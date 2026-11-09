@@ -89,9 +89,9 @@ each name read allocates a finalizable `StringName`. A human aircraft carrying t
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
 per pane, and it owns its `TargetPool`. The split between the action handlers, which only mutate the
 class and the selection identity, and `Resolve`, the per-frame pass that re-sorts and re-finds the
-selection by entity before falling back to the list head, is the original's, and that one fallback is
-the entire lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. `NearestAfterKill`, the remake setting off by default, is the one departure: it moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head. `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
-Godot node dependency; pinned by the `target-selection` and `target-flag` suites. Decode:
+selection by entity before falling back to the list head, is the original's, and that fallback is
+the whole decoded lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed re-find. The two remake-only rules are `NearestAfterKill` (a setting, off by default, that moves the lost-selection re-resolve alone onto the nearest entry by distance, leaving the acquire and every class change on the head) and `ZoneFirst` (set on a race run's seats alone: Next Enemy pressed off the next zone (a course gate or a Danger Zone) and a zone's passing both select it). `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
+Godot node dependency; pinned by the `target-selection`, `target-flag` and `stunt-race-zone-first` suites. Decode:
 [../org/targeting.md](../org/targeting.md). Read `TargetHud.cs` for what draws the result.
 
 ## src/Flight/Weapons/SeatTargeting.cs
@@ -981,10 +981,10 @@ One authored air race course, engine-free: the gate pool (`CourseGate`, a pylon 
 heading and sizes, with `FlownWay` the way an entry crosses it), the `SequenceEntry` list naming pool gates by id with a
 `GateDirection` (a gate may repeat), and the start point as a `SpawnPoint`. Chapter and name come from the file's path;
 the name is the id everywhere (`--course=`, `--course-edit=`, the library, the score key), and the optional `title`, a
-string, is what a player sees (`DisplayName`, the name where it is blank). `Parse` reads a file or rejects it whole,
+string, is what a player sees (`DisplayName`, the name where it is blank). The optional `planes` (`Planes`, null for all) bars the other airframes through `Limits` (`NetPlaneRules.CourseBarred`), and `Refuses` names a launch plane it bars. `Parse` reads a file or rejects it whole,
 `ToJson` writes the same shape, `FromWire` is a network guest's `Parse` whose `Hash` must equal the one sent, `FromWord` its check of a lobby word (`WordFor` builds one, `FitsWire` says whether it can be sent), and `Hash`
-digests pool, sequence and start but not the name, title or ids; `ScoreStore.KeyFor` adds chapter and name for course
-bests, so a retitle keeps them. Read `CourseLibrary` for where the files live.
+digests pool, sequence and start but not the name, title, planes or ids; `ScoreStore.KeyFor` adds chapter and name for course
+bests, so a retitle or a new plane list keeps them. Read `CourseLibrary` for where the files live.
 
 ## src/Flight/Modes/CourseAperture.cs
 A course gate's scoring aperture, engine-free: a pylon gate's rectangle between its course pylons from the
@@ -1051,12 +1051,12 @@ controls. Read `CoursePylonCutTests.cs`.
 ## src/Flight/Modes/StuntRace.cs
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
-(`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
-carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed. A `Racer`
-keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
-most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved`
-records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by
-`TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
+(`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished`, `RunReset` and
+`RunAbandoned` carry each pilot's runs, a network host's entry points as much as `Follow`'s local
+feed, `RunReset` excepted, which only `Follow` calls. A live respawn held in the open window (`RunReset`)
+puts the `Racer` `OnApproach`, in a run until its clock starts, which may be after time up; outside the
+window it is an abandon. A `Racer` keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
+most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved` records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of
@@ -1259,9 +1259,9 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look,
 additions are `Frame(Aabb)`, `LookFrom(eye, target)` (keeping the free look's yaw and pitch in step), the `FollowNode`
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
-orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot
-out of the mission watches from (`Session/Roster/SpectateHandoff.cs`), with `padDevices`/`useKeyboard`
-filtering each watcher to its own seat so two watchers move independently. Read `OrbitLock.cs` next.
+orbit answers the right stick and the triggers as well as the mouse. A pilot out of the mission
+watches from it (`SpectateHandoff.cs`) on its seat's own devices, the RMB look writing no mouse mode
+under the seat's hide (`SeatHidesPointer`); a debugging camera's look captures, then shows the pointer. Read `OrbitLock.cs` next.
 
 ## src/Flight/Camera/OrbitLock.cs
 `SpectatorCamera`'s re-lock rule, taken as positions and an index rather than nodes so it runs
@@ -1327,7 +1327,7 @@ display with somebody at the controls, so the test desktop and `--det` keep thei
 ## src/Flight/Camera/SeatMouse.cs
 The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
 half it leaves out. `Step` takes the mouse on a wanted frame, hides the pointer unheld on a frame a
-cutscene has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
+cutscene or a spectator has the pane, and gives it back on any other, writing `Input.MouseMode` (`ModeForTest` a
 suite's stand-in); `Release` puts back only a capture or hide this seat made. `Stick` is the cursor offset
 the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
 otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and

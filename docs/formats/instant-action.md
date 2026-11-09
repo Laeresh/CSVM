@@ -193,6 +193,14 @@ not carry per-chapter values) because they are what each row can then be *offere
 | 6 | a movie studio | C2 | stunt_flying | ground_target |
 | *(none)* | *(not offered)* | C1C | zeppelin_run | ground_target, stunt_flying |
 
+**The remake's menus do not show these words, a remake-only rule.** The original names one map
+two ways, these sentence fragments here and the Multiplayer box's own row words
+([../org/loading-screen.md](../org/loading-screen.md)). Every CSVM mode shows one name per chapter
+instead, the table in `CSVM/src/UI/Menu/MenuChapters.cs` (Airfield, The Ocean, Above the Clouds,
+Hollywood, The Clouds, Hawaii, Sky Haven, Manhattan). On an install whose `langui.dll` string
+resources are not in English, each chapter reads the game's own word from one row: its Multiplayer
+row from 10558, or for C2B row 3651 above. The rows and their order stay the decode's.
+
 ⚠ **C1C is the chapter Instant Action omits, not C2B.** The launcher's map covers chapter ids
 1, 5, 6, 8, 2, 7, 4 and never 3, and `CSVM/src/UI/Menu/InstantActionFeature.cs` carries this mapping
 (`c1, c2b, c3, c5, c1b, c4, c2`, C1C campaign/MP only).

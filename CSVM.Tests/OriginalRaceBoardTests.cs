@@ -129,14 +129,15 @@ public class OriginalRaceBoardTests
         Assert.Equal(6, OriginalRaceResults.MenuRowAt(sheet, sx + 1f, sy + 1f));
 
         // Down on each list until it stops: the scores at 6, the splits at 9.
-        (int scores, int splits) = (0, 0);
+        var tops = (0, 0, 0);
         for (int i = 0; i < 20; i++)
         {
-            (scores, splits) = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.ScoresDownRow, scores, splits);
-            (scores, splits) = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.SplitsDownRow, scores, splits);
+            tops = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.ScoresDownRow, tops);
+            tops = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.SplitsDownRow, tops);
         }
 
-        Assert.Equal((6, 9), (scores, splits));
+        var (scores, splits, _) = tops;
+        Assert.Equal((6, 9, 0), tops);
         var board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 0, false, scores, splits);
         Assert.Contains(board.Lines, l => l.Text == "16th  P16" && l.Y == 26f + 69f + (9 * 20f));
         Assert.Contains(board.Lines, l => l.Text == "P16" && l.X == 38f && l.Y == 373f + (7 * 20f));
@@ -201,7 +202,7 @@ public class OriginalRaceBoardTests
     }
 
     [Fact]
-    public void ALongCourseTakesTwoKeyColumnsAndNarrowerSplitColumns()
+    public void ALongCourseTakesTwoKeyColumnsAndScrollsItsZonesAcrossTenFullColumns()
     {
         var race = new StuntRace(60f, 17);
         race.Add(0, "Fury");
@@ -210,15 +211,45 @@ public class OriginalRaceBoardTests
         race.ZoneCleared(0, 16, 4f);
         race.Advance(61f);
         var names = Enumerable.Range(1, 17).Select(i => $"Z{i}").ToList();
-        var board = OriginalRaceResults.Compose(RaceResultsSheet.Of(race, names, "", "Back"), UiStrings.Empty, 0, false);
+        var sheet = RaceResultsSheet.Of(race, names, "", "Back");
+        var board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 0, false);
 
         Assert.Contains(board.Lines, l => l.Text == "9  Z9" && l.X == 36f && l.Y == 83f + (8 * 20f));
         Assert.Contains(board.Lines, l => l.Text == "10  Z10" && l.X == 36f + 138f && l.Y == 83f);
         Assert.Contains(board.Lines, l => l.Text == "17  Z17" && l.Y == 83f + (7 * 20f));
+
+        // Ten zones across at the scores page's column width, the rest behind the zone bar.
         var header = board.Lines.Where(l => l.Y == 373f && l.X >= 134f).ToList();
-        Assert.Equal(17, header.Count);
-        Assert.Equal(625f / 17f, header[0].Width, 3);
-        Assert.Contains(board.Lines, l => l.Text == "0:04.0" && l.Y == 393f && System.Math.Abs(l.X - (134f + (16 * 625f / 17f))) < 0.01f);
+        Assert.Equal(Enumerable.Range(1, 10).Select(i => $"{i}"), header.Select(l => l.Text));
+        Assert.All(header, l => Assert.Equal(OriginalRaceResults.SplitColumn, l.Width));
+        Assert.Equal(new[] { 0, 1, 2, 7, 8 }, OriginalRaceResults.Slots(sheet));
+
+        // The bar's arrows stand at the pane's foot, at its run's two ends, and the pointer finds them.
+        var (lx, ly, lw, lh) = OriginalRaceResults.SlotRect(OriginalRaceResults.ZonesLeftRow);
+        var (rx, ry, _, _) = OriginalRaceResults.SlotRect(OriginalRaceResults.ZonesRightRow);
+        Assert.Equal((134f, 527f, 11f, 16f, 743f, 527f), (lx, ly, lw, lh, rx, ry));
+        Assert.Equal(4, OriginalRaceResults.MenuRowAt(sheet, rx + 1f, ry + 1f));
+
+        // Right until it stops: zone 17's split under its own number in the last column.
+        var tops = (0, 0, 0);
+        for (int i = 0; i < 20; i++)
+        {
+            tops = OriginalRaceResults.Scrolled(sheet, OriginalRaceResults.ZonesRightRow, tops);
+        }
+
+        Assert.Equal((0, 0, 7), tops);
+        board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 0, false, zonesTop: tops.Item3);
+        float last = 134f + (9 * OriginalRaceResults.SplitColumn);
+        Assert.Contains(board.Lines, l => l.Text == "17" && l.Y == 373f && l.X == last);
+        Assert.Contains(board.Lines, l => l.Text == "0:04.0" && l.Y == 393f && l.X == last);
+        Assert.Contains(board.Lines, l => l.Text == "P1" && l.X == 38f && l.Y == 393f);
+
+        // ABLE-TO-FAIL CONTROL: ten zones fit the pane, so no zone bar stands.
+        var tenZones = new StuntRace(60f, 10);
+        tenZones.Add(0, "Fury");
+        tenZones.BeginOpening(0f);
+        tenZones.Advance(61f);
+        Assert.Equal(new[] { 0, 1, 2 }, OriginalRaceResults.Slots(RaceResultsSheet.Of(tenZones, names, "", "Back")));
     }
 
     [Fact]

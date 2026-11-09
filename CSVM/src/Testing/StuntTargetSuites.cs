@@ -9,14 +9,18 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>A two-player stunt race over C1/IA1's authored Danger Zones, driven through the same
-/// per-pilot <see cref="TargetSelection"/> the pilot HUD reads: each pane cycles its own zones, one
-/// pane's step never moves the other's marker, and a pilot who clears the course empties their own
+/// per-pilot <see cref="TargetSelection"/> the pilot HUD reads. Each pane cycles its own zones and one
+/// pane's step never moves the other's marker. A pilot who clears the course empties their own
 /// cycle alone. Also pins the marker the zone draws, which is the objective marker every other
-/// site takes rather than a style of its own.</summary>
+/// site takes rather than a style of its own. A race run's zone-first rule is pinned over a
+/// two-gate course beside two AI racers, against a solo run that keeps the decoded cycle.</summary>
 internal static class StuntTargetSuites
 {
     private const string Chapter = "C1";
     private const string Mission = "IA1";
+
+    // The AI racers' side, any team but the pilot's own.
+    private const int Hostile = AimAssist.PlayerTeam + 1;
 
     // A non-destructive objective's own label, the colour class a Danger Zone falls in
     // (Target::GetColor, docs/org/targeting.md): anything but Destroy/Disable/Disable Engines/Damage.
@@ -26,6 +30,14 @@ internal static class StuntTargetSuites
     // each plane's own basis and position, so two pilots racing one course see two orders.
     private static readonly Vector3 P1Pose = new(-5000f, 300f, -6000f);
     private static readonly Vector3 P2Pose = new(-7000f, 300f, -2500f);
+
+    // A two-gate course whose start pose faces -Z down it. Two AI racers sit on the Enemy cycle:
+    // Lead 100 m ahead, Wing off the left wing. The decoded cycle is the gate, Lead, Wing.
+    private static readonly Vector3 GridPose = new(0f, 15f, 300f);
+    private static readonly string Lead = "Lead";
+    private static readonly string Wing = "Wing";
+    private static readonly CourseGate GateA = new("a", CourseGateKind.PylonGate, Vector3.Zero, 0f, 40f, 30f, 0f);
+    private static readonly CourseGate GateB = new("b", CourseGateKind.BalloonRing, new Vector3(0f, 50f, -200f), 0f, 0f, 0f, 20f);
 
     [Suite("stunt-target-cycle",
         "a two-player stunt race over C1/IA1's danger zones on the pilots' own target cycles: "
@@ -95,6 +107,140 @@ internal static class StuntTargetSuites
             ctx.Note($"{Chapter}/{Mission}: {p1Run.TotalCount} zones on two independent cycles");
         });
     }
+
+    [Suite("stunt-race-zone-first",
+        "a race run's Next Enemy takes the next zone in one press from any plane, ahead of a plane "
+        + "that just shot at the pilot, and from a cleared selection ahead of a nearer hostile round; "
+        + "passing a zone selects the next one with a plane or the zone selected and Nearest After "
+        + "Kill on or off; outside a race the decoded cycle, the attacker queue, the round at the "
+        + "head and the kept or nearest pick on a passing keep their non-race rules")]
+    internal static void StuntRaceZoneFirst(TestContext ctx)
+    {
+        foreach (bool race in new[] { true, false })
+        {
+            string mode = race ? "race" : "solo";
+            var (run, sel) = NewRun(race, nearestAfterKill: false);
+            object zone = run.Zones[0];
+            ctx.Check(Is(sel, zone), $"[{mode}] the run starts on the first zone ({Picked(sel)})");
+
+            Press(sel, run, previous: false);
+            ctx.Check(Is(sel, Lead), $"[{mode}] Next on the zone steps on to the plane ahead ({Picked(sel)})");
+
+            Press(sel, run, previous: false);
+            object fromPlane = race ? zone : Wing;
+            ctx.Check(Is(sel, fromPlane), $"[{mode}] Next from that plane takes {Label(fromPlane)} ({Picked(sel)})");
+
+            if (race)
+            {
+                Press(sel, run, previous: true);
+            }
+
+            sel.RecordAttacker(Lead);
+            Press(sel, run, previous: false);
+            object afterShot = race ? zone : Lead;
+            ctx.Check(Is(sel, afterShot), $"[{mode}] Next from Wing just after Lead shot at the pilot takes {Label(afterShot)} ({Picked(sel)})");
+
+            // A hostile round nearer than the zone takes the decoded head, which tells the two apart.
+            // The pool admits a round only by its TARGETABLE flyout, and a flyout needs a pool.
+            var rounds = new ProjectilePool(null!, null, null);
+            try
+            {
+                var round = new ProjectilePool.Flyout(new WeaponDef { Id = "wep_14", Targetable = true }, 0, rounds);
+                var (clearRun, clearSel) = NewRun(race, nearestAfterKill: false);
+                clearSel.Clear();
+                RebuildRace(clearSel, clearRun, round);
+                clearSel.NextEnemy();
+                RebuildRace(clearSel, clearRun, round);
+                object fromCleared = race ? clearRun.Zones[0] : round;
+                ctx.Check(Is(clearSel, fromCleared), $"[{mode}] Next from a cleared selection takes {Label(fromCleared)} ({Picked(clearSel)})");
+            }
+            finally
+            {
+                rounds.Free();
+            }
+
+            foreach (bool nearest in new[] { false, true })
+            {
+                foreach (bool onPlane in new[] { false, true })
+                {
+                    var (passRun, passSel) = NewRun(race, nearest);
+                    if (onPlane)
+                    {
+                        Press(passSel, passRun, previous: true);
+                    }
+
+                    PassFirstZone(passRun);
+                    RebuildRace(passSel, passRun);
+                    object next = passRun.Zones[1];
+                    object expected = race ? next : onPlane ? Wing : nearest ? Lead : next;
+                    ctx.Check(passRun.CompletedCount == 1 && Is(passSel, expected),
+                        $"[{mode}] passing a zone with {(onPlane ? "Wing" : "the zone")} selected and Nearest After Kill {(nearest ? "on" : "off")} selects {Label(expected)} ({Picked(passSel)}, {passRun.CompletedCount} passed)");
+                }
+            }
+        }
+    }
+
+    private static (StuntMission Run, TargetSelection Selection) NewRun(bool race, bool nearestAfterKill)
+    {
+        var course = new Course("c1", "race", new SpawnPoint(GridPose, 0f), new[] { GateA, GateB },
+            new[] { new SequenceEntry(GateA.Id, GateDirection.Forward), new SequenceEntry(GateB.Id, GateDirection.Forward) });
+        var run = StuntMission.ForCourse(course)!;
+        var selection = new TargetSelection { ZoneFirst = race, NearestAfterKill = nearestAfterKill };
+        RebuildRace(selection, run);
+        return (run, selection);
+    }
+
+    private static void Press(TargetSelection selection, StuntMission run, bool previous)
+    {
+        if (previous)
+        {
+            selection.Previous(TargetClass.Enemy);
+        }
+        else
+        {
+            selection.NextEnemy();
+        }
+
+        RebuildRace(selection, run);
+    }
+
+    private static void RebuildRace(TargetSelection selection, StuntMission run, object? round = null)
+    {
+        var planes = new AimCandidateSet();
+        if (round != null)
+        {
+            planes.AddOrdnance(GridPose + new Vector3(0f, 0f, -50f), Vector3.Zero, Hostile, round);
+        }
+
+        planes.AddVehicle(GridPose + new Vector3(0f, 0f, -100f), Vector3.Zero, Hostile, live: true, Lead);
+        planes.AddVehicle(GridPose + new Vector3(-100f, 0f, 0f), Vector3.Zero, Hostile, live: true, Wing);
+        var gates = new List<AimCandidate>();
+        run.CollectTargets(gates);
+        selection.Rebuild(planes, null, AimAssist.PlayerTeam, null, GridPose, Basis.Identity, gates);
+    }
+
+    // One step straight through the first zone's course gate, the way it is flown.
+    private static void PassFirstZone(StuntMission run)
+    {
+        var centre = GateA.Position + new Vector3(0f, GateA.Height / 2f, 0f);
+        var along = GateA.Forward * 5f;
+        run.Relocated();
+        run.Update(centre - along);
+        run.Update(centre + along);
+    }
+
+    private static bool Is(TargetSelection selection, object source) =>
+        ReferenceEquals(selection.Current?.Source, source);
+
+    private static string Picked(TargetSelection selection) => Label(selection.Current?.Source);
+
+    private static string Label(object? source) =>
+        source switch
+        {
+            StuntZone zone => zone.Description,
+            ProjectilePool.Flyout round => round.Name,
+            _ => source?.ToString() ?? "nothing",
+        };
 
     private static bool AllObjectives(IReadOnlyList<TargetRef> cycle)
     {

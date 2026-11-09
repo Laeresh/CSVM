@@ -10,8 +10,9 @@ using CSVM.Utils;
 
 namespace CSVM.UI.Menu;
 
-/// <summary>One Instant Action environment: its dropdown name and the chapter it flies.</summary>
-public readonly record struct InstantActionEnvironment(string Name, string Code);
+/// <summary>One Instant Action environment: the chapter it flies, which a presentation names with
+/// <see cref="MenuChapters.Name"/>.</summary>
+public readonly record struct InstantActionEnvironment(string Code);
 
 /// <summary>One mission type: its label and the <c>ia.json</c> <c>mission_type</c> key.</summary>
 public readonly record struct InstantActionMissionType(string Label, string Key);
@@ -66,13 +67,7 @@ public sealed class InstantActionFeature : IMenuFeature
     // alphabetic chapter order. C1C is the chapter Instant Action omits.
     private static readonly InstantActionEnvironment[] EnvironmentRows =
     {
-        new("an airfield", "C1"),
-        new("the clouds", "C2B"),
-        new("Hawaii", "C3"),
-        new("Manhattan", "C5"),
-        new("the ocean", "C1B"),
-        new("Sky Haven", "C4"),
-        new("a movie studio", "C2"),
+        new("C1"), new("C2B"), new("C3"), new("C5"), new("C1B"), new("C4"), new("C2"),
     };
 
     // The four mission types in the UI dropdown's order (IDS_IA_MISSIONTYPE), not the internal id

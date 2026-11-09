@@ -1301,6 +1301,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _ => string.Empty,
     };
 
+    /// <summary>A chapter's name in this page's string table, the word Free Flight's map box shows
+    /// too.</summary>
+    internal string ChapterWord(string code) => MenuChapters.Name(code, _text.Strings);
+
     /// <summary>One line pinned at the chat pane's top in the pinned rows' ink.</summary>
     internal BoardLine PinnedLine(string text) => _text.Line(10575, string.Empty, ChatX + 4f, ChatY, ChatWidth - 8f, Pinned, text: text);
 
@@ -2073,7 +2077,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return true;
     }
 
-    private string EnvironmentWord(int environment) => _text.Word(10558 + environment, DogfightLobby.EnvironmentName(environment));
+    private string EnvironmentWord(int environment) => DogfightLobby.EnvironmentName(environment, _text.Strings);
 
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];

@@ -38,8 +38,8 @@ internal static class NetStuntRaceSuites
     private const int HostGap = 30;
     private const int FinalGap = 2;
 
-    // How much of the window a pilot restarts into: its 3, 2, 1 then ends with a run in progress at time up.
-    private const float LateRestartSeconds = 4.5f;
+    // How much of the window a pilot holds into: its 3, 2, 1 then ends with a run in progress at time up.
+    private const float LateHoldSeconds = 4.5f;
 
     // How far a seat may stand from the spawn on its GO step: one step's flight at race speed.
     private const float SpawnReach = 5f;
@@ -61,8 +61,10 @@ internal static class NetStuntRaceSuites
         + "with jitter and loss: the guest is released late but its opening count catches up and both "
         + "windows open on the host's step; both boards hold both pilots; the guest's own run reaches the "
         + "host's board and comes back to the guest's with its splits, and the host's run reaches the "
-        + "guest's; both boards agree on the order and the best splits before and after a final run; a "
-        + "guest run finished after time up counts while the guest's restart there is refused; the "
+        + "guest's; both boards agree on the order and the best splits before and after a final run; behind "
+        + "the counts of both pilots' late holds the host's seat is on its approach on the host's board and the "
+        + "guest's, whose hold crosses as an abandon, is not; a "
+        + "guest run finished after time up counts while the guest's hold there is refused; the "
         + "guest, out of a run, then spectates the host's copy after the crash camera's time, its own "
         + "aeroplane taking no input and its target key offering only the racers still in a run, its run "
         + "HUD up alone and naming the host's pilot while the lock holds; the "
@@ -798,12 +800,12 @@ internal static class NetStuntRaceSuites
             $"[{cell}] and the catch-up matches the lag the start word took ({caughtSteps} against {lag})");
     }
 
-    // A late restart by both pilots puts both in a run at time up. The guest's run finished in the
-    // final run counts, its restart there is refused, and the host's pilot is still in a run.
+    // A late hold by both pilots puts both in a run at time up. The guest's run finished in the
+    // final run counts, its hold there is refused, and the host's pilot is still in a run.
     private static void FinalRun(TestContext ctx, string cell, GameSession[] peers, FlightController host, FlightController guest,
         StuntRace hostRace, StuntRace guestRace, StuntMission hostRun, StuntMission guestRun)
     {
-        float jump = hostRace.TimeLeft - LateRestartSeconds;
+        float jump = hostRace.TimeLeft - LateHoldSeconds;
         hostRace.Advance(jump);
         guestRace.Advance(jump);
         foreach (var seat in new[] { host, guest })
@@ -817,6 +819,11 @@ internal static class NetStuntRaceSuites
             seat.HoldActionForTest(InputAction.Respawn, false);
         }
 
+        // The host's race follows its own seat, whose hold keeps its fresh run's place behind the
+        // count; a guest's hold crosses as an abandon.
+        ctx.Check(hostRace.Of(0)!.OnApproach && !hostRace.Of(1)!.OnApproach,
+            $"[{cell}] behind the counts the host's seat is on its approach on the host's board and the guest's is not (host {hostRace.Of(0)!.OnApproach}, guest {hostRace.Of(1)!.OnApproach})");
+
         bool counted = CourseFlight.Until(peers, () => !host.StartCount.Running && !guest.StartCount.Running);
         Steps(peers, 6);
         StuntRaceSuites.ClearZone(hostRun, hostRun.Zones[0]);
@@ -824,7 +831,7 @@ internal static class NetStuntRaceSuites
         bool up = CourseFlight.Until(peers, () => hostRace.Phase == StuntRacePhase.FinalRun && guestRace.Phase == StuntRacePhase.FinalRun
                                      && guestRace.Of(0)!.CurrentZones == 1 && guestRace.Of(1)!.CurrentZones == 1);
         ctx.Check(counted && up && hostRace.Racers.All(r => r.InRun) && guestRace.Racers.All(r => r.InRun),
-            $"[{cell}] both pilots restart late and are in a run at time up, on both boards ({hostRace.Phase}/{guestRace.Phase}, in a run {string.Join("", hostRace.Racers.Select(r => r.InRun ? 1 : 0))}/{string.Join("", guestRace.Racers.Select(r => r.InRun ? 1 : 0))})");
+            $"[{cell}] both pilots hold late and are in a run at time up, on both boards ({hostRace.Phase}/{guestRace.Phase}, in a run {string.Join("", hostRace.Racers.Select(r => r.InRun ? 1 : 0))}/{string.Join("", guestRace.Racers.Select(r => r.InRun ? 1 : 0))})");
 
         int respawns = guest.RespawnCount;
         guest.HoldActionForTest(InputAction.Respawn, true);
@@ -832,7 +839,7 @@ internal static class NetStuntRaceSuites
         guest.HoldActionForTest(InputAction.Respawn, false);
         Step(peers);
         ctx.Check(guest.RespawnCount == respawns && !guest.StartCount.Running,
-            $"[{cell}] the guest's restart in the final run is refused by the host's window ({guest.RespawnCount - respawns} respawn(s))");
+            $"[{cell}] the guest's hold in the final run is refused by the host's window ({guest.RespawnCount - respawns} respawn(s))");
 
         for (int k = 1; k < guestRun.TotalCount; k++)
         {

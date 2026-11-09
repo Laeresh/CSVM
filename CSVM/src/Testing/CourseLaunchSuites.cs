@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
@@ -18,6 +19,11 @@ internal static class CourseLaunchSuites
 {
     private const string Chapter = "C1";
     private const string Sample = "sample_out_and_back";
+
+    // The shipped course that refuses a plane, the Balmoral, and that plane's node.
+    private const string RefusingChapter = "C2";
+    private const string Refusing = "Hollywood_Track_1";
+    private const string Refused = "player_balmoral";
 
     [Suite("course-launch",
         "the shipped sample course lists and loads from res:// and a game-folder file of its name wins "
@@ -37,13 +43,21 @@ internal static class CourseLaunchSuites
         "a --stunt --course=C1/sample_out_and_back race of two split screen panes, and a menu-built one of a "
         + "pane and an ace race bot: every seat flies its own run of the course, the drawn course carries one cue set "
         + "per pane, and each pane flown through every entry records its best under the course key in the launch's "
-        + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole")]
+        + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole; "
+        + "both split screen panes, holding 1.5 s before time up, are on their approach and in a run at time up, "
+        + "seat 0's crash short of the first entry ends its part at once, and seat 1's run, started at its first "
+        + "entry after time up, counts and its finish ends the race long before the cap. On C2/Hollywood_Track_1, "
+        + "which refuses the Balmoral, a launch seating one as a pane or a named bot is refused with the reason, "
+        + "and seven Random bots draw none")]
     internal static void CourseRaceLocal(TestContext ctx)
     {
         ctx.RequireData(ctx.ChapterGamez(Chapter), $"{Chapter} gamez");
+        ctx.RequireData(ctx.ChapterGamez(RefusingChapter), $"{RefusingChapter} gamez");
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
+            RefusedPlanes(ctx);
+
             string split = Scores(ctx, "split");
             var panes = SessionSpec.Parse(new[] { "--stunt", $"--course={Chapter}/{Sample}", "--plane=player_pfighter,player_fury", "--mute", "--no-pads", $"--scores={split}" });
             LocalRace(ctx, "split screen", panes, roster: null, split, flown: new[] { 0, 1 });
@@ -58,6 +72,36 @@ internal static class CourseLaunchSuites
         {
             ambient.Restore();
         }
+    }
+
+    // A local race on the course that refuses the Balmoral, built as Instant Action's join board builds
+    // it. A Balmoral pane or named bot refuses the launch, and Random bots draw around it.
+    private static void RefusedPlanes(TestContext ctx)
+    {
+        var cli = SessionSpec.Parse(new[] { "--mute", "--no-pads" });
+        SessionSpec Race(string pane, params string?[] bots) => SessionSpec.FromMenu(cli, RefusingChapter, new[] { pane }, MenuMode.Stunt,
+            vsTimeMinutes: 5, missionType: DogfightMissionType.StuntRace, course: Refusing,
+            bots: bots.Select((plane, i) => new VsBotEntry(plane, Net.NetBotSkill.Veteran, 0, $"Bot {i + 1}")).ToArray());
+        foreach (var (cell, spec) in new[] { ("pane", Race(Refused, "player_fury")), ("bot", Race("player_fury", Refused)), ("control", Race("player_fury", "player_fury")) })
+        {
+            var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, 1, SeatFields.LocalVersusField(spec, ctx.Data.Messages), exitSession: () => { });
+            try
+            {
+                string refusal = end.Session.MenuRefusal ?? "";
+                ctx.Check(cell == "control" ? end.Built && refusal.Length == 0 : !end.Built && refusal.Contains($"not {Refused}", StringComparison.Ordinal),
+                    $"[{cell}] {RefusingChapter}/{Refusing} {(cell == "control" ? "ABLE-TO-FAIL CONTROL: builds with no Balmoral on it" : "refuses a Balmoral launch")}: '{refusal}'");
+            }
+            finally
+            {
+                end.Close();
+            }
+        }
+
+        var random = Race("player_fury", null, null, null, null, null, null, null);
+        var rules = SeatFields.CourseRules(random, new CourseLibrary(CourseLibrary.ShippedRoot, null));
+        var bots = SeatFields.LocalVersusField(random, ctx.Data.Messages, rules)?.Where(seat => seat.IsBot).Select(seat => seat.PlaneNode).ToArray() ?? Array.Empty<string>();
+        ctx.Check(rules is { } barred && !barred.AirframeAllowed(2) && bots.Length == 7 && !bots.Contains(Refused),
+            $"seven Random bots draw under the course's bar on the Balmoral and none flies one: {string.Join(", ", bots)}");
     }
 
     // The library's two reads in the engine: res:// for the shipped file, an OS folder for the game's.
@@ -330,11 +374,56 @@ internal static class CourseLaunchSuites
             {
                 BotCuts(ctx, cell, visuals, runs[1]!, course);
             }
+            else
+            {
+                HeldAcrossTimeUp(ctx, cell, peers, race, new[] { seats[0]!, seats[1]! }, new[] { runs[0]!, runs[1]! }, course);
+            }
         }
         finally
         {
             end.Close();
         }
+    }
+
+    // Both panes hold 1.5 s before time up, so each is on its approach to the first entry at time up.
+    // Seat 0 crashes there, which ends its part at once. Seat 1 flies every entry after time up, and
+    // its finish, the last run, ends the race long before the final run's cap.
+    private static void HeldAcrossTimeUp(TestContext ctx, string cell, GameSession[] peers, StuntRace race,
+        FlightController[] panes, StuntMission[] runs, Course course)
+    {
+        var racers = panes.Select(p => race.Of(p.PlayerIndex)!).ToArray();
+        var started = racers.Select(r => r.RunsStarted).ToArray();
+        var finished = racers.Select(r => r.RunsFinished).ToArray();
+        race.Advance(race.TimeLeft - 1.5f);
+        int holdSteps = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / GameClock.FixedDt) + 2;
+        foreach (var pane in panes)
+        {
+            pane.HoldActionForTest(InputAction.Respawn, true);
+        }
+
+        int held = 0;
+        CourseFlight.Until(peers, () => ++held > holdSteps);
+        foreach (var pane in panes)
+        {
+            pane.HoldActionForTest(InputAction.Respawn, false);
+        }
+
+        bool up = CourseFlight.Until(peers, () => race.Phase != StuntRacePhase.Open);
+        ctx.Check(up && race.Phase == StuntRacePhase.FinalRun && racers.All(r => r.InRun && r.OnApproach)
+                  && racers.Select(r => r.RunsStarted).SequenceEqual(started) && runs.All(r => r.CompletedCount == 0),
+            $"[{cell}] both panes, holding before time up, are on their approach at time up and counted as in a run ({race.Phase}, in a run {string.Join("/", racers.Select(r => r.InRun))}, on the approach {string.Join("/", racers.Select(r => r.OnApproach))})");
+
+        CourseFlight.Until(peers, () => panes.All(p => !p.StartCount.Running));
+        bool short0 = runs[0].Elapsed == 0f && runs[0].CompletedCount == 0;
+        panes[0].DebugForceCrash();
+        bool out0 = CourseFlight.Until(peers, () => !racers[0].InRun);
+        ctx.Check(short0 && out0 && runs[0].Stopped && racers[0].RunsStarted == started[0] && race.Phase == StuntRacePhase.FinalRun && racers[1].OnApproach,
+            $"[{cell}] seat 0's crash short of the first entry ends its part at once, its run stopped and never started, while seat 1 is still on its approach (short of it {short0}, stopped {runs[0].Stopped}, runs started {racers[0].RunsStarted - started[0]}, {race.Phase})");
+
+        int crossed = course.Sequence.Count(entry => CourseFlight.Through(peers, panes[1], runs[1], course, entry));
+        ctx.Check(crossed == course.Sequence.Count && racers[1].RunsStarted == started[1] + 1 && racers[1].RunsFinished == finished[1] + 1
+                  && race.Ended && race.WindowElapsed - race.WindowSeconds < 30f,
+            $"[{cell}] seat 1's run starts at its first entry after time up and its finish counts on the board, ending the race with nobody left in a run ({crossed} of {course.Sequence.Count} entries, runs {racers[1].RunsStarted - started[1]} started and {racers[1].RunsFinished - finished[1]} finished, ended {race.Ended} {race.WindowElapsed - race.WindowSeconds:0.0} s after time up)");
     }
 
     // The bot's run brushes a pylon gate's left course pylon and another racer's cut takes the right.

@@ -1,6 +1,18 @@
 {
   "version": 1,
   "title": "Studio Lot Dash",
+  "planes": [
+    "player_autogyro",
+    "player_avenger",
+    "player_bhawk",
+    "player_brigand",
+    "player_pfighter",
+    "player_fbrand",
+    "player_fury",
+    "player_kestrel",
+    "player_peacemaker",
+    "player_warhawk"
+  ],
   "start": {
     "pos": [
       -5221.4453,

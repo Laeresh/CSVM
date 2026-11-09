@@ -90,7 +90,7 @@ public class OriginalInstantActionTests
         Assert.Equal("Stock Autogyro", plane.Label);
         Assert.Equal("0", Row(host, OriginalInstantActionScreen.WingmenKey).Label);
         Assert.Equal("Dogfighting an Ace", Row(host, OriginalInstantActionScreen.MissionKey).Label);
-        Assert.Equal("an airfield", Row(host, OriginalInstantActionScreen.EnvironmentKey).Label);
+        Assert.Equal("Airfield", Row(host, OriginalInstantActionScreen.EnvironmentKey).Label);
         Assert.Equal(1, plane.Column);
         Assert.Equal(0, contents.Column);
 
@@ -186,7 +186,7 @@ public class OriginalInstantActionTests
         Click(host, 3);
 
         Assert.Equal(3, ia.PresetIndex);
-        Assert.Equal("Hawaii", ia.Environment.Name);
+        Assert.Equal("C3", ia.Environment.Code);
         Assert.Equal("zeppelin_run", ia.MissionType.Key);
         Assert.Equal("Test Ace", ia.BaseDef!.AceName);
         Assert.Equal("Hellhound", Row(host, OriginalInstantActionScreen.WingmanPlaneKey).Label);
@@ -342,10 +342,10 @@ public class OriginalInstantActionTests
         // Stunt flying bars the clouds, so the step over the environment skips row 1.
         Hover(host, OriginalInstantActionScreen.EnvironmentKey);
         Step(host, 1);
-        Assert.Equal("Hawaii", ia.Environment.Name);
+        Assert.Equal("C3", ia.Environment.Code);
         Assert.Equal("Test Ace", ia.BaseDef!.AceName);
         Step(host, -1);
-        Assert.Equal("an airfield", ia.Environment.Name);
+        Assert.Equal("C1", ia.Environment.Code);
 
         // With the environment open, the clouds row is listed but not live.
         Accept(host);
@@ -358,6 +358,22 @@ public class OriginalInstantActionTests
         host.Module.CloseDropdown();
         Hover(host, OriginalInstantActionScreen.ViewStoryKey);
         Assert.False(Step(host, 1));
+    }
+
+    [Fact]
+    public void TheEnvironmentBoxNamesEachChapterInTheInstallsTranslation()
+    {
+        var host = Host(out _, stock: false, out _);
+        host.Strings = MenuChapterNamesTests.Table(MenuChapterNamesTests.German);
+        host.Module.OpenInstantAction();
+        Assert.Equal(MenuChapterNamesTests.TranslatedName("C1"), Row(host, OriginalInstantActionScreen.EnvironmentKey).Label);
+
+        Hover(host, OriginalInstantActionScreen.EnvironmentKey);
+        Accept(host);
+        Assert.Equal(OriginalInstantActionScreen.EnvironmentKey, host.Module.OpenDropdown);
+        Assert.Equal(
+            InstantActionFeature.Environments.Select(e => MenuChapterNamesTests.TranslatedName(e.Code)),
+            host.Rows.Take(InstantActionFeature.Environments.Count).Select(r => r.Label));
     }
 
     [Fact]
@@ -1250,6 +1266,11 @@ public class OriginalInstantActionTests
         }
 
         public int SeatWalks { get; private set; }
+
+        // The string table the screen reads its words from, empty unless a test hands one in.
+        public UiStrings Strings { get; set; } = UiStrings.Empty;
+
+        public override UiStrings MenuStrings => Strings;
 
         protected override bool FocusLeavesDeadRows => false;
 

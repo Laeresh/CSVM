@@ -153,7 +153,7 @@ public class OriginalSeatsTests
 
         shell.LocalLobby.Enter(OriginalScreen.Dogfight);
         Assert.Null(shell.LocalLobby.PickedChapter(OriginalScreen.Dogfight));
-        Assert.Equal("Sea Haven (night)", Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
+        Assert.Equal("Airfield", Row(shell, OriginalLobbyScreen.EnvironmentKey).Label);
         Press(shell, OriginalLobbyScreen.EnvironmentKey);
         Press(shell, OriginalLobbyScreen.EnvironmentKey + ":5");
         setup.AddBot();

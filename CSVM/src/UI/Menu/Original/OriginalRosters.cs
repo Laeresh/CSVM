@@ -4,18 +4,18 @@ using CSVM.Mech3;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>One chapter row of the Original Free Flight screen: the shared roster's code and the
-/// label this screen writes for it.</summary>
-public readonly record struct OriginalChapter(string Code, string Label);
+/// <summary>One chapter row of the Original Free Flight screen: the shared roster's code. The screen
+/// names it with <see cref="MenuChapters.Name"/>.</summary>
+public readonly record struct OriginalChapter(string Code);
 
 /// <summary>One airframe row: the display name and the planes.zbd node the launch builds.</summary>
 public readonly record struct OriginalAirframe(string Name, string Node);
 
 /// <summary>
 /// The two rosters the Original Free Flight screen lists. The chapters are the shared
-/// <see cref="MenuChapters"/> roster with a short label per code; the airframes are the eleven
-/// stock names in the string table's own order, resolved to nodes through the Instant Action
-/// decode so the name-to-node map has one home. The saved custom planes are appended by
+/// <see cref="MenuChapters"/> roster. The airframes are the eleven stock names in the string
+/// table's own order. The Instant Action decode resolves them to nodes, so the name-to-node map
+/// has one home. The saved custom planes are appended by
 /// <see cref="OriginalPresentation.Roster"/> through the shared player setup's roster rule.
 /// </summary>
 public static class OriginalRosters
@@ -26,7 +26,7 @@ public static class OriginalRosters
         "Firebrand", "Fury", "Kestrel", "Peacemaker", "Warhawk",
     };
 
-    /// <summary>Every Free Flight chapter with its label, in the shared roster's order.</summary>
+    /// <summary>Every Free Flight chapter, in the shared roster's order.</summary>
     public static IReadOnlyList<OriginalChapter> Chapters { get; } = BuildChapters();
 
     /// <summary>The eleven stock airframes with their nodes.</summary>
@@ -50,7 +50,7 @@ public static class OriginalRosters
         var rows = new List<OriginalChapter>();
         foreach (var chapter in MenuChapters.All)
         {
-            rows.Add(new OriginalChapter(chapter.Code, ChapterLabel(chapter.Code)));
+            rows.Add(new OriginalChapter(chapter.Code));
         }
 
         return rows;
@@ -69,18 +69,4 @@ public static class OriginalRosters
 
         return rows;
     }
-
-    // The regions by their place names, short enough for a list column at authored size.
-    private static string ChapterLabel(string code) => code switch
-    {
-        "C1" => "Sea Haven (night)",
-        "C1B" => "The Ocean",
-        "C1C" => "Sea Haven (variant C)",
-        "C2" => "Hollywood",
-        "C2B" => "The Clouds",
-        "C3" => "Hawaii",
-        "C4" => "Rocky Mountains",
-        "C5" => "New York",
-        _ => code,
-    };
 }

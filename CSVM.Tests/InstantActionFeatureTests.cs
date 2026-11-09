@@ -50,7 +50,7 @@ public class InstantActionFeatureTests
         var ia = Feature();
 
         Assert.Equal(0, ia.EnvironmentIndex);
-        Assert.Equal("an airfield", ia.Environment.Name);
+        Assert.Equal("C1", ia.Environment.Code);
         Assert.Equal(0, ia.MissionTypeIndex);
         Assert.True(ia.IsAceDuel);
         Assert.Equal(1, ia.Lives);
@@ -196,7 +196,7 @@ public class InstantActionFeatureTests
         ia.ApplyPreset(0);
 
         Assert.Equal(0, ia.PresetIndex);
-        Assert.Equal("Sky Haven", ia.Environment.Name);
+        Assert.Equal("C4", ia.Environment.Code);
         Assert.Equal("dogfight_squadron", ia.MissionType.Key);
         Assert.Equal("Firebrand", ia.PlayerPlane.Name);
         Assert.Equal(2, ia.NumWingmen);
@@ -210,7 +210,7 @@ public class InstantActionFeatureTests
 
         // An ace preset leaves the wingman plane where it was: the decode reports none at zero.
         ia.ApplyPreset(2);
-        Assert.Equal("the ocean", ia.Environment.Name);
+        Assert.Equal("C1B", ia.Environment.Code);
         Assert.True(ia.IsAceDuel);
         Assert.Equal(0, ia.NumWingmen);
         Assert.Equal("Peacemaker", ia.WingmanPlane.Name);

@@ -590,7 +590,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/IMenuAudio.cs`, the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs`, semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
-- `src/UI/Menu/MenuChapters.cs`, the shared chapter roster: the eight chapter worlds, which carry Danger Zones, and the per-mode filter.
+- `src/UI/Menu/MenuChapters.cs`, the shared chapter roster: the eight chapter worlds, which carry Danger Zones, the per-mode filter, and the one name each chapter shows in every mode.
 - `src/UI/Menu/DisplaySettingRows.cs`, the monitor, size, mode and V-Sync as rows, shared by both Options screens: a label per store word, the forgiving reads, the wrap.
 - `src/UI/Menu/OptionsChoices.cs`, the Options settings the Original pages stage before the apply: the rules that couple them, and the exit.
 - `src/UI/Menu/MenuLayout.cs`, the runtime reader of `menu_layout.json` from `Extraction/RofFiles.cs`: screens, widgets with typed fields, navigation edges.
@@ -657,7 +657,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalAvailability.cs`, Original's availability answer before entry: a refusal reason, or the loaded layout.
 - `src/UI/Menu/Original/SyntheticShell.cs`, the synthetic tree's Original shell: the fixture layout decoded, invented string rows, one generated picture per recorded art size, and the whole tree's family list.
 - `src/UI/Menu/Original/OriginalAssetManifest.cs`, the required/optional file manifest derived from the layout, the backdrop movies among the optional, and the check over a tree.
-- `src/UI/Menu/Original/OriginalRosters.cs`, the Original local lobby's chapter labels and the eleven stock airframes with their nodes.
+- `src/UI/Menu/Original/OriginalRosters.cs`, the Original local lobby's chapters and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs`, the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs`, seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
 - `src/UI/Menu/InstantActionPresets.cs`, the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.

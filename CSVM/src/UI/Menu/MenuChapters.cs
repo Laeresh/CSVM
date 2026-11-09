@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Mech3;
 using CSVM.Spec;
 
 namespace CSVM.UI.Menu;
@@ -29,6 +30,22 @@ public static class MenuChapters
         new("C5", true),
     };
 
+    // Each chapter's one English name in every mode, a remake-only rule: the original's two boxes
+    // word the maps differently (docs/formats/instant-action.md#environment-mapping). The id is
+    // the langui row a translated install reads: the Multiplayer Environment row (10558 + row), or
+    // Instant Action's clouds row for C2B.
+    private static readonly (string Code, string English, int StringId)[] Names =
+    {
+        ("C1", "Airfield", 10562),
+        ("C1B", "The Ocean", 10563),
+        ("C1C", "Above the Clouds", 10558),
+        ("C2", "Hollywood", 10560),
+        ("C2B", "The Clouds", 3651),
+        ("C3", "Hawaii", 10559),
+        ("C4", "Sky Haven", 10564),
+        ("C5", "Manhattan", 10561),
+    };
+
     private static readonly MenuChapter[] WithDangerZones = Array.FindAll(Rows, c => c.DangerZones);
 
     /// <summary>Every chapter, in the order every roster offers them.</summary>
@@ -55,4 +72,23 @@ public static class MenuChapters
 
     /// <summary>Whether a chapter ships Danger Zones; false for a code no chapter carries.</summary>
     public static bool DangerZonesFor(string code) => Find(code)?.DangerZones ?? false;
+
+    /// <summary>The name Free Flight, Instant Action and Multiplayer all show for a chapter. A
+    /// translated <paramref name="strings"/> gives the game's own word, read through one row per
+    /// chapter so the modes agree. Otherwise, and where that row is missing, the English name
+    /// applies. A code no chapter carries is its own name.</summary>
+    public static string Name(string code, UiStrings? strings = null)
+    {
+        foreach (var (chapter, english, id) in Names)
+        {
+            if (chapter == code)
+            {
+                // A leading ] marks some lobby rows and is not drawn (docs/formats/strings.md).
+                string word = strings is { IsTranslation: true } ? strings.Text(id).Trim().TrimStart(']') : "";
+                return word.Length > 0 ? word : english;
+            }
+        }
+
+        return code;
+    }
 }

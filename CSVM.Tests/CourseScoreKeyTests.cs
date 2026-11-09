@@ -67,6 +67,15 @@ public class CourseScoreKeyTests
     }
 
     [Fact]
+    public void LimitingThePlanesKeepsTheBoard()
+    {
+        var limited = Sample with { Planes = new[] { 7 } };
+
+        Assert.Equal(Key(Sample), Key(limited));
+        Assert.Equal(Key(Sample), Key(limited with { Planes = new[] { 0, 1 } }));
+    }
+
+    [Fact]
     public void ACourseRunNeverKeysUnderItsDangerZoneMission()
     {
         // The launch flies a course over the chapter's IA1 world, the Danger Zone key's mission.

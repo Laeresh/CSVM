@@ -58,6 +58,7 @@ public sealed partial class CourseLab : Node
     private OptionButton? _courses;
     private LineEdit? _name;
     private LineEdit? _title;
+    private MenuButton? _planes;
     private Label? _info;
     private Label? _selectedTitle;
     private Control? _selected;
@@ -630,6 +631,7 @@ public sealed partial class CourseLab : Node
         _title = new LineEdit { Name = "course_title", PlaceholderText = "title players see (blank: the name)" };
         _title.TextSubmitted += _ => _title.ReleaseFocus();
         box.AddChild(_title);
+        box.AddChild(PlaneChecks());
 
         box.AddChild(new Label { Text = "LEFT CLICK PLACES", Modulate = Amber });
         var place = new OptionButton { Name = "place_kind", FocusMode = Control.FocusModeEnum.None };
@@ -869,6 +871,17 @@ public sealed partial class CourseLab : Node
             _title.Text = course.Title;
         }
 
+        if (_planes != null)
+        {
+            var popup = _planes.GetPopup();
+            for (int airframe = 0; airframe < popup.ItemCount; airframe++)
+            {
+                popup.SetItemChecked(airframe, course.Admits(airframe));
+            }
+
+            _planes.Text = course.Planes == null ? "Planes: every one" : $"Planes: {course.Planes.Count} of {popup.ItemCount}";
+        }
+
         var s = course.Start;
         _info.Text = $"{course.Name}: {course.Gates.Count} gate(s), {course.Sequence.Count} sequence entr{(course.Sequence.Count == 1 ? "y" : "ies")}"
             + $"\nstart ({Format(s.Position.X)}, {Format(s.Position.Y)}, {Format(s.Position.Z)}) heading {Format(s.HeadingDeg)}";
@@ -919,6 +932,22 @@ public sealed partial class CourseLab : Node
         {
             _status.Text = _note;
         }
+    }
+
+    // One checkable row per stock airframe, ticked where the course admits it, in a menu so the panel
+    // grows one line. A click flips the row; clearing the last one is refused.
+    private Control PlaneChecks()
+    {
+        _planes = new MenuButton { Name = "course_planes", Flat = false, FocusMode = Control.FocusModeEnum.None };
+        var popup = _planes.GetPopup();
+        popup.HideOnCheckableItemSelection = false;
+        foreach (var (name, _) in Mech3.InstantAction.Airframes)
+        {
+            popup.AddCheckItem(name);
+        }
+
+        popup.IndexPressed += i => Draft.SetAdmitted((int)i, !popup.IsItemChecked((int)i));
+        return _planes;
     }
 
     private Button Btn(string text, Action pressed)

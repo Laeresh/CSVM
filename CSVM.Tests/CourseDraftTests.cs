@@ -24,6 +24,37 @@ public class CourseDraftTests
         Assert.Equal("r10", CourseDraft.NextId(new[] { other with { Id = "r9" }, other with { Id = "p12" } }, CourseGateKind.BalloonRing));
     }
 
+    [Fact]
+    public void PlanesAreRefusedOneAtATimeTheLastOneStaysAndAdmittingAllDropsTheList()
+    {
+        var draft = Draft();
+        int changes = 0;
+        draft.Changed += () => changes++;
+
+        Assert.True(draft.SetAdmitted(2, false));
+        Assert.Equal(Enumerable.Range(0, 11).Where(a => a != 2), draft.Course.Planes);
+        Assert.Contains("\"planes\"", draft.Course.ToJson(), System.StringComparison.Ordinal);
+        for (int a = 0; a < 10; a++)
+        {
+            draft.SetAdmitted(a, false);
+        }
+
+        Assert.Equal(new[] { 10 }, draft.Course.Planes);
+        Assert.False(draft.SetAdmitted(10, false));
+        Assert.False(draft.SetAdmitted(11, true));
+        Assert.Equal(new[] { 10 }, draft.Course.Planes);
+
+        // ABLE-TO-FAIL CONTROL: admitting every plane again leaves the file with no list.
+        for (int a = 0; a < 11; a++)
+        {
+            draft.SetAdmitted(a, true);
+        }
+
+        Assert.Null(draft.Course.Planes);
+        Assert.DoesNotContain("\"planes\"", draft.Course.ToJson(), System.StringComparison.Ordinal);
+        Assert.True(changes > 0);
+    }
+
     [Theory]
     [InlineData(0f)]
     [InlineData(90f)]

@@ -252,6 +252,121 @@ internal static class MouseFlightSuites
         ctx.Note($"the mode is the seat's own decision on a stand-in desktop; no real pointer was captured");
     }
 
+    [Suite("flight-mouse-spectate",
+        "the pointer over panes handed to their spectators, followed through the seats' own mode "
+        + "writes on a stand-in desktop: the handoff takes the keyboard seat's hold away and leaves "
+        + "the pointer hidden on every frame it watches, the watcher's right-button release writes no "
+        + "mode where a debugging camera's shows the pointer, a halt shows the pointer for a board "
+        + "that draws none and leaves alone the hide a pause sheet swapped in for its own, the resume "
+        + "hides it again, the hand-back takes the capture afresh, and the pad seat writes no mode")]
+    internal static void FlightMouseSpectate(TestContext ctx)
+    {
+        const Godot.Input.MouseModeEnum Captured = Godot.Input.MouseModeEnum.Captured;
+        const Godot.Input.MouseModeEnum Hidden = Godot.Input.MouseModeEnum.Hidden;
+        const Godot.Input.MouseModeEnum Visible = Godot.Input.MouseModeEnum.Visible;
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk");
+        var stats = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
+        var seat = Rig(ctx, stats, "SpectateMouseSeat", human: true);
+        var pad = Rig(ctx, stats, "SpectatePadSeat", human: true);
+        pad.PlayerIndex = 1;
+        pad.UseKeyboard = false;
+        var rigs = new[]
+        {
+            new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = ctx.Host, Controller = seat },
+            new PlayerRig { Index = 1, Camera = ctx.Camera, HudParent = ctx.Host, Controller = pad },
+        };
+        var watchers = new System.Collections.Generic.List<SpectatorCamera>();
+        var debugCamera = new SpectatorCamera(new Camera3D(), Vector3.Zero, Vector3.Forward);
+        try
+        {
+            foreach (var each in new[] { seat, pad })
+            {
+                each.Mouse.Allowed = true;
+                each.Mouse.ModeForTest = Visible;
+            }
+
+            Frames(seat, pad, 10, halted: false);
+            var flying = seat.Mouse.ModeForTest;
+            ctx.Check(flying == Captured && seat.Mouse.Holding,
+                $"ABLE-TO-FAIL CONTROL: the keyboard seat flying holds the mouse captured (mode {flying}, holding {seat.Mouse.Holding})");
+
+            foreach (var rig in rigs)
+                SpectateHandoff.Begin(rig, rigs, ctx.Host, null, watchers, out _);
+            ctx.Check(seat.Spectating && pad.Spectating && watchers.Count == 2 && watchers.TrueForAll(w => w.SeatHidesPointer),
+                $"both panes are handed to watchers whose look leaves the mode to the seat (spectating {seat.Spectating}/{pad.Spectating}, watchers {watchers.Count})");
+            bool hiddenThroughout = true;
+            for (int frame = 0; frame < 30; frame++)
+            {
+                Frames(seat, pad, 1, halted: false);
+                seat.Mouse.Moved(new InputEventMouseMotion { Relative = new Vector2(40f, 0f) });
+                hiddenThroughout &= seat.Mouse.ModeForTest == Captured && seat.Mouse.Hiding && !seat.Mouse.Holding;
+            }
+
+            ctx.Check(hiddenThroughout,
+                $"every watched frame leaves the pointer hidden without the seat holding it (mode {seat.Mouse.ModeForTest}, hiding {seat.Mouse.Hiding}, holding {seat.Mouse.Holding})");
+
+            // A right-button look, press then release, on each camera's stand-in desktop.
+            foreach (var camera in new[] { debugCamera, watchers[0] })
+            {
+                camera.ModeForTest = Hidden;
+                camera._UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true });
+                camera._UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false });
+            }
+
+            ctx.Check(debugCamera.ModeForTest == Visible,
+                $"ABLE-TO-FAIL CONTROL: a debugging camera's right-button look ends showing the pointer ({debugCamera.ModeForTest})");
+            ctx.Check(watchers[0].ModeForTest == Hidden,
+                $"the watcher's right-button look writes no mode, the seat's hide standing ({watchers[0].ModeForTest})");
+
+            Frames(seat, pad, 1, halted: true);
+            ctx.Check(seat.Mouse.ModeForTest == Visible && !seat.Mouse.Hiding,
+                $"a halt shows the pointer for a board that draws none, the race board's case (mode {seat.Mouse.ModeForTest})");
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == Captured && seat.Mouse.Hiding,
+                $"and the resume hides it again (mode {seat.Mouse.ModeForTest})");
+
+            // The Original pause sheet's own swap: Hidden for its drawn pointer, ahead of the seat's
+            // halted frame, and the Restorable mode back on its close.
+            var saved = seat.Mouse.ModeForTest ?? Captured;
+            seat.Mouse.ModeForTest = Hidden;
+            Frames(seat, pad, 1, halted: true);
+            ctx.Check(seat.Mouse.ModeForTest == Hidden,
+                $"a pause sheet that draws its own pointer keeps the OS one hidden under the halt (mode {seat.Mouse.ModeForTest})");
+            seat.Mouse.ModeForTest = MouseCapture.Restorable(saved);
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(seat.Mouse.ModeForTest == Captured && seat.Mouse.Hiding,
+                $"and its close hands the pane back hidden (mode {seat.Mouse.ModeForTest})");
+
+            SpectateHandoff.HandBack(rigs, watchers);
+            Frames(seat, pad, 1, halted: false);
+            ctx.Check(!seat.Spectating && seat.Mouse.ModeForTest == flying && seat.Mouse.Holding && !seat.Mouse.Hiding,
+                $"the hand-back's next frame takes the capture afresh, as flight had it (mode {seat.Mouse.ModeForTest}, was {flying}, holding {seat.Mouse.Holding})");
+            ctx.Check(pad.Mouse.ModeForTest == Visible && !pad.Mouse.Holding && !pad.Mouse.Hiding,
+                $"the pane whose seat reads no keyboard wrote no mode at any point (mode {pad.Mouse.ModeForTest})");
+        }
+        finally
+        {
+            foreach (var watcher in watchers)
+            {
+                if (GodotObject.IsInstanceValid(watcher))
+                    watcher.QueueFree();
+            }
+
+            foreach (var each in new[] { seat, pad })
+            {
+                each.Mouse.Allowed = false;
+                each.Mouse.ModeForTest = null;
+                each.QueueFree();
+            }
+
+            debugCamera.Camera.Free();
+            debugCamera.Free();
+        }
+
+        ctx.Note($"the seats' and the cameras' modes are on stand-in desktops; no real pointer was captured");
+    }
+
     [Suite("flight-mouse-scheme-live",
         "a Controls page accepted over the pause reaches the seat already flying: the real pause "
         + "Preferences leaf over the install's decoded layout, holding a rebinding feature that "

@@ -44,9 +44,10 @@ public static class UiStringTable
     }
 
     /// <summary>One DLL's table as rows, in ascending id order. <paramref name="dll"/> is the
-    /// DLL's name without extension, the value the reader filters on.</summary>
+    /// DLL's name without extension, the value the reader filters on. Every row carries the
+    /// table's <paramref name="language"/> ID.</summary>
     public static List<UiStringRow> Rows(
-        string dll, SortedDictionary<int, string> table, IReadOnlyDictionary<int, string> symbols)
+        string dll, SortedDictionary<int, string> table, IReadOnlyDictionary<int, string> symbols, int language = 0)
     {
         var rows = new List<UiStringRow>(table.Count);
         foreach (var (id, raw) in table)
@@ -60,7 +61,7 @@ public static class UiStringTable
                 text = m.Groups[2].Value;
             }
 
-            rows.Add(new UiStringRow(id, symbols.TryGetValue(id, out var symbol) ? symbol : null, font, text, dll));
+            rows.Add(new UiStringRow(id, symbols.TryGetValue(id, out var symbol) ? symbol : null, font, text, dll, language));
         }
 
         return rows;
@@ -96,6 +97,7 @@ public static class UiStringTable
                 WriteNullable(w, "font", row.Font);
                 w.WriteString("text", row.Text);
                 w.WriteString("dll", row.Dll);
+                w.WriteNumber("language", row.Language);
                 w.WriteEndObject();
             }
 
@@ -120,5 +122,5 @@ public static class UiStringTable
 
 /// <summary>One row of <c>ui_strings.json</c>. <see cref="Symbol"/> is null for an id no
 /// <c>IDS_</c> define names, <see cref="Font"/> for a row with no single-line <c>[FONTID]</c>
-/// tag.</summary>
-public sealed record UiStringRow(int Id, string? Symbol, string? Font, string Text, string Dll);
+/// tag. The DLL's resource language ID is <see cref="Language"/>, 0 where none was read.</summary>
+public sealed record UiStringRow(int Id, string? Symbol, string? Font, string Text, string Dll, int Language = 0);

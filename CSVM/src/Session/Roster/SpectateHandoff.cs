@@ -59,6 +59,7 @@ internal static class SpectateHandoff
         {
             ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
             LockCandidates = lockCandidates,
+            SeatHidesPointer = true,   // FlightController hides it for as long as the pane spectates
         };
         worldRoot.AddChild(spectator);
         tracked?.Add(spectator);   // tracked so a rerun can hand the panes back

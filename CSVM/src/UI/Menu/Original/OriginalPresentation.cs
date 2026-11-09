@@ -1237,7 +1237,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         if (tab is "course" or "course-zones" && host.Dogfight is { } race)
         {
-            // A Stunt Race on NW Boeing Field, every door listing the shipped courses, over the first
+            // A Stunt Race on Airfield, every door listing the shipped courses, over the first
             // of them or the Danger Zones.
             foreach (var door in guests.Prepend(host))
             {

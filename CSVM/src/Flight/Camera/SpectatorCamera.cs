@@ -29,6 +29,12 @@ public sealed partial class SpectatorCamera : Node
     /// <summary>Shows the live position/speed readout (on by default; off for screenshots).</summary>
     public bool ShowReadout = true;
 
+    /// <summary>Whether the pane's flight seat keeps the pointer hidden for this camera, a watcher's
+    /// (<c>SpectateHandoff</c>). The right-button look then writes no mouse mode, the seat's hide
+    /// already reporting relative motion. False (the default) captures on the press and shows the
+    /// pointer on the release, for a debugging camera that points with it.</summary>
+    public bool SeatHidesPointer;
+
     /// <summary>What the target key (<c>F</c> / pad <c>X</c>) may lock onto, answered afresh on
     /// each press. Null (the default) leaves the key inert, for a call site with no roster to
     /// offer. A caller that has one supplies the aircraft it considers in play; the key takes the
@@ -111,6 +117,11 @@ public sealed partial class SpectatorCamera : Node
     /// (WASD/QE / left stick), so flying off ends the lock while looking keeps it.</summary>
     public Node3D? Follow { get; private set; }
 
+    /// <summary>The desktop mouse mode the look writes while set, standing in for
+    /// <c>Input.MouseMode</c> on a display that keeps no mode (<see cref="SeatMouse.ModeForTest"/>'s
+    /// pattern). Null, the default, is the real desktop.</summary>
+    internal Input.MouseModeEnum? ModeForTest { get; set; }
+
     // True while a text input owns keyboard focus (the picker's filter): the camera polls raw key
     // state, which bypasses GUI focus, so without this typing WASD would fly the camera.
     private bool KeyboardCaptured => GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit;
@@ -183,7 +194,13 @@ public sealed partial class SpectatorCamera : Node
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Right } rmb:
                 _looking = rmb.Pressed;
-                Input.MouseMode = _looking ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+                if (SeatHidesPointer)
+                    break;
+                var mode = _looking ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+                if (ModeForTest.HasValue)
+                    ModeForTest = mode;
+                else
+                    Input.MouseMode = mode;
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp, Pressed: true }:
                 // While locked the wheel zooms the orbit; otherwise it sets the fly speed.
