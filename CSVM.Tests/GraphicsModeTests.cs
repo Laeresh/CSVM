@@ -154,6 +154,26 @@ public class GraphicsModeTests
         }
     }
 
+    /// <summary>The Shadow Distance stretches the sun only in enhanced mode, both ways across a live
+    /// switch. Kept in this class because the mode is process-wide.</summary>
+    [Fact]
+    public void TheShadowDistanceScaleFollowsTheLiveSwitch()
+    {
+        try
+        {
+            ShadowDistanceSetting.Lookup.ResolveFrom(ShadowDistanceSetting.Extreme, null, new SettingContext(true, true, 1));
+            GraphicsMode.Set(true);
+            Assert.Equal(2f, ShadowDistanceSetting.EnhancedScale());
+            GraphicsMode.Set(false);
+            Assert.Equal(1f, ShadowDistanceSetting.EnhancedScale());
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+            ShadowDistanceSetting.Lookup.ResolveFrom(null, null, new SettingContext(true, false, 1));
+        }
+    }
+
     /// <summary>The View Distance reaches the clutter only in enhanced mode, both ways across a
     /// live switch. The faithful fade stays the decoded one whatever is saved.</summary>
     [Fact]

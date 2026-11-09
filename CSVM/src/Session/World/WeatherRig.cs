@@ -1047,7 +1047,7 @@ public sealed class WeatherRig
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
         return Log.Format($"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
-               + Log.Format($"shadows to {FogRangeFor(fog).X * tune.ShadowDistance:0} m")
+               + Log.Format($"shadows to {FogRangeFor(fog).X * tune.ShadowDistance * ShadowDistanceSetting.EnhancedScale():0} m")
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty)
                + (tune != ZoneLighting.Default ? $"; lighting tune {tune.Describe()}" : string.Empty);
     }
@@ -1701,7 +1701,7 @@ public sealed class WeatherRig
         var tune = Tuning(fog);
         if (fog.FogFar > 0f)
         {
-            _sun.DirectionalShadowMaxDistance = FogRangeFor(fog).X * tune.ShadowDistance;
+            SunShadow.WriteDistance(_sun, FogRangeFor(fog).X * tune.ShadowDistance);
             _sun.DirectionalShadowFadeStart = tune.FadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
@@ -1733,9 +1733,7 @@ public sealed class WeatherRig
         {
             _sun.ShadowBias = tune.ShadowBias;
             _sun.ShadowNormalBias = tune.NormalBias;
-            _sun.DirectionalShadowSplit1 = tune.Split1;
-            _sun.DirectionalShadowSplit2 = tune.Split2;
-            _sun.DirectionalShadowSplit3 = tune.Split3;
+            SunShadow.WriteSplits(_sun, tune.Split1, tune.Split2, tune.Split3);
             _sun.DirectionalShadowFadeStart = tune.FadeStart;
             ShadowQualitySetting.Softness = tune.ShadowSoftness;
             ShadowQualitySetting.ApplyTo(_sun, ShadowQualitySetting.Sun, true, ShadowQualitySetting.HardShadows);

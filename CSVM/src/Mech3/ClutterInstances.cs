@@ -146,13 +146,9 @@ public sealed class ClutterInstances
         bool rich = RichWanted;
         if (rich != _rich)
             MoveTo(rich ? _richVariant!.Placements : _proto.Placements, rich);
+        // CellsAt ranges the layout it returns, the drawn one included.
         var want = GraphicsMode.Enhanced ? CellsAt(EffectsLevel.RegisteredScaleSq) : _whole!;
-        if (ReferenceEquals(want, _drawn))
-        {
-            if (want.IsCut)
-                want.Range(EffectsLevel.RegisteredScaleSq);
-        }
-        else
+        if (!ReferenceEquals(want, _drawn))
         {
             // The new node takes the old one's place among the root's children. Draw order between
             // kinds that overlap follows it, so a recut kind draws where a fresh build puts it.
@@ -258,6 +254,9 @@ public sealed class ClutterInstances
     private Layout CellsAt(float fadeScaleSq, bool nodes = false)
     {
         var proto = _proto!;
+        // The Rich cards fade out further under a far 3D Vegetation word (VegetationModels.Reach), so their cells range further.
+        if (_rich)
+            fadeScaleSq *= VegetationModels.ReachSq;
         ref var cells = ref _rich ? ref _richCells : ref _cells;
         float cellM = CellFor(KindFarM(proto.Fades, fadeScaleSq));
         if (cells == null || cells.CellM != cellM)

@@ -386,8 +386,10 @@ A live change runs `EnhancedLook.ApplyVegetationQuality`, which has `Launch/Vege
 (`Follow`); a mode switch recuts them too. The VIDEO page shows it as the Vegetation dropdown under View Distance.
 
 ## src/Utils/VegetationModelsSetting.cs
-How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (400 to 600 m, the default) or
-`far` (600 to 900 m); `VegetationModels.BandFor` holds the bands. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
+How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs`): `off`, `near` (400 to 600 m, the default),
+`far` (600 to 900 m), `veryfar` (900 to 1350 m) or `extreme` (1200 to 1800 m); `VegetationModels.BandFor` holds the bands.
+`veryfar` and `extreme` also push the Rich cards' fade, their cells' ranges, the clump handover and C3's crown models out 1.5x or 2x
+(`VegetationModels.Reach`), so the models stand where cards still draw; other clutter keeps the View Distance fade. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
 the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
 included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
 clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
@@ -399,6 +401,14 @@ Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `o
 (`default_det`), so a golden draws none unless its command line asks. It has no live-apply hook: the owner reads `Enabled`
 every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
+
+## src/Utils/ShadowDistanceSetting.cs
+How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
+(2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the
+`graphics.shadowDistance` key, then `normal` on every machine and under `--det`. `SunShadow.Stretch` multiplies the sun's given
+distance by the scale and divides its three split fractions by it, so the near cascades keep their metres and only the far one
+reaches further, at coarser texels. A live change stretches the session sun again. The VIDEO page shows it as the Shadow Distance
+dropdown under Cloud Shadows.
 
 ## src/Utils/PostProcessingSetting.cs
 Whether Enhanced grades the lit world (`Session/World/WeatherRig.cs`'s `WriteGrade`, at the zone tune's grade): `off` or `on`. It resolves as
@@ -437,7 +447,9 @@ cost. `Launcher` folds `EnhancedReach` into the clutter fade global at startup a
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
 plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
 graphics-mode switch, and `Launch/EnhancedLook.cs` resets the session sun from a fresh light
-through it. Below Flight and Session so both share one field list.
+through it. Below Flight and Session so both share one field list. It also keeps the session sun's given shadow distance and
+split fractions (`WriteDistance`, `WriteSplits`) and writes them under the Shadow Distance scale (`Stretch`); a copy takes
+the given splits, so the cockpit pass's short range never stretches.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
