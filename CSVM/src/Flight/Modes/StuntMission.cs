@@ -438,6 +438,14 @@ public sealed class StuntMission
     /// warned. Rule: docs/org/aiPilot.md "Stunt race bots".</summary>
     public void FitLines(Func<Vector3, Vector3, Basis, bool> blocked)
     {
+        for (int i = 0; i < _zones.Count; i++)
+            FitLine(blocked, i);
+    }
+
+    /// <summary>Lays entry <paramref name="i"/>'s line alone, as <see cref="FitLines"/> lays them all.
+    /// A race spreads its bots' fits over the opening count with it, one entry a step.</summary>
+    public void FitLine(Func<Vector3, Vector3, Basis, bool> blocked, int i)
+    {
         ArgumentNullException.ThrowIfNull(blocked);
         if (Course == null)
             return;
@@ -489,62 +497,66 @@ public sealed class StuntMission
             return null;
         }
 
-        _leadRise = new float[_zones.Count];
-        _runRise = new float[_zones.Count];
-        _runOut = new float[_zones.Count];
-        _leadWay = new Vector3[_zones.Count];
-        _runWay = new Vector3[_zones.Count];
-        _knifeEdge = new bool[_zones.Count];
-        _shift = new Vector3[_zones.Count];
-        for (int i = 0; i < _zones.Count; i++)
+        if (_leadRise.Length != _zones.Count)
         {
-            var (centre, way) = EntryAxis(i);
-            var level = Side(centre, -way, EntryLeadInM, knife: false, lead: true);
-            (Vector3 Way, float Slope)? lead = null;
-            (Vector3 Way, float Slope, float Metres)? run = null;
+            _leadRise = new float[_zones.Count];
+            _runRise = new float[_zones.Count];
+            _runOut = new float[_zones.Count];
+            _leadWay = new Vector3[_zones.Count];
+            _runWay = new Vector3[_zones.Count];
+            _knifeEdge = new bool[_zones.Count];
+            _shift = new Vector3[_zones.Count];
+        }
 
-            // ⚠ Try level, then knife-edge at every place in the opening, before a shorter exit. Off the end
-            // of a short one, the bot flies on into what cut it short (C2's p12 at 106 m).
-            var across = way.Cross(Vector3.Up).Normalized();
-            foreach (float metres in ExitLengthsM)
+        // A refit starts level and through the centre, as a fresh one does.
+        _knifeEdge[i] = false;
+        _shift[i] = Vector3.Zero;
+        var (centre, way) = EntryAxis(i);
+        var level = Side(centre, -way, EntryLeadInM, knife: false, lead: true);
+        (Vector3 Way, float Slope)? lead = null;
+        (Vector3 Way, float Slope, float Metres)? run = null;
+
+        // ⚠ Try level, then knife-edge at every place in the opening, before a shorter exit. Off the end
+        // of a short one, the bot flies on into what cut it short (C2's p12 at 106 m).
+        var across = way.Cross(Vector3.Up).Normalized();
+        foreach (float metres in ExitLengthsM)
+        {
+            if (level != null && Side(centre, way, metres, knife: false, lead: false) is { } levelRun)
             {
-                if (level != null && Side(centre, way, metres, knife: false, lead: false) is { } levelRun)
-                {
-                    (lead, run) = (level, (levelRun.Way, levelRun.Slope, metres));
-                    break;
-                }
-
-                foreach (var shift in EntryKnifeShifts(across))
-                {
-                    if (Side(centre + shift, way, metres, knife: true, lead: false) is { } knifeRun
-                        && Side(centre + shift, -way, EntryLeadInM, knife: true, lead: true) is { } knifeLead)
-                    {
-                        (lead, run, _knifeEdge[i], _shift[i]) = (knifeLead, (knifeRun.Way, knifeRun.Slope, metres), true, shift);
-                        break;
-                    }
-                }
-
-                if (run != null)
-                    break;
+                (lead, run) = (level, (levelRun.Way, levelRun.Slope, metres));
+                break;
             }
 
-            // With neither, the level parts that fit stand.
-            lead ??= level;
-            run ??= Exit(centre, way, knife: false);
+            foreach (var shift in EntryKnifeShifts(across))
+            {
+                if (Side(centre + shift, way, metres, knife: true, lead: false) is { } knifeRun
+                    && Side(centre + shift, -way, EntryLeadInM, knife: true, lead: true) is { } knifeLead)
+                {
+                    (lead, run, _knifeEdge[i], _shift[i]) = (knifeLead, (knifeRun.Way, knifeRun.Slope, metres), true, shift);
+                    break;
+                }
+            }
 
-            if (lead == null || run == null)
-                Log.Warn("flight", $"course entry {i + 1} ({_zones[i].PathName}): no line, level or knife-edge, clears the world {(lead == null ? "before" : "after")} the gate; it stays straight and level there");
-
-            // A climbing, turned or knife-edge exit is ridden to the end the fit cleared. Off the rail at
-            // EntryRunOutM, a bot sinks back under its line before the flight law climbs.
-            bool ridden = run is { } r && (r.Slope > 0f || r.Way != way || _knifeEdge[i]);
-            _runOut[i] = ridden ? run!.Value.Metres : EntryRunOutM;
-            _leadWay[i] = -(lead?.Way ?? -way);
-            _runWay[i] = run?.Way ?? way;
-            _leadRise[i] = (lead?.Slope ?? 0f) * EntryLeadInM;
-            _runRise[i] = (run?.Slope ?? 0f) * _runOut[i];
-            _zones[i].Route = EntryLine(i);
+            if (run != null)
+                break;
         }
+
+        // With neither, the level parts that fit stand.
+        lead ??= level;
+        run ??= Exit(centre, way, knife: false);
+
+        if (lead == null || run == null)
+            Log.Warn("flight", $"course entry {i + 1} ({_zones[i].PathName}): no line, level or knife-edge, clears the world {(lead == null ? "before" : "after")} the gate; it stays straight and level there");
+
+        // A climbing, turned or knife-edge exit is ridden to the end the fit cleared. Off the rail at
+        // EntryRunOutM, a bot sinks back under its line before the flight law climbs.
+        bool ridden = run is { } r && (r.Slope > 0f || r.Way != way || _knifeEdge[i]);
+        _runOut[i] = ridden ? run!.Value.Metres : EntryRunOutM;
+        _leadWay[i] = -(lead?.Way ?? -way);
+        _runWay[i] = run?.Way ?? way;
+        _leadRise[i] = (lead?.Slope ?? 0f) * EntryLeadInM;
+        _runRise[i] = (run?.Slope ?? 0f) * _runOut[i];
+        _zones[i].Route = EntryLine(i);
     }
 
     /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
