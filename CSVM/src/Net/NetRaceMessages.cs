@@ -18,14 +18,8 @@ public enum NetRaceRun : byte
     /// <summary>The run cleared every zone, in the run time carried.</summary>
     Finished = 3,
 
-    /// <summary>The run was thrown away by a held live respawn, or the run or its approach was
-    /// stopped by a crash in the final run.</summary>
+    /// <summary>The run was thrown away by a rerun, or stopped by a crash in the final run.</summary>
     Abandoned = 4,
-
-    /// <summary>A held live respawn's fresh run began its approach, sent right after that hold's
-    /// abandon. Numbered like a start, so a later abandon can name it; the host grants it only in
-    /// its open window. A host of an earlier build of this minor refuses it as superseded.</summary>
-    Approach = 5,
 }
 
 /// <summary>Where a host's stunt race stands, as a <see cref="RaceStateMessage"/> carries it. The
@@ -65,8 +59,8 @@ public enum NetRaceCall : byte
 /// <summary>
 /// One fact about a seat's own run, sent by the machine flying it to the host, which times nothing
 /// of a remote seat itself. Reliable. <c>Run</c> numbers the owner's runs from 1 within a window,
-/// and <c>Window</c> numbers the window. The host drops a repeated start or approach, and any
-/// report of a run or window it has passed (<c>docs/org/multiplayer-messages.md</c>).
+/// and <c>Window</c> numbers the window. The host drops a repeated start and any report of a run or a
+/// window it has moved past (<c>docs/org/multiplayer-messages.md</c>, "Stunt race").
 /// </summary>
 public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zone, byte Window, ushort Run, float RunTime)
     : INetMessage<RaceRunMessage>

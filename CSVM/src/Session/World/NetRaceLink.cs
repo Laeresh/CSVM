@@ -177,13 +177,8 @@ internal sealed class NetRaceLink
         }
 
         run.RunStarted += () => Report(seat, NetRaceRun.Started);
-        // ⚠ Do not drop the abandon ahead of the approach. An earlier build of this minor
-        // takes it and refuses the approach's newer number as superseded, so the hold is a plain abandon there.
-        run.RunReset += () =>
-        {
-            Report(seat, NetRaceRun.Abandoned);
-            Report(seat, NetRaceRun.Approach);
-        };
+        run.RunReset += () => Report(seat, NetRaceRun.Abandoned);
+        // The host stops a run lost in its final run as it stops one thrown away.
         run.RunStopped += () => Report(seat, NetRaceRun.Abandoned);
         run.ZoneCompleted += zone =>
         {
@@ -198,8 +193,8 @@ internal sealed class NetRaceLink
         run.RunCompleted += () => Report(seat, NetRaceRun.Finished, runTime: run.Elapsed);
     }
 
-    /// <summary>A guest's report of one event of its own seat's run. A start or an approach numbers
-    /// a new run; every other event names the run in progress.</summary>
+    /// <summary>A guest's report of one event of its own seat's run. A start numbers a new run;
+    /// every other event names the run in progress.</summary>
     internal void Report(int seat, NetRaceRun kind, int zone = RaceRunMessage.NoZone, float runTime = 0f)
     {
         if (_net.IsHost)
@@ -214,7 +209,7 @@ internal sealed class NetRaceLink
         }
 
         ushort run = _ownRuns.GetValueOrDefault(seat);
-        if (kind is NetRaceRun.Started or NetRaceRun.Approach)
+        if (kind == NetRaceRun.Started)
         {
             _ownRuns[seat] = ++run;
         }
@@ -347,9 +342,9 @@ internal sealed class NetRaceLink
         }
     }
 
-    // The host's intake. Only the machine flying a seat reports it, under the current window. A
-    // repeated start or approach and an event of a run already superseded are dropped. The race then
-    // applies its own rules on the host's clock: an approach only in the open window, nothing after the end.
+    // The host's intake. Only the machine flying a seat reports it, under the current window; a
+    // repeated start and an event of a run already superseded are dropped. The race then applies
+    // its own rules: no start outside the open window, nothing after the end.
     private void TakeReport(int peer, RaceRunMessage report)
     {
         if (peer == _net.LocalPeer || _net.PeerOfSeat(report.Seat) != peer)
@@ -377,11 +372,10 @@ internal sealed class NetRaceLink
         }
 
         ushort newest = _ownerRuns.GetValueOrDefault(report.Seat);
-        bool numbers = report.Kind is NetRaceRun.Started or NetRaceRun.Approach;
-        bool fresh = numbers ? report.Run > newest : newest != 0 && report.Run == newest;
+        bool fresh = report.Kind == NetRaceRun.Started ? report.Run > newest : newest != 0 && report.Run == newest;
         if (!fresh)
         {
-            Refuse(report, numbers ? "a repeated run number" : "of a run already superseded");
+            Refuse(report, report.Kind == NetRaceRun.Started ? "a repeated start" : "of a run already superseded");
             return;
         }
 
@@ -393,14 +387,6 @@ internal sealed class NetRaceLink
                 if (!_race.RunStarted(report.Seat))
                 {
                     Log.Info("flight", $"net race: seat {report.Seat}'s run {report.Run} started outside the open window or after its pilot left, not counted");
-                }
-
-                break;
-            case NetRaceRun.Approach:
-                _ownerRuns[report.Seat] = report.Run;
-                if (!_race.RunReset(report.Seat))
-                {
-                    Log.Info("flight", $"net race: seat {report.Seat}'s held approach {report.Run} reached the host outside the open window, an abandon");
                 }
 
                 break;

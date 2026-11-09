@@ -244,143 +244,35 @@ public sealed class NetStuntRaceTests
     }
 
     [Fact]
-    public void AGuestsHoldBeforeTimeUpGrantsItARunAfterItOnBothBoards()
+    public void AGuestsHoldBeforeTimeUpIsAnAbandonWhileAHostSeatsHoldKeepsItsFreshRunsPlace()
     {
         var f = Field();
-        var run = StuntRaceTests.FakeMission(Zones);
-        f.Guest.Feed(1, run);
-        run.Tick(Dt);
-        run.Reset();
-        f.Pump();
+        var hostRun = StuntRaceTests.FakeMission(Zones);
+        var guestRun = StuntRaceTests.FakeMission(Zones);
+        f.Host.Feed(0, hostRun);
+        f.Guest.Feed(1, guestRun);
+        foreach (var run in new[] { hostRun, guestRun })
+        {
+            run.Tick(Dt);
+            run.Reset();
+        }
 
-        // The hold reaches this build's host as the abandon and the approach, both taken.
-        Assert.Equal((3, 0), (f.Host.ReportsTaken, f.Host.ReportsRefused));
+        f.Pump();
+        var hostSeat = f.HostRace.Of(0)!;
+        var guestSeat = f.HostRace.Of(1)!;
+        Assert.Equal((2, 0), (f.Host.ReportsTaken, f.Host.ReportsRefused));
+        Assert.Equal((true, true), (hostSeat.InRun, hostSeat.OnApproach));
+        Assert.Equal((false, false), (guestSeat.InRun, guestSeat.OnApproach));
+
+        // The guest's hold crossed as an abandon, so the race refuses its start after time up; the host seat's armed approach admits its own.
         Advance(f.HostRace, Window + 1f);
-        Advance(f.GuestRace, Window + 1f);
-        f.Step();
-        var hosted = f.HostRace.Of(1)!;
-        Assert.Equal((StuntRacePhase.FinalRun, true, true, 1), (f.HostRace.Phase, hosted.InRun, hosted.OnApproach, hosted.RunsStarted));
-        Assert.True(f.GuestRace.Of(1)!.InRun);
-
-        // The run starts after time up and counts on both boards.
-        run.Tick(Dt);
-        for (int zone = 0; zone < Zones; zone++)
-        {
-            f.Guest.Report(1, NetRaceRun.Zone, zone, 1f + zone);
-        }
-
-        f.Guest.Report(1, NetRaceRun.Finished, runTime: Zones);
+        Assert.Equal(StuntRacePhase.FinalRun, f.HostRace.Phase);
+        hostRun.Tick(Dt);
+        guestRun.Tick(Dt);
         f.Pump();
-        Assert.Equal((2, 1, (float?)Zones), (hosted.RunsStarted, hosted.RunsFinished, hosted.BestTime));
-        Assert.True(f.HostRace.Ended);
-        f.Step();
-        Assert.Equal(((float?)Zones, 2), (f.GuestRace.Of(1)!.BestTime, f.GuestRace.Of(1)!.RunsStarted));
-        Assert.True(f.GuestRace.Ended);
-    }
-
-    [Fact]
-    public void AGuestsCrashOnItsApproachEndsTheRaceAtOnceAndAHoldReachingTheHostLateIsAnAbandon()
-    {
-        var f = Field();
-        var run = StuntRaceTests.FakeMission(Zones);
-        f.Guest.Feed(1, run);
-        run.Tick(Dt);
-        run.Reset();
-        f.Pump();
-        Advance(f.HostRace, Window + 1f);
-        Advance(f.GuestRace, Window + 1f);
-        f.Step();
-
-        // ABLE-TO-FAIL CONTROL: the host waits on the guest's approach.
-        Assert.Equal((false, true), (f.HostRace.Ended, f.HostRace.Of(1)!.OnApproach));
-        run.Stop();
-        f.Pump();
-        Assert.Equal((false, 1, true), (f.HostRace.Of(1)!.InRun, f.HostRace.Of(1)!.RunsStarted, f.HostRace.Ended));
-        f.Step();
-        Assert.True(f.GuestRace.Ended);
-
-        // A hold sent before the guest's own time up that reaches the host after its own.
-        var late = Field();
-        var lateRun = StuntRaceTests.FakeMission(Zones);
-        late.Guest.Feed(1, lateRun);
-        lateRun.Tick(Dt);
-        late.Pump();
-        Advance(late.HostRace, Window + 1f);
-        Assert.Equal((StuntRacePhase.FinalRun, true), (late.HostRace.Phase, late.HostRace.Of(1)!.InRun));
-        lateRun.Reset();
-        late.Pump();
-        Assert.Equal((false, false, true), (late.HostRace.Of(1)!.InRun, late.HostRace.Of(1)!.OnApproach, late.HostRace.Ended));
-        Assert.Equal((3, 0), (late.Host.ReportsTaken, late.Host.ReportsRefused));
-    }
-
-    [Fact]
-    public void AHostOfAnEarlierBuildOfThisMinorTakesAHoldAsAPlainAbandonAndEndsTheRaceAtTimeUp()
-    {
-        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(2267));
-        var roster = new[]
-        {
-            new NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Red" },
-            new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
-        };
-        var sessions = new[] { NetSession.Host(mesh[0], roster, 0x5EEDUL), NetSession.Guest(mesh[1]) };
-        Pump(sessions);
-        var races = new[] { new StuntRace(Window, Zones), new StuntRace(Window, Zones) };
-        foreach (var race in races)
-        {
-            race.Add(0, "Bloodhawk");
-            race.Add(1, "Kestrel");
-        }
-
-        // The earlier build's intake. A start must carry a newer run and any other report must name
-        // the newest; a kind it does not know counts nothing.
-        var hostRace = races[0];
-        var heard = new List<NetRaceRun>();
-        int newest = 0;
-        int refused = 0;
-        sessions[0].On<RaceRunMessage>((_, report) =>
-        {
-            heard.Add(report.Kind);
-            if (!(report.Kind == NetRaceRun.Started ? report.Run > newest : newest != 0 && report.Run == newest))
-            {
-                refused++;
-                return;
-            }
-
-            switch (report.Kind)
-            {
-                case NetRaceRun.Started:
-                    newest = report.Run;
-                    hostRace.RunStarted(report.Seat);
-                    break;
-                case NetRaceRun.Abandoned:
-                    hostRace.RunAbandoned(report.Seat);
-                    break;
-                default:
-                    refused++;
-                    break;
-            }
-        });
-        var guestLink = NetRaceLink.Open(sessions[1], races[1], () => 0.0, null, null, Dt);
-        foreach (var race in races)
-        {
-            race.BeginOpening(0f);
-        }
-
-        var run = StuntRaceTests.FakeMission(Zones);
-        guestLink.Feed(1, run);
-        run.Tick(Dt);
-        run.Reset();
-        Pump(sessions);
-        Assert.Equal(new[] { NetRaceRun.Started, NetRaceRun.Abandoned, NetRaceRun.Approach }, heard);
-        Assert.Equal((1, false), (refused, hostRace.Of(1)!.InRun));
-
-        // On that host nobody is in a run at time up and the race ends. A crash on
-        // the approach names a run that host never took.
-        Advance(hostRace, Window + 1f);
-        Assert.True(hostRace.Ended);
-        run.Stop();
-        Pump(sessions);
-        Assert.Equal((NetRaceRun.Abandoned, 2), (heard[^1], refused));
+        Assert.Equal(3, f.Host.ReportsTaken);
+        Assert.Equal((2, true), (hostSeat.RunsStarted, hostSeat.InRun));
+        Assert.Equal((1, false), (guestSeat.RunsStarted, guestSeat.InRun));
     }
 
     [Fact]
