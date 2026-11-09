@@ -26,8 +26,9 @@ internal sealed partial class ProtoClouds : Node3D
     // The authored band is the whiteout's thin sheet. The cumulus layer stands this much taller
     // over the same floor, so the heads have room to tower.
     private const float LayerDepthGain = 3f;
-    private const float LayerMinDepthM = 600f;
+    private const float LayerMinDepthM = 900f;
     private const int ShellCount = 24;
+    private const float DeckCover = 0.92f;
     private const float ShellSizeM = 36000f;
     private const float PuffMapSize = 128;
     private const float PuffRadiusM = 170f;
@@ -46,15 +47,17 @@ internal sealed partial class ProtoClouds : Node3D
     private readonly List<MeshInstance3D> _hidden = new();
     private readonly float? _bottom;
     private readonly float? _top;
+    private readonly bool _hasDeck;
     private Variant _variant;
     private Node3D? _built;
     private bool _hiding;
 
     private ProtoClouds(Variant variant, Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
-        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, Func<Camera3D?> camera)
+        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, Func<Camera3D?> camera, bool hasDeck)
     {
         Name = "ProtoClouds";
         _variant = variant;
+        _hasDeck = hasDeck;
         _worldRoot = worldRoot;
         _weather = weather;
         _field = field;
@@ -87,10 +90,10 @@ internal sealed partial class ProtoClouds : Node3D
     /// <summary>The prototype over <paramref name="worldRoot"/>'s world: it hides the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
     /// placed, and draws <paramref name="variant"/> over the band or <paramref name="volumes"/>. The shells
-    /// follow <paramref name="camera"/>.</summary>
+    /// follow <paramref name="camera"/>; <paramref name="hasDeck"/> draws the overcast deck under the heads.</summary>
     public static ProtoClouds Create(Variant variant, Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
-        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, Func<Camera3D?> camera) =>
-        new(variant, worldRoot, weather, field, scene, volumes, camera);
+        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, Func<Camera3D?> camera, bool hasDeck) =>
+        new(variant, worldRoot, weather, field, scene, volumes, camera, hasDeck);
 
     /// <summary>The layer's altitudes: the mission's cloud band where it authors one, else the fvol
     /// volumes' vertical union, else none.</summary>
@@ -173,21 +176,33 @@ internal sealed partial class ProtoClouds : Node3D
         uniform float erosion = 0.55;
         uniform float density_gain = 0.025;
         uniform int steps = 40;
-        uniform vec3 sun_rgb = vec3(1.0, 0.96, 0.9);
-        uniform float ambient_gain = 0.6;
+        uniform vec3 sun_rgb = vec3(0.8, 0.77, 0.72);
+        uniform float ambient_gain = 0.5;
         uniform float far_m = 24000.0;
+        // The stratus deck's share of the sky, 0 in a chapter without a deck, and its depth over the
+        // layer floor. The heads' coverage gain is lower over a deck.
+        uniform float deck_cover = 0.0;
+        uniform float deck_depth_m = 150.0;
+        uniform float heads_gain = 1.0;
         """;
 
     // The march, its lighting and the write, shared by every variant after its own PC_COVER.
     private static string SharedFunctions() => """
+        // The whole field at `p`: the cumulus heads over the variant's coverage, the deck under them.
+        float pc_density(vec3 p, float bottom, float top, float cover_scale) {
+            float c = PC_COVER(p) * heads_gain * cover_scale;
+            float heads = csky_pc_density(p, bottom, top, c, detail_m, erosion);
+            float deck = csky_pc_deck_density(p, bottom, bottom + deck_depth_m, deck_cover, detail_m);
+            return max(heads, deck);
+        }
+
         // The sun's share reaching `p`, three taps up the sun ray inside the layer.
         float pc_sun(vec3 p, float step_m, float bottom, float top, float cover_scale) {
             float od = 0.0;
             vec3 q = p;
             for (int i = 0; i < 3; i++) {
                 q += csky_sun_dir * step_m;
-                float c = PC_COVER(q) * cover_scale;
-                od += csky_pc_density(q, bottom, top, c, detail_m, erosion) * density_gain * step_m;
+                od += pc_density(q, bottom, top, cover_scale) * density_gain * step_m;
             }
             return csky_pc_beer_powder(od);
         }
@@ -217,8 +232,7 @@ internal sealed partial class ProtoClouds : Node3D
             float sun_step = max((top - bottom) * 0.3, 20.0);
             for (int i = 0; i < n && trans > 0.01; i++) {
                 vec3 p = eye + dir * t;
-                float c = PC_COVER(p) * cover_scale;
-                float d = csky_pc_density(p, bottom, top, c, detail_m, erosion);
+                float d = pc_density(p, bottom, top, cover_scale);
                 if (d > 0.001) {
                     float ext = d * density_gain * dt;
                     float a = 1.0 - exp(-ext);
@@ -336,8 +350,7 @@ internal sealed partial class ProtoClouds : Node3D
         void fragment() {
             vec3 eye = CAMERA_POSITION_WORLD;
             vec3 p = v_world;
-            float c = PC_COVER(p);
-            float d = csky_pc_density(p, layer_bottom, layer_top, c, detail_m, erosion);
+            float d = pc_density(p, layer_bottom, layer_top, 1.0);
             float a = 1.0 - exp(-d * density_gain * shell_thickness_m);
             float dist = distance(p, eye);
             a *= smoothstep(0.0, near_fade_m, dist);
@@ -352,14 +365,6 @@ internal sealed partial class ProtoClouds : Node3D
             ALPHA = a;
         }
         """;
-
-    private static ShaderMaterial MaterialOf(string code, float bottom, float top)
-    {
-        var material = new ShaderMaterial { Shader = new Shader { Code = code }, RenderPriority = 120 };
-        material.SetShaderParameter("layer_bottom", bottom);
-        material.SetShaderParameter("layer_top", top);
-        return material;
-    }
 
     private static Aabb Grow(Aabb box, float margin) => box.Grow(margin);
 
@@ -400,6 +405,19 @@ internal sealed partial class ProtoClouds : Node3D
         return ImageTexture.CreateFromImage(image);
     }
 
+    private ShaderMaterial MaterialOf(string code, float bottom, float top)
+    {
+        var material = new ShaderMaterial { Shader = new Shader { Code = code }, RenderPriority = 120 };
+        material.SetShaderParameter("layer_bottom", bottom);
+        material.SetShaderParameter("layer_top", top);
+        // A deck chapter reads as a near-solid overcast with a few tall heads over it, formed only
+        // where the pattern is strong. One without a deck draws fuller heads alone.
+        material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
+        material.SetShaderParameter("cover_bias", _hasDeck ? -0.3f : 0.15f);
+        material.SetShaderParameter("heads_gain", _hasDeck ? 1.15f : 1f);
+        return material;
+    }
+
     private void Rebuild()
     {
         FreeBuilt();
@@ -420,7 +438,7 @@ internal sealed partial class ProtoClouds : Node3D
         _built = root;
         AddChild(root);
         string layer = _bottom is { } b && _top is { } t ? $"layer {b:0}-{t:0} m" : "no cloud band";
-        Log.Info("world", $"proto clouds: variant={_variant.ToString().ToLowerInvariant()} {layer}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count} (Shift+F6 cycles)");
+        Log.Info("world", $"proto clouds: variant={_variant.ToString().ToLowerInvariant()} {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count} (Shift+F6 cycles)");
     }
 
     private string BuildSlab(Node3D root)

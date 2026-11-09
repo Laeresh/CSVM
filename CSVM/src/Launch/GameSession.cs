@@ -2835,7 +2835,7 @@ public partial class GameSession : Node3D
             return;
         }
         _protoClouds = Effects.ProtoClouds.Create(variant, _plane, weather, _sky!.CloudField, _worldScene,
-            weather.FogVolumes, () => _rigs.Count > 0 ? _rigs[0].Camera : null);
+            weather.FogVolumes, () => _rigs.Count > 0 ? _rigs[0].Camera : null, _unplacedWatch?.CloudDeck != null);
         _plane.AddChild(_protoClouds);
     }
 

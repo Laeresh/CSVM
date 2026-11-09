@@ -86,6 +86,19 @@ float csky_pc_density(vec3 p, float bottom, float top, float cover, float detail
     return clamp(d, 0.0, 1.0);
 }
 
+// The stratus deck under the heads: a sheet from `bottom` to `deck_top` covering `cover` of the
+// sky, its holes where the broad noise falls under the uncovered share. Zero with no cover.
+float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, float detail_m) {
+    if (cover <= 0.0 || p.y < bottom || p.y > deck_top) {
+        return 0.0;
+    }
+    float h = (p.y - bottom) / max(deck_top - bottom, 1.0);
+    float prof = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
+    float n = csky_pc_fbm(p / (detail_m * 1.8));
+    float body = clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
+    return body * prof;
+}
+
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
 float csky_pc_phase(float cos_theta, float g) {
     float g2 = g * g;
