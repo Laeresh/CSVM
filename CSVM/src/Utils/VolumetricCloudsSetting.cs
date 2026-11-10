@@ -65,7 +65,7 @@ public static class VolumetricCloudsSetting
         SavedField = "volumetricClouds",
         LogName = "volumetric_clouds",
         Labels = VolumetricCloudsSetting.Labels,
-        // The on/off option's on marched at half resolution (PLAN-volumetric-clouds-gi D37).
+        // The on/off option's on marched at half resolution.
         Legacy = new Dictionary<string, string> { ["on"] = Half },
         EnhancedOnly = true,
         Detail = static enhanced => enhanced

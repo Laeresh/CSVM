@@ -29,19 +29,27 @@ internal sealed partial class CloudShadow : Node
     private static float _publishedAmbient;
 
     private readonly bool _cloudy;
+    private readonly string _chapter;
+    private CloudShadowChapters _chapters;
     private bool _night;
     private Vector2 _drift;
 
     // Added to the drift's own offset, so a drift change mid-session moves on from where the pattern stands.
     private double _shiftX, _shiftZ;
 
-    private CloudShadow(Vector2 drift, CloudShadowPattern.DriftSource source, bool cloudy, bool night)
+    private CloudShadow(Vector2 authored, CloudShadowPattern.DriftSource source, bool cloudy, bool night,
+        CloudShadowChapters chapters, string chapter)
     {
         Name = "CloudShadow";
-        _drift = drift;
+        Authored = authored;
         Source = source;
         _cloudy = cloudy;
         _night = night;
+        _chapters = chapters;
+        _chapter = chapter;
+        CloudsLayer = VolumetricCloudsSetting.Enabled;
+        Tune = Saved;
+        _drift = Tune.Drift(authored);
     }
 
     /// <summary>The node whose state the globals carry, null while the off state stands.</summary>
@@ -68,7 +76,7 @@ internal sealed partial class CloudShadow : Node
         }
     }
 
-    /// <summary>The tunes this session draws: the chapter's, until the cloud lab edits them.</summary>
+    /// <summary>The tunes this session draws: the chapter's in the standing layer, until the cloud lab edits them.</summary>
     public CloudShadowPattern.Tune Tune { get; set; } = CloudShadowPattern.Tune.Default;
 
     /// <summary>The cloud lab's tint, the light added under a shadow's core. Black adds nothing.</summary>
@@ -76,6 +84,16 @@ internal sealed partial class CloudShadow : Node
 
     /// <summary>Where <see cref="Drift"/> came from.</summary>
     public CloudShadowPattern.DriftSource Source { get; }
+
+    /// <summary>The mission's own drift, before a saved speed or heading turns it.</summary>
+    public Vector2 Authored { get; }
+
+    /// <summary>Whether the chapter's tune stands in its clouds layer (<see cref="CloudShadowChapters.CloudsLayer"/>),
+    /// as it does while the volumetric clouds stand on.</summary>
+    public bool CloudsLayer { get; private set; }
+
+    /// <summary>The chapter's saved tune in the standing layer.</summary>
+    public CloudShadowPattern.Tune Saved => _chapters.For(_chapter, CloudsLayer);
 
     /// <summary>Whether the shadows draw now: Enhanced, the word on, a cloudy mission, a day zone.</summary>
     public bool Draws => GraphicsMode.Enhanced && CloudShadowSetting.Enabled && _cloudy && !_night;
@@ -109,10 +127,12 @@ internal sealed partial class CloudShadow : Node
         Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f);
     }
 
-    /// <summary>The shadows for a mission drifting at <paramref name="drift"/>, drawn while
-    /// <paramref name="cloudy"/> and the zone is not <paramref name="night"/>.</summary>
-    public static CloudShadow Create(Vector2 drift, CloudShadowPattern.DriftSource source, bool cloudy, bool night) =>
-        new(drift, source, cloudy, night);
+    /// <summary>The shadows for a mission drifting at <paramref name="authored"/>, drawn while
+    /// <paramref name="cloudy"/> and the zone is not <paramref name="night"/>. The tune is
+    /// <paramref name="chapters"/>' entry for <paramref name="chapter"/> in the standing layer, else the constants.</summary>
+    public static CloudShadow Create(Vector2 authored, CloudShadowPattern.DriftSource source, bool cloudy, bool night,
+        CloudShadowChapters? chapters = null, string chapter = "") =>
+        new(authored, source, cloudy, night, chapters ?? new CloudShadowChapters(), chapter);
 
     /// <summary>The drift of <paramref name="dome"/>'s scrolling surfaces (<see cref="CloudShadowPattern.CeilingDrift"/>),
     /// their ceiling put at <paramref name="altitude"/>, or null where none scrolls. The arrays come
@@ -142,6 +162,22 @@ internal sealed partial class CloudShadow : Node
             Publish();
     }
 
+    /// <summary>Takes the layer the Volumetric Clouds word names: the chapter's saved tune and drift in
+    /// it, any live edit dropped. Returns whether the layer moved; a standing one moves nothing.</summary>
+    public bool FollowLayer()
+    {
+        if (CloudsLayer == VolumetricCloudsSetting.Enabled)
+            return false;
+        CloudsLayer = VolumetricCloudsSetting.Enabled;
+        Tune = Saved;
+        Drift = Tune.Drift(Authored);
+        Log.Info("world", $"cloud shadows: the {(CloudsLayer ? "clouds layer" : "base tune")} stands, {Tune.Describe()}");
+        return true;
+    }
+
+    /// <summary>Reads the tunes from <paramref name="chapters"/> from now on, as after a lab's Save.</summary>
+    public void Reload(CloudShadowChapters chapters) => _chapters = chapters;
+
     public override void _EnterTree()
     {
         Live = this;
@@ -154,9 +190,13 @@ internal sealed partial class CloudShadow : Node
             Withdraw();
     }
 
-    // The word, the graphics mode and the clock are read every frame. An Options apply or a mode
-    // switch reaches the globals with no hook, and a halted clock holds the pattern still.
-    public override void _Process(double delta) => Publish();
+    // The words, the graphics mode and the clock are read every frame. An Options apply, a lab toggle or
+    // a mode switch reaches the globals with no hook, and a halted clock holds the pattern still.
+    public override void _Process(double delta)
+    {
+        FollowLayer();
+        Publish();
+    }
 
     // The dome-frame triangles and UVs of every surface under `node` whose material scrolls. The
     // scroll is one model's rate, so the last surface's stands for all.

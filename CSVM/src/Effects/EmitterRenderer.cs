@@ -70,6 +70,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
 """;
 
+    /// <summary>Enhanced only: the volumetric slab's transmittance from the eye to the instance, which every
+    /// sprite drawn over the slab multiplies its alpha by. It reads exactly 1 with no slab drawing
+    /// (csky_pc_veil_at). The declaration goes before <c>vertex()</c> and <see cref="VeilSet"/> inside it.</summary>
+    internal const string VeilDecl = "varying flat float v_veil;\n#include \"res://shaders/csky_volumetric_clouds.gdshaderinc\"";
+
+    /// <summary>The <c>vertex()</c> line that sets <see cref="VeilDecl"/>'s varying.</summary>
+    internal const string VeilSet = "v_veil = csky_pc_veil_at(CAMERA_POSITION_WORLD, MODEL_MATRIX[3].xyz);";
+
     private const string ShaderCode = """
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -186,11 +194,6 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         """;
 
     private const string AtmosphereLine = "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
-
-    // Enhanced only: the volumetric slab's transmittance from the eye to the particle, which every
-    // particle's alpha takes. It reads exactly 1 with no slab drawing (csky_pc_veil_at).
-    private const string VeilDecl = "varying flat float v_veil;\n#include \"res://shaders/csky_volumetric_clouds.gdshaderinc\"";
-    private const string VeilSet = "\n    v_veil = csky_pc_veil_at(CAMERA_POSITION_WORLD, MODEL_MATRIX[3].xyz);";
 
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
@@ -454,7 +457,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 ? "varying flat float v_gain;" + (shaded ? "\nvarying flat float v_shade;" : "") + "\n" + VeilDecl
                 : "")
             .Replace("GAIN_SET", enhanced
-                ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "") + VeilSet
+                ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "") + "\n    " + VeilSet
                 : "")
             .Replace("GAIN_MUL", enhanced ? " * v_gain" : "")
             .Replace("VEIL_MUL", enhanced ? " * v_veil" : "")

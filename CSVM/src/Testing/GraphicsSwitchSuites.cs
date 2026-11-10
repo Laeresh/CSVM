@@ -37,7 +37,7 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
-    // The chapter the volumetric clouds suite flies, the one B12's controls check names.
+    // The chapter the volumetric clouds suite flies: a deck under a cloud band, so every part of the slab draws.
     private const string CloudsChapter = "C1C";
 
     // CloudsState with the clouds off and on.
@@ -501,6 +501,7 @@ internal static class GraphicsSwitchSuites
         + "keep the same node at the word's march divisor between resolutions, move a puffer's draw past the slab "
         + "and back with its Enhanced text dimmed by the slab's transmittance, "
         + "swap the tracers and gun smoke to veiled twins at the puffers' priority and back to their own materials, "
+        + "move the rain past them and back, give the cloud shadows the chapter's clouds layer and back, "
         + "and draw both band zones with the camera state held across the band; "
         + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
         + "values, the next tick re-reading the state and narrowing the cull mask to it; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
@@ -562,9 +563,14 @@ internal static class GraphicsSwitchSuites
                     }
 
                     puffer.Show(0);
-                    int wantPriority = on ? Precipitation.DrawPriority - 1 : 0;
+                    int wantPriority = on ? Precipitation.OverSlabPriority - 1 : 0;
                     ctx.Check(pufferMaterial.RenderPriority == wantPriority,
                         $"at {word} a puffer draws at priority {wantPriority}, {(on ? "after the slab and before the rain" : "among the world's transparents")} ({pufferMaterial.RenderPriority})");
+                    int wantRain = on ? Precipitation.OverSlabPriority : 0;
+                    ctx.Check(Precipitation.DrawPriority == wantRain,
+                        $"at {word} the rain draws at priority {wantRain}, {(on ? "after the puffers over the slab" : "among the world's transparents")} ({Precipitation.DrawPriority})");
+                    ctx.Check(CloudShadow.Live is { } shadows && shadows.CloudsLayer == on && shadows.Tune == shadows.Saved,
+                        $"at {word} the cloud shadows take the chapter's {(on ? "clouds layer" : "base tune")} ({(CloudShadow.Live is { } s ? $"clouds layer {s.CloudsLayer}, {s.Tune.Describe()}" : "none standing")})");
                     weapons._Process(0.0);
                     var (tracer, smoke) = weapons.WornMaterials();
                     bool veiled = tracer is ShaderMaterial { Shader: { } ts } && smoke is ShaderMaterial { Shader: { } ss }
@@ -576,7 +582,7 @@ internal static class GraphicsSwitchSuites
                     standing = node;
                     if (weather.Mission is { HasCloudBand: true } band)
                     {
-                        // Held, both band zones draw and the state stays put across the band (D39, C4's mountain tops).
+                        // Held, both band zones draw and the state stays put across the band, so C4's mountain tops show.
                         // Released, the next tick re-reads the state and the mask narrows to it.
                         var zone = ZoneAcross(live, weather, band.CloudBandCentre);
                         uint both = ZoneGate.LayerFor(1) | ZoneGate.LayerFor(2);

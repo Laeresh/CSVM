@@ -23,23 +23,24 @@ internal sealed partial class VolumetricClouds : Node3D
     private const float LayerDepthGain = 3f;
     private const float LayerMinDepthM = 900f;
     private const float DeckCover = 0.92f;
-    // The share of a deck torn open and the tears' size, and the shafts' haze under rain or a dry zone.
+    // The share of a deck torn open and the tears' size.
     private const float DeckGaps = 0.35f;
     private const float GapM = 3200f;
-    // The deck's depth (the shader's deck_depth_m) and the sun share it takes from the ground under it.
+    // The deck's depth over the layer floor, the shader's deck_depth_m.
     private const float DeckDepthM = 150f;
     // The heads' edge band, billow and lean (the shader's head_soft, warp_m, shear_m), and erosion cell.
     private const float HeadSoft = 0.16f;
     private const float WarpM = 320f;
     private const float ShearM = 260f;
     private const float DetailM = 180f;
+    // The shafts' haze under rain or snow, and in a dry zone.
     private const float RainShaftGain = 1f;
     private const float HazeShaftGain = 0.3f;
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
     // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
-    private const int SlabPriority = Precipitation.DrawPriority - 2;
+    private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
     private static readonly StringName MarchOnParam = "march_on";
     private static readonly StringName MarchEyeParam = "march_eye";
@@ -235,17 +236,10 @@ internal sealed partial class VolumetricClouds : Node3D
                 }
             }
             vec3 shafts = pc_shaft_colour(trace.w, eye, dir);
-            // A sky pixel whose ray leaves through the layer's top shows the lifted sky above it.
-            // The exit's fog closes the far rifts into the horizon.
             vec4 behind = vec4(0.0);
             // At or below the horizon, a sky pixel past the clipped sea shows the fog, not the dome's lower band.
             if (scene >= 1e8 && span.y < 0.0 && dir.y <= 0.02) {
                 behind = vec4(csky_fog_color_at(eye), 1.0);
-            }
-            if (rift_sky_lift > 0.0 && scene >= 1e8 && span.y >= 0.0 && dir.y > 0.0 && eye.y < layer_top) {
-                vec3 fog_rgb = csky_fog_color_at(eye);
-                float exit_fog = csky_fog_amount(eye + dir * span.y, eye);
-                behind = vec4(mix(mix(fog_rgb, vec3(1.0), rift_sky_lift), fog_rgb, exit_fog), 1.0);
             }
             pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
         }
@@ -280,7 +274,8 @@ internal sealed partial class VolumetricClouds : Node3D
                 float l0 = min(span.y >= 0.0 ? span.x : shaft_far_m, shaft_far_m);
                 if (l0 > 1.0) {
                     trace.w = pc_shaft_at(texture(march_texture, vec2(0.5 + x, SCREEN_UV.y)), min(scene, l0) / l0);
-                }            } else {
+                }
+            } else {
                 // The march's start offset moves by the golden ratio every frame. TAA then averages the
                 // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
                 float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
@@ -314,7 +309,8 @@ internal sealed partial class VolumetricClouds : Node3D
             vec3 dir = csky_pc_ray_dir(uv, view_inv_projection, view_camera);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
             float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
-            COLOR = UV.x < 0.5 ? vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0) : pc_shafts(eye, dir, span, 1e9, dither);        }
+            COLOR = UV.x < 0.5 ? vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0) : pc_shafts(eye, dir, span, 1e9, dither);
+        }
         """;
 
     // The march both passes share: the includes, the layer's uniforms and the march's functions.
@@ -355,9 +351,6 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform int shaft_steps = 16;
         uniform float shaft_far_m = 6000.0;
         uniform float shaft_height_m = 1500.0;
-        // How far from the zone fog colour toward white the sky above the layer stands, seen
-        // through the rifts; 0 leaves the Environment's panorama.
-        uniform float rift_sky_lift = 0.0;
         // The heads' shape (csky_pc_cover_shaped). `taper` rounds each cloud's crown toward its own
         // top. The sample point billows by `warp_m` and leans `shear_m` downwind at the top.
         uniform float taper = 0.3;
@@ -371,8 +364,8 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // The cumulus heads at `p` over the pattern's coverage.
-        float pc_heads(vec3 p, float bottom, float top, float cover_scale) {
-            float c = pc_cover_shaped(p) * heads_gain * cover_scale;
+        float pc_heads(vec3 p, float bottom, float top) {
+            float c = pc_cover_shaped(p) * heads_gain;
             return csky_pc_density(p, bottom, top, c, detail_m, erosion);
         }
 
@@ -383,8 +376,8 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // The whole field at `p`: the heads over the deck.
-        float pc_density(vec3 p, float bottom, float top, float cover_scale) {
-            return max(pc_heads(p, bottom, top, cover_scale), pc_deck(p, bottom));
+        float pc_density(vec3 p, float bottom, float top) {
+            return max(pc_heads(p, bottom, top), pc_deck(p, bottom));
         }
 
         // The deck's optical depth along the sun ray from `p`, two taps over the ray's span through
@@ -406,12 +399,12 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // The sun's share reaching `p`: three taps up the sun ray through the heads, and the deck's span.
-        float pc_sun(vec3 p, float step_m, float bottom, float top, float cover_scale) {
+        float pc_sun(vec3 p, float step_m, float bottom, float top) {
             float od = pc_deck_od(p, bottom);
             vec3 q = p;
             for (int i = 0; i < 3; i++) {
                 q += csky_sun_dir * step_m;
-                od += pc_heads(q, bottom, top, cover_scale) * density_gain * step_m;
+                od += pc_heads(q, bottom, top) * density_gain * step_m;
             }
             return csky_pc_beer_powder(od);
         }
@@ -444,7 +437,7 @@ internal sealed partial class VolumetricClouds : Node3D
             if (heads.y > 0.0) {
                 float dt = min(heads.y - heads.x, (top - bottom) * 3.0) / 3.0;
                 for (int i = 0; i < 3; i++) {
-                    od += pc_heads(p + csky_sun_dir * (heads.x + dt * (float(i) + 0.5)), bottom, top, 1.0) * density_gain * dt;
+                    od += pc_heads(p + csky_sun_dir * (heads.x + dt * (float(i) + 0.5)), bottom, top) * density_gain * dt;
                 }
             }
             return exp(-od);
@@ -489,7 +482,9 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_light) premultiplied and
         // the transmittance.
-        vec3 pc_march(vec3 eye, vec3 dir, float t0, float t1, float bottom, float top, float cover_scale, float dither) {
+        vec3 pc_march(vec3 eye, vec3 dir, float t0, float t1, float dither) {
+            float bottom = layer_bottom;
+            float top = layer_top;
             float len = t1 - t0;
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
             float span_step = len / float(n);
@@ -498,7 +493,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float clear = t0;
             int i = 0;
             while (i < step_budget && t < t1) {
-                if (pc_density(eye + dir * t, bottom, top, cover_scale) > 0.001) {
+                if (pc_density(eye + dir * t, bottom, top) > 0.001) {
                     break;
                 }
                 clear = t;
@@ -514,7 +509,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float hi = t;
             for (int k = 0; k < 3; k++) {
                 float mid = (clear + hi) * 0.5;
-                if (pc_density(eye + dir * mid, bottom, top, cover_scale) > 0.001) {
+                if (pc_density(eye + dir * mid, bottom, top) > 0.001) {
                     hi = mid;
                 } else {
                     clear = mid;
@@ -527,11 +522,11 @@ internal sealed partial class VolumetricClouds : Node3D
             while (i < step_budget && trans > 0.01 && t < t1) {
                 float dt = pc_step(t, span_step);
                 vec3 p = eye + dir * t;
-                float d = pc_density(p, bottom, top, cover_scale);
+                float d = pc_density(p, bottom, top);
                 if (d > 0.001) {
                     float ext = d * density_gain * dt;
                     float a = 1.0 - exp(-ext);
-                    float sun_t = pc_sun(p, sun_step, bottom, top, cover_scale);
+                    float sun_t = pc_sun(p, sun_step, bottom, top);
                     w += trans * a * pc_light(p, sun_t);
                     trans *= 1.0 - a;
                 }
@@ -551,7 +546,7 @@ internal sealed partial class VolumetricClouds : Node3D
             if (span.y >= 0.0) {
                 float t1 = pc_march_end(span, scene);
                 if (t1 > span.x) {
-                    return pc_march(eye, dir, span.x, t1, layer_bottom, layer_top, 1.0, dither);
+                    return pc_march(eye, dir, span.x, t1, dither);
                 }
             }
             return vec3(0.0, 0.0, 1.0);
@@ -589,8 +584,6 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
         material.SetShaderParameter("gap_m", GapM);
         material.SetShaderParameter("shaft_gain", ShaftGain);
-        // Off: the held upper zone's dome is the sky a rift shows (WeatherRig.HoldZone).
-        material.SetShaderParameter("rift_sky_lift", 0f);
         return material;
     }
 
@@ -613,8 +606,9 @@ internal sealed partial class VolumetricClouds : Node3D
         // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
         _material.RenderPriority = SlabPriority;
         // The puffers and weapon sprites draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
-        // front of a cloud covers it, and one behind shows only through its gaps.
+        // front of a cloud covers it, and one behind shows only through its gaps. The rain draws last.
         MultiMeshEmitterRenderer.DrawPriority = SlabPriority + 1;
+        Precipitation.DrawPriority = Precipitation.OverSlabPriority;
         var quad = new MeshInstance3D
         {
             Name = "slab",
@@ -766,6 +760,7 @@ internal sealed partial class VolumetricClouds : Node3D
         {
             RenderingServer.FramePreDraw -= FollowCamera;
             MultiMeshEmitterRenderer.DrawPriority = 0;
+            Precipitation.DrawPriority = 0;
         }
         _material = null;
         _march = null;

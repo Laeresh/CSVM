@@ -302,7 +302,6 @@ internal sealed partial class TerrainShadow : Node
     private static bool IsSea(string texture) =>
         SceneBuilder.ClassifySurface(texture) == "water" || TextureArchive.IsPaintedShallows(texture);
 
-    // One orientation's texture and the direction toward its sun.
     // Bakes one orientation into the cache and returns its raster.
     private TerrainShadowRaster.Result BakeOne(Vector3 orientation)
     {
@@ -318,5 +317,6 @@ internal sealed partial class TerrainShadow : Node
         return raster;
     }
 
+    // One orientation's texture and the direction toward its sun.
     private sealed record Baked(ImageTexture Texture, Vector3 Sun);
 }

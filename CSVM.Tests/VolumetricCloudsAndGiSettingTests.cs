@@ -147,6 +147,29 @@ public class VolumetricCloudsAndGiSettingTests
         Assert.False(VolumetricCloudsSetting.Enabled || GlobalIlluminationSetting.Enabled);
     }
 
+    /// <summary>The VIDEO page's ACCEPT carries the saved or picked word, never a lab's unsaved one, which
+    /// its row only shows while nothing is saved.</summary>
+    [Fact]
+    public void AnOptionsApplyNeverSavesALabsUnsavedWord()
+    {
+        try
+        {
+            VolumetricCloudsSetting.TakeUnsaved(VolumetricCloudsSetting.Full);
+            var choices = new UI.Menu.OptionsChoices();
+            choices.Load(new OptionsDef { Words = { [VolumetricCloudsSetting.Lookup] = VolumetricCloudsSetting.Quarter } });
+            Assert.Equal(VolumetricCloudsSetting.Quarter, choices.ToExit().Words[VolumetricCloudsSetting.Lookup]);
+            choices.Load(null);
+            Assert.Equal(VolumetricCloudsSetting.Full, VolumetricCloudsSetting.Lookup.Words[choices.At(VolumetricCloudsSetting.Lookup)]);
+            Assert.Null(choices.ToExit().Words[VolumetricCloudsSetting.Lookup]);
+            choices.Pick(VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Half);
+            Assert.Equal(VolumetricCloudsSetting.Half, choices.ToExit().Words[VolumetricCloudsSetting.Lookup]);
+        }
+        finally
+        {
+            VolumetricCloudsSetting.TakeUnsaved(VolumetricCloudsSetting.Default);
+        }
+    }
+
     private static WordSetting Of(string key) =>
         key == VolumetricCloudsSetting.Key ? VolumetricCloudsSetting.Lookup : GlobalIlluminationSetting.Lookup;
 

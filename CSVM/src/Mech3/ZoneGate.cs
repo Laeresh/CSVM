@@ -58,7 +58,7 @@ public static class ZoneGate
         (mask & ~LayerBand) | LayerFor(cameraState);
 
     /// <summary>One camera's cull mask while the volumetric clouds hold <paramref name="cameraState"/>:
-    /// zones 1 and 2 both draw, since no whiteout hides the band's switch any more. Zone 3 keeps the
+    /// zones 1 and 2 both draw, since no whiteout hides the band's switch. Zone 3 keeps the
     /// held state's gate, because C5's zone-3 streets are in-volume alternates of its zone-1 ground.
     /// Census: docs/org/weather.md.</summary>
     public static uint HeldCullMask(uint mask, int cameraState) =>

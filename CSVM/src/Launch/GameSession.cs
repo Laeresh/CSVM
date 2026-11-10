@@ -1263,6 +1263,9 @@ public partial class GameSession : Node3D
     /// deck back at once. A move between resolutions keeps the clouds, which read the divisor each frame.</summary>
     internal void FollowVolumetricClouds()
     {
+        // The cloud shadows' layer first, so a slab built now reads the clouds layer's shape.
+        if (_cloudShadow != null && GodotObject.IsInstanceValid(_cloudShadow))
+            _cloudShadow.FollowLayer();
         if (VolumetricCloudsSetting.Enabled == (_volumetricClouds != null))
             return;
         if (_volumetricClouds == null)
@@ -2861,12 +2864,11 @@ public partial class GameSession : Node3D
         }
         var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
         var (authored, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
-        var tunes = Effects.CloudShadowChapters.Load().For(_spec.Chapter);
-        var drift = tunes.Drift(authored);
-        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
-        _cloudShadow.Tune = tunes;
+        _cloudShadow = Effects.CloudShadow.Create(authored, source, cloudy, weather.NightApplied,
+            Effects.CloudShadowChapters.Load(), _spec.Chapter);
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
+        var drift = _cloudShadow.Drift;
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {(_cloudShadow.CloudsLayer ? "clouds layer " : string.Empty)}{_cloudShadow.Tune.Describe()}");
     }
 
     // The volumetric clouds, over a full weathered world alone. They hide the deck, the cloud field
@@ -2884,7 +2886,7 @@ public partial class GameSession : Node3D
         _plane.AddChild(_volumetricClouds);
     }
 
-    // A lab's control: this flight stands on the word, and the options file is left alone (Decision 10).
+    // A lab's control: this flight stands on the word, and the options file is left alone.
     private void SetVolumetricCloudsForFlight(string word)
     {
         VolumetricCloudsSetting.TakeUnsaved(word);

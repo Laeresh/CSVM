@@ -464,7 +464,12 @@ public sealed partial class LightingLab : Node
             var table = LightingTable.Parse(File.ReadAllText(SavePath, Encoding.UTF8));
             _weather.ReloadLighting(table);
             _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone, Layer).Keys, StringComparer.OrdinalIgnoreCase);
-            _note = $"saved {_chapter} {zone} {EditedLayer} layer to the {what}, {_overrides[zone].Count} mission override(s), to {SavePath}";
+            var stored = table.For(_chapter, _mission, zone, _layers);
+            var refused = ZoneLighting.Fields.Where(f => !LightingTable.Belongs(f, Layer)
+                && ZoneLighting.Field.Rounded(f.Get(edit)) != ZoneLighting.Field.Rounded(f.Get(stored)))
+                .Select(f => $"{f.Key} (the {f.Layer} layer's)").ToList();
+            _note = $"saved {_chapter} {zone} {EditedLayer} layer to the {what}, {_overrides[zone].Count} mission override(s), to {SavePath}"
+                + (refused.Count > 0 ? $"; not saved: {string.Join(", ", refused)}" : "");
             Log.Info("ui", $"lighting lab: saved {_chapter}/{_mission} {zone} {EditedLayer} layer to the {what}: chapter={ChapterSaved(zone).Describe()} overrides=[{string.Join(",", _overrides[zone])}]");
             Commit();
             return SavePath;

@@ -16,6 +16,12 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed record ZoneLighting
 {
+    /// <summary>The layer that applies while Volumetric Clouds stands on.</summary>
+    public const string CloudsLayer = "clouds";
+
+    /// <summary>The layer that applies while Global Illumination stands on.</summary>
+    public const string GiLayer = "gi";
+
     /// <summary>The tune with nothing saved: the current Enhanced look.</summary>
     public static readonly ZoneLighting Default = new();
 
@@ -185,7 +191,7 @@ public sealed record ZoneLighting
     public float FadeStart { get; init; } = 0.8f;
 
     /// <summary>How dark terrain and object shadows fall, 1 fully shaded and 0 none. A base field, since
-    /// C1B's caves need it with both options off (PLAN-volumetric-clouds-gi Decision 12).</summary>
+    /// C1B's caves need it with both options off.</summary>
     public float ShadowStrength { get; init; } = 1f;
 
     /// <summary>The volumetric clouds' light shafts over the mission's haze gain, a <c>clouds</c> layer field.</summary>
@@ -280,6 +286,15 @@ public sealed record ZoneLighting
     {
         /// <summary>The value <see cref="ZoneLighting.Default"/> holds.</summary>
         public float Default => Get(ZoneLighting.Default);
+
+        /// <summary>The one layer the field belongs in, <see cref="CloudsLayer"/> or <see cref="GiLayer"/>, since it
+        /// draws only under that option. Null for a field any block may hold.</summary>
+        public string? Layer => Group switch
+        {
+            Clouds => CloudsLayer,
+            Gi => GiLayer,
+            _ => null,
+        };
 
         /// <summary>A value as the file writes it: four decimals, so a float's tail never reads as a change.</summary>
         public static double Rounded(float v) => Math.Round((double)v, 4);

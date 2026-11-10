@@ -1,64 +1,83 @@
 {
-  "_about": "Per-chapter Enhanced cloud shadow tunes (Effects/CloudShadowChapters.cs). A chapter or field left out takes the constants in Effects/CloudShadowPattern.cs. The cloud lab (Shift+F4 in --freecam) saves the chapter it runs on. Darkness and ambient 0 draw no shadow, for a chapter whose sky is clear. Heading is degrees from +X toward +Z, as ocean_seas.json's wind. head_taper, deck_sun and deck_ambient shape the volumetric clouds (Session/World/VolumetricClouds.cs) and read only while that option is on.",
+  "_about": "Per-chapter Enhanced cloud shadow tunes (Effects/CloudShadowChapters.cs). A chapter or field left out takes the constants in Effects/CloudShadowPattern.cs. A chapter's 'clouds' block holds the fields that differ while the Volumetric Clouds option is on, applied over the chapter's own; with the option off it is ignored. The cloud lab (Shift+F4 in --freecam) saves the chapter it runs on, into 'clouds' while the option is on. Darkness and ambient 0 draw no shadow, for a chapter whose sky is clear. Heading is degrees from +X toward +Z, as ocean_seas.json's wind. head_taper, deck_sun and deck_ambient shape the volumetric clouds (Session/World/VolumetricClouds.cs) and read only while that option is on.",
   "C2": {
-    "darkness": 0.36,
-    "ambient": 0.49,
-    "size": 2790,
-    "coverage": 0.1,
+    "darkness": 0.7,
+    "ambient": 0.87,
+    "size": 330,
+    "coverage": 0.26,
     "softness": 0.07,
     "speed": 9.5,
     "heading": 291,
-    "head_taper": 0.3,
-    "deck_sun": 0.97,
-    "deck_ambient": 0.6
+    "clouds": {
+      "darkness": 0.36,
+      "ambient": 0.49,
+      "size": 2790,
+      "coverage": 0.1
+    }
   },
   "C1": {
-    "darkness": 0.55,
-    "ambient": 0.43,
+    "darkness": 0.79,
+    "ambient": 0.7,
     "size": 590,
     "coverage": 0.42,
-    "softness": 0.08,
+    "softness": 0.07,
     "speed": 15,
     "heading": 295,
-    "head_taper": 0.3,
-    "deck_sun": 0.65,
-    "deck_ambient": 0.6
+    "clouds": {
+      "darkness": 0.55,
+      "ambient": 0.43,
+      "softness": 0.08,
+      "deck_sun": 0.65
+    }
   },
   "C1B": {
-    "darkness": 0.29,
-    "ambient": 0.36,
-    "size": 750,
-    "coverage": 0.32,
+    "darkness": 0.67,
+    "ambient": 1,
+    "size": 300,
+    "coverage": 0.42,
     "softness": 0.16,
     "speed": 15,
     "heading": 20,
-    "head_taper": 0.3,
-    "deck_sun": 0.67,
-    "deck_ambient": 0.6
+    "clouds": {
+      "darkness": 0.29,
+      "ambient": 0.36,
+      "size": 750,
+      "coverage": 0.32,
+      "deck_sun": 0.67
+    }
   },
   "C4": {
-    "darkness": 0.47,
-    "ambient": 0.54,
-    "size": 880,
-    "coverage": 0.63,
+    "darkness": 0.72,
+    "ambient": 0.7,
+    "size": 740,
+    "coverage": 0.54,
     "softness": 0.12,
     "speed": 10,
     "heading": 36.87,
-    "head_taper": 0.3,
-    "deck_sun": 0.2,
-    "deck_ambient": 0.6
+    "clouds": {
+      "darkness": 0.47,
+      "ambient": 0.54,
+      "size": 880,
+      "coverage": 0.63,
+      "deck_sun": 0.2
+    }
   },
   "C2B": {
-    "darkness": 0.32,
-    "ambient": 0.16,
-    "size": 930,
-    "coverage": 0.37,
+    "darkness": 0.73,
+    "ambient": 0.57,
+    "size": 900,
+    "coverage": 0.42,
     "softness": 0.12,
     "speed": 10,
     "heading": 20,
-    "head_taper": 0.3,
-    "deck_sun": 0.13,
-    "deck_ambient": 0.47
+    "clouds": {
+      "darkness": 0.32,
+      "ambient": 0.16,
+      "size": 930,
+      "coverage": 0.37,
+      "deck_sun": 0.13,
+      "deck_ambient": 0.47
+    }
   },
   "C3": {
     "darkness": 0,
@@ -69,15 +88,19 @@
     "ambient": 0
   },
   "C1C": {
-    "darkness": 0.41,
-    "ambient": 0.5,
-    "size": 810,
-    "coverage": 0.7,
+    "darkness": 0.77,
+    "ambient": 0.84,
+    "size": 880,
+    "coverage": 0.74,
     "softness": 0.12,
     "speed": 10,
     "heading": 20,
-    "head_taper": 0.3,
-    "deck_sun": 0.53,
-    "deck_ambient": 0.6
+    "clouds": {
+      "darkness": 0.41,
+      "ambient": 0.5,
+      "size": 810,
+      "coverage": 0.7,
+      "deck_sun": 0.53
+    }
   }
 }

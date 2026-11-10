@@ -329,7 +329,7 @@ public sealed class WeatherRig
         (Vector3.One * WeatherState.DefaultDiffuse, Vector3.One * WeatherState.DefaultAmbient);
 
     /// <summary>Gets or sets whether every zone lights as day, so a night look is the lighting tune's
-    /// alone. No energy cap, the pushed fog, day glint, cloud shadows. Set by the cloud prototype.</summary>
+    /// alone. No energy cap, the pushed fog, day glint, cloud shadows. Set while the volumetric clouds stand.</summary>
     public static bool NightOff { get; set; }
 
     /// <summary>The fog this rig last wrote into the three <c>csky_fog_*</c> globals and
@@ -1703,7 +1703,7 @@ public sealed class WeatherRig
             else if (dome == null && d.ZoneId <= 0)
                 dome = d.Node;
         }
-        // Under the cloud prototype a day sky's moon card is the bright spot the shafts must fall from.
+        // While the volumetric clouds hold the zone, a day sky's moon card is the bright spot the shafts must fall from.
         bool moon = IsNightZone(fog) || HoldZone;
         if (dome != null && SkyAnchorOrientation(dome, moon) is { } aimed)
             return aimed;

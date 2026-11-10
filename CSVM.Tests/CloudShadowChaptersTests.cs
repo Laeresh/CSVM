@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Text.Json.Nodes;
 using CSVM.Effects;
 using Xunit;
 
@@ -84,7 +86,7 @@ public class CloudShadowChaptersTests
     }
 
     [Fact]
-    public void The_volumetric_fields_default_to_the_prototype_look_and_read_back()
+    public void The_volumetric_fields_default_to_the_constants_and_read_back()
     {
         var file = CloudShadowChapters.Parse("""{ "C1": { "head_taper": 0.5 } }""");
 
@@ -110,9 +112,54 @@ public class CloudShadowChaptersTests
     }
 
     [Fact]
+    public void The_clouds_layer_applies_over_the_entry_only_while_the_clouds_stand()
+    {
+        var file = CloudShadowChapters.Parse("""{ "C1": { "darkness": 0.5, "size": 600, "clouds": { "darkness": 0.2, "head_taper": 0.6 } }, "C2": { "size": 400 } }""");
+
+        Assert.Empty(file.Warnings);
+        Assert.Equal(CloudShadowPattern.Tune.Default with { Darkness = 0.5f, PatternSize = 600f }, file.For("C1"));
+        Assert.Equal(CloudShadowPattern.Tune.Default with { Darkness = 0.2f, PatternSize = 600f, HeadTaper = 0.6f }, file.For("C1", clouds: true));
+        // A chapter with no layer, or none at all, reads the same either way.
+        Assert.Equal(file.For("C2"), file.For("C2", clouds: true));
+        Assert.Equal(CloudShadowPattern.Tune.Default, file.For("C4", clouds: true));
+        Assert.Single(CloudShadowChapters.Parse("""{ "C1": { "clouds": 3 } }""").Warnings);
+    }
+
+    [Fact]
+    public void A_clouds_save_writes_only_what_differs_and_a_base_save_keeps_the_layer()
+    {
+        const string existing = """{ "_about": "prose", "C1": { "darkness": 0.5, "size": 600 }, "C3": { "size": 700 } }""";
+        var file = CloudShadowChapters.Parse(existing);
+        var edit = file.For("C1", clouds: true) with { Darkness = 0.2f, HeadTaper = 0.6f };
+
+        string layered = CloudShadowChapters.WithEntry(existing, "C1", edit, clouds: true);
+        var root = (JsonObject)JsonNode.Parse(layered)!;
+        Assert.Equal(new[] { "_about", "C1", "C3" }, Keys(root));
+        Assert.Equal(new[] { "darkness", "size", "clouds" }, Keys((JsonObject)root["C1"]!));
+        Assert.Equal(new[] { "darkness", "head_taper" }, Keys((JsonObject)root["C1"]!["clouds"]!));
+        var read = CloudShadowChapters.Parse(layered);
+        Assert.Equal(file.For("C1"), read.For("C1"));
+        Assert.Equal(edit, read.For("C1", clouds: true));
+
+        // A base save rewrites the fields and keeps the layer after them.
+        string based = CloudShadowChapters.WithEntry(layered, "C1", read.For("C1") with { Darkness = 0.7f });
+        var c1 = (JsonObject)JsonNode.Parse(based)!["C1"]!;
+        Assert.Equal("clouds", Keys(c1).Last());
+        Assert.Equal(0.7f, CloudShadowChapters.Parse(based).For("C1").Darkness);
+        Assert.Equal(0.2f, CloudShadowChapters.Parse(based).For("C1", clouds: true).Darkness);
+
+        // A layer saved equal to the entry drops out, and a second identical save changes nothing.
+        Assert.Equal(existing.Replace(" ", ""), CloudShadowChapters.WithEntry(layered, "C1", file.For("C1"), clouds: true)
+            .Replace(" ", "").Replace("\r", "").Replace("\n", ""));
+        Assert.Equal(layered, CloudShadowChapters.WithEntry(layered, "C1", edit, clouds: true));
+    }
+
+    [Fact]
     public void Save_refuses_a_file_it_cannot_read()
     {
         Assert.Throws<System.IO.InvalidDataException>(() =>
             CloudShadowChapters.WithEntry("[1, 2]", "C1", CloudShadowPattern.Tune.Default));
     }
+
+    private static string[] Keys(JsonObject o) => o.Select(kv => kv.Key).ToArray();
 }

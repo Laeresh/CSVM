@@ -23,7 +23,7 @@ public static class GlobalIlluminationSetting
     public const string On = "on";
 
     /// <summary>The word a discrete GPU runs with nothing set. SDFGI costs 0.6 to 1.0 ms of an RTX 5080's
-    /// 1080p frame (D34 of the volumetric-clouds plan).</summary>
+    /// 1080p frame.</summary>
     public const string Default = On;
 
     /// <summary>The word an integrated GPU (the Steam Deck's APU) runs with nothing set, until a

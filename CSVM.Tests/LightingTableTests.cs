@@ -223,6 +223,29 @@ public sealed class LightingTableTests
     }
 
     [Fact]
+    public void AFieldOfOneLayerIsNeverSavedIntoAnotherOrTheBase()
+    {
+        var none = new Dictionary<string, float>();
+        var edit = ZoneLighting.Default with { Exposure = 1.2f, GodRays = 2f, SdfgiEnergy = 0.8f, AmbientFloor = 0.5f };
+        var mission = new Dictionary<string, float> { ["god_rays"] = 3f, ["sdfgi_energy"] = 0.9f };
+
+        // The gi layer keeps its own fields and refuses god rays, chapter and mission alike.
+        var gi = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", "M01", "zone1", edit, mission, layer: LightingTable.GiLayer))!;
+        Assert.Equal(new[] { "exposure", "ambient_floor", "sdfgi_energy" }, Keys((JsonObject)gi["C1"]!["ZONE1"]!["gi"]!));
+        Assert.Equal(new[] { "sdfgi_energy" }, Keys((JsonObject)gi["C1"]!["M01"]!["ZONE1"]!["gi"]!));
+        // The clouds layer takes god rays alone of the four.
+        var clouds = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", null, "zone1", edit, none, layer: LightingTable.CloudsLayer))!;
+        Assert.Equal(new[] { "exposure", "god_rays" }, Keys((JsonObject)clouds["C1"]!["ZONE1"]!["clouds"]!));
+        // The base takes none of them.
+        var based = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", null, "zone1", edit, none))!;
+        Assert.Equal(new[] { "exposure" }, Keys((JsonObject)based["C1"]!["ZONE1"]!));
+
+        Assert.Equal(new[] { "god_rays", "ambient_floor", "self_lit_emission", "sdfgi_energy" },
+            ZoneLighting.Fields.Where(f => f.Layer != null).Select(f => f.Key));
+        Assert.True(LightingTable.Belongs(ZoneLighting.Find("shadow_strength")!, null));
+    }
+
+    [Fact]
     public void TheDebugGrammarKeepsWhatTheLabReads()
     {
         var rejected = new List<string>();

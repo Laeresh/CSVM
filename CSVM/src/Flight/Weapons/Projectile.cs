@@ -3582,11 +3582,10 @@ public sealed partial class ProjectilePool : Node3D
             shader_type spatial;
             render_mode BLEND_MODE, depth_draw_never, cull_disabled, unshaded;
             uniform sampler2D texture_albedo : source_color, filter_linear_mipmap, repeat_disable;
-            varying flat float v_veil;
-            #include "res://shaders/csky_volumetric_clouds.gdshaderinc"
+            VEIL_DECL
 
             void vertex() {
-                v_veil = csky_pc_veil_at(CAMERA_POSITION_WORLD, MODEL_MATRIX[3].xyz);
+                VEIL_SET
             }
 
             void fragment() {
@@ -3681,7 +3680,9 @@ public sealed partial class ProjectilePool : Node3D
         private static ShaderMaterial Veiled(StandardMaterial3D source)
         {
             bool additive = source.BlendMode == BaseMaterial3D.BlendModeEnum.Add;
-            string code = VeiledCode.Replace("BLEND_MODE", additive ? "blend_add" : "blend_mix");
+            string code = VeiledCode.Replace("BLEND_MODE", additive ? "blend_add" : "blend_mix")
+                .Replace("VEIL_DECL", MultiMeshEmitterRenderer.VeilDecl)
+                .Replace("VEIL_SET", MultiMeshEmitterRenderer.VeilSet);
             ShaderCensus.Note(code);
             if (!VeiledShaders.TryGetValue(additive, out var shader))
                 VeiledShaders[additive] = shader = new Shader { Code = code };

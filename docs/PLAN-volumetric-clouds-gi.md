@@ -61,6 +61,7 @@ who leave it off.
 | 14 | The slab costs 4-9 ms of GPU at 1080p on an RTX 5080 (D34). Ship it as is? | **No: march at reduced resolution first (D35)**, judged by the author against full resolution. |
 | 15 | The options' defaults? | **Clouds off; GI on, off through the existing integrated-GPU fallback** (D36), pending the Deck half of D34. |
 | 16 | How does the player choose the march resolution? | **The Volumetric Clouds option: a combo box of off, quarter, half, full; the march resolution is the player's choice and saved** (D37). |
+| 17 | Decision 4 says one checkbox each. What do the options look like? | **Two VIDEO dropdowns: Clouds Off/Quarter/Half/Full and GI Off/On**, because the page's two checkbox lines are taken (Ocean Waves and Enhanced Graphics). |
 
 ## ⚠ Read this before implementing anything
 
@@ -68,7 +69,7 @@ who leave it off.
 |---|---|---|
 | 1 | The terrain shadow bake drew the inverted ground shadow (lit under cover, dark in the rifts). | A brute-force ray cast against a `--dump-terrain-shadow` PNG agreed with the bake on 99.7% of texels. The cause was the ground's deck term reading `1 - gaps`, but `csky_pc_deck_gaps` returns the share of deck **kept**. The fix is `1 - y * gaps` in `csky_pc_deck_sun` (`CSVM/shaders/csky_cloud_shadow.gdshaderinc`). |
 | 2 | `--terrain-shadows=off` is an A/B for the cloud shadows on the ground. | It also drops every cloud shadow, which the terrain's `light()` path draws. Use the cloud lab's tint toggle (red heads, blue deck) to read the shadows instead. |
-| 3 | Aiming the sun at the drawn moon card fixes the shadow bearing. | It gave the same bearing; the change was reverted. |
+| 3 | Aiming the sun at the drawn moon card fixes the shadow bearing. | It gave the same bearing. The drawn-moon `HeldSkyOrientation` was reverted; the held zone still aims the light at the dome's sun or moon card (`WeatherRig.LightOrientation`, from A1). |
 | 4 | C5's fvol volumes can stand in for its cloud layer. | They are ground fog banks reaching down to -463 m, so a slab fitted to them buried the terrain in cloud. |
 | 5 | Shift+F6's freeze is the march cost. | Each material compiled its own shader (1077 compiles). One cached `Shader` per code fixed it (`ProtoClouds._shaders`). |
 
@@ -126,6 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 40. ☑ Puffers and other transparent effects are occluded correctly by the clouds (author's report)
 43. ☑ Enclosed spaces read black under GI, since SDFGI replaces the flat ambient and `ambient_floor` did nothing (author's reports: C1/IA1 zeppelin hangar, C1 train tunnels)
 44. ☑ Weapon sprites (tracers, flashes, gun smoke) are veiled by the clouds like the puffers (author's request, D40's follow-up)
+45. ☑ Pre-close review fixes and a clouds layer for the cloud lab
 
 ### Wave E, tuning and landing
 
@@ -859,6 +861,31 @@ Every material is unshaded, `Transparency.Alpha`, `CullMode.Disabled`, `DepthDra
 **Model recommendation.** medium.
 
 **Verify.** `graphics-volumetric-clouds-gi`: a weapon pool built with the clouds off wears its `StandardMaterial3D`s at 0, veiled twins (`blend_add` for the tracer, `blend_mix` for the smoke, both carrying `csky_pc_veil_at(`) at 105 at quarter, full and half, and its own materials again off. The suite is windowed (`headlessShaders`), so both twin texts compile on a real renderer. Flown C1 probes firing guns (`--fire`) and rockets (`--fire-rockets`), before and after, clouds off, half and full, under the layer (`--pos=-6041,600,-4313`) and inside the deck (`--pos=-6041,1050,-4313`). Clouds off is byte-identical before and after. GPU cost at a firing pose with the clouds half. The 8-chapter `--freecam --graphics=enhanced --volumetric-clouds=half` sweep for shader errors; `xr-sprite-facing`, the weapon and projectile suites; units.
+
+## D45 ☑ Pre-close review fixes and a clouds layer for the cloud lab
+
+**Landed.**
+- **The cloud lab's `clouds` layer.** A chapter entry in `cloud_shadows.json` may carry a sparse `clouds` block, applied over the entry while Volumetric Clouds stands on (`CloudShadowChapters.For(chapter, clouds)`). `CloudShadow` resolves its tune and drift from the layer the word names, re-resolving each frame and from `GameSession.FollowVolumetricClouds` when the word moves, which drops live edits. The cloud lab names the layer under its title, re-reads it when the word moves, and saves into it: a `clouds` save writes only the fields that differ from the entry and keeps the base fields, and a base save keeps the `clouds` block after the fields.
+- **The volumetric fields** (`head_taper`, `deck_sun`, `deck_ambient`) need no routing. They draw only while the clouds stand, which is exactly when the lab edits `clouds`, so a lab save puts them there as differences. A base save also writes them, where nothing reads them.
+- **The data.** Every value `d58606a68` changed in `cloud_shadows.json` moved into the chapter's `clouds` block, and each base field is back at its value before that commit. Values equal to the base's (`head_taper` 0.3, `deck_ambient` 0.6, C2's `deck_sun` 0.97, the defaults) are left out, as a lab save would leave them; the clouds-on tune is unchanged. In `lighting.json` every `god_rays` left the `gi` blocks for the matching `clouds` blocks; where both held one (C1, C1B) the `gi` value, the one drawn with both options on, replaced the `clouds` one.
+- **Layer-owned lighting fields.** `ZoneLighting.Field.Layer` names the one layer a field belongs in: `god_rays` in `clouds`, `ambient_floor`, `self_lit_emission` and `sdfgi_energy` in `gi`. `LightingTable.WithZone` never writes such a field into another layer or the base (`LightingTable.Belongs`), and the lighting lab's save note names any edit it left unsaved. Routing a field into another layer than the edited one was not built: with both options on `god_rays` saves only with GI switched off for the flight.
+- **The rain's draw order** follows the slab as the puffers' does: `Precipitation.DrawPriority` is 0 with no slab and `OverSlabPriority` (106) while one stands, set in `VolumetricClouds.BuildSlab` and reset in `FreeBuilt`, and each field takes a change on its next frame. `c4-snow` is back at `2ca089750a810401a9dbc2dbaf251bb1`.
+- **The VIDEO page's ACCEPT** never saved a lab's unsaved word. The page's staged words are the options file's or the player's picks; a lab word only shows on a row with nothing saved, and ACCEPT then carries null and saves nothing for it.
+- **Clean-up.** Plan and history references out of code comments; `rift_sky_lift`, the always-1 `cover_scale` and the march's `bottom`/`top` parameters removed with the shader output unchanged; the veil's declaration and line shared by the puffers and the weapon twins (`MultiMeshEmitterRenderer.VeilDecl`, `VeilSet`); stale comments in `VolumetricClouds` and `TerrainShadow`; the unused `using` in `CloudLab`. `softVEIL_MUL` is no typo but the `VEIL_MUL` hole after `soft`, as `GAIN_MUL` is. `PublishedGround`'s ungated `DeckGaps` draws nothing without a deck, since every reader gates on the deck's share.
+
+**Verified.** Units, the touched suites, the C1C tune lines (clouds off reads the pre-E41 base, clouds on the author's values) and the sweep are in the commit message. The migration was re-run on the plan branch's data after the author's retune and is idempotent. The full battery runs in E42.
+
+**Goal.** The author: "fix them, add a clouds layer to the cloud lab".
+
+**Evidence (confidence: traced-to-code).** The pre-close code review found:
+- the cloud lab saved into each chapter's base tune, which the cloud shadows draw with the clouds off too, so the tuning done under the clouds changed the clouds-off look (`d58606a68`);
+- `god_rays` saved into `gi` layers, because the lighting lab edits `gi` whenever GI is on;
+- `Precipitation.DrawPriority` was 106 in every mode, so the rain drew after the flare with no slab and `c4-snow` moved;
+- plan references and prototype wording in comments, dead shader parameters, a misplaced comment, two shader lines run together, and an unused `using`.
+
+**Approach.** A sparse `clouds` block per cloud-shadow entry, built as `LightingTable`'s layers are; a layer per lighting field that draws under one option alone, refused elsewhere; the rain's priority set by the slab as the puffers' is.
+
+**Verify.** Units: the clouds layer parses, applies only while the clouds stand, saves only differences and round-trips without reordering (`CloudShadowChaptersTests`); a layer field is never written into another layer or the base (`LightingTableTests`); an options apply never saves a lab's word (`VolumetricCloudsAndGiSettingTests`). `graphics-volumetric-clouds-gi` checks the rain's priority and the cloud shadows' layer at each word; `lighting-lab`, `cloud-shadow-globals`. C1C probes: the cloud-shadow tune line reads the pre-`d58606a68` base with the clouds off and the author's values with them on. A C1C probe pair before and after the shader clean-up, pixel-identical. `c4-snow`'s golden. The 8-chapter `--freecam --graphics=enhanced --volumetric-clouds=half` sweep for shader errors.
 
 # Wave E, tuning and landing
 

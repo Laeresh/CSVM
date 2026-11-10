@@ -26,15 +26,15 @@ public sealed class LightingTable
     public const string DefaultPath = "res://data/lighting.json";
 
     /// <summary>The layer that applies while Volumetric Clouds stands on.</summary>
-    public const string CloudsLayer = "clouds";
+    public const string CloudsLayer = ZoneLighting.CloudsLayer;
 
     /// <summary>The layer that applies while Global Illumination stands on.</summary>
-    public const string GiLayer = "gi";
+    public const string GiLayer = ZoneLighting.GiLayer;
 
     /// <summary>The table with nothing in it, what a missing or unreadable file gives.</summary>
     public static readonly LightingTable None = new();
 
-    /// <summary>Every layer in the order they apply: <c>gi</c> after <c>clouds</c> (PLAN-volumetric-clouds-gi Decision 11).</summary>
+    /// <summary>Every layer in the order they apply: <c>gi</c> after <c>clouds</c>, so GI's tune has the last word.</summary>
     public static readonly IReadOnlyList<string> Layers = new[] { CloudsLayer, GiLayer };
 
     private const string NightKey = "night";
@@ -143,9 +143,9 @@ public sealed class LightingTable
     /// <summary>The file's text with one zone's chapter and mission blocks, or their <paramref name="layer"/>,
     /// written. The chapter block holds <paramref name="chapterLighting"/>'s differences from <paramref name="under"/>
     /// (the defaults when null), the mission block the <paramref name="missionFields"/> that differ from it.
-    /// An empty block is dropped, and so is a mission left with no zone and no night flag. A non-null
-    /// <paramref name="night"/> sets the mission's flag (false removes it). Throws
-    /// <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
+    /// A field of another layer (<see cref="Belongs"/>) is never written. An empty block is dropped, and so is a
+    /// mission left with no zone and no night flag. A non-null <paramref name="night"/> sets the mission's flag
+    /// (false removes it). Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
     public static string WithZone(string? existing, string chapter, string? mission, string zone,
         ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null,
         string? layer = null, ZoneLighting? under = null)
@@ -187,6 +187,10 @@ public sealed class LightingTable
             Remove(root, chapter);
         return root.ToJsonString(Written) + Environment.NewLine;
     }
+
+    /// <summary>Whether a block of <paramref name="layer"/> (null for the base) may hold <paramref name="field"/>.
+    /// A field that draws under one option alone belongs in that option's layer only.</summary>
+    public static bool Belongs(ZoneLighting.Field field, string? layer) => field.Layer == null || field.Layer == layer;
 
     /// <summary>Writes one zone's blocks into the file at <paramref name="diskPath"/>
     /// (<see cref="WithZone"/>), creating it when absent.</summary>
@@ -327,7 +331,7 @@ public sealed class LightingTable
         block.Clear();
         foreach (var f in ZoneLighting.Fields)
         {
-            if (fields.TryGetValue(f.Key, out float v))
+            if (Belongs(f, layer) && fields.TryGetValue(f.Key, out float v))
                 block[f.Key] = JsonValue.Create(ZoneLighting.Field.Rounded(v));
         }
         foreach (var (key, node) in others)
