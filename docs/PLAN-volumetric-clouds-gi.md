@@ -271,7 +271,7 @@ wrong layer.
 
 **Landed.** Any zone block may carry sparse `clouds` and `gi` layers, resolved chapter then mission over the base tune while each option's word stands on, `gi` after `clouds` (`LightingTable.ActiveLayers`, `For`), and `WeatherRig.ReapplyZone` drops its cached tunes so a live toggle takes the right layers. The lighting lab names the layer it edits under its title, re-reads it when a box flips, the panel opens or a Save starts (dropping unsaved edits made over the other layer), and `WithZone` writes into that layer only what differs from the tune beneath it, keeping the base fields and the other layer in place.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the plan tree with B14 and B15: units 8422 passed, engine 675 passed with engine errors clean, goldens 41 hash-identical. `lighting-lab` saves with GI on and finds only `gi: {sdfgi_energy 0.9}` beside an unchanged base block. C1C probes with both options off match a no-flag probe byte for byte.
 
 **Original approach (kept for reference).**
 
@@ -306,7 +306,7 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 **Landed.** The cloud tune gains `head_taper`, `deck_sun` and `deck_ambient`, saved by the cloud lab and read by the volumetric clouds from `CloudShadow.Live`. `ZoneLighting` gains `shadow_strength` (base), `god_rays`, `ambient_floor` and `sdfgi_energy`, applied on every zone apply in `WeatherRig`, so `VolumetricClouds.LabSlider` and the unsaved statics are gone and the defaults reproduce the prototype's values.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The same battery. A round trip written into the data files (base `shadow_strength` 0.75, `gi` `sdfgi_energy` 0.65, cloud `head_taper` 0.55) read back after a relaunch, `sdfgi_energy` only while GI is on. A lab Save then relaunch is the author's check in E41.
 
 **Original approach (kept for reference).**
 
