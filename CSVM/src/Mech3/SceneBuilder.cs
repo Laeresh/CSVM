@@ -2895,6 +2895,10 @@ void fragment() {{");
             sb.AppendLine("    ROUGHNESS = 1.0;");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.0;");
+            // SDFGI's floor: the flat ambient it replaced, shaded by a cloud shadow as the AO below shades it.
+            sb.AppendLine(terrainShadow
+                ? "    EMISSION = ALBEDO * csky_gi_ambient_fill * csky_cloud_ao(v_terrain_pos);"
+                : "    EMISSION = ALBEDO * csky_gi_ambient_fill;");
         }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
         // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world.
@@ -2903,6 +2907,10 @@ void fragment() {{");
         // Point lights go in before the fog mix, on the same texel as the vertex colour they scale.
         if (fullbright && lit)
             sb.AppendLine("    ALBEDO += base_col.rgb * v_point_gain;");
+        // A self-lit surface hands SDFGI its own colour as light, so it lights the models inside it. The
+        // screen never shows an unshaded EMISSION. The dome, deck, clutter and water would light the world.
+        if (GraphicsMode.Enhanced && fullbright && !water && !xrInterior && !clutterFade && tint == SurfaceTint.None)
+            sb.AppendLine("    EMISSION = ALBEDO * csky_gi_self_lit;");
         // A model authored `fog: false` is exempt from distance fog entirely; the instance-level
         // csky_fog_on stays the per-instance opt-out beside it (see the uniform block).
         if (fogged)

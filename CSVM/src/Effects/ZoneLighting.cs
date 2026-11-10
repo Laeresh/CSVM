@@ -63,8 +63,10 @@ public sealed record ZoneLighting
             "the terrain bake's share and the sun's shadow-map opacity, 1 fully shaded"),
         new("god_rays", "God-ray intensity", Clouds, 0f, 4f, 0.01f, l => l.GodRays, (l, v) => l with { GodRays = v },
             "over the mission's haze gain; draws only with Volumetric Clouds on"),
-        new("ambient_floor", "Ambient floor under SDFGI", Gi, 0f, 1f, 0.01f, l => l.AmbientFloor, (l, v) => l with { AmbientFloor = v },
-            "the share of the zone's flat ambient kept while SDFGI stands, for caves its sky light misses"),
+        new("ambient_floor", "Ambient fill under SDFGI", Gi, 0f, 2f, 0.01f, l => l.AmbientFloor, (l, v) => l with { AmbientFloor = v },
+            "the zone's flat ambient added back on lit world surfaces, which SDFGI replaces; 1 is the GI-off fill"),
+        new("self_lit_emission", "Self-lit glow into SDFGI", Gi, 0f, 8f, 0.05f, l => l.SelfLitEmission, (l, v) => l with { SelfLitEmission = v },
+            "light self-lit surfaces give lit models near them; SDFGI takes a change only when it re-voxelises, so toggle GI or move on"),
         new("sdfgi_energy", "SDFGI energy", Gi, 0f, 2f, 0.01f, l => l.SdfgiEnergy, (l, v) => l with { SdfgiEnergy = v },
             "reads only with Global Illumination on"),
     };
@@ -189,9 +191,14 @@ public sealed record ZoneLighting
     /// <summary>The volumetric clouds' light shafts over the mission's haze gain, a <c>clouds</c> layer field.</summary>
     public float GodRays { get; init; } = 1f;
 
-    /// <summary>The share of the zone's flat ambient kept while SDFGI brings its own sky light, a
-    /// <c>gi</c> layer field. None by default, since the flat fill would double the GI's.</summary>
-    public float AmbientFloor { get; init; }
+    /// <summary>The share of the zone's flat ambient added back as emission on the lit world while SDFGI
+    /// stands, a <c>gi</c> layer field. SDFGI replaces the Environment's ambient inside its cascades, so
+    /// without it a roofed or tunnelled surface reads black. 1, the GI-off fill, by default.</summary>
+    public float AmbientFloor { get; init; } = 1f;
+
+    /// <summary>TUNE, a <c>gi</c> layer field. The gain on the colour self-lit (<c>lighting: false</c>) surfaces
+    /// hand SDFGI as emission. A self-lit hangar then lights the models inside it.</summary>
+    public float SelfLitEmission { get; init; } = 1f;
 
     /// <summary>SDFGI's energy, a <c>gi</c> layer field. Half by default: a sky at full energy
     /// over-fills a flat world's ground.</summary>

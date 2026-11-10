@@ -26,6 +26,11 @@ global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2
 // takes the sky tint the fog colour takes, the cloud deck and every cloud sprite the cloud tint.
 global uniform vec3 csky_tune_sky_tint = vec3(1.0);
 global uniform vec3 csky_tune_cloud_tint = vec3(1.0);
+// Zero unless SDFGI stands, Enhanced text only (WeatherRig.ApplyEnhancedLighting). The fill is the zone's
+// flat ambient, linear, which SDFGI replaces; the lit world adds it back as emission. The self-lit
+// world's gain hands its own colour to SDFGI as emission.
+global uniform vec3 csky_gi_ambient_fill = vec3(0.0);
+global uniform float csky_gi_self_lit = 0.0;
 
 // The per-view fog table (Session/World/FogViewTable.cs). Splitscreen panes and spyglass pictures
 // each sit in their own camera weather state, so each wears its own zone's fog, world light and

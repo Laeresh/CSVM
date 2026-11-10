@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json.Nodes;
 using CSVM.Effects;
 using CSVM.Session.World;
@@ -36,7 +38,7 @@ public sealed class LightingTableTests
         Assert.Equal((1.25f, 1.1f, 1.15f), (d.GradeAgxContrast, d.GradeContrast, d.GradeSaturation));
         Assert.Equal((1f, 1f, 1f), (d.CloudR, d.CloudG, d.CloudB));
         Assert.Equal((1f, 1f, 1f), (d.SkyR, d.SkyG, d.SkyB));
-        Assert.Equal((1f, 1f, 0f, 0.5f), (d.ShadowStrength, d.GodRays, d.AmbientFloor, d.SdfgiEnergy));
+        Assert.Equal((1f, 1f, 1f, 1f, 0.5f), (d.ShadowStrength, d.GodRays, d.AmbientFloor, d.SelfLitEmission, d.SdfgiEnergy));
         Assert.Equal(d, LightingTable.Parse("{}").For("C1", "M01", "zone1", LightingTable.Layers));
         Assert.False(d.TurnsSun);
         Assert.False(d.TunesEnvironment);
@@ -141,12 +143,12 @@ public sealed class LightingTableTests
         var table = LightingTable.Parse("""
             { "C1": { "ZONE1": { "exposure": 1.2, "clouds": { "sun_energy": 0.5, "god_rays": 2 },
                                  "gi": { "sun_energy": 0.4, "sdfgi_energy": 0.8 } },
-                      "M01": { "zone1": { "clouds": { "sun_energy": 0.6 }, "gi": { "ambient_floor": 0.3 } } } } }
+                      "M01": { "zone1": { "clouds": { "sun_energy": 0.6 }, "gi": { "ambient_floor": 0.3, "self_lit_emission": 2.5 } } } } }
             """);
         Assert.Empty(table.Warnings);
         Assert.Equal(new[] { "exposure" }, table.ChapterFields("C1", "zone1").Keys);
         Assert.Equal(new[] { "sun_energy", "god_rays" }, table.ChapterFields("C1", "zone1", LightingTable.CloudsLayer).Keys);
-        Assert.Equal(new[] { "ambient_floor" }, table.MissionFields("C1", "M01", "zone1", LightingTable.GiLayer).Keys);
+        Assert.Equal(new[] { "ambient_floor", "self_lit_emission" }, table.MissionFields("C1", "M01", "zone1", LightingTable.GiLayer).Keys);
         Assert.Empty(LightingTable.ActiveLayers(false, false));
         Assert.Equal(new[] { "clouds", "gi" }, LightingTable.ActiveLayers(true, true));
 
@@ -157,7 +159,8 @@ public sealed class LightingTableTests
         Assert.Equal((1.2f, 0.6f, 2f, 0.5f), (clouds.Exposure, clouds.SunEnergy, clouds.GodRays, clouds.SdfgiEnergy));
         Assert.Equal(0.5f, table.For("C1", "IA1", "zone1", LightingTable.ActiveLayers(true, false)).SunEnergy);
         var gi = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(false, true));
-        Assert.Equal((0.4f, 1f, 0.8f, 0.3f), (gi.SunEnergy, gi.GodRays, gi.SdfgiEnergy, gi.AmbientFloor));
+        Assert.Equal((0.4f, 1f, 0.8f, 0.3f, 2.5f), (gi.SunEnergy, gi.GodRays, gi.SdfgiEnergy, gi.AmbientFloor, gi.SelfLitEmission));
+        Assert.Equal(1f, clouds.SelfLitEmission);
         // Both on: gi applies after clouds, so its sun wins and the clouds' god rays stand.
         var both = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(true, true));
         Assert.Equal((0.4f, 2f, 0.8f, 0.3f), (both.SunEnergy, both.GodRays, both.SdfgiEnergy, both.AmbientFloor));
@@ -210,6 +213,13 @@ public sealed class LightingTableTests
         var c1Cleared = (JsonObject)JsonNode.Parse(cleared)!["C1"]!;
         Assert.Equal(new[] { "ZONE1", "ZONE2" }, Keys(c1Cleared));
         Assert.Equal(new[] { "exposure", "gi" }, Keys((JsonObject)c1Cleared["ZONE1"]!));
+
+        // The gi layer saves the GI fields beside sdfgi_energy and reads them back.
+        var giTune = under with { SdfgiEnergy = 0.8f, AmbientFloor = 0.5f, SelfLitEmission = 3f };
+        string giSaved = LightingTable.WithZone(existing, "C1", null, "zone1", giTune, new Dictionary<string, float>(), layer: LightingTable.GiLayer, under: under);
+        Assert.Equal(new[] { "ambient_floor", "sdfgi_energy", "self_lit_emission" },
+            Keys((JsonObject)JsonNode.Parse(giSaved)!["C1"]!["ZONE1"]!["gi"]!).OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(giTune, LightingTable.Parse(giSaved).For("C1", "IA1", "zone1", new[] { LightingTable.GiLayer }));
     }
 
     [Fact]

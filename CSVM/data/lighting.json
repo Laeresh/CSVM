@@ -22,8 +22,7 @@
         "split1": 0.025,
         "split3": 0.415,
         "shadow_strength": 0.31,
-        "god_rays": 0.54,
-        "ambient_floor": 0.08
+        "god_rays": 0.54
       },
       "clouds": {
         "shadow_strength": 0.8,
@@ -80,8 +79,7 @@
         "split1": 0.035,
         "split3": 0.425,
         "shadow_strength": 0.51,
-        "god_rays": 0.26,
-        "ambient_floor": 0.1
+        "god_rays": 0.26
       },
       "clouds": {
         "shadow_strength": 0.5,
@@ -180,8 +178,7 @@
         "sun_g": 1.2,
         "grade_saturation": 0.85,
         "shadow_strength": 0.25,
-        "god_rays": 0.5,
-        "ambient_floor": 0.02
+        "god_rays": 0.5
       },
       "clouds": {
         "ambient_r": 1,
@@ -223,7 +220,6 @@
         "fade_start": 0.81,
         "shadow_strength": 0.1,
         "god_rays": 0,
-        "ambient_floor": 0.04,
         "sdfgi_energy": 0.73
       }
     }

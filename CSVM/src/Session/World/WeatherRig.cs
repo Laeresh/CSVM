@@ -41,6 +41,14 @@ public sealed class WeatherRig
     /// tune's cloud tint, linear.</summary>
     public const string CloudTintParam = "csky_tune_cloud_tint";
 
+    /// <summary>The global the lit world adds as emission while SDFGI stands: the zone's flat ambient,
+    /// linear, times the tune's <see cref="ZoneLighting.AmbientFloor"/>. Zero otherwise.</summary>
+    public const string GiAmbientFillParam = "csky_gi_ambient_fill";
+
+    /// <summary>The global gain the self-lit world hands SDFGI its colour at, the tune's
+    /// <see cref="ZoneLighting.SelfLitEmission"/> while SDFGI stands. Zero otherwise.</summary>
+    public const string GiSelfLitParam = "csky_gi_self_lit";
+
     /// <summary>The D of a padding plane in <see cref="VolumeFogData"/>. With a zero normal, every
     /// point lies this deep inside it. So it neither cuts the ray nor thins the fog.</summary>
     public const float VolumeUnboundD = 1e9f;
@@ -580,6 +588,8 @@ public sealed class WeatherRig
             RenderingServer.GlobalShaderParameterType.Int, 0);
         RenderingServer.GlobalShaderParameterAdd(SkyTintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
         RenderingServer.GlobalShaderParameterAdd(CloudTintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        RenderingServer.GlobalShaderParameterAdd(GiAmbientFillParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
+        RenderingServer.GlobalShaderParameterAdd(GiSelfLitParam, RenderingServer.GlobalShaderParameterType.Float, 0f);
     }
 
     /// <summary>A tint as the shaders multiply it in: linear, and exactly white for an untinted
@@ -1146,6 +1156,18 @@ public sealed class WeatherRig
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
         env.AmbientLightEnergy = ambientEnergy;
+    }
+
+    // The two GI emission globals, zero unless SDFGI stands, so every other path draws as it did.
+    // ⚠ SDFGI replaces the Environment's ambient inside its cascades rather than adding to it, so the
+    // floor reaches the screen only through this fill.
+    private static void WriteGiGlobals(ZoneLighting tune, Color ambientColor, float ambientEnergy)
+    {
+        bool live = Effects.GlobalIllumination.SkyLightLive;
+        var linear = ambientColor.SrgbToLinear();
+        float fill = live ? ambientEnergy * tune.AmbientFloor : 0f;
+        RenderingServer.GlobalShaderParameterSet(GiAmbientFillParam, new Vector3(linear.R, linear.G, linear.B) * fill);
+        RenderingServer.GlobalShaderParameterSet(GiSelfLitParam, live ? tune.SelfLitEmission : 0f);
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class
@@ -1768,9 +1790,6 @@ public sealed class WeatherRig
             _sun.DirectionalShadowFadeStart = tune.FadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
-        // SDFGI brings the sky light itself, so the flat fill steps aside down to the tune's floor.
-        if (Effects.GlobalIllumination.SkyLightLive)
-            ambientEnergy *= tune.AmbientFloor;
         Effects.GlobalIllumination.Energy = tune.SdfgiEnergy;
         foreach (var gi in _extraLighting.Select(e => e.Env).Prepend(_env))
         {
@@ -1786,6 +1805,7 @@ public sealed class WeatherRig
         CloudTint = LinearTint(tune.CloudR, tune.CloudG, tune.CloudB);
         RenderingServer.GlobalShaderParameterSet(SkyTintParam, SkyTint);
         RenderingServer.GlobalShaderParameterSet(CloudTintParam, CloudTint);
+        WriteGiGlobals(tune, ambientColor, ambientEnergy);
         ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
         foreach (var (sun, env) in _extraLighting)
             ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
@@ -1846,6 +1866,7 @@ public sealed class WeatherRig
     private void ApplyFaithfulLighting(WeatherState.ZoneWeather fog)
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);
+        WriteGiGlobals(ZoneLighting.Default, Colors.Black, 0f);
         _sun.LightEnergy = sunEnergy;
         WriteColorAmbient(_env, fog.SunColorAmbient, ambientEnergy);
         foreach (var (sun, env) in _extraLighting)

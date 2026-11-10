@@ -124,6 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 38. ☑ The clouds' self-shadow flicker and the horizon band (author's report)
 39. ☑ Zone-gated meshes draw while the clouds hold the zone (author's report: C4's mountain tops)
 40. ☑ Puffers and other transparent effects are occluded correctly by the clouds (author's report)
+43. ☑ Enclosed spaces read black under GI, since SDFGI replaces the flat ambient and `ambient_floor` did nothing (author's reports: C1/IA1 zeppelin hangar, C1 train tunnels)
 
 ### Wave E, tuning and landing
 
@@ -759,6 +760,76 @@ Open after D40:
 **Model recommendation.** high: shader sampling and GPU cost.
 
 **Verify.** The bursts and metric above at each resolution, the cost table, the 8-chapter sweep with zero shader errors, `graphics-volumetric-clouds-gi`, the units, and the author's eyes in flight.
+
+## D43 ☑ Enclosed spaces read black under GI, since SDFGI replaces the flat ambient and `ambient_floor` did nothing
+
+**Landed.** Both of the author's picks, read through two globals that are zero unless SDFGI stands (`WeatherRig.WriteGiGlobals`, declared in `csky_atmosphere.gdshaderinc`).
+- **A working floor.** `ambient_floor` keeps its key and `gi` layer. It now sets `csky_gi_ambient_fill`, the zone's flat ambient (linear colour times energy) times the floor. The world-lit arm adds it as `EMISSION`, shaded by the cloud shadow's AO term. The default is 1, the GI-off fill; the range is 0 to 2. The Environment's ambient is no longer scaled by the floor.
+- **Self-lit emission.** A new `gi` field, `self_lit_emission` (default 1, range 0 to 8), sets `csky_gi_self_lit`. The Enhanced fullbright arm writes `EMISSION = ALBEDO * csky_gi_self_lit`, leaving out the dome, the deck, clutter, water and the stereo interior. An unshaded EMISSION never reaches the screen, only SDFGI's voxels, so a self-lit hangar lights the models in it.
+- **Defaults and data.** The author's four saved floors (C1, C1B, C4 and C5 `gi` layers) are dropped from `lighting.json`, so every zone takes the GI-off fill. The lab labels read "Ambient fill under SDFGI" and "Self-lit glow into SDFGI". The glow's note says a change waits for SDFGI to re-voxelise.
+
+**Verified.** The orchestrator reviewed the before and after matrix and the author chose the fixes from the comparison montage; units, the sweep and the suites are in the commit message. The full battery runs in E42.
+
+**Goal.** The author's reports:
+- "In C1/IA1 the zeppelin hangar is lit by itself but the zeppelin in it and a car are nearly black."
+- "could d41 also check the train tunnels in C1 they are too dark under gi and i found no setting where i could brighten them up without changing the look of the map significantly. I had the feeling that the "keep ambient" slider did not do anything there."
+
+With GI on, the lit models in the hangar and the lit tunnel shells read as they do with GI off, without washing out open air.
+
+**Evidence (confidence: traced in Godot's shader source; measured).**
+- **The places.**
+  - **The hangar** is C1's `g16107` at (-5239, 128, -6754). Its shell (`hangar_floor`, `mainhangar_roof`, `hangar_left`/`_right`, `terminal_win`) is authored `lighting: false`, so Enhanced draws it on the unshaded fullbright arm.
+  - **The models inside it** are authored `lighting: true` and draw on the world-lit arm: the zeppelin (`dliner1`/`dxzep_skin`) and the Studebaker trucks (`hauler1`, `flatbed1`/`2`).
+  - **The train tunnels** are the danger zones dz2 to dz4 on z -3856. Tunnel Mid runs from x -5784 to -5465. Its shell is `track01` (`rr_bricks*`, `lighting: true`) under the terrain tile `a3`.
+- **The cause.**
+  - **Godot replaces the ambient.** Godot's forward shader computes `ambient_light = mix(flat ambient, GI buffer, alpha)`, and `sdfgi_process` writes alpha 1 everywhere inside the cascades. The cascades span the chapter, so the Environment's ambient never reaches a pixel while SDFGI stands.
+  - **The roof and the tunnel hide the sky.** SDFGI's sky light reads the background panorama, which the roof and the tunnel occlude.
+  - **Consequence.** The old floor, a multiplier on that ambient, was a no-op: floor 0 and floor 1 drew identical frames at the hangar and in the tunnel.
+- **Measured before the fix.** Probe settings: 1920x1080, `--freecam --graphics=enhanced --frames=300`, clouds off unless noted. Values are mean Rec.709 luma (0 to 255, sRGB). Zeppelin and truck pixels come from a `--tex-override` mask pair (SHOT-38). Poses:
+  - Hangar: `--chapter=C1 --mission=IA1 --pos=-5301,142,-6454 --direction=-0.12,0.08,-1`.
+  - Tunnel Mid inside: `--pos=-5560,134,-3856 --direction=-1,0,0`, its far mouth masked out.
+  - Its mouth: `--pos=-5440,138,-3856 --direction=-1,-0.03,0`.
+
+  Each candidate was a temporary hack.
+
+| State | Zeppelin | Truck | Hangar wall | Tunnel inside | Tunnel mouth |
+|---|---|---|---|---|---|
+| GI off | 71.4 | 23.3 | 76.7 | 14.7 | 31.7 |
+| GI on (old floor 0 or 1) | 0.8 | 2.9 | 76.7 | 0.1 | 17.1 |
+| GI on, the author's old C1 tune (floor 0.08, shadow 0.31, clouds half) | 4.2 | 2.9 | 76.6 | 0.5 | |
+| Fill as emission, 0.08 / 0.15 / 0.3 (C1's flat ambient is 0.15) | 52.6 / 71.2 / 96.3 | 17.3 / 24.7 / 35.7 | 76.7 | 9.2 / 14.8 / 23.6 | 26.4 / 32.2 (0.08 / 0.15) |
+| Self-lit emission ×0.5 / ×1 / ×2 / ×4, no fill | 20.6 / 31.9 / 46.7 / 65.9 | 5.0 / 7.0 / 10.4 / 15.8 | 76.7 | 0.1 (×4) | |
+| Self-lit shells cast no shadow | 0.8 | 2.9 | 76.7 | 0.1 | |
+| SDFGI bounce feedback 1.0 / 1.5 | 0.8 / 3.6 | 2.9 / 3.5 | 76.7 | 0.2 (1.5) | |
+
+- **The dead ends.**
+  - **No shadow from self-lit shells.** It moved no pixel at any pose, with GI on or off.
+  - **More bounce feedback.** Bounce feedback 1.5 lifted the zeppelin by 3 levels.
+  - **The tunnels.** Self-lit emission cannot reach them, because they have no self-lit surface.
+
+**Approach.** The fill as emission on the lit world, plus the self-lit surfaces' own colour as emission into SDFGI. Both are tune fields in the `gi` layer, read through globals so the lab's sliders apply without a shader rebuild.
+- **Default fill.** 1, the zone's GI-off ambient.
+- **Default self-lit gain.** 1. With the fill on, the gain only needs to take the zeppelin a little past GI off. ×2 reads 84 against the wall's 77, and ×4 alone (65.9) was tuned with no fill under it.
+
+**Verify.** Same probes and statistic, after the fix, at the defaults.
+
+| Pose | GI off | GI on, fill 0 and gain 0 | GI on, default |
+|---|---|---|---|
+| Hangar zeppelin / truck / wall | 71.4 / 23.3 / 76.7 | 0.8 / 20.4 / 76.7 | 78.2 / 35.9 / 76.8 (fill only: 71.7) |
+| Hangar zeppelin, clouds half | 46.6 | 0.5 (before the fix) | 67.7 |
+| Tunnel inside | 14.7 | 0.1 | 17.6 |
+| Tunnel mouth | 31.7 | 17.1 (before the fix) | 32.7 |
+| C1 lake, whole frame | 51.8 | 46.9 | 52.6 |
+| C2 city, whole frame | 126.2 | 121.5 | 131.3 (all of it the fill; the gain moved no pixel) |
+| C1B dzpath1 tunnel, whole frame | 31.7 | 23.1 (before the fix) | 27.3 |
+
+- **GI off is unchanged.** Every GI-off shot (hangar, tunnel, C1 lake, C2 city) is pixel-identical to the same shot before the fix.
+- **The fill applies live, the gain does not.** A temporary hook set the globals 150 frames after the zone apply, with the camera still. The fill dropped the zeppelin from 71.7 to 2.0 in the same run. A gain raised from 0 to 4 left it at 71.7, where 4 from the start reads 93.7. The slider's note says so.
+- **Checks run:**
+  - the 8-chapter `--freecam --graphics=enhanced --global-illumination=on` sweep: zero shader errors, the only stderr ERROR being the exit-time `finalize` line every probe prints;
+  - `graphics-volumetric-clouds-gi` and `lighting-lab` pass;
+  - units 8428 passed, with `LightingTableTests` holding the defaults and the `gi` round trip of `self_lit_emission`.
+- **Goldens.** They run under `--det` with GI off, where both globals are zero, so they should not move; the full battery in E42 checks it.
 
 # Wave E, tuning and landing
 

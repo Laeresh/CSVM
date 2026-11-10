@@ -25,8 +25,8 @@ internal static class GlobalIllumination
     public static float Energy { get; set; } = ZoneLighting.Default.SdfgiEnergy;
 
     /// <summary>Gets a value indicating whether SDFGI's own sky light stands on the live Environment.
-    /// Then the zone's flat ambient steps aside to the tune's <see cref="ZoneLighting.AmbientFloor"/>
-    /// (<c>WeatherRig.ApplyEnhancedLighting</c>) instead of doubling it.</summary>
+    /// SDFGI then replaces the Environment's flat ambient, so the zone apply writes the tune's
+    /// <see cref="ZoneLighting.AmbientFloor"/> fill and self-lit glow as emission globals (<c>WeatherRig</c>).</summary>
     public static bool SkyLightLive { get; private set; }
 
     /// <summary>Writes GI onto <paramref name="env"/>: on under Enhanced while the option stands on, a
