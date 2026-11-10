@@ -538,6 +538,17 @@ public class SessionSpecParserTests
         Assert.Equal(4f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=huge" }).TerrainShadowCell);
     }
 
+    /// <summary><c>--cloud-march=</c> names the volumetric march's divisor, and absent or unknown leaves the default.</summary>
+    [Fact]
+    public void CloudMarchFlagCarriesItsDivisor()
+    {
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).CloudMarch);
+        Assert.Equal(1, SessionSpec.Parse(new[] { "--fly", "--cloud-march=full" }).CloudMarch);
+        Assert.Equal(2, SessionSpec.Parse(new[] { "--fly", "--cloud-march=half" }).CloudMarch);
+        Assert.Equal(4, SessionSpec.Parse(new[] { "--fly", "--cloud-march=quarter" }).CloudMarch);
+        Assert.Null(SessionSpec.Parse(new[] { "--fly", "--cloud-march=eighth" }).CloudMarch);
+    }
+
     /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves
     /// config.json's; <c>--no-hd-models</c> is its own switch, so it holds in either order.</summary>
     [Fact]

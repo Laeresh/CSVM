@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Session.World;
 using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
@@ -13,7 +14,8 @@ namespace CSVM.UI.Labs;
 /// heading. A tint lights the shadows red, so the pattern and its drift show plainly. Every
 /// edit only writes globals, so it applies at once. Save writes the chapter's tunes and the drift's
 /// speed and heading into <see cref="CloudShadowChapters"/>; the tint is never saved. A box switches
-/// the volumetric clouds for this flight without saving the video option.
+/// the volumetric clouds for this flight without saving the video option, and a button steps their march
+/// resolution.
 /// </summary>
 internal sealed partial class CloudLab : Node
 {
@@ -36,6 +38,7 @@ internal sealed partial class CloudLab : Node
     private CanvasLayer? _layer;
     private CheckButton? _tint;
     private CheckButton? _volumetric;
+    private Button? _march;
     private Label? _status;
     private bool _open;
     private bool _syncing;
@@ -147,6 +150,9 @@ internal sealed partial class CloudLab : Node
         return label;
     }
 
+    private static string MarchText() =>
+        $"Volumetric march resolution: {(VolumetricClouds.MarchDivisor > 1 ? $"1/{VolumetricClouds.MarchDivisor}" : "full")} (not saved)";
+
     private static string ValueText(Row row, CloudShadow c) =>
         $"{row.Field.Show(row.Get(c))}   (saved {row.Field.Show(row.Saved())})";
 
@@ -233,6 +239,15 @@ internal sealed partial class CloudLab : Node
                 Log.Info("ui", $"cloud lab: volumetric clouds {(on ? "on" : "off")} for this flight");
             };
             box.AddChild(_volumetric);
+            // Full, half and quarter resolution in turn, for comparing the reduced march live.
+            _march = new Button { FocusMode = Control.FocusModeEnum.None };
+            _march.Pressed += () =>
+            {
+                VolumetricClouds.MarchDivisor = VolumetricClouds.MarchDivisor switch { 1 => 2, 2 => 4, _ => 1 };
+                _march.Text = MarchText();
+                Log.Info("ui", $"cloud lab: {MarchText()}");
+            };
+            box.AddChild(_march);
         }
 
         var buttons = new HBoxContainer();
@@ -292,6 +307,8 @@ internal sealed partial class CloudLab : Node
         _syncing = true;
         if (_volumetric != null)
             _volumetric.ButtonPressed = VolumetricCloudsSetting.Enabled;
+        if (_march != null)
+            _march.Text = MarchText();
         _syncing = false;
         if (_clouds() is not { } c)
             return;

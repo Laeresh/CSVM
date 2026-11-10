@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ C2's horizon under the clouds (author's check)
 33. ☑ `TerrainShadow.SunAt` ignores the shadow strength
 34. ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults (Deck half deferred)
-35. ☐ March the clouds at reduced resolution
+35. ☑ March the clouds at reduced resolution
 36. ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
 
 ### Wave E, tuning and landing
@@ -528,13 +528,35 @@ Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout
 
 **⚠ Traps.** The sim clock lags wall time on the author's rig in late C2. Read the sim-clock cadence, not `physics_ms`.
 
-## D35 ☐ March the clouds at reduced resolution
+## D35 ☑ March the clouds at reduced resolution
+
+**Landed.** `VolumetricClouds.MarchDivisor` (`--cloud-march=full|half|quarter`, default `half`, and a cloud lab button that steps it live) marches the slab into a smaller target.
+- **Route.** A canvas `SubViewport` (2D only, HDR, transparent) runs the same march code as the quad, from the view's camera, which `FollowCamera` writes at `RenderingServer.FramePreDraw`. Every SubViewport renders before the view that samples it, so the quad at priority 104 reads it in the same frame and D31's order stands. A `CompositorEffect` would have meant porting the march, the per-view fog table and the terrain bake's global sampler to RD GLSL, which global shader uniforms do not reach. A checkerboard needs a history buffer a spatial shader cannot keep.
+- **Depth.** The reduced march ignores the scene. Its target holds the layer's light weights and transmittance in its left half and the shafts' light at each quarter of their ray in its right half. The quad decides per full-resolution pixel from its own depth: a scene in front of the layer hides the cloud, a scene behind it takes the bilinear sample, and a scene inside the marched span (terrain or an aircraft in the layer) marches at full resolution. The shafts are read at the pixel's own depth between the stored quarters.
+- **Full resolution stays** for a divisor of 1, a headset (`UseXR`), and any view whose camera is not the one traced (a splitscreen pane, the spyglass disc), which the quad tests per fragment.
+- **Instrument.** The target is a viewport of its own, so `gpu_ms` leaves it out; `--perf` prints it as `[perf] cloud_march march_gpu_ms=`, and the table sums the two.
+
+**Verified.** The orchestrator viewed the 2x crops: half reads as full, quarter saw-tooths the rift edges near the horizon. The full battery runs in E42. The agent's measurements, D34's instrument and poses at 1920x1080, clouds on and GI off, one warm-up round and three measured rounds with the four states rotated. Each cell is the median of `gpu_ms + march_gpu_ms`, then its delta over clouds off and that delta's share of full resolution's. Spread across runs is 0.03 ms or less except C1C above full (6.73 to 7.01).
+
+| Pose | Clouds off | Full | Half | Quarter |
+|---|---|---|---|---|
+| C1C under | 0.60 | 9.55 (+8.95) | 3.10 (+2.50, 28 %) | 1.39 (+0.79, 9 %) |
+| C1C graze | 0.83 | 8.41 (+7.58) | 3.03 (+2.20, 29 %) | 1.61 (+0.78, 10 %) |
+| C1C above | 0.65 | 6.99 (+6.35) | 3.11 (+2.47, 39 %) | 1.88 (+1.23, 19 %) |
+| C1B | 1.26 | 6.87 (+5.61) | 2.85 (+1.59, 28 %) | 1.75 (+0.49, 9 %) |
+
+- The quad's own pass costs 0.1 to 0.15 ms over clouds off at under and graze, and 0.55 ms above, where no pixel falls back to the full march (checked with a debug colour).
+- One flown C1C run each (`--plane=player_bhawk --hold=0.2,0.1,0,1`, chase camera inside the layer, the aircraft marching at full): 5.08 ms full, 2.56 half, 1.76 quarter.
+- Screenshots of full against half and quarter at under, graze, above and C1B differ by a mean of 0.13 to 0.38 levels in 255, against 0.08 to 0.17 between two full-resolution runs. Above, quarter draws saw-tooth edges along the rifts near the horizon, where the coarse per-texel dither is too blocky for TAA to average. Half keeps the edges, a little softer.
+- `--xr-sim` falls back to full and matches the unchanged build to a mean of 0.07 levels.
+
+**Original approach (kept for reference).**
 
 **Goal.** The slab costs about a quarter of its full-resolution GPU time at the D34 poses, with no visible loss the author objects to against full resolution.
 
 **Evidence (confidence: direction-sound).** D34: the slab adds 4.3 to 8.9 ms at 1080p and 15.6 ms at 1440p on an RTX 5080, scaling with pixel count (1.78x the pixels cost 1.75x). The cost is the per-pixel march (40 to 60 steps, 5 sun taps each, 16 shaft samples under the base). The magnitude a lower resolution saves is TUNE until measured.
 
-**Approach.** <TODO: the agent reads how the slab draws (a full-screen quad at priority 104 reading `depth_texture`) and picks the smallest workable route in Godot 4.7. Candidates: march into a half- or quarter-resolution target (a SubViewport or a compositor effect) and upsample against full-resolution depth so edges against terrain stay sharp; or march a checkerboard and reproject. Keep D31's draw order and the clouds-over-flare rule.> A lab or flag switch between full and reduced resolution lets the author compare.
+**Approach.** March the layer into a half- or quarter-resolution canvas `SubViewport` with the scene ignored, and let the existing quad pick per pixel from its own depth: no cloud in front of the layer, the upsampled trace behind it, a full-resolution march inside it. Keep D31's draw order and the clouds-over-flare rule. A lab or flag switch between full and reduced resolution lets the author compare.
 
 **Model recommendation.** high: renderer plumbing in Godot 4.7 with depth-aware upsampling.
 
@@ -546,7 +568,7 @@ Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout
 
 **Landed.** `GlobalIlluminationSetting.Default` is `on`, and its fallback is `FallbackFor(det, integrated)`: `off` under `--det` (`default_det`, as `CloudShadowSetting` and `PostProcessingSetting` do), `off` on an integrated GPU (`default_integrated_gpu`, read through `ShadowQualitySetting.IntegratedGpu` as ground cover does), otherwise `on`. The renderer is asked only off `--det`, so the goldens and suites keep GI off unless their command line asks. The VR quality profile carries a GI word, `off`, beside its shadow word: a headset session stands GI off in place of the saved word, and `--global-illumination=` beats the profile, as `--shadow-quality=` does. `VolumetricCloudsSetting` stays `off` everywhere, unchanged. The `graphics-volumetric-clouds-gi` suite's restore falls back to `off`, the `--det` word, in place of the shared default.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Units 8424 passed in the agent's tree; the full battery runs in E42 with D35 and D36 merged.
 
 **Original approach (kept for reference).**
 

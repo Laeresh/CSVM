@@ -10,13 +10,17 @@ namespace CSVM.Session.World;
 /// <summary>
 /// Volumetric clouds in place of the cloud deck, the fogvol field and the placed cloud sprites,
 /// under Enhanced alone (<see cref="VolumetricCloudsSetting"/>). The slab is one full-screen raymarch through
-/// the mission's cloud band, over the cloud shadows' own pattern. It draws cumulus heads over an
+/// the mission's cloud band, over the cloud shadows' own pattern. It marches at a fraction of the view's
+/// resolution (<see cref="MarchDivisor"/>). It draws cumulus heads over an
 /// overcast deck torn by rifts, with light shafts under them. It reads the depth buffer so terrain
 /// and aircraft occlude it, publishes its ground shadow to the terrain, and the faithful path
 /// builds none. It lives beside <see cref="WeatherRig"/>, whose zone, night and deck it holds.
 /// </summary>
 internal sealed partial class VolumetricClouds : Node3D
 {
+    /// <summary>The march's resolution divisor with no flag or lab row moving it (PLAN-volumetric-clouds-gi D35).</summary>
+    public const int DefaultMarchDivisor = 2;
+
     // The authored band is the whiteout's thin sheet. The cumulus layer stands this much taller
     // over the same floor, so the heads have room to tower.
     private const float LayerDepthGain = 3f;
@@ -37,6 +41,13 @@ internal sealed partial class VolumetricClouds : Node3D
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
+    private static readonly StringName MarchOnParam = "march_on";
+    private static readonly StringName MarchEyeParam = "march_eye";
+    private static readonly StringName MarchBackParam = "march_back";
+    private static readonly StringName MarchLensParam = "march_lens";
+    private static readonly StringName ViewCameraParam = "view_camera";
+    private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
+
     private readonly Node3D _worldRoot;
     private readonly WeatherRig _weather;
     private readonly FogVolumeClutter? _field;
@@ -45,6 +56,11 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly List<MeshInstance3D> _hidden = new();
     private readonly bool _hasDeck;
     private ShaderMaterial? _material;
+    // The reduced march (MarchShader), its target, the target's render time and its size, zero while off.
+    private ShaderMaterial? _march;
+    private SubViewport? _marchView;
+    private MeasuredRenderTime? _marchTime;
+    private Vector2I _marchSize;
     private float? _bottom;
     private float? _top;
     // The layer was fitted to the placed clouds, so the upper zone is no air above it to split the fog by.
@@ -69,6 +85,14 @@ internal sealed partial class VolumetricClouds : Node3D
     /// <summary>Gets the <c>csky_pc_ground</c> global as last written, zero with no clouds drawing. A suite
     /// reads it here, since reading a global back is an engine error outside the editor.</summary>
     public static Vector4 PublishedGround { get; private set; }
+
+    /// <summary>Gets or sets the march's resolution divisor (<c>--cloud-march=</c>, the cloud lab's row). At 1
+    /// the quad marches every pixel; 2 or 4 march a half- or quarter-size target.</summary>
+    public static int MarchDivisor { get; set; } = DefaultMarchDivisor;
+
+    /// <summary>Gets the reduced march's render time while it runs, else null. Its target is a viewport
+    /// of its own, which <c>gpu_ms</c> leaves out (verification PERF-39).</summary>
+    public static MeasuredRenderTime? MarchTime { get; private set; }
 
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
@@ -145,15 +169,161 @@ internal sealed partial class VolumetricClouds : Node3D
         SetProcess(enhanced);
     }
 
-    // One full-screen quad, the cloud shadows' pattern as the layer's coverage.
+    // One full-screen quad, the cloud shadows' pattern as the layer's coverage. Where the reduced
+    // march runs for this view, the quad reads its target and marches only the pixels it cannot serve.
     private static string SlabShader() => """
         shader_type spatial;
         render_mode blend_premul_alpha, unshaded, depth_draw_never, shadows_disabled, fog_disabled, cull_disabled, depth_test_disabled;
+
+        """ + MarchCode() + """
+
+        uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
+        // The reduced march's target (MarchShader) and the camera it was traced from. A view drawn
+        // from any other camera, a pane, a spyglass or a second eye, marches every pixel itself.
+        uniform sampler2D march_texture : filter_linear, repeat_disable;
+        uniform bool march_on = false;
+        uniform vec3 march_eye;
+        uniform vec3 march_back;
+        uniform vec2 march_lens;
+
+        // Whether this view is the camera the reduced march traced. TAA's jitter leaves the lens
+        // diagonal alone, and the eye test fails for a headset's eyes and every other camera.
+        bool pc_reduced(vec3 eye, mat4 inv_view, mat4 inv_projection) {
+            if (!march_on || distance(eye, march_eye) > 0.01 || dot(inv_view[2].xyz, march_back) < 0.99999) {
+                return false;
+            }
+            vec2 lens = abs(vec2(inv_projection[0][0], inv_projection[1][1]));
+            return all(lessThan(abs(lens - march_lens), march_lens * 0.001));
+        }
+
+        // Fogs the march's result at the entry point and writes it premultiplied. The light shafts in
+        // front of it add on top, and `behind`, premultiplied over its alpha, shows under it.
+        void pc_write(vec4 marched, vec3 entry, vec3 cam, vec3 shafts, vec4 behind, inout vec3 albedo, inout float alpha) {
+            float a = 1.0 - marched.a;
+            alpha = a + (1.0 - a) * behind.a;
+            if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
+                discard;
+            }
+            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam)));
+            albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
+        }
+
+        // The shafts' light gathered over share `f` of their ray, between the quarters pc_shaft_light keeps.
+        float pc_shaft_at(vec4 quarters, float f) {
+            float u = clamp(f, 0.0, 1.0) * 4.0;
+            int k = min(int(u), 3);
+            vec4 before = vec4(0.0, quarters.xyz);
+            return mix(before[k], quarters[k], u - float(k));
+        }
+
+        // Writes the pixel from its trace (pc_trace): the cloud lit and fogged, then the layer past
+        // the cap. The shafts and the sky or fog behind follow.
+        void pc_resolve(vec3 eye, vec3 dir, vec2 span, float scene, vec4 trace, inout vec3 albedo, inout float alpha) {
+            vec4 m = vec4(pc_colour(trace.xy, dir, eye), trace.z);
+            float t0 = 0.0;
+            if (span.y >= 0.0) {
+                t0 = span.x;
+                // A march cut off inside the layer leaves the rest of it to the fog, not the dome, by
+                // the layer left unmarched. A ray leaving just past the cap takes little.
+                float t1 = pc_march_end(span, scene);
+                float unmarched = min(span.y, scene) - t1;
+                if (unmarched > 1.0) {
+                    float rest = max(csky_fog_amount(eye + dir * t1, eye), smoothstep(haze_near_m, far_m, t1))
+                        * (1.0 - exp(-unmarched / 5000.0));
+                    m.rgb += m.a * rest * csky_fog_color_at(eye);
+                    m.a *= 1.0 - rest;
+                }
+            }
+            vec3 shafts = pc_shaft_colour(trace.w, eye, dir);
+            // A sky pixel whose ray leaves through the layer's top shows the lifted sky above it.
+            // The exit's fog closes the far rifts into the horizon.
+            vec4 behind = vec4(0.0);
+            // At or below the horizon, a sky pixel past the clipped sea shows the fog, not the dome's lower band.
+            if (scene >= 1e8 && span.y < 0.0 && dir.y <= 0.02) {
+                behind = vec4(csky_fog_color_at(eye), 1.0);
+            }
+            if (rift_sky_lift > 0.0 && scene >= 1e8 && span.y >= 0.0 && dir.y > 0.0 && eye.y < layer_top) {
+                vec3 fog_rgb = csky_fog_color_at(eye);
+                float exit_fog = csky_fog_amount(eye + dir * span.y, eye);
+                behind = vec4(mix(mix(fog_rgb, vec3(1.0), rift_sky_lift), fog_rgb, exit_fog), 1.0);
+            }
+            pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
+        }
+
+        void vertex() {
+            POSITION = vec4(VERTEX.xy, 1.0, 1.0);
+        }
+
+        void fragment() {
+            vec3 eye = CAMERA_POSITION_WORLD;
+            vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
+            float scene = csky_pc_scene_distance(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
+            // Past the full fog nothing is seen, so the dome, which writes depth, reads as open sky.
+            if (scene > csky_fog_range.y) {
+                scene = 1e9;
+            }
+            vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
+            vec4 trace;
+            // The reduced march ignored the scene, so it serves every pixel whose scene stands outside
+            // the marched span. Terrain or an aircraft inside the layer marches here at full resolution.
+            bool inside = span.y >= 0.0 && scene > span.x && scene < min(span.y, span.x + far_m);
+            if (!inside && pc_reduced(eye, INV_VIEW_MATRIX, INV_PROJECTION_MATRIX)) {
+                // The target's left half holds the layer's trace and its right half the shafts'
+                // quarters. The clamp keeps the filter off the seam between them.
+                float edge = 1.0 / float(textureSize(march_texture, 0).x);
+                float x = clamp(SCREEN_UV.x, edge, 1.0 - edge) * 0.5;
+                trace = vec4(texture(march_texture, vec2(x, SCREEN_UV.y)).xyz, 0.0);
+                // In front of the layer the scene hides it, so the edge stays at this pixel's own depth.
+                if (span.y < 0.0 || scene <= span.x) {
+                    trace.xyz = vec3(0.0, 0.0, 1.0);
+                }
+                float l0 = min(span.y >= 0.0 ? span.x : shaft_far_m, shaft_far_m);
+                if (l0 > 1.0) {
+                    trace.w = pc_shaft_at(texture(march_texture, vec2(0.5 + x, SCREEN_UV.y)), min(scene, l0) / l0);
+                }            } else {
+                // The march's start offset moves by the golden ratio every frame. TAA then averages the
+                // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
+                float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
+                trace = pc_trace(eye, dir, span, scene, dither);
+            }
+            vec3 albedo = vec3(0.0);
+            float alpha = 0.0;
+            pc_resolve(eye, dir, span, scene, trace, albedo, alpha);
+            ALBEDO = albedo;
+            ALPHA = alpha;
+        }
+        """;
+
+    // The reduced march: a canvas over two targets side by side, each a half or a quarter of the view's
+    // size. Each texel traces the main camera's ray with the scene ignored, and keeps the trace raw.
+    private static string MarchShader() => """
+        shader_type canvas_item;
+        render_mode blend_disabled, unshaded;
+
+        """ + MarchCode() + """
+
+        // The main view's camera and inverse projection, written before each draw (FollowCamera).
+        uniform mat4 view_camera;
+        uniform mat4 view_inv_projection;
+
+        void fragment() {
+            vec3 eye = view_camera[3].xyz;
+            // The left half traces the layer and the right half the shafts, each over the whole view.
+            // The engine's projection has its y up and the canvas its rows down.
+            vec2 uv = vec2(fract(UV.x * 2.0), 1.0 - UV.y);
+            vec3 dir = csky_pc_ray_dir(uv, view_inv_projection, view_camera);
+            vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
+            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
+            COLOR = UV.x < 0.5 ? vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0) : pc_shafts(eye, dir, span, 1e9, dither);        }
+        """;
+
+    // The march both passes share: the includes, the layer's uniforms and the march's functions.
+    // Its pc_trace returns what a pixel needs before the scene and the fog.
+    private static string MarchCode() => """
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_volumetric_clouds.gdshaderinc"
         #include "res://shaders/csky_terrain_shadow.gdshaderinc"
 
-        uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
         uniform float layer_bottom = 970.0;
         uniform float layer_top = 1130.0;
         uniform float cover_bias = 0.15;
@@ -241,19 +411,24 @@ internal sealed partial class VolumetricClouds : Node3D
             return csky_pc_beer_powder(od);
         }
 
-        // The lit cloud body at `p`, before fog: the sun through its own shadow plus the sky's
-        // ambient. The mission's SUNLIGHT dims it and the zone tune tints it.
-        vec3 pc_light(vec3 p, vec3 dir, float sun_t, vec3 cam) {
-            float cos_theta = dot(dir, csky_sun_dir);
-            float phase = mix(csky_pc_phase(cos_theta, 0.0), csky_pc_phase(cos_theta, 0.6), 0.5) * 4.0 * 3.14159265;
+        // The sky's and the sun's weights on the cloud body at `p`, under `sun_t` of the sun. Their
+        // colours are the same along a ray, so pc_colour applies them once per pixel.
+        vec2 pc_light(vec3 p, float sun_t) {
             // The sky lights the crown and little reaches the base, so the underside reads darker.
             float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
-            vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain * mix(0.5, 1.0, h);
             // The floor stands in for the multiple scattering a thick cloud's shaded side still gets.
             // It is lower at the base, where a deck's underside and a cumulus base read dark.
-            float lit = mix(mix(0.12, 0.25, h), 1.0, sun_t);
-            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * lit * mix(0.6, 1.4, phase / (1.0 + phase));
-            return (ambient + sun) * csky_world_light_at(cam) * csky_tune_cloud_tint;
+            return vec2(mix(0.5, 1.0, h), mix(mix(0.12, 0.25, h), 1.0, sun_t));
+        }
+
+        // The lit cloud body from the march's two weights, before fog: the sun through its own shadow
+        // plus the sky's ambient. The mission's SUNLIGHT dims it and the zone tune tints it.
+        vec3 pc_colour(vec2 w, vec3 dir, vec3 cam) {
+            float cos_theta = dot(dir, csky_sun_dir);
+            float phase = mix(csky_pc_phase(cos_theta, 0.0), csky_pc_phase(cos_theta, 0.6), 0.5) * 4.0 * 3.14159265;
+            vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain;
+            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * mix(0.6, 1.4, phase / (1.0 + phase));
+            return (ambient * w.x + sun * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
         }
 
         // The sun's share reaching a point under the layer. Along the sun ray: the deck's span, then
@@ -270,17 +445,16 @@ internal sealed partial class VolumetricClouds : Node3D
             return exp(-od);
         }
 
-        // The light shafts under the layer: the sun in-scattered toward the eye by the haze below the
-        // deck. The march runs from the eye to `t_end`, each sample shadowed by the layer along the
-        // sun ray. The haze thins with height and the zone fog swallows the far samples.
-        vec3 pc_shafts(vec3 eye, vec3 dir, float t_end, float dither) {
+        // The light shafts' gathered light: the sun in-scattered by the haze below the deck, from the
+        // eye to `t_end`, each sample shadowed by the layer. The haze thins with height, and the fog swallows it.
+        // Returns the light gathered by the end of each quarter of the ray, the last the whole.
+        vec4 pc_shaft_light(vec3 eye, vec3 dir, float t_end, float dither) {
             float len = min(t_end, shaft_far_m);
             if (len <= 1.0) {
-                return vec3(0.0);
+                return vec4(0.0);
             }
             float dt = len / float(shaft_steps);
-            float phase = csky_pc_phase(dot(dir, csky_sun_dir), 0.5) * 4.0 * 3.14159265;
-            float light = 0.0;
+            vec4 light = vec4(0.0);
             float t = dt * dither;
             for (int i = 0; i < shaft_steps; i++) {
                 vec3 q = eye + dir * t;
@@ -288,20 +462,28 @@ internal sealed partial class VolumetricClouds : Node3D
                 float reach = 1.0 - csky_fog_amount(q, eye);
                 // The terrain's baked sun shadow holds in the air too, so a hill's lee carries no shaft.
                 float sun_t = pc_sun_through(q, layer_bottom, layer_top) * csky_terrain_baked_sun(q);
-                light += sun_t * haze * reach * dt;
+                // The sample's quarter and every later one gather it.
+                light += sun_t * haze * reach * dt * step(vec4(float(i * 4 / shaft_steps)), vec4(0.0, 1.0, 2.0, 3.0));
                 t += dt;
             }
+            return light;
+        }
+
+        // The shafts' colour from the light pc_shaft_light gathered along `dir`.
+        vec3 pc_shaft_colour(float light, vec3 eye, vec3 dir) {
+            float phase = csky_pc_phase(dot(dir, csky_sun_dir), 0.5) * 4.0 * 3.14159265;
             vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * csky_world_light_at(eye);
             return sun * light * shaft_gain * 0.00006 * phase;
         }
 
-        // Marches `dir` from `t0` to `t1`, returning the lit colour premultiplied and the transmittance.
-        vec4 pc_march(vec3 eye, vec3 dir, float t0, float t1, float bottom, float top, float cover_scale, float dither) {
+        // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_light) premultiplied and
+        // the transmittance.
+        vec3 pc_march(vec3 eye, vec3 dir, float t0, float t1, float bottom, float top, float cover_scale, float dither) {
             float len = t1 - t0;
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
             float dt = len / float(n);
             float t = t0 + dt * dither;
-            vec3 col = vec3(0.0);
+            vec2 w = vec2(0.0);
             float trans = 1.0;
             float sun_step = max((top - bottom) * 0.3, 20.0);
             for (int i = 0; i < n && trans > 0.01; i++) {
@@ -311,89 +493,49 @@ internal sealed partial class VolumetricClouds : Node3D
                     float ext = d * density_gain * dt;
                     float a = 1.0 - exp(-ext);
                     float sun_t = pc_sun(p, sun_step, bottom, top, cover_scale);
-                    col += trans * a * pc_light(p, dir, sun_t, eye);
+                    w += trans * a * pc_light(p, sun_t);
                     trans *= 1.0 - a;
                 }
                 t += dt;
             }
-            return vec4(col, trans);
+            return vec3(w, trans);
         }
 
-        // Fogs the march's result at the entry point and writes it premultiplied. The light shafts in
-        // front of it add on top, and `behind`, premultiplied over its alpha, shows under it.
-        void pc_write(vec4 marched, vec3 entry, vec3 cam, vec3 shafts, vec4 behind, inout vec3 albedo, inout float alpha) {
-            float a = 1.0 - marched.a;
-            alpha = a + (1.0 - a) * behind.a;
-            if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
-                discard;
-            }
-            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam)));
-            albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
+        // Where the march along a ray through the layer's `span` ends: the exit, the scene or the cap.
+        float pc_march_end(vec2 span, float scene) {
+            return min(min(span.y, scene), span.x + far_m);
         }
 
-        void vertex() {
-            POSITION = vec4(VERTEX.xy, 1.0, 1.0);
-        }
-
-        void fragment() {
-            vec3 eye = CAMERA_POSITION_WORLD;
-            vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
-            float scene = csky_pc_scene_distance(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
-            // Past the full fog nothing is seen, so the dome, which writes depth, reads as open sky.
-            if (scene > csky_fog_range.y) {
-                scene = 1e9;
-            }
-            vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
-            // The march's start offset moves by the golden ratio every frame. TAA then averages the
-            // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
-            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
-            vec4 m = vec4(0.0, 0.0, 0.0, 1.0);
-            float t0 = 0.0;
+        // A pixel's march through the layer before the fog: the light's weights and the transmittance.
+        vec3 pc_layer(vec3 eye, vec3 dir, vec2 span, float scene, float dither) {
             if (span.y >= 0.0) {
-                t0 = span.x;
-                float t1 = min(min(span.y, scene), t0 + far_m);
-                if (t1 > t0) {
-                    m = pc_march(eye, dir, t0, t1, layer_bottom, layer_top, 1.0, dither);
-                }
-                // A march cut off inside the layer leaves the rest of it to the fog, not the dome, by
-                // the layer left unmarched. A ray leaving just past the cap takes little.
-                float unmarched = min(span.y, scene) - t1;
-                if (unmarched > 1.0) {
-                    float rest = max(csky_fog_amount(eye + dir * t1, eye), smoothstep(haze_near_m, far_m, t1))
-                        * (1.0 - exp(-unmarched / 5000.0));
-                    m.rgb += m.a * rest * csky_fog_color_at(eye);
-                    m.a *= 1.0 - rest;
+                float t1 = pc_march_end(span, scene);
+                if (t1 > span.x) {
+                    return pc_march(eye, dir, span.x, t1, layer_bottom, layer_top, 1.0, dither);
                 }
             }
-            // Under the layer the ray crosses the haze first, up to the layer, the scene or the cap.
-            vec3 shafts = vec3(0.0);
-            if (shaft_gain > 0.0 && eye.y < layer_bottom) {
-                shafts = pc_shafts(eye, dir, min(scene, span.y >= 0.0 ? span.x : shaft_far_m), dither);
+            return vec3(0.0, 0.0, 1.0);
+        }
+
+        // A pixel's shaft light by quarters (pc_shaft_light). Under the layer the ray crosses the haze
+        // first, up to the layer, the scene or the cap.
+        vec4 pc_shafts(vec3 eye, vec3 dir, vec2 span, float scene, float dither) {
+            if (shaft_gain <= 0.0 || eye.y >= layer_bottom) {
+                return vec4(0.0);
             }
-            // A sky pixel whose ray leaves through the layer's top shows the lifted sky above it.
-            // The exit's fog closes the far rifts into the horizon.
-            vec4 behind = vec4(0.0);
-            // At or below the horizon, a sky pixel past the clipped sea shows the fog, not the dome's lower band.
-            if (scene >= 1e8 && span.y < 0.0 && dir.y <= 0.02) {
-                behind = vec4(csky_fog_color_at(eye), 1.0);
-            }
-            if (rift_sky_lift > 0.0 && scene >= 1e8 && span.y >= 0.0 && dir.y > 0.0 && eye.y < layer_top) {
-                vec3 fog_rgb = csky_fog_color_at(eye);
-                float exit_fog = csky_fog_amount(eye + dir * span.y, eye);
-                behind = vec4(mix(mix(fog_rgb, vec3(1.0), rift_sky_lift), fog_rgb, exit_fog), 1.0);
-            }
-            vec3 albedo = vec3(0.0);
-            float alpha = 0.0;
-            pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
-            ALBEDO = albedo;
-            ALPHA = alpha;
+            return pc_shaft_light(eye, dir, min(scene, span.y >= 0.0 ? span.x : shaft_far_m), dither);
+        }
+
+        // A pixel's whole trace: the layer's weights and transmittance, then the shafts' light.
+        vec4 pc_trace(vec3 eye, vec3 dir, vec2 span, float scene, float dither) {
+            return vec4(pc_layer(eye, dir, span, scene, dither), pc_shafts(eye, dir, span, scene, dither).w);
         }
         """;
 
-    private ShaderMaterial MaterialOf(float bottom, float top)
+    // The quad's or the reduced march's material over the layer from `bottom` to `top`.
+    private ShaderMaterial MaterialOf(string code, float bottom, float top)
     {
-        // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
-        var material = new ShaderMaterial { Shader = new Shader { Code = SlabShader() }, RenderPriority = Precipitation.DrawPriority - 1 };
+        var material = new ShaderMaterial { Shader = new Shader { Code = code } };
         material.SetShaderParameter("layer_bottom", bottom);
         material.SetShaderParameter("layer_top", top);
         // A deck chapter reads as a near-solid overcast with a few tall heads over it, formed only
@@ -427,7 +569,9 @@ internal sealed partial class VolumetricClouds : Node3D
     {
         if (_bottom is not { } bottom || _top is not { } top)
             return "nothing drawn";
-        _material = MaterialOf(bottom, top);
+        _material = MaterialOf(SlabShader(), bottom, top);
+        // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
+        _material.RenderPriority = Precipitation.DrawPriority - 1;
         var quad = new MeshInstance3D
         {
             Name = "slab",
@@ -439,7 +583,63 @@ internal sealed partial class VolumetricClouds : Node3D
             Layers = uint.MaxValue,
         };
         root.AddChild(quad);
+
+        // The reduced march renders before the view that reads it, as every SubViewport does. Its
+        // target is linear half floats, so the trace's weights and shaft light arrive unclamped.
+        _march = MaterialOf(MarchShader(), bottom, top);
+        _marchView = new SubViewport
+        {
+            Name = "march",
+            Disable3D = true,
+            UseHdr2D = true,
+            // Without it the target's alpha reads 1 whatever the canvas wrote.
+            TransparentBg = true,
+            Size = Vector2I.One,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+        };
+        var canvas = new ColorRect { Material = _march, MouseFilter = Control.MouseFilterEnum.Ignore };
+        canvas.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _marchView.AddChild(canvas);
+        root.AddChild(_marchView);
+        _material.SetShaderParameter("march_texture", _marchView.GetTexture());
+        RenderingServer.ViewportSetMeasureRenderTime(_marchView.GetViewportRid(), true);
+        _marchTime = new MeasuredRenderTime(_marchView.GetViewportRid());
+        RenderingServer.FramePreDraw += FollowCamera;
         return "one full-screen march";
+    }
+
+    // Before each draw, once every camera has moved: aims the reduced march at the view's camera. A
+    // divisor of 1, no camera, or a headset's two eyes leave every pixel to the quad.
+    private void FollowCamera()
+    {
+        if (_material == null || _march == null || _marchView == null || !IsInsideTree())
+            return;
+        var viewport = GetViewport();
+        var camera = viewport.GetCamera3D();
+        int divisor = MarchDivisor;
+        bool on = divisor > 1 && camera != null && !viewport.UseXR;
+        var full = (Vector2I)viewport.GetVisibleRect().Size;
+        // Two halves side by side: the layer's trace, then the shafts' (MarchShader).
+        var size = on ? new Vector2I(Math.Max((full.X + divisor - 1) / divisor, 1) * 2, Math.Max((full.Y + divisor - 1) / divisor, 1)) : Vector2I.Zero;
+        if (size != _marchSize)
+        {
+            _marchSize = size;
+            _marchView.RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+            if (on)
+                _marchView.Size = size;
+            _material.SetShaderParameter(MarchOnParam, on);
+            MarchTime = on ? _marchTime : null;
+            Log.Info("world", $"volumetric clouds: march at {(on ? $"1/{divisor} resolution, {size.X / 2}x{size.Y}" : "full resolution")}");
+        }
+        if (!on)
+            return;
+        var view = camera!.GetCameraTransform();
+        var inverse = camera.GetCameraProjection().Inverse();
+        _march.SetShaderParameter(ViewCameraParam, new Projection(view));
+        _march.SetShaderParameter(ViewInvProjectionParam, inverse);
+        _material.SetShaderParameter(MarchEyeParam, view.Origin);
+        _material.SetShaderParameter(MarchBackParam, view.Basis.Z);
+        _material.SetShaderParameter(MarchLensParam, new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y)));
     }
 
     // The placed cloud sprites: every mesh instance under the world root wearing a pooled material.
@@ -519,7 +719,14 @@ internal sealed partial class VolumetricClouds : Node3D
 
     private void FreeBuilt()
     {
+        if (_material != null)
+            RenderingServer.FramePreDraw -= FollowCamera;
         _material = null;
+        _march = null;
+        _marchView = null;
+        _marchTime = null;
+        _marchSize = Vector2I.Zero;
+        MarchTime = null;
         if (_built == null)
             return;
         _built.QueueFree();
@@ -601,7 +808,10 @@ internal sealed partial class VolumetricClouds : Node3D
             return;
         _appliedTaper = taper;
         _appliedShaft = shaft;
-        _material.SetShaderParameter("taper", taper);
-        _material.SetShaderParameter("shaft_gain", shaft);
+        foreach (var material in new[] { _material, _march })
+        {
+            material?.SetShaderParameter("taper", taper);
+            material?.SetShaderParameter("shaft_gain", shaft);
+        }
     }
 }

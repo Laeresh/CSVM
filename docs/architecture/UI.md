@@ -971,7 +971,7 @@ The cloud lab (Shift+F4), built by `InspectionLabs.BuildCloudLab` in `--freecam`
 one slider per `Effects/CloudShadowPattern.cs` `Tune` field and the drift's speed and heading, each beside its saved value.
 Every edit writes the `Effects/CloudShadow.cs` globals at once, so no shader rebuilds; the volumetric head taper and deck
 shares reach `Session/World/VolumetricClouds.cs` on its next frame. A switch tints the shadows red, so the
-pattern and its drift show plainly; the tint is never saved. Revert to saved, and Save, which writes the chapter's entry
+pattern and its drift show plainly; the tint is never saved. A button steps the volumetric march through full, half and quarter resolution (`VolumetricClouds.MarchDivisor`), unsaved. Revert to saved, and Save, which writes the chapter's entry
 through `Effects/CloudShadowChapters.cs` into the source tree's file and is off in an exported build. The status line says
 whether the shadows draw, since a clear or night mission shows none.
 
