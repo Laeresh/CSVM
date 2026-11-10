@@ -40,7 +40,7 @@ process-wide unit quad and one compiled shader per blend and soft pair, with a t
 per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold that the mixed alpha's clamp carries through; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), the
 mission's distance fog off the sky's globals, and a mixed alpha that lands on DX7's byte-space mix. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
-blend, each in write order and depth-sorted on its cloud's AABB centre. Under the stereo path the quad and the smoke grade take `Mech3/StereoFacing.cs`'s basis instead. While the volumetric slab stands, `DrawPriority` puts every layer after it, and the Enhanced text dims each particle's alpha by the slab's transmittance from the eye to it (`csky_pc_veil_at`, exactly 1 with no slab). Read `Puffer.cs` next.
+blend, each in write order and depth-sorted on its cloud's AABB centre. Under the stereo path the quad and the smoke grade take `Mech3/StereoFacing.cs`'s basis instead. While the volumetric slab stands, `DrawPriority` puts every layer after it, with the weapon sprites (`Flight/Weapons/Projectile.cs`), and the Enhanced text dims each particle's alpha by the slab's transmittance from the eye to it (`csky_pc_veil_at`, exactly 1 with no slab). Read `Puffer.cs` next.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table laid on a

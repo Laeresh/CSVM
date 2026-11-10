@@ -125,6 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 39. ☑ Zone-gated meshes draw while the clouds hold the zone (author's report: C4's mountain tops)
 40. ☑ Puffers and other transparent effects are occluded correctly by the clouds (author's report)
 43. ☑ Enclosed spaces read black under GI, since SDFGI replaces the flat ambient and `ambient_floor` did nothing (author's reports: C1/IA1 zeppelin hangar, C1 train tunnels)
+44. ☑ Weapon sprites (tracers, flashes, gun smoke) are veiled by the clouds like the puffers (author's request, D40's follow-up)
 
 ### Wave E, tuning and landing
 
@@ -694,7 +695,7 @@ No deck chapter tags an alternate of the same object per band zone, so opening z
 | Draw | Module | Priority | Blend | Depth write | D40 |
 |---|---|---|---|---|---|
 | Puffers: smoke, fire columns, explosion and impact sprites, rocket and exhaust trails, splashes, cliff spray, speed cue | `Effects/EmitterRenderer.cs` | 0 | mix (gamma composite) or add | never | after the slab while it stands, dimmed by `csky_pc_veil_at` |
-| Tracer streaks, tips, muzzle flashes, impact flashes, gun smoke | `Flight/Weapons/Projectile.cs` pools, `StandardMaterial3D` | 0 | add (gun smoke mix) | never | unchanged: still under the slab |
+| Tracer streaks, tips, muzzle flashes, impact flashes, gun smoke | `Flight/Weapons/Projectile.cs` pools, `StandardMaterial3D` | 0 | add (gun smoke mix) | never | unchanged by D40; with the puffers since D44 |
 | Heat shimmer | `Effects/HeatShimmer.cs` | -1 | mix of the screen copy | never | unchanged: its copy is taken before the transparent pass, so after the slab it would write the cloudless scene over the cloud |
 | Wind streaks | `Effects/WindStreaks.cs` | 0 | mix | never | unchanged: off by default, within 30 m like the rain |
 | Rain and snow | `Effects/Precipitation.cs` | 105, now 106 | mix | never | after the slab since D31 |
@@ -708,8 +709,8 @@ No deck chapter tags an alternate of the same object per band zone, so opening z
 | Scorch marks | `Effects/ScorchField.cs` (`Decal`) | opaque pass | | | not a transparent |
 
 Open after D40:
-- **The weapon sprites.** The `Projectile` pools are `StandardMaterial3D`s, which cannot read the veil. Converting the five pools to a `ShaderMaterial` must keep their faithful look, so it is an item of its own. Until then a tracer in front of a cloud stays under it.
-- **The new order.** While a slab stands, the puffers draw after every other world transparent, the weapon sprites, the lamps and the aircraft flares included, where they were depth-sorted with them before. A tracer or a lamp in front of smoke draws under it.
+- **The weapon sprites.** The `Projectile` pools are `StandardMaterial3D`s, which cannot read the veil. D44 covers them.
+- **The new order.** While a slab stands, the puffers draw after every other world transparent, the lamps and the aircraft flares included, where they were depth-sorted with them before. A lamp in front of smoke draws under it. The weapon sprites sort with the puffers again since D44.
 - **The mix composite.** A mixed puffer's gamma alpha (`GammaMixComposite`) reads the screen copy taken before the transparents. Over a cloud it is therefore worked out against the scene behind the cloud, as it already was over any other transparent.
 
 **Approach.** Order plus transmittance, the rain's fix with the cloud between taken into account. Each alternative was weighed and dropped:
@@ -830,6 +831,34 @@ With GI on, the lit models in the hangar and the lit tunnel shells read as they 
   - `graphics-volumetric-clouds-gi` and `lighting-lab` pass;
   - units 8428 passed, with `LightingTableTests` holding the defaults and the `gi` round trip of `self_lit_emission`.
 - **Goldens.** They run under `--det` with GI off, where both globals are zero, so they should not move; the full battery in E42 checks it.
+## D44 ☑ Weapon sprites (tracers, flashes, gun smoke) are veiled by the clouds like the puffers (author's request, D40's follow-up)
+
+**Landed.** While a slab stands, every weapon sprite pool wears a veiled `ShaderMaterial` twin of its own `StandardMaterial3D` and draws at the puffers' 105, dimmed by `csky_pc_veil_at` as they are.
+- **Where.** `ProjectilePool.BandedPool` (`Flight/Weapons/Projectile.cs`). `End`, run each frame for each pool, compares `MultiMeshEmitterRenderer.DrawPriority` with the priority it last took. On a change it sets each side's `MaterialOverride` to the twin at that priority, or back to null at 0, so the mesh's own material draws again. An above-band side built later takes the same.
+- **The twin.** `VeiledCode` is the text Godot generates for `AddMultiMesh`'s settings (unshaded, `depth_draw_never`, `cull_disabled`, the albedo texture times `COLOR`, `filter_linear_mipmap`, `repeat_disable`), with `blend_add` or `blend_mix` from the source and `ALPHA` multiplied by `csky_pc_veil_at(CAMERA_POSITION_WORLD, MODEL_MATRIX[3].xyz)` in `vertex()`. One shader per blend is shared by the process; each pool's twin carries its texture. With nothing between the eye and the sprite the veil is 1, and the twin draws what the `StandardMaterial3D` draws.
+- **Unchanged.** The faithful path and Enhanced with the clouds off never build a twin, so they keep the `StandardMaterial3D`s. Heat shimmer stays at -1 as D40 left it.
+
+**Verified.** Probes, cost and suites in the commit message: clouds off byte-identical, inside the deck the muzzle flash and gun smoke now stand in front of the slab, and the twin matches the original look where the veil is 1. The full battery runs in E42.
+
+**Goal.** The author: "Do the weapon-sprite follow up". A tracer, flash or gun puff in front of a cloud draws over it, and one inside or behind it fades with the cloud between it and the eye, as a puffer does since D40.
+
+**Evidence (confidence: traced-to-code).** Census of the weapon sprites' materials. Every pool is built by `AddMultiMesh` through `AddBandedPool` in `_Ready`: a `MultiMesh` of `Transform3D` instances with per-instance colour, one `MultiMeshInstance3D` per band side, over one `StandardMaterial3D`.
+
+| Pool | Texture | Mesh | Blend |
+|---|---|---|---|
+| Tracer streaks, one per `TracerTextures` entry | the ammo's streak | `CrossedStreakMesh`, two crossed quads | add |
+| Tip discs, one per `TipTextures` entry | the ammo's tip | unit quad | add |
+| Muzzle flashes, one per `MuzzleAmmoTextures` entry | the ammo's flash | unit quad | add |
+| Impact flashes | `slug_muzzle2` | unit quad | add |
+| Gun smoke | `smoke101` | unit quad | mix |
+
+Every material is unshaded, `Transparency.Alpha`, `CullMode.Disabled`, `DepthDrawMode.Disabled`, billboard off (`RenderSprites` orients each quad itself), `VertexColorUseAsAlbedo`, `TextureRepeat` off, the default `LinearWithMipmaps` filter, and render priority 0. A `StandardMaterial3D` cannot include `csky_volumetric_clouds.gdshaderinc`, so it cannot read the veil.
+
+**Approach.** The twin, swapped through `MaterialOverride` only while a slab stands. The alternative, the `StandardMaterial3D`s moved to 105 with the veil folded into each instance's colour alpha, needs the slab's density march ported to C# beside the shader's, and a per-instance march on the CPU each frame; the twin reuses D40's function as it stands. Swapping the override, rather than replacing the mesh's material, leaves the faithful and cloudless draw untouched. Weapon sprites and puffers share 105 again, so they depth-sort together, which undoes D40's side effect of a tracer in front of smoke drawing under it. The rain stays at 106 and the head-locked tiers above it.
+
+**Model recommendation.** medium.
+
+**Verify.** `graphics-volumetric-clouds-gi`: a weapon pool built with the clouds off wears its `StandardMaterial3D`s at 0, veiled twins (`blend_add` for the tracer, `blend_mix` for the smoke, both carrying `csky_pc_veil_at(`) at 105 at quarter, full and half, and its own materials again off. The suite is windowed (`headlessShaders`), so both twin texts compile on a real renderer. Flown C1 probes firing guns (`--fire`) and rockets (`--fire-rockets`), before and after, clouds off, half and full, under the layer (`--pos=-6041,600,-4313`) and inside the deck (`--pos=-6041,1050,-4313`). Clouds off is byte-identical before and after. GPU cost at a firing pose with the clouds half. The 8-chapter `--freecam --graphics=enhanced --volumetric-clouds=half` sweep for shader errors; `xr-sprite-facing`, the weapon and projectile suites; units.
 
 # Wave E, tuning and landing
 

@@ -500,6 +500,7 @@ internal static class GraphicsSwitchSuites
         + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
         + "keep the same node at the word's march divisor between resolutions, move a puffer's draw past the slab "
         + "and back with its Enhanced text dimmed by the slab's transmittance, "
+        + "swap the tracers and gun smoke to veiled twins at the puffers' priority and back to their own materials, "
         + "and draw both band zones with the camera state held across the band; "
         + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
         + "values, the next tick re-reading the state and narrowing the cull mask to it; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
@@ -536,6 +537,9 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(pufferMaterial.Shader.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal)
                     && !MultiMeshEmitterRenderer.VariantCode(true, false, enhanced: false, stereo: false).Contains("csky_pc_veil", StringComparison.Ordinal),
                     $"the Enhanced puffer text dims each particle by the slab's transmittance, and the faithful text carries no such term");
+                // A weapon pool built before the clouds, whose sprites must follow the puffers past the slab and back.
+                var weapons = new Flight.Weapons.ProjectilePool(new TextureArchive(ctx.ChapterTextures("C1")), null, null);
+                ctx.Host.AddChild(weapons);
                 VolumetricClouds? standing = null;
                 foreach (var (word, divisor) in new[]
                 {
@@ -561,6 +565,14 @@ internal static class GraphicsSwitchSuites
                     int wantPriority = on ? Precipitation.DrawPriority - 1 : 0;
                     ctx.Check(pufferMaterial.RenderPriority == wantPriority,
                         $"at {word} a puffer draws at priority {wantPriority}, {(on ? "after the slab and before the rain" : "among the world's transparents")} ({pufferMaterial.RenderPriority})");
+                    weapons._Process(0.0);
+                    var (tracer, smoke) = weapons.WornMaterials();
+                    bool veiled = tracer is ShaderMaterial { Shader: { } ts } && smoke is ShaderMaterial { Shader: { } ss }
+                        && ts.Code.Contains("blend_add", StringComparison.Ordinal) && ss.Code.Contains("blend_mix", StringComparison.Ordinal)
+                        && ts.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal) && ss.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal);
+                    ctx.Check(on ? veiled && tracer.RenderPriority == wantPriority && smoke.RenderPriority == wantPriority
+                            : tracer is StandardMaterial3D { RenderPriority: 0 } && smoke is StandardMaterial3D { RenderPriority: 0 },
+                        $"at {word} the tracers and gun smoke draw {(on ? $"veiled twins at priority {wantPriority}, with the puffers" : "their own StandardMaterial3D at 0")} ({tracer.GetType().Name} {tracer.RenderPriority}, {smoke.GetType().Name} {smoke.RenderPriority})");
                     standing = node;
                     if (weather.Mission is { HasCloudBand: true } band)
                     {
@@ -579,6 +591,7 @@ internal static class GraphicsSwitchSuites
                 }
 
                 pufferOwner.QueueFree();
+                weapons.QueueFree();
 
                 foreach (string word in new[] { GlobalIlluminationSetting.On, GlobalIlluminationSetting.Off })
                 {

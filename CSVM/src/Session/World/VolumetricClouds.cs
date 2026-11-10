@@ -612,7 +612,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _material = MaterialOf(SlabShader(), bottom, top);
         // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
         _material.RenderPriority = SlabPriority;
-        // The puffers draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
+        // The puffers and weapon sprites draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
         // front of a cloud covers it, and one behind shows only through its gaps.
         MultiMeshEmitterRenderer.DrawPriority = SlabPriority + 1;
         var quad = new MeshInstance3D
