@@ -392,7 +392,8 @@ internal sealed partial class VolumetricClouds : Node3D
 
     private ShaderMaterial MaterialOf(float bottom, float top)
     {
-        var material = new ShaderMaterial { Shader = new Shader { Code = SlabShader() }, RenderPriority = 120 };
+        // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
+        var material = new ShaderMaterial { Shader = new Shader { Code = SlabShader() }, RenderPriority = Precipitation.DrawPriority - 1 };
         material.SetShaderParameter("layer_bottom", bottom);
         material.SetShaderParameter("layer_top", top);
         // A deck chapter reads as a near-solid overcast with a few tall heads over it, formed only

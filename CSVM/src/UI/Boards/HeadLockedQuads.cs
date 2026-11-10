@@ -14,8 +14,8 @@ namespace CSVM.UI.Boards;
 public sealed partial class HeadLockedQuads : Node3D
 {
     /// <summary>The 3D draw order of the world flare, its four elements on this and the next three.
-    /// It draws after every other transparent in the world, as the flat sprites do, and under every
-    /// quad below.</summary>
+    /// It draws after the world's transparents, as the flat sprites do, and under every quad below.
+    /// The cloud slab and the rain alone draw between it and the quads (<c>Effects.Precipitation.DrawPriority</c>).</summary>
     public const int WorldFlarePriority = 100;
 
     /// <summary>The flight markers' world cards (<c>Flight.Hud.XrMarkers</c>). They draw over the

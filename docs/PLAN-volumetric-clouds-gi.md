@@ -373,7 +373,13 @@ stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second mu
 
 # Wave D, defects and cost
 
-## D31 ☐ The slab draws over the rain
+## D31 ☑ The slab draws over the rain
+
+**Landed.** The claim held. The rain (`Effects/Precipitation.cs`) blends with no depth write at priority 0, and the slab drew at 120 with no depth test, reading opaque depth alone, so it painted the cloud over every streak in front of it. `Precipitation.DrawPriority` (105, the world flare's 100 plus 5) now orders the rain, and the slab draws one before it at 104. The slab stays after the world's transparents (all at 30 or below) and the flare's four quads (100 to 103), so the cloud still covers the sun. In flat mode nothing else sits between 104 and 120. In stereo the slab and the rain now draw under the head-locked tiers (whiteout 109, interior glass 110, flash 111, markers 112, HUD panel 115 and up); at 120 the slab painted cloud over the HUD panel. That stereo order is not checked in a headset. Wind streaks (`Effects/WindStreaks.cs`, priority 0, off by default) are still covered by the slab.
+
+**Verified.** The orchestrator viewed the before and after shots and confirms them; the full battery runs in E42. Probe in C1C/M01 (layer 1055-1955 m, rain under 1055 m), `--freecam --graphics=enhanced --volumetric-clouds=on '--pos=-3694,800,-12482' '--direction=0,0.6,-1'`: with the old order the deck's underside shows no streaks, with the fix the streaks stand over it, and with the clouds off the same streaks fall in front of a flat grey sky. The pose looks up from under the base, so it does not show rain against a distant cloud at the horizon or the fog fill below it.
+
+**Original approach (kept for reference).**
 
 **Goal.** Rain in front of the cloud layer draws over it.
 

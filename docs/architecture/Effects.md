@@ -212,8 +212,8 @@ whose shader derives each quad's position from a per-instance seed, `csky_time` 
 SNOW flutters as flakes; RAIN streaks along the data's world fall velocity. The sprites are
 procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn untextured
 primitives no archive carries. Under the stereo path a flake faces the eye with world up
-(`Mech3/StereoFacing.cs`). Schema and the data-to-look TUNE mapping:
-[../formats/weather.md](../formats/weather.md).
+(`Mech3/StereoFacing.cs`). The field draws at `DrawPriority`, one after `Session/World/VolumetricClouds.cs`'s slab,
+which reads opaque depth alone and would otherwise paint the cloud over the rain in front of it. Schema and the data-to-look TUNE mapping: [../formats/weather.md](../formats/weather.md).
 
 ## src/Effects/Weather.cs
 `WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,

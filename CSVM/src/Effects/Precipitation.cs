@@ -15,6 +15,12 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed partial class Precipitation : Node3D
 {
+    /// <summary>The field's draw order, one after the volumetric cloud slab. The slab reads opaque depth
+    /// alone, so drawn later it paints the cloud over rain in front of it. Both sit past the world flare
+    /// (<see cref="UI.Boards.HeadLockedQuads.WorldFlarePriority"/> and its three rings) and under the
+    /// stereo whiteout at 109.</summary>
+    internal const int DrawPriority = UI.Boards.HeadLockedQuads.WorldFlarePriority + 5;
+
     // --- TUNE: the feel, pending the user's A/B against the original ---
     private const float RainBoxHalf = 30f;   // camera-centred wrap-box half-extent (m), rain …
     private const float SnowBoxHalf = 30f;   // … and snow
@@ -191,7 +197,7 @@ public sealed partial class Precipitation : Node3D
 
         string code = CodeFor(Mech3.StereoFacing.Live);
         ShaderCensus.Note(code);
-        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
+        var mat = new ShaderMaterial { Shader = new Shader { Code = code }, RenderPriority = DrawPriority };
         mat.SetShaderParameter("sprite", rain ? MakeStreakTexture() : MakeFlakeTexture());
         mat.SetShaderParameter("tint", new Vector3(tint.R, tint.G, tint.B));
         mat.SetShaderParameter("box_half", new Vector3(boxHalf, boxHalf, boxHalf));

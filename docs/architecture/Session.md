@@ -643,7 +643,7 @@ the node live, and its exit restores the zone, night, fog and deck at once. The 
 The zone is held before the terrain bake only for a build with the option on; a live toggle leaves the bearing to the on-demand bake.
 The slab is one full-screen raymarch through the mission's cloud band over `shaders/csky_volumetric_clouds.gdshaderinc`, a deck
 torn by rifts with shafts under them; a band far above every placed cloud is refitted to their heights, or draws nothing with none
-placed. It hides the deck (`WeatherRig.HideDeck`), field and sprites, which `Follow` restores on the faithful path. `PublishGround`
+placed. The slab draws after the world's transparents and the world flare, then the rain (`Effects/Precipitation.cs`'s `DrawPriority`) after it, and the stereo head-locked tiers last. It hides the deck (`WeatherRig.HideDeck`), field and sprites, which `Follow` restores on the faithful path. `PublishGround`
 writes the `csky_pc_*` globals. The heads' taper and the deck's sun and ambient shares come from the chapter's cloud tune (`CloudShadow.Live`), and the zone tune's `WeatherRig.GodRays` scales the shafts' gain; `FollowKnobs` rewrites the taper and the gain on the frame either moves. It sits in `Session.World` because it drives `WeatherRig`. Read `Effects/CloudShadow.cs` next.
 
 ## src/Session/World/LightingTable.cs
