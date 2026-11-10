@@ -404,9 +404,9 @@ internal sealed class InspectionLabs
 
     /// <summary>The cloud lab (Shift+F4), in <c>--freecam</c> alone: the cloud shadows' tunes, drift and
     /// tint on sliders, applied live to <paramref name="clouds"/>. Save writes the shipped file. Its
-    /// volumetric box switches them for this flight through <paramref name="setVolumetric"/>.
+    /// volumetric button steps their word for this flight through <paramref name="setVolumetric"/>.
     /// Every other mode builds none.</summary>
-    public void BuildCloudLab(Func<CloudShadow?> clouds, Action<bool> setVolumetric)
+    public void BuildCloudLab(Func<CloudShadow?> clouds, Action<string> setVolumetric)
     {
         if (!_in.Spec.Freecam)
             return;

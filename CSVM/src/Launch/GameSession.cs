@@ -1258,8 +1258,9 @@ public partial class GameSession : Node3D
         }
     }
 
-    /// <summary>The Volumetric Clouds word on the running world: the clouds built while it stands on and
-    /// freed while it is off. Freeing them puts the zone switch, whiteout, night, fog and deck back at once.</summary>
+    /// <summary>The Volumetric Clouds word on the running world: the clouds built while it names a march
+    /// resolution and freed while it is off. Freeing them puts the zone switch, whiteout, night, fog and
+    /// deck back at once. A move between resolutions keeps the clouds, which read the divisor each frame.</summary>
     internal void FollowVolumetricClouds()
     {
         if (VolumetricCloudsSetting.Enabled == (_volumetricClouds != null))
@@ -2883,10 +2884,10 @@ public partial class GameSession : Node3D
         _plane.AddChild(_volumetricClouds);
     }
 
-    // A lab's toggle: this flight stands on the word, and the options file is left alone (Decision 10).
-    private void SetVolumetricCloudsForFlight(bool on)
+    // A lab's control: this flight stands on the word, and the options file is left alone (Decision 10).
+    private void SetVolumetricCloudsForFlight(string word)
     {
-        VolumetricCloudsSetting.TakeUnsaved(on);
+        VolumetricCloudsSetting.TakeUnsaved(word);
         FollowVolumetricClouds();
     }
 

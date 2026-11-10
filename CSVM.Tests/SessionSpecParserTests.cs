@@ -538,15 +538,17 @@ public class SessionSpecParserTests
         Assert.Equal(4f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=huge" }).TerrainShadowCell);
     }
 
-    /// <summary><c>--cloud-march=</c> names the volumetric march's divisor, and absent or unknown leaves the default.</summary>
+    /// <summary><c>--volumetric-clouds=</c> names off or a march resolution, reads the retired on as half,
+    /// and absent or unknown leaves the saved option's word.</summary>
     [Fact]
-    public void CloudMarchFlagCarriesItsDivisor()
+    public void VolumetricCloudsFlagCarriesItsWord()
     {
-        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).CloudMarch);
-        Assert.Equal(1, SessionSpec.Parse(new[] { "--fly", "--cloud-march=full" }).CloudMarch);
-        Assert.Equal(2, SessionSpec.Parse(new[] { "--fly", "--cloud-march=half" }).CloudMarch);
-        Assert.Equal(4, SessionSpec.Parse(new[] { "--fly", "--cloud-march=quarter" }).CloudMarch);
-        Assert.Null(SessionSpec.Parse(new[] { "--fly", "--cloud-march=eighth" }).CloudMarch);
+        var clouds = Utils.VolumetricCloudsSetting.Lookup;
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).WordFlags[clouds]);
+        foreach (string word in new[] { "off", "quarter", "half", "full" })
+            Assert.Equal(word, SessionSpec.Parse(new[] { "--fly", $"--volumetric-clouds={word}" }).WordFlags[clouds]);
+        Assert.Equal("half", SessionSpec.Parse(new[] { "--fly", "--volumetric-clouds=on" }).WordFlags[clouds]);
+        Assert.Null(SessionSpec.Parse(new[] { "--fly", "--volumetric-clouds=eighth" }).WordFlags[clouds]);
     }
 
     /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves

@@ -497,7 +497,8 @@ internal static class GraphicsSwitchSuites
 
     [Suite("graphics-volumetric-clouds-gi",
         "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
-        + "clouds on, off, on and off build the clouds node holding the zone, night off and the deck hidden, "
+        + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
+        + "keep the same node at the word's march divisor between resolutions, "
         + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
         + "values; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
     internal static void VolumetricCloudsAndGi(TestContext ctx)
@@ -522,14 +523,28 @@ internal static class GraphicsSwitchSuites
                 string off = CloudsState(live, weather);
                 ctx.Check(off == CloudsOff && PcGround() == Vector4.Zero,
                     $"built with the option off, no clouds stand and nothing is held ({off}, csky_pc_ground {PcGround()})");
-                foreach (string word in new[] { VolumetricCloudsSetting.On, VolumetricCloudsSetting.Off, VolumetricCloudsSetting.On, VolumetricCloudsSetting.Off })
+                VolumetricClouds? standing = null;
+                foreach (var (word, divisor) in new[]
+                {
+                    (VolumetricCloudsSetting.Off, 0), (VolumetricCloudsSetting.Quarter, 4), (VolumetricCloudsSetting.Full, 1),
+                    (VolumetricCloudsSetting.Half, 2), (VolumetricCloudsSetting.Off, 0),
+                })
                 {
                     ApplyOption(live, VolumetricCloudsSetting.Lookup, word);
-                    bool on = word == VolumetricCloudsSetting.On;
+                    bool on = divisor > 0;
                     string state = CloudsState(live, weather);
+                    var node = CloudsNode(live);
                     // C1C draws a layer, so on writes the ground global.
                     ctx.Check(on ? state == CloudsOn && PcGround() != Vector4.Zero : state == CloudsOff && PcGround() == Vector4.Zero,
                         $"a live move to {word} {(on ? "builds the clouds and holds the zone" : "frees them and restores the zone")} ({state}, csky_pc_ground {PcGround()})");
+                    if (on)
+                    {
+                        // Between resolutions the same node stands and only re-marches.
+                        ctx.Check(VolumetricClouds.MarchDivisor == divisor && (standing == null || node == standing),
+                            $"at {word} the march divisor is {divisor} on {(standing == null ? "the clouds just built" : "the same clouds node")} (divisor {VolumetricClouds.MarchDivisor}, same node {node == standing})");
+                    }
+
+                    standing = node;
                 }
 
                 foreach (string word in new[] { GlobalIlluminationSetting.On, GlobalIlluminationSetting.Off })
@@ -3255,6 +3270,13 @@ internal static class GraphicsSwitchSuites
         int clouds = 0;
         Walk(rig.Session, node => clouds += node is VolumetricClouds ? 1 : 0);
         return $"clouds={clouds} hold={weather.HoldZone} night_off={WeatherRig.NightOff} deck_hidden={weather.HideDeck}";
+    }
+
+    private static VolumetricClouds? CloudsNode(Rig rig)
+    {
+        VolumetricClouds? found = null;
+        Walk(rig.Session, node => found ??= node as VolumetricClouds);
+        return found;
     }
 
     private static Vector4 PcGround() => VolumetricClouds.PublishedGround;

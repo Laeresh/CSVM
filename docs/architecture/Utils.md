@@ -334,7 +334,8 @@ written up as a divergence in `docs/architecture/Spec.md`.
 One word setting's descriptor, each setting's `Lookup`: its words, config key, flag, options-file field (`SavedField`), labels,
 detail, `Fallback` over a `SettingContext` (`--det`, the mode, the panes) naming its own rule,
 `Take` (where the word is stored) and live-apply hook over `ILiveWorld`, one surface for every setting (the sun, the session's follow).
-`Resolve` takes the flag, then the saved word, then the config key, then the fallback; a word outside the list falls through, a key spelling
+`Resolve` takes the flag, then the saved word, then the config key, then the fallback; a retired word in `Legacy` reads as the word it
+maps to (`Known`, which the flag parser and the options file share too), a word outside the list falls through, a key spelling
 the fallback reads as it, and an unknown config word the lookup reaches warns. `ResolveFrom` keeps its inputs, so `Refresh` resolves again
 only when a moved mode or pane count moves the fallback of a setting already resolved, and `Retake` lets the render scale follow the
 anti-aliasing method. `SourceName` spells a source, or the fallback's rule, for a log line. The registry is `WordSettings.cs`.
@@ -419,11 +420,11 @@ shows it as the Post-processing dropdown under Cloud Shadows.
 
 ## src/Utils/VolumetricCloudsSetting.cs
 Whether Enhanced draws the volumetric clouds (`Session/World/VolumetricClouds.cs`) in place of the deck, the cloud field and
-the placed cloud sprites: `off` or `on`. It resolves as `ShadowDistanceSetting` does: `--volumetric-clouds=`, the saved
-`volumetricClouds` word, the `graphics.volumetricClouds` key, then `off` on every machine and under `--det`. Its live-apply
-hook follows the session, which builds the clouds or frees them (`GameSession.FollowVolumetricClouds`). `TakeUnsaved` is the
-cloud lab's toggle: it moves the run's word and never the options file, and the session's exit puts the resolved word back
-(`WordSetting.Retake`). The VIDEO page shows it as the Volumetric Clouds dropdown under Post-processing.
+the placed cloud sprites: `off`, or the march resolution `quarter`, `half` or `full` (`MarchDivisor`). An older build's `on`
+reads as `half` (`WordSetting.Legacy`). It resolves as `ShadowDistanceSetting` does: `--volumetric-clouds=`, the saved
+`volumetricClouds` word, the `graphics.volumetricClouds` key, then `off` everywhere. Its live-apply hook follows the session,
+which builds or frees the clouds (`GameSession.FollowVolumetricClouds`). `TakeUnsaved` is the cloud lab's button: it moves
+the run's word and never the options file, and the session's exit puts the resolved word back (`WordSetting.Retake`). The VIDEO page shows it as the Volumetric Clouds dropdown under Post-processing.
 
 ## src/Utils/GlobalIlluminationSetting.cs
 Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIllumination.cs`): `off` or `on`. It resolves

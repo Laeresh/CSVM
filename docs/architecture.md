@@ -737,7 +737,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
 - `src/Utils/CloudShadowSetting.cs`, whether Enhanced draws the cloud shadows (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, read every frame.
 - `src/Utils/PostProcessingSetting.cs`, whether Enhanced grades the lit world (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, applied live.
-- `src/Utils/VolumetricCloudsSetting.cs`, whether Enhanced draws the volumetric clouds (off, on): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
+- `src/Utils/VolumetricCloudsSetting.cs`, whether Enhanced draws the volumetric clouds and at which march resolution (off, quarter, half, full): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
 - `src/Utils/GlobalIlluminationSetting.cs`, whether Enhanced lights with SDFGI plus SSIL (off, on): the flag/saved/config `WordSetting` lookup over on, off on an integrated GPU or under `--det`, applied live, with an unsaved lab word.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.

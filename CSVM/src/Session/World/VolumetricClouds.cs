@@ -18,9 +18,6 @@ namespace CSVM.Session.World;
 /// </summary>
 internal sealed partial class VolumetricClouds : Node3D
 {
-    /// <summary>The march's resolution divisor with no flag or lab row moving it (PLAN-volumetric-clouds-gi D35).</summary>
-    public const int DefaultMarchDivisor = 2;
-
     // The authored band is the whiteout's thin sheet. The cumulus layer stands this much taller
     // over the same floor, so the heads have room to tower.
     private const float LayerDepthGain = 3f;
@@ -86,9 +83,9 @@ internal sealed partial class VolumetricClouds : Node3D
     /// reads it here, since reading a global back is an engine error outside the editor.</summary>
     public static Vector4 PublishedGround { get; private set; }
 
-    /// <summary>Gets or sets the march's resolution divisor (<c>--cloud-march=</c>, the cloud lab's row). At 1
-    /// the quad marches every pixel; 2 or 4 march a half- or quarter-size target.</summary>
-    public static int MarchDivisor { get; set; } = DefaultMarchDivisor;
+    /// <summary>Gets the march's resolution divisor, the Volumetric Clouds word's, read each frame so a
+    /// live move re-marches. At 1 the quad marches every pixel; 2 or 4 march a half- or quarter-size target.</summary>
+    public static int MarchDivisor => VolumetricCloudsSetting.MarchDivisor;
 
     /// <summary>Gets the reduced march's render time while it runs, else null. Its target is a viewport
     /// of its own, which <c>gpu_ms</c> leaves out (verification PERF-39).</summary>

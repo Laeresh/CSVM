@@ -60,6 +60,7 @@ who leave it off.
 | 13 | Goldens with the options on? | **No.** |
 | 14 | The slab costs 4-9 ms of GPU at 1080p on an RTX 5080 (D34). Ship it as is? | **No: march at reduced resolution first (D35)**, judged by the author against full resolution. |
 | 15 | The options' defaults? | **Clouds off; GI on, off through the existing integrated-GPU fallback** (D36), pending the Deck half of D34. |
+| 16 | How does the player choose the march resolution? | **The Volumetric Clouds option: a combo box of off, quarter, half, full; the march resolution is the player's choice and saved** (D37). |
 
 ## ⚠ Read this before implementing anything
 
@@ -119,6 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 34. ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults (Deck half deferred)
 35. ☑ March the clouds at reduced resolution
 36. ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
+37. ☑ The Volumetric Clouds option chooses the march resolution: off, quarter, half, full
 
 ### Wave E, tuning and landing
 
@@ -573,7 +575,7 @@ pilot's Options toggle can still arm it.
 
 ## D35 ☑ March the clouds at reduced resolution
 
-**Landed.** `VolumetricClouds.MarchDivisor` (`--cloud-march=full|half|quarter`, default `half`, and a cloud lab button that steps it live) marches the slab into a smaller target.
+**Landed.** `VolumetricClouds.MarchDivisor` marches the slab into a smaller target. D37 makes it the Volumetric Clouds option's word (`--volumetric-clouds=quarter|half|full`, the VIDEO row, the cloud lab's button); this item landed it as `--cloud-march=`, default `half`, which D37 removed.
 - **Route.** A canvas `SubViewport` (2D only, HDR, transparent) runs the same march code as the quad, from the view's camera, which `FollowCamera` writes at `RenderingServer.FramePreDraw`. Every SubViewport renders before the view that samples it, so the quad at priority 104 reads it in the same frame and D31's order stands. A `CompositorEffect` would have meant porting the march, the per-view fog table and the terrain bake's global sampler to RD GLSL, which global shader uniforms do not reach. A checkerboard needs a history buffer a spatial shader cannot keep.
 - **Depth.** The reduced march ignores the scene. Its target holds the layer's light weights and transmittance in its left half and the shafts' light at each quarter of their ray in its right half. The quad decides per full-resolution pixel from its own depth: a scene in front of the layer hides the cloud, a scene behind it takes the bilinear sample, and a scene inside the marched span (terrain or an aircraft in the layer) marches at full resolution. The shafts are read at the pixel's own depth between the stored quarters.
 - **Full resolution stays** for a divisor of 1, a headset (`UseXR`), and any view whose camera is not the one traced (a splitscreen pane, the spyglass disc), which the quad tests per fragment.
@@ -624,6 +626,29 @@ pilot's Options toggle can still arm it.
 **Model recommendation.** medium.
 
 **Verify.** Unit tests for the default and the fallback; the full battery (goldens run under `--det`, which keeps only the flag, so they must not move).
+
+## D37 ☑ The Volumetric Clouds option chooses the march resolution: off, quarter, half, full
+
+**Landed.** `VolumetricCloudsSetting` takes four words, `off`, `quarter`, `half` and `full`, in that order on the VIDEO page's dropdown, still at its place under Post-processing, with `off` the default everywhere (Decision 16).
+- **One word.** `Enabled` is any word but `off`; `MarchDivisor` is 4 at quarter, 2 at half, 1 at full, and `VolumetricClouds.MarchDivisor` reads it each frame. A move between resolutions leaves `FollowVolumetricClouds` with nothing to build, so the same node stands, the zone hold untouched, and `FollowCamera` re-marches at the new size. A headset, a splitscreen pane and the spyglass still march at full.
+- **The old word.** `on`, from an options file, the config key or the flag, reads as `half`, the march `on` ran at. `WordSetting.Legacy` maps a retired word, and `WordSetting.Known` applies it in `Resolve`, the flag parser and the options file's read, so a saved `on` is written back as `half`.
+- **The flag.** `--cloud-march=` is gone; `--volumetric-clouds=` takes the four words.
+- **The cloud lab.** One button steps off, quarter, half and full in place of B13's box and D35's march button. It calls `TakeUnsaved(word)`, and the session's exit `Retake` puts the saved word back.
+- **The layers.** `LightingTable.ActiveLayers` and `WeatherRig` read `Enabled`, so the `clouds` layer applies at every word but `off`.
+
+**Verified.** Units 8427 passed; `graphics-volumetric-clouds-gi` (able to fail: a planted wrong divisor turned it red), `menu-original-tracer-core` and `lighting-lab` pass; C1C probes per word and a saved `on` loading as half, in the commit message. The full battery runs in E42.
+
+**Original approach (kept for reference).**
+
+**Goal.** The author's request: "Make volumetric clouds option a combo box with off, quarter, half, full." The march resolution D35 put behind a flag becomes the player's saved choice.
+
+**Evidence (confidence: traced).** D35's divisor was a static that `FollowCamera` reads each frame, so writing it live already re-marched without rebuilding the node (the D35 lab button). The VIDEO page draws every word setting as a dropdown over its `Words` and `Labels`, so the row needs no code of its own.
+
+**Approach.** Widen the setting's words, derive the divisor from the word, drop `--cloud-march=` and its spec field, and map the retired `on` to `half` through the setting descriptor so the flag, the options file and the config key agree. Replace the lab's box and march button with one stepping button.
+
+**Model recommendation.** medium.
+
+**Verify.** Units: the four words, `on` as `half` from each source, an unknown word, precedence, `--det`, the options-file round trip, and the flag. `graphics-volumetric-clouds-gi` steps off, quarter, full, half and off live: the node stands exactly when not off, the divisor follows the word, and the same node stands between resolutions. `menu-original-tracer-core` walks the VIDEO page. A C1C probe per word logs the march line at its size.
 
 # Wave E, tuning and landing
 

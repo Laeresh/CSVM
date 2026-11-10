@@ -89,7 +89,6 @@ internal sealed class LiveSettings
         WordSettings.ResolveLaunch(Flags(spec), spec.Det);
         ShadowQualitySetting.HardShadows = (spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
         ShadowQualitySetting.TerrainShadows = spec.TerrainShadows;
-        Session.World.VolumetricClouds.MarchDivisor = spec.CloudMarch ?? Session.World.VolumetricClouds.DefaultMarchDivisor;
         Effects.TerrainShadowRaster.Cell = spec.TerrainShadowCell;
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={graphicsWord} {WordSettings.Describe()}");

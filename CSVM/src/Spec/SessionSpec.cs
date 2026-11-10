@@ -496,10 +496,6 @@ public sealed record SessionSpec
     /// (<see cref="Effects.TerrainShadow"/>), the A/B lever; on unless said otherwise. See <c>docs/cli.md</c>.</summary>
     public bool TerrainShadows { get; private set; } = true;
 
-    /// <summary><c>--cloud-march=full|half|quarter</c>: the volumetric clouds' march resolution as a
-    /// divisor (1, 2, 4); null leaves the default. See <c>docs/cli.md</c>.</summary>
-    public int? CloudMarch { get; private set; }
-
     /// <summary><c>--dump-terrain-shadow=&lt;path&gt;</c>: where the terrain shadow bake writes its
     /// texels as a PNG; empty for none. See <c>docs/cli.md</c>.</summary>
     public string TerrainShadowPath { get; private set; } = "";
@@ -1799,7 +1795,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg.StartsWith("--coast-spray=")) { s.CoastSpray = arg["--coast-spray=".Length..]; }
             else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
-            else if (arg.StartsWith("--cloud-march=")) { s.CloudMarch = arg["--cloud-march=".Length..] switch { "full" => 1, "half" => 2, "quarter" => 4, _ => s.CloudMarch }; }
             else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
             else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
@@ -2556,11 +2551,10 @@ public sealed record SessionSpec
             }
 
             setting = candidate;
-            word = arg[prefix.Length..];
-            if (!candidate.IsWord(word))
+            word = candidate.Known(arg[prefix.Length..]);
+            if (word == null)
             {
-                notes.Add(new Note("world", $"{prefix}{word} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
-                word = null;
+                notes.Add(new Note("world", $"{arg} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
             }
 
             return true;
