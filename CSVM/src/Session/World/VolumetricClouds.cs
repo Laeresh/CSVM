@@ -331,6 +331,11 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float erosion = 0.55;
         uniform float density_gain = 0.025;
         uniform int steps = 40;
+        // The step near the eye: this many metres plus this share of the distance (pc_step). The
+        // budget caps a ray's steps.
+        uniform float step_near_m = 30.0;
+        uniform float step_growth = 0.05;
+        uniform int step_budget = 128;
         uniform vec3 sun_rgb = vec3(0.8, 0.77, 0.72);
         uniform float ambient_gain = 0.5;
         uniform float far_m = 24000.0;
@@ -476,17 +481,51 @@ internal sealed partial class VolumetricClouds : Node3D
             return sun * light * shaft_gain * 0.00006 * phase;
         }
 
+        // The march's step at distance `t`: the span's share, but never more than grows with distance
+        // from the eye. A level ray's span runs to far_m, and its share alone stepped over a near head.
+        float pc_step(float t, float span_step) {
+            return min(span_step, step_near_m + t * step_growth);
+        }
+
         // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_light) premultiplied and
         // the transmittance.
         vec3 pc_march(vec3 eye, vec3 dir, float t0, float t1, float bottom, float top, float cover_scale, float dither) {
             float len = t1 - t0;
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
-            float dt = len / float(n);
-            float t = t0 + dt * dither;
+            float span_step = len / float(n);
+            float t = t0 + pc_step(t0, span_step) * dither;
+            // The clear air before the first cloud, density alone.
+            float clear = t0;
+            int i = 0;
+            while (i < step_budget && t < t1) {
+                if (pc_density(eye + dir * t, bottom, top, cover_scale) > 0.001) {
+                    break;
+                }
+                clear = t;
+                t += pc_step(t, span_step);
+                i++;
+            }
+            if (t >= t1) {
+                return vec3(0.0, 0.0, 1.0);
+            }
+            // Its surface, bisected since the last clear sample, and the first sample half a step past
+            // it. The dither then no longer sets how deep the light is read. Outside the loop, so a
+            // GPU wave bisects once.
+            float hi = t;
+            for (int k = 0; k < 3; k++) {
+                float mid = (clear + hi) * 0.5;
+                if (pc_density(eye + dir * mid, bottom, top, cover_scale) > 0.001) {
+                    hi = mid;
+                } else {
+                    clear = mid;
+                }
+            }
+            t = min((clear + hi) * 0.5 + pc_step(hi, span_step) * 0.5, t1);
             vec2 w = vec2(0.0);
             float trans = 1.0;
             float sun_step = max((top - bottom) * 0.3, 20.0);
-            for (int i = 0; i < n && trans > 0.01; i++) {
+            while (i < step_budget && trans > 0.01 && t < t1) {
+                float dt = pc_step(t, span_step);
                 vec3 p = eye + dir * t;
                 float d = pc_density(p, bottom, top, cover_scale);
                 if (d > 0.001) {
@@ -497,6 +536,7 @@ internal sealed partial class VolumetricClouds : Node3D
                     trans *= 1.0 - a;
                 }
                 t += dt;
+                i++;
             }
             return vec3(w, trans);
         }

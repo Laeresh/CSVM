@@ -121,6 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 35. ☑ March the clouds at reduced resolution
 36. ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
 37. ☑ The Volumetric Clouds option chooses the march resolution: off, quarter, half, full
+38. ☑ The clouds' self-shadow flicker and the horizon band (author's report)
 39. ☑ Zone-gated meshes draw while the clouds hold the zone (author's report: C4's mountain tops)
 40. ☑ Puffers and other transparent effects are occluded correctly by the clouds (author's report)
 
@@ -716,6 +717,48 @@ Open after D40:
 - **A per-fragment march.** It costs the march per pixel of smoke overdraw where a per-vertex one costs it four times per particle.
 
 **Verify.** `graphics-volumetric-clouds-gi`: a puffer built with the clouds off draws at 0, at 105 at quarter, full and half, and at 0 again off; its Enhanced text carries `csky_pc_veil_at(` and the faithful text no veil. Flown C1 probes firing rockets (`--fly --plane=player_bhawk --hold=0,0,0,1 --fire-rockets`), before and after, clouds off, half and full: from under the layer (`--pos=-6041,600,-4313`) the bursts and trails stand in front of the deck's underside; inside the deck, under the band's midpoint (`--pos=-6041,1050,-4313`), the near puffs stand inside cloud and the far bursts behind it. GPU cost before and after at both, clouds off, half and full (D34's runner, the march's own time added). The 8-chapter `--freecam --graphics=enhanced --volumetric-clouds=half` sweep for shader errors; `xr-sprite-facing`, the puffer suites; units.
+## D38 ☑ The clouds' self-shadow flicker and the horizon band (author's report)
+
+**Landed.** `pc_march` (`VolumetricClouds.MarchCode`, shared by the quad and the reduced march) changes in two ways.
+- **The step.** It is the span's share as before, capped by `pc_step`: `step_near_m` (30 m) plus `step_growth` (0.05) of the distance from the eye. A ray takes at most `step_budget` (128) steps; a level ray inside the layer needs about 93 to reach the 24 km cap.
+- **The first cloud.** A density-only scan finds the first cloud. Its surface is bisected three times between the last clear sample and the first dense one, and the lit march starts half a step past it. The bisection sits after the scan loop, so a GPU wave runs it once; inside the loop it cost 0.45 to 0.66 ms more at half resolution.
+- **Unchanged.** The density, the sun taps, the rest fill past the cap, the haze and the shafts. D40's `csky_pc_veil_at` marches from the eye to each particle over that distance alone, never to `far_m`, so the level-ray fault does not reach it.
+
+**Verified.** The orchestrator viewed the montages: the moving hatch on the shadowed undersides is gone at Quarter, and the near heads at eye level are solid with their shaded faces. Metrics and cost are in the commit message; the full battery runs in E42.
+
+**Original approach (kept for reference).**
+
+**Goal.** The author: "the clouds self shadow is flickering very strong", then "I had quarter clouds active, it's a lot better with half or full. But still there. And the transparent band on the horizon level is still there too", and "this is not seen from the cloud but when the camera is on the same height as the clouds. there is always a transparent band in the clouds".
+
+**Evidence (confidence: measured).**
+- **The band's cause: the step over a level ray.** The march split the span into at most 60 steps. A ray within about 3 degrees of level inside the layer has a span capped at `far_m` (24 km), so it stepped about 400 m and stepped over near heads. Rays tilted more cross the layer in a short span with short steps, which is why the stripe sat at eye level and cut through near clouds. The rest fill past the cap, and a step budget running out, were ruled out: the old count always reached the cap, and the fill is opaque on a level ray.
+- **The flicker's cause: the dithered depth of the first sample.** One step into a dense cloud carries an optical depth of 1.4 at 55 m and 10 at 400 m. So a pixel's colour is the light at one sample, anywhere within a step of the surface, and the dither moves it every frame. The self-shadow there changes steeply with depth. The sun taps (`pc_sun`, three at a fixed 270 m spacing) are not dithered and add no frame-to-frame change.
+- **The metric.** Eight consecutive `--det` frames (`--shots=8`, the shader clock steps 1/60 s a frame, so the dither moves as in play), 1920x1080, C1. The share of pixels whose temporal standard deviation exceeds 2 levels, with the 99th percentile in levels. A clouds-off control reads 0.00 % (p99 0.48).
+
+| Pose, rows | Quarter | Half | Full |
+|---|---|---|---|
+| Author's, `--pos=-7124,1476,-5471 --direction=-1,-0.15,0`, rows 300-1080 | 1.88 % (2.95) → 0.41 % (0.87) | 0.51 % (1.22) → 0.12 % (0.50) | 0.01 % (0.78) → 0.01 % (0.50) |
+| Eye level in the layer, `--pos=-4660,1280,-3065 --direction=-1,0.02,0`, rows 480-640 | 17.44 % (5.94) → 1.47 % (2.65) | 1.82 % (2.39) → 0.26 % (1.09) | 0.03 % (1.36) → 0.01 % (0.66) |
+
+- **The cost.** D34's instrument at 1920x1080, GI off: `gpu_ms + march_gpu_ms`, the median of each launch's windows after the first two. The old and new march were timed back to back on one build, one pair per cell; the old column repeats D35's figures to 0.05 ms.
+
+| Pose | Quarter | Half | Full |
+|---|---|---|---|
+| C1C under | 1.39 → 1.42 | 3.11 → 3.29 | 9.55 → 10.54 |
+| C1C graze | 1.61 → 1.64 | 3.03 → 3.16 | 8.46 → 9.05 |
+| C1C above | 1.87 → 1.89 | 3.11 → 3.18 | 6.94 → 7.26 |
+| C1B | 1.74 → 1.72 | 2.84 → 2.86 | 6.86 → 7.20 |
+| C1, eye level in the layer | 1.69 → 1.74 | 2.75 → 2.94 | 6.55 → 7.30 |
+| C1, the author's pose | 1.55 → 1.62 | 2.55 → 2.80 | 5.93 → 6.70 |
+
+- **The look.** At the author's pose the self-shadowed undersides no longer carry the per-frame hatch and vertical streaks at quarter and half; the lit-to-shadow edge holds still, and at quarter it keeps the target's stair-steps. At eye level the near heads draw solid with their shaded faces, where before the dome's painted clouds showed through them along a horizontal seam. C2's horizon (`--pos=-5630,205,-3422`) and C1C's from above read as before. From above, the far tops still fade into a flat fog-grey strip under the dome, which is A1's 8-24 km haze.
+- **Not measured.** Motion: every frame is a still camera. A flown camera, TAA's history under motion and the Steam Deck's cost are not covered.
+
+**Approach.** Cap the step by distance from the eye, so a level ray resolves near clouds, and read the first cloud's light at a depth set by its surface rather than by the dither.
+
+**Model recommendation.** high: shader sampling and GPU cost.
+
+**Verify.** The bursts and metric above at each resolution, the cost table, the 8-chapter sweep with zero shader errors, `graphics-volumetric-clouds-gi`, the units, and the author's eyes in flight.
 
 # Wave E, tuning and landing
 
