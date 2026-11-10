@@ -38,6 +38,9 @@ internal sealed partial class VolumetricClouds : Node3D
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
+    // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
+    private const int SlabPriority = Precipitation.DrawPriority - 2;
+
     private static readonly StringName MarchOnParam = "march_on";
     private static readonly StringName MarchEyeParam = "march_eye";
     private static readonly StringName MarchBackParam = "march_back";
@@ -568,7 +571,10 @@ internal sealed partial class VolumetricClouds : Node3D
             return "nothing drawn";
         _material = MaterialOf(SlabShader(), bottom, top);
         // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
-        _material.RenderPriority = Precipitation.DrawPriority - 1;
+        _material.RenderPriority = SlabPriority;
+        // The puffers draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
+        // front of a cloud covers it, and one behind shows only through its gaps.
+        MultiMeshEmitterRenderer.DrawPriority = SlabPriority + 1;
         var quad = new MeshInstance3D
         {
             Name = "slab",
@@ -717,7 +723,10 @@ internal sealed partial class VolumetricClouds : Node3D
     private void FreeBuilt()
     {
         if (_material != null)
+        {
             RenderingServer.FramePreDraw -= FollowCamera;
+            MultiMeshEmitterRenderer.DrawPriority = 0;
+        }
         _material = null;
         _march = null;
         _marchView = null;
@@ -740,8 +749,11 @@ internal sealed partial class VolumetricClouds : Node3D
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground", Vector4.Zero);
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
             RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_veil", Vector4.Zero);
             return;
         }
+        // The layer the effects drawn after the slab march their transmittance through (csky_pc_veil_at).
+        RenderingServer.GlobalShaderParameterSet("csky_pc_veil", new Vector4(bottom, top, _hasDeck ? DeckCover : 0f, DeckDepthM));
         // The fog splits at the layer: the held lower zone below it, the upper zone's range above it.
         if (_weather.Mission is { } mission && !_fitted)
         {

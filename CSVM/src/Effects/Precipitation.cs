@@ -15,11 +15,11 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed partial class Precipitation : Node3D
 {
-    /// <summary>The field's draw order, one after the volumetric cloud slab. The slab reads opaque depth
-    /// alone, so drawn later it paints the cloud over rain in front of it. Both sit past the world flare
-    /// (<see cref="UI.Boards.HeadLockedQuads.WorldFlarePriority"/> and its three rings) and under the
-    /// stereo whiteout at 109.</summary>
-    internal const int DrawPriority = UI.Boards.HeadLockedQuads.WorldFlarePriority + 5;
+    /// <summary>The field's draw order, after the volumetric cloud slab and the puffers drawn over it. The
+    /// slab reads opaque depth alone, so drawn later it paints the cloud over rain in front of it. All
+    /// sit past the world flare (<see cref="UI.Boards.HeadLockedQuads.WorldFlarePriority"/> and its three
+    /// rings) and under the stereo whiteout at 109.</summary>
+    internal const int DrawPriority = UI.Boards.HeadLockedQuads.WorldFlarePriority + 6;
 
     // --- TUNE: the feel, pending the user's A/B against the original ---
     private const float RainBoxHalf = 30f;   // camera-centred wrap-box half-extent (m), rain …

@@ -94,6 +94,7 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_shape", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_veil", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;
         Published = OffValue;
         _publishedEdge = CloudShadowPattern.Edge;

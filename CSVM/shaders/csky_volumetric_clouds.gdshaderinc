@@ -2,8 +2,8 @@
 #define CSKY_VOLUMETRIC_CLOUDS_INC
 
 // The volumetric cloud slab's helpers (Session/World/VolumetricClouds.cs): the deck's density, the
-// phase and transmittance terms, and the screen-ray helpers its full-screen march reads. Only
-// the slab's shader includes it.
+// phase and transmittance terms, and the screen-ray helpers its full-screen march reads. The slab's
+// shader includes it, and so do the effects drawn after the slab, for csky_pc_veil_at.
 
 #include "res://shaders/csky_cloud_shadow.gdshaderinc"
 
@@ -64,6 +64,47 @@ vec2 csky_pc_slab_span(vec3 eye, vec3 dir, float bottom, float top) {
     float near = max(min(t0, t1), 0.0);
     float far = max(t0, t1);
     return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
+}
+
+// The slab's layer as the effects drawn after it read it (VolumetricClouds.PublishGround): its floor
+// and top, and the deck's cover and depth. All zero while no slab draws.
+global uniform vec4 csky_pc_veil;
+
+// The share of an effect at `p` the slab lets through toward `eye`: 1 with no slab, or no layer
+// between them. It marches the slab's density over the ground shadow's globals: the heads in twelve
+// steps, and the deck in three over its own depth, which the heads' steps would step over.
+float csky_pc_veil_at(vec3 eye, vec3 p) {
+    vec4 v = csky_pc_veil;
+    vec3 d = p - eye;
+    float len = length(d);
+    if (v.y <= v.x || len < 1.0) {
+        return 1.0;
+    }
+    vec3 dir = d / len;
+    vec2 span = csky_pc_slab_span(eye, dir, v.x, v.y);
+    float t1 = min(span.y, len);
+    if (t1 <= span.x) {
+        return 1.0;
+    }
+    vec4 layer = csky_pc_heads_layer;
+    vec4 k = csky_pc_heads_density;
+    float dt = (t1 - span.x) / 12.0;
+    float od = 0.0;
+    for (int i = 0; i < 12; i++) {
+        vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
+        float c = csky_pc_cover_shaped(q, v.x, v.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
+        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * dt;
+    }
+    vec2 deck = csky_pc_slab_span(eye, dir, v.x, v.x + v.w);
+    float d1 = min(deck.y, len);
+    if (v.z > 0.0 && d1 > deck.x) {
+        float ddt = (d1 - deck.x) / 3.0;
+        for (int i = 0; i < 3; i++) {
+            vec3 q = eye + dir * (deck.x + ddt * (float(i) + 0.5));
+            od += csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z) * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
+        }
+    }
+    return exp(-od * k.z);
 }
 
 // A per-pixel jitter in [0, 1) off the screen position alone. The slab adds its own per-frame
