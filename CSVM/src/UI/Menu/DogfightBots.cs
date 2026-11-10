@@ -139,6 +139,20 @@ public sealed class DogfightBots
         (airframe is >= 0 and < DogfightLobby.AirframeCount || airframe == DogfightLobbySeat.RandomAirframe)
         && Edit(id, bot => bot with { Airframe = (byte)airframe });
 
+    /// <summary>Puts every row on a stock airframe <paramref name="admits"/> refuses back on Random.
+    /// A bot has no Ready to refuse, so a rules or course change resets its pick instead.</summary>
+    public void ResetRefused(Func<int, bool> admits)
+    {
+        ArgumentNullException.ThrowIfNull(admits);
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            if (!_rows[i].RandomPlane && !admits(_rows[i].Airframe))
+            {
+                _rows[i] = _rows[i] with { Airframe = DogfightLobbySeat.RandomAirframe };
+            }
+        }
+    }
+
     /// <summary>Sets row <paramref name="id"/>'s skill tier.</summary>
     public bool SetSkill(int id, NetBotSkill skill) =>
         skill is >= NetBotSkill.Novice and <= NetBotSkill.Ace && Edit(id, bot => bot with { Skill = skill });

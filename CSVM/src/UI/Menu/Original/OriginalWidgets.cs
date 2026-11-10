@@ -192,7 +192,7 @@ internal static class OriginalWidgets
                 }
 
                 rows.Add(new OriginalRow(EntryKeyPrefix + entry.ToString(CultureInfo.InvariantCulture), open.Entries[entry],
-                    OriginalRowKind.ListRow, open.X, top + (seen * open.RowHeight), open.Width, open.RowHeight, true, 0, null));
+                    OriginalRowKind.ListRow, open.X, top + (seen * open.RowHeight), open.Width, open.RowHeight, open.IsAllowed(entry), 0, null));
             }
         }
     }

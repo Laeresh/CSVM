@@ -23,6 +23,11 @@ internal static class MenuInstantActionSuites
     private const string LongCourse = "long_title_slalom";
     private const string LongTitle = "The Grand Hollywoodland Studio Lot Slalom and Harbour Climb Run";
 
+    // The shipped C2 course that refuses one plane, its title, and that plane's node.
+    private const string RefusingCourse = "Hollywood_Track_1";
+    private const string RefusingTitle = "Studio Lot Dash";
+    private const string RefusedPlane = "player_balmoral";
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -186,6 +191,261 @@ internal static class MenuInstantActionSuites
             MenuSuiteHost.DropScratchPlanes(ctx, suite);
         }
     }
+
+    [Suite("menu-instant-action-course-planes",
+        "Instant Action over the install's layout, the shipped courses and a saved Balmoral build, with seat 0 on a stock Balmoral "
+        + "and two racing bot rows on a Balmoral and an Avenger: off a course every list admits the Balmoral; picking "
+        + "C2/Hollywood_Track_1, which refuses it, in the Course box puts the Balmoral bot back on Random and keeps the Avenger "
+        + "one; the join board reached through the top level's door, which a local Dogfight shares, offers the Balmoral "
+        + "ungreyed, while the board opened under Instant Action's rule greys it in its Edit Bot plane list, ignores a click "
+        + "on it and a step from the Avenger lands past it; seat 0 keeps its pick, the Pilot Plane list greys the stock Balmoral and the build, FLY MISSION "
+        + "answers with the course's reason and no launch, and a step from the Avenger lands past it; a second seat left "
+        + "confirmed on a Balmoral is walked again, its list greys the row, an Accept on it raises the reason, and the walk "
+        + "leaves as one launch of the course with no Balmoral anywhere on it, which the course admits")]
+    internal static void MenuInstantActionCoursePlanes(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string suite = "menu-instant-action-course-planes";
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        // Three builds on airframes 0, 1 and 2, the last a Balmoral.
+        var store = MenuSuiteHost.ScratchPlanes(ctx, suite, customs: 3);
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = store,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        host.AddSeat(seat);
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var shell = (host.Active as OriginalPresentation)?.Shell;
+            var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+            var fit = BoardFit.For(size.X, size.Y);
+            if (shell == null || !EnterInstantAction(ctx, host, seat, shell, fit))
+            {
+                ctx.Check(false, $"Original stands up on its Instant Action screen");
+                return;
+            }
+
+            var ia = host.Features.Get<InstantActionFeature>();
+            var setup = host.Features.Get<PlayerSetupFeature>();
+            if (CoursePlanesPicked(ctx, host, seat, shell, fit, ia, setup) is { } bots)
+            {
+                CoursePlanesOffTheDoor(ctx, host, seat, shell, fit, bots.Avenger);
+                shell.JoinBoard.Open(ia.AdmitsBot);
+                CoursePlanesOnTheBoard(ctx, host, seat, shell, fit, setup, bots.Avenger);
+                host.Show(MenuReturnDestination.InstantAction);
+                CoursePlanesForSeats(ctx, host, seat, shell, fit, ia, setup, exits);
+            }
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, suite);
+        }
+    }
+
+    // Seat 0 on a stock Balmoral and two racing bots, then C2/Hollywood_Track_1 picked through the
+    // Course box. Answers the two bots' ids, or null where the setup cannot stand.
+    private static (int Balmoral, int Avenger)? CoursePlanesPicked(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, PlayerSetupFeature setup)
+    {
+        int balmoral = StockAirframes.IdOf(RefusedPlane) ?? -1;
+        int avenger = StockAirframes.IdOf("player_avenger") ?? -1;
+        ctx.Check(setup.AddBot() && setup.AddBot(), $"two bot rows join the board ({setup.Bots.Count})");
+        if (setup.Bots.Count < 2)
+        {
+            return null;
+        }
+
+        var (onBalmoral, onAvenger) = (setup.Bots.Rows[0].Id, setup.Bots.Rows[1].Id);
+        setup.Bots.SetAirframe(onBalmoral, balmoral);
+        setup.Bots.SetAirframe(onAvenger, avenger);
+        ia.SelectPlayerPlane(InstantActionFeature.Airframes.ToList().FindIndex(a => a.Node == RefusedPlane));
+        ia.SelectEnvironment(InstantActionFeature.Environments.ToList().FindIndex(e => e.Code == "C2"));
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(ia.MissionTypes.ToList().FindIndex(m => m.Key == InstantActionFeature.StuntKey));
+        ia.RaceBots = true;
+        var (stock, build) = (PilotRowOfNode(shell, custom: false), PilotRowOfNode(shell, custom: true));
+        ctx.Check(shell.InstantAction.OpenDropdownOn(OriginalInstantActionScreen.PlayerPlaneKey)
+                && stock >= 0 && build >= 0 && PilotItem(shell, stock) is { Enabled: true } && PilotItem(shell, build) is { Enabled: true }
+                && ia.LaunchCourse == null && ia.AdmitsBot(balmoral),
+            $"ABLE-TO-FAIL CONTROL: on C2's Danger Zones the Pilot Plane list offers the stock Balmoral and the build, and a bot may fly one (rows {stock}, {build}, course {ia.LaunchCourse ?? "none"})");
+        shell.InstantAction.CloseDropdown();
+
+        ctx.Check(shell.InstantAction.OpenDropdownOn(OriginalInstantActionScreen.CourseKey), $"the Course list opens ({ia.Environment.Code}, {ia.MissionType.Key})");
+        var pick = shell.Rows.FirstOrDefault(r => r.Label == RefusingTitle);
+        if (pick == null)
+        {
+            ctx.Check(false, $"C2's Course list carries {RefusingTitle} ({string.Join(", ", shell.Rows.Select(r => r.Label))})");
+            return null;
+        }
+
+        Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
+        var (reset, kept) = (setup.Bots.ById(onBalmoral), setup.Bots.ById(onAvenger));
+        ctx.Check(ia.LaunchCourse == RefusingCourse && reset is { RandomPlane: true } && kept?.Airframe == avenger,
+            $"picking {RefusingCourse} puts the Balmoral bot back on Random and keeps the Avenger one ({ia.LaunchCourse}, {reset?.Airframe}, {kept?.Airframe})");
+        ctx.Check(ia.PlayerPlane.Node == RefusedPlane, $"seat 0 keeps its Balmoral pick, as a lobby pilot does ({ia.PlayerPlane.Node})");
+        return (onBalmoral, onAvenger);
+    }
+
+    // ABLE-TO-FAIL CONTROL for the greying below. The top level's door serves a local Dogfight too,
+    // which flies no course, so the Balmoral stands there whatever Instant Action is left on.
+    private static void CoursePlanesOffTheDoor(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int onAvenger)
+    {
+        host.Show(MenuReturnDestination.TopLevel);
+        var door = Row(shell, OriginalShell.JoinBoardKey);
+        if (door != null)
+        {
+            Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        }
+
+        shell.JoinBoard.ShowBot(onAvenger);
+        var box = Row(shell, OriginalJoinBoard.BotPlaneKey);
+        if (box != null)
+        {
+            Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
+        }
+
+        var item = Row(shell, BotPlaneItem(StockAirframes.IdOf(RefusedPlane) ?? -1));
+        ctx.Check(shell.Screen == OriginalScreen.JoinBoard && item is { Enabled: true },
+            $"ABLE-TO-FAIL CONTROL: through the top level's door, with Instant Action left on {RefusingCourse}, the Balmoral stands ungreyed ({shell.Screen}, {item?.Enabled})");
+        shell.JoinBoard.CloseDropdown();
+    }
+
+    private static string BotPlaneItem(int airframe) =>
+        OriginalJoinBoard.BotPlaneKey + ":" + (airframe + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // The join board opened on Instant Action's behalf: the Balmoral greyed and passed over.
+    private static void CoursePlanesOnTheBoard(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, PlayerSetupFeature setup, int onAvenger)
+    {
+        int balmoral = StockAirframes.IdOf(RefusedPlane) ?? -1;
+        int avenger = StockAirframes.IdOf("player_avenger") ?? -1;
+        shell.JoinBoard.ShowBot(onAvenger);
+        var box = Row(shell, OriginalJoinBoard.BotPlaneKey);
+        if (box == null)
+        {
+            ctx.Check(false, $"Edit Bot stands on the Avenger bot with its plane box");
+            return;
+        }
+
+        Click(host, seat, Pointer(fit, box.X + 5f, box.Y + 5f, pressed: true, clicked: true));
+        var refused = Row(shell, BotPlaneItem(balmoral));
+        var admitted = Row(shell, BotPlaneItem(avenger));
+        var lines = shell.Compose().Overlays.SelectMany(p => p.Lines).ToList();
+        var (grey, black) = (lines.FirstOrDefault(l => l.Text == refused?.Label), lines.FirstOrDefault(l => l.Text == admitted?.Label));
+        ctx.Check(shell.JoinBoard.OpenDropdown == OriginalJoinBoard.BotPlaneKey && refused is { Enabled: false } && admitted is { Enabled: true }
+                && Row(shell, OriginalJoinBoard.BotPlaneKey + ":0") is { Enabled: true } && grey != null && black != null && grey.Colour != black.Colour,
+            $"the open plane list greys the Balmoral and keeps Random and the Avenger ({refused?.Label} {refused?.Enabled}, {admitted?.Label} {admitted?.Enabled})");
+        if (refused != null)
+        {
+            Click(host, seat, Pointer(fit, refused.X + 5f, refused.Y + 5f, pressed: true, clicked: true));
+        }
+
+        ctx.Check(setup.Bots.ById(onAvenger)?.Airframe == avenger, $"a click on the greyed Balmoral leaves the bot on its Avenger ({setup.Bots.ById(onAvenger)?.Airframe})");
+        shell.JoinBoard.CloseDropdown();
+        OriginalWalk.WalkTo(shell, OriginalJoinBoard.BotPlaneKey, frame => Press(host, seat, frame));
+        Press(host, seat, Right);
+        int stepped = setup.Bots.ById(onAvenger)?.Airframe ?? -1;
+        ctx.Check(stepped == balmoral + 1 && stepped != balmoral,
+            $"a step right from the Avenger passes the Balmoral to the next airframe ({stepped})");
+        Press(host, seat, Left);
+        ctx.Check(setup.Bots.ById(onAvenger)?.Airframe == avenger, $"and a step back passes it again to the Avenger ({setup.Bots.ById(onAvenger)?.Airframe})");
+        shell.JoinBoard.ShowBot(-1);
+    }
+
+    // Seat 0's Pilot Plane list and FLY MISSION, then a second seat's walk, under the course.
+    private static void CoursePlanesForSeats(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, PlayerSetupFeature setup,
+        List<MenuExit> exits)
+    {
+        var (stock, build) = (PilotRowOfNode(shell, custom: false), PilotRowOfNode(shell, custom: true));
+        int fury = shell.InstantAction.PilotRoster.ToList().FindIndex(r => !r.IsCustom && r.Node == "player_fury");
+        ctx.Check(ia.LaunchCourse == RefusingCourse && shell.InstantAction.OpenDropdownOn(OriginalInstantActionScreen.PlayerPlaneKey)
+                && PilotItem(shell, stock) is { Enabled: false } && PilotItem(shell, build) is { Enabled: false } && PilotItem(shell, fury) is { Enabled: true },
+            $"the Pilot Plane list greys the stock Balmoral and the Balmoral build and keeps the Fury ({PilotItem(shell, stock)?.Label}, {PilotItem(shell, build)?.Label})");
+        shell.InstantAction.CloseDropdown();
+
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        int before = exits.Count;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        string reason = shell.Dialog?.Message ?? "";
+        ctx.Check(exits.Count == before && shell.Screen == OriginalScreen.InstantAction
+                && reason.Contains($"C2/{RefusingCourse}", StringComparison.Ordinal) && reason.Contains($"not {RefusedPlane}", StringComparison.Ordinal),
+            $"FLY MISSION on the Balmoral launches nothing and answers with the course's reason ({exits.Count - before}, '{reason}')");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Dialog == null, $"OK answers the box");
+
+        ia.SelectPlayerPlane(InstantActionFeature.Airframes.ToList().FindIndex(a => a.Node == "player_avenger"));
+        OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.PlayerPlaneKey, frame => Press(host, seat, frame));
+        Press(host, seat, Right);
+        ctx.Check(ia.PlayerPlane.Node == "player_bhawk", $"a step right from the Avenger passes the Balmoral ({ia.PlayerPlane.Node})");
+
+        // A second seat left confirmed on a Balmoral, as a cancelled walk leaves one.
+        var guest = new ScriptedSeat();
+        var joined = setup.Join(guest);
+        setup.SetRoster(shell.InstantAction.PilotRoster);
+        ctx.Check(joined != null && setup.Browse(joined, stock) && setup.Select(joined) && setup.Confirm(joined),
+            $"a second seat joins confirmed on the stock Balmoral ({joined?.Cursor})");
+        if (joined == null)
+        {
+            return;
+        }
+
+        fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
+        Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        string entry = OriginalWidgets.EntryKeyPrefix;
+        ctx.Check(shell.Screen == OriginalScreen.SeatPlane && shell.PickingSeat == 1 && !joined.Confirmed
+                && Row(shell, entry + stock.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { Enabled: false }
+                && Row(shell, entry + fury.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { Enabled: true },
+            $"FLY MISSION walks the second seat again, its list greying the Balmoral ({shell.Screen}, seat {shell.PickingSeat}, confirmed {joined.Confirmed})");
+        Press(host, guest, Accept);
+        reason = shell.Dialog?.Message ?? "";
+        ctx.Check(shell.Screen == OriginalScreen.SeatPlane && !joined.Locked && reason.Contains($"not {RefusedPlane}", StringComparison.Ordinal),
+            $"an Accept on the greyed Balmoral selects nothing and raises the reason ('{reason}')");
+        Press(host, guest, Accept);
+        Press(host, guest, Down);
+        Press(host, guest, Accept);
+        Press(host, guest, Accept);
+        if (exits.Count != before + 1 || exits[^1] is not LaunchExit exit)
+        {
+            ctx.Check(false, $"the walk ends as one LaunchExit ({exits.Count - before}, {shell.Screen}, '{shell.Dialog?.Message}')");
+            return;
+        }
+
+        var planes = exit.Seats.Select(s => s.PlaneNode).ToList();
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), exit.Chapter, planes, exit.Mode,
+            exit.InstantAction, missionType: exit.Match?.MissionType ?? DogfightMissionType.Deathmatch, bots: exit.Bots, course: exit.Course);
+        var course = new Flight.Modes.CourseLibrary(Flight.Modes.CourseLibrary.ShippedRoot, null).Load("C2", RefusingCourse, out string error);
+        string? refusal = course == null ? error : Launch.SeatFields.CoursePlaneRefusal(spec, course);
+        ctx.Check(exit is { Chapter: "C2", Course: RefusingCourse, Seats.Count: 2, Bots.Count: 2 } && !planes.Contains(RefusedPlane)
+                && exit.Bots.All(b => b.Plane != RefusedPlane) && refusal == null,
+            $"the walk leaves as one launch of the course, no seat or bot on a Balmoral, which the course admits ({string.Join(", ", planes)}; {string.Join(", ", exit.Bots?.Select(b => b.Plane ?? "random") ?? Array.Empty<string>())}; {refusal ?? "admitted"})");
+        setup.Unjoin(joined);
+    }
+
+    // The Pilot Plane list's row index for the Balmoral, the stock row or the saved build.
+    private static int PilotRowOfNode(OriginalShell shell, bool custom) =>
+        shell.InstantAction.PilotRoster.ToList().FindIndex(r => r.IsCustom == custom && r.Node == RefusedPlane);
+
+    // The open Pilot Plane list's item row at roster index <paramref name="row"/>.
+    private static OriginalRow? PilotItem(OriginalShell shell, int row) =>
+        Row(shell, OriginalInstantActionScreen.PlayerPlaneKey + ":" + row.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     // The shipped courses plus, in the suite's scratch game folder, the sample under a title far wider than the Course box.
     private static Flight.Modes.CourseLibrary LongTitledLibrary(TestContext ctx, string suite)

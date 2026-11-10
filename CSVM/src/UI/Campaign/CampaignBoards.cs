@@ -648,7 +648,7 @@ public static class CampaignBoards
                     ComboPicked[0], ComboPicked[1], ComboPicked[2]));
             }
 
-            lines.Add(FieldText(combo.Entries[entry], combo.X, y, combo.Width, BoardInk.Row));
+            lines.Add(FieldText(combo.Entries[entry], combo.X, y, combo.Width, combo.IsAllowed(entry) ? BoardInk.Row : BoardInk.Detail));
         }
 
         if (combo.Scrolls)

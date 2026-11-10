@@ -79,6 +79,7 @@ internal sealed class OriginalBotPanel
     private readonly MultiplayerBoardText _text;
     private readonly Func<StockLoadouts?> _stock;
     private readonly Func<string, OriginalRow> _plaque;
+    private Func<int, bool> _admits = _ => true;
     private bool _poolRead;
     private int _picked = -1;
     private int _fillTo = DogfightLobby.DefaultFillTo;
@@ -116,9 +117,11 @@ internal sealed class OriginalBotPanel
     /// <summary>The row key of the bot listed <paramref name="place"/>-th.</summary>
     internal static string RowKey(int place) => OriginalJoinBoard.BotRowPrefix + place.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Lets the picked row and any open list go, as a door onto the board does.</summary>
-    internal void Reset()
+    /// <summary>Lets the picked row and any open list go, as a door onto the board does. The plane
+    /// list then greys and steps over an airframe <paramref name="admits"/> refuses, none where it is null.</summary>
+    internal void Reset(Func<int, bool>? admits = null)
     {
+        _admits = admits ?? (_ => true);
         _picked = -1;
         _open = null;
         _typing = null;
@@ -177,7 +180,7 @@ internal sealed class OriginalBotPanel
         return false;
     }
 
-    /// <summary>A sideways step on a live dropdown picks its next value.</summary>
+    /// <summary>A sideways step on a live dropdown picks its next allowed value.</summary>
     internal bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (_open != null || focus < 0 || focus >= rows.Count || direction == 0)
@@ -192,7 +195,17 @@ internal sealed class OriginalBotPanel
         }
 
         int count = list.Items.Count;
-        list.Select(((list.Current + Math.Sign(direction)) % count + count) % count);
+        int at = list.Current;
+        for (int i = 0; i < count; i++)
+        {
+            at = ((at + Math.Sign(direction)) % count + count) % count;
+            if (list.Allowed(at))
+            {
+                list.Select(at);
+                break;
+            }
+        }
+
         return true;
     }
 
@@ -490,14 +503,15 @@ internal sealed class OriginalBotPanel
                         items[i] = PlaneWord(i - 1);
                     }
 
-                    return new BotList(items, bot.RandomPlane ? 0 : bot.Airframe + 1,
-                        i => _setup.Bots.SetAirframe(bot.Id, i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1));
+                    int Airframe(int i) => i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1;
+                    return new BotList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, i => _admits(Airframe(i)),
+                        i => _setup.Bots.SetAirframe(bot.Id, Airframe(i)));
                 }
 
             case OriginalJoinBoard.BotSkillKey:
                 return new BotList(
                     new[] { _text.SkillWord(NetBotSkill.Novice), _text.SkillWord(NetBotSkill.Veteran), _text.SkillWord(NetBotSkill.Ace) },
-                    (int)bot.Skill, i => _setup.Bots.SetSkill(bot.Id, (NetBotSkill)i));
+                    (int)bot.Skill, _ => true, i => _setup.Bots.SetSkill(bot.Id, (NetBotSkill)i));
         }
 
         return null;
@@ -513,13 +527,13 @@ internal sealed class OriginalBotPanel
         var closed = new List<OriginalRow>();
         Widgets(closed);
         var box = closed.Find(row => row.Key == key);
-        return box == null ? null : OriginalDropLists.Over(key, null, list.Items, (box.X, box.Y, box.Width, box.Height));
+        return box == null ? null : OriginalDropLists.Over(key, null, list.Items, (box.X, box.Y, box.Width, box.Height), list.Allowed);
     }
 
     private void PickFromList(string key, string suffix)
     {
         if (DropdownFor(key) is { } list && int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out int index)
-            && index >= 0 && index < list.Items.Count)
+            && index >= 0 && index < list.Items.Count && list.Allowed(index))
         {
             list.Select(index);
         }
@@ -628,10 +642,11 @@ internal sealed class OriginalBotPanel
     private void ComposeOpenList(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         int picked = _open != null && DropdownFor(_open) is { } open ? open.Current : -1;
-        layers.Overlays.Add(OriginalDropLists.ComposeOpen(rows, focus, picked, _text.Regular(BoxFace), FallbackText, _ => Black));
+        layers.Overlays.Add(OriginalDropLists.ComposeOpen(rows, focus, picked, _text.Regular(BoxFace), FallbackText,
+            item => item.Enabled ? Black : Greyed));
     }
 
-    private sealed record BotList(IReadOnlyList<string> Items, int Current, Func<int, bool> Pick)
+    private sealed record BotList(IReadOnlyList<string> Items, int Current, Func<int, bool> Allowed, Func<int, bool> Pick)
     {
         public void Select(int index) => Pick(index);
     }

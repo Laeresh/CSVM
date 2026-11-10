@@ -98,18 +98,25 @@ public sealed class InstantActionFeature : IMenuFeature
 
     private readonly Func<string, InstantActionDef> _loadBase;
     private readonly Func<string, IReadOnlyList<(string Name, string Title)>> _listCourses;
+    private readonly Func<string, string, Flight.Modes.Course?> _loadCourse;
     private readonly Dictionary<string, IReadOnlyList<(string Name, string Title)>> _courses = new(StringComparer.Ordinal);
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
+
+    // The picked course as read when the Course box or the environment last moved, for the planes it admits.
+    private Flight.Modes.Course? _picked;
 
     /// <summary>A feature whose environment defs come from <paramref name="loadBase"/>, called with
     /// a chapter code when an environment is confirmed. The loader's failure policy is its own;
     /// see <see cref="ForGameData"/> for the one the game uses. A chapter's authored courses, each a
-    /// file name and the title it shows, come from <paramref name="listCourses"/>; none when it is null.</summary>
+    /// file name and the title it shows, come from <paramref name="listCourses"/>; none when it is null.
+    /// The picked one is read for its plane list through <paramref name="loadCourse"/>, by chapter and file name.</summary>
     public InstantActionFeature(
-        Func<string, InstantActionDef> loadBase, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null)
+        Func<string, InstantActionDef> loadBase, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null,
+        Func<string, string, Flight.Modes.Course?>? loadCourse = null)
     {
         _loadBase = loadBase ?? throw new ArgumentNullException(nameof(loadBase));
         _listCourses = listCourses ?? (_ => Array.Empty<(string, string)>());
+        _loadCourse = loadCourse ?? ((_, _) => null);
         Discard();
     }
 
@@ -169,6 +176,9 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The course a launch flies, or null for the Danger Zones.</summary>
     public string? LaunchCourse => OffersCourse ? Course : null;
+
+    /// <summary>Whether the join board's bots race <see cref="LaunchCourse"/>, so its plane list binds them.</summary>
+    public bool BotsRaceCourse => LaunchCourse != null && RaceBots;
 
     /// <summary>Whether the picked mission is the ace duel, which takes no waves and no wingmen.</summary>
     public bool IsAceDuel => MissionType.Key == AceKey;
@@ -241,7 +251,8 @@ public sealed class InstantActionFeature : IMenuFeature
     /// defaults with a warning rather than leaving the menu unable to proceed. The courses come from
     /// <paramref name="listCourses"/>, as the constructor takes them.</summary>
     public static InstantActionFeature ForGameData(
-        Spec.GameData data, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null)
+        Spec.GameData data, Func<string, IReadOnlyList<(string Name, string Title)>>? listCourses = null,
+        Func<string, string, Flight.Modes.Course?>? loadCourse = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         return new InstantActionFeature(
@@ -257,7 +268,8 @@ public sealed class InstantActionFeature : IMenuFeature
                     return InstantAction.Defaults();
                 }
             },
-            listCourses);
+            listCourses,
+            loadCourse);
     }
 
     /// <summary>The mission types a chapter offers: all four, minus stunt flying where its
@@ -338,11 +350,27 @@ public sealed class InstantActionFeature : IMenuFeature
     public bool AllowsEnvironment(int environmentIndex, string missionTypeKey) =>
         missionTypeKey != StuntKey || StuntOffered(EnvironmentRows[environmentIndex].Code);
 
-    /// <summary>Picks a row within <see cref="CourseOptions"/>.</summary>
+    /// <summary>Why <see cref="LaunchCourse"/> refuses <paramref name="planes"/>, stock nodes (a custom
+    /// plane's is its airframe's), in the words a refused launch shows. Null where it admits each or none flies.</summary>
+    public string? PlaneRefusal(IEnumerable<string> planes) =>
+        LaunchCourse != null && _picked?.Refuses(planes) is { } why
+            ? $"The course {_picked.Chapter}/{_picked.Name} cannot be flown: {why}."
+            : null;
+
+    /// <summary>Whether a seat may pick <paramref name="node"/>, a stock node: see <see cref="PlaneRefusal"/>.</summary>
+    public bool Admits(string node) => PlaneRefusal(new[] { node }) == null;
+
+    /// <summary>Whether a join board bot row may stand on <paramref name="airframe"/>: Random always,
+    /// a stock airframe unless <see cref="BotsRaceCourse"/> holds and the course leaves it out.</summary>
+    public bool AdmitsBot(int airframe) =>
+        airframe == Net.DogfightLobbySeat.RandomAirframe || !BotsRaceCourse || _picked?.Admits(airframe) != false;
+
+    /// <summary>Picks a row within <see cref="CourseOptions"/>, reading the picked course afresh.</summary>
     public void SelectCourse(int index)
     {
         var rows = CourseRows;
         Course = rows[Index(index, rows.Count, nameof(index))].Name;
+        ReadCourse();
     }
 
     /// <summary>Picks an environment row. The mission type is not re-fitted until
@@ -370,6 +398,7 @@ public sealed class InstantActionFeature : IMenuFeature
             Course = courses[0].Name;
         }
 
+        ReadCourse();
         BaseDef = _loadBase(Environment.Code);
     }
 
@@ -632,6 +661,7 @@ public sealed class InstantActionFeature : IMenuFeature
         PresetIndex = -1;
         BaseDef = null;
         Course = null;
+        _picked = null;
         for (int i = 0; i < WaveSlots; i++)
         {
             _waves[i] = default;
@@ -659,4 +689,6 @@ public sealed class InstantActionFeature : IMenuFeature
 
         return wave;
     }
+
+    private void ReadCourse() => _picked = Course is { } name ? _loadCourse(Environment.Code, name) : null;
 }

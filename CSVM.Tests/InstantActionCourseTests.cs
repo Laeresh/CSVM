@@ -277,6 +277,73 @@ public class InstantActionCourseTests
         Assert.Single(LoadScreens.Texts(null, "FREE FLIGHT", ZrdrSet.None, new Messages()));
     }
 
+    [Fact]
+    public void APickedCourseRefusesTheSeatsAndRacingBotsItLeavesOutAndNothingElse()
+    {
+        int balmoral = Flight.Hangar.StockAirframes.IdOf("player_balmoral") ?? -1;
+        int fury = Flight.Hangar.StockAirframes.IdOf("player_fury") ?? -1;
+        var loads = new List<(string Chapter, string Name)>();
+        var ia = new InstantActionFeature(_ => InstantAction.Defaults(), code => code == "C1" ? new[] { ("a_loop", "a_loop"), (Sample, Sample) } : Array.Empty<(string, string)>(),
+            (chapter, name) =>
+            {
+                loads.Add((chapter, name));
+                return name == Sample ? Limited(chapter, name, fury) : null;
+            });
+        ia.ConfirmEnvironment();
+        ia.SelectMissionType(2);
+        Assert.True(ia.Admits("player_balmoral"));
+
+        ia.SelectCourse(2);
+        Assert.Equal(("C1", Sample), loads[^1]);
+        Assert.True(ia.Admits("player_fury"));
+        Assert.False(ia.Admits("player_balmoral"));
+        Assert.True(ia.Admits("not_a_plane"));
+        Assert.Equal($"The course C1/{Sample} cannot be flown: it admits only player_fury, not player_balmoral.", ia.PlaneRefusal(new[] { "player_fury", "player_balmoral" }));
+
+        // A bot answers to the list only while the bots race; Random always stands.
+        Assert.True(ia.AdmitsBot(balmoral));
+        ia.RaceBots = true;
+        Assert.False(ia.AdmitsBot(balmoral));
+        Assert.True(ia.AdmitsBot(fury));
+        Assert.True(ia.AdmitsBot(Net.DogfightLobbySeat.RandomAirframe));
+
+        // Off the course (another mission, the Danger Zones, a discard) every plane flies.
+        ia.SelectMissionType(0);
+        Assert.True(ia.Admits("player_balmoral") && ia.AdmitsBot(balmoral));
+        ia.SelectMissionType(2);
+        ia.SelectCourse(0);
+        Assert.True(ia.Admits("player_balmoral") && ia.AdmitsBot(balmoral));
+        ia.SelectCourse(2);
+        ia.Discard();
+        Assert.True(ia.Admits("player_balmoral"));
+    }
+
+    [Fact]
+    public void ABotRowOnARefusedPlaneGoesBackToRandomAndTheRestKeepTheirs()
+    {
+        int balmoral = Flight.Hangar.StockAirframes.IdOf("player_balmoral") ?? -1;
+        int fury = Flight.Hangar.StockAirframes.IdOf("player_fury") ?? -1;
+        var bots = new DogfightBots();
+        int on = bots.Add(Array.Empty<string>(), 0).Id;
+        int kept = bots.Add(Array.Empty<string>(), 0).Id;
+        int random = bots.Add(Array.Empty<string>(), 0).Id;
+        bots.SetAirframe(on, balmoral);
+        bots.SetAirframe(kept, fury);
+
+        bots.ResetRefused(a => a != balmoral);
+
+        Assert.True(bots.ById(on)!.Value.RandomPlane);
+        Assert.Equal(fury, bots.ById(kept)!.Value.Airframe);
+        Assert.True(bots.ById(random)!.Value.RandomPlane);
+    }
+
+    // A course admitting only the airframes given, its gates beside the point.
+    private static Flight.Modes.Course Limited(string chapter, string name, params int[] planes) =>
+        new(chapter, name, new Flight.Modes.SpawnPoint(Godot.Vector3.Zero, 0f), Array.Empty<Flight.Modes.CourseGate>(), Array.Empty<Flight.Modes.SequenceEntry>())
+        {
+            Planes = planes,
+        };
+
     // Each course shows its file name, as a file without a title does.
     private static InstantActionFeature Feature(Dictionary<string, string[]> courses) =>
         new(_ => InstantAction.Defaults(), code => courses.TryGetValue(code, out var names) ? names.Select(n => (n, n)).ToList() : new List<(string, string)>());

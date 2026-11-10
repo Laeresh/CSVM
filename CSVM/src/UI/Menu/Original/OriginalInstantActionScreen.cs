@@ -5,6 +5,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -309,6 +310,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     public void OpenInstantAction()
     {
         _instantAction.ConfirmEnvironment();
+        ResetRefusedBots();
         if (_instantAction.IsAceDuel)
         {
             _iaPage = 0;
@@ -370,6 +372,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             if (types[i].Key == InstantActionFeature.StuntKey)
             {
                 _instantAction.SelectMissionType(i);
+                ResetRefusedBots();
                 _host.FocusKey(RaceTimeKey);
                 return true;
             }
@@ -389,6 +392,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         _instantAction.RaceBots = true;
+        ResetRefusedBots();
         _host.FocusKey(RaceBotsKey);
         return true;
     }
@@ -522,6 +526,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         if (next != list.Current && list.Allowed(next))
         {
             list.Select(next);
+            ResetRefusedBots();
         }
 
         _host.FocusKey(row.Key);
@@ -1141,9 +1146,13 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The pilot's list stands over the roster. The wingman's stays the stock table, the original
-    // offering the wingmen no builds, so the two dropdowns are built apart on purpose.
+    // offering the wingmen no builds, so the two dropdowns are built apart on purpose. A row the
+    // picked course refuses greys, a build by its airframe's node.
     private DropdownList PilotDropdown() =>
-        new(Names(_iaPilotRoster, PilotRowText), PilotRow, _ => true, SelectPilotRow);
+        new(Names(_iaPilotRoster, PilotRowText), PilotRow, i => _instantAction.Admits(_iaPilotRoster[i].Node), SelectPilotRow);
+
+    // A bot row the setup now refuses goes back to Random, as a lobby's does on a course change.
+    private void ResetRefusedBots() => _setup.Bots.ResetRefused(_instantAction.AdmitsBot);
 
     private DropdownList WingmanPlaneDropdown() =>
         new(Names(InstantActionFeature.Airframes, a => a.Name), _instantAction.WingmanPlaneIndex, _ => true, _instantAction.SelectWingmanPlane);
@@ -1293,6 +1302,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                         string before = _instantAction.PlayerPlane.Node;
                         _instantAction.ApplyPreset(int.Parse(suffix, CultureInfo.InvariantCulture));
                         _instantAction.ConfirmEnvironment();
+                        ResetRefusedBots();
                         _iaPilotBuild = null;
                         _iaPage = 0;
                         DropPilotFitIfMoved(before);
@@ -1318,6 +1328,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 if (list.Allowed(index))
                 {
                     list.Select(index);
+                    ResetRefusedBots();
                 }
 
                 _iaOpen = null;
@@ -1355,6 +1366,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 OpenLoadout();
                 return null;
             case FlyMissionKey:
+                // A course keeps seat 0's refused pick, as a lobby keeps a pilot's. It refuses this
+                // press as the lobby refuses Ready, in the words a refused launch shows.
+                if (_instantAction.PlaneRefusal(new[] { PilotPick().Node }) is { } refused)
+                {
+                    _host.RaiseDialog(refused, DialogIcon.Warning,
+                        new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _host.MenuStrings.Text(100, "OK"), null));
+                    return null;
+                }
+
+                // The board edits its rows for no one mode, so a row the course refuses is caught here.
+                ResetRefusedBots();
                 if (_setup.Seats.Count > 1)
                 {
                     // A second pilot joined here picks on the per-seat screen first; the launch

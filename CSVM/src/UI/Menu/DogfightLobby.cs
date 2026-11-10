@@ -1368,18 +1368,7 @@ public sealed class DogfightLobby
         return true;
     }
 
-    // A bot has no Ready for the rules to refuse, so a rules or course change resets its pick instead.
-    private void ResetRefusedBots()
-    {
-        var rules = Rules;
-        foreach (var bot in new List<DogfightBot>(_bots.Rows))
-        {
-            if (!bot.RandomPlane && !rules.AdmitsStock(bot.Airframe))
-            {
-                _bots.SetAirframe(bot.Id, DogfightLobbySeat.RandomAirframe);
-            }
-        }
-    }
+    private void ResetRefusedBots() => _bots.ResetRefused(Rules.AdmitsStock);
 
     // Every host change is a new round: the Ready marks under the old options clear.
     private bool Change(DogfightOptionsMessage changed)

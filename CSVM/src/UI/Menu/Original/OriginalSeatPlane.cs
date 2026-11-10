@@ -64,6 +64,9 @@ public sealed partial class OriginalShell
             ? new MenuCommands { Pointer = commands.Pointer }
             : commands;
 
+    // Whether the walk lets a seat take a row: Instant Action's course refuses a plane by its node.
+    private bool WalkAdmits(MenuAircraft row) => _seatReturn != OriginalScreen.InstantAction || _instantAction.Admits(row.Node);
+
     private int SeatIndex(PlayerSeat seat)
     {
         var seats = _setup.Seats;
@@ -122,6 +125,13 @@ public sealed partial class OriginalShell
         foreach (var joined in _setup.Seats)
         {
             joined.Cursor = Math.Clamp(joined.Cursor, 0, last);
+            // A pick the course now refuses is taken back, as a lobby's course change clears a Ready.
+            if (!ReferenceEquals(joined, seat) && roster.Count > 0 && !_instantAction.Admits(roster[joined.Cursor].Node))
+            {
+                while (_setup.Back(joined) != SeatBack.Browsing)
+                {
+                }
+            }
         }
 
         while (_setup.Back(seat) != SeatBack.Browsing)
@@ -295,6 +305,14 @@ public sealed partial class OriginalShell
     private void TakeSeatPick(SeatPlanePage page, PlayerSeat seat)
     {
         int pick = page.List.Confirm() ?? page.List.Highlight;
+        if (pick >= 0 && pick < WalkRoster.Count && !WalkAdmits(WalkRoster[pick]))
+        {
+            // The list reopens on the refused row, the reason over it in a lobby's refused Ready.
+            page.List.Expand();
+            RaiseDialog(_instantAction.PlaneRefusal(new[] { WalkRoster[pick].Node }) ?? string.Empty, DialogIcon.Warning, Ok());
+            return;
+        }
+
         page.List.Select(pick);
         _setup.Browse(seat, pick);
         _setup.Select(seat);
@@ -437,6 +455,7 @@ public sealed partial class OriginalShell
             }
 
             List.Load(entries, seat.Cursor);
+            List.Allowed = i => shell.WalkAdmits(roster[i]);
             if (!seat.Locked)
             {
                 List.Expand();

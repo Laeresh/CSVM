@@ -188,6 +188,23 @@ public class CampaignComboTests
         Assert.Equal(0, combo.First);
     }
 
+    [Fact]
+    public void TheCursorStepsOverARefusedEntryEitherWay()
+    {
+        var combo = Loaded(5, selected: 0);
+        combo.Allowed = i => i is not (1 or 2 or 4);
+        combo.Expand();
+
+        combo.Move(1);
+        Assert.Equal(3, combo.Highlight);
+        combo.Move(1);
+        Assert.Equal(0, combo.Highlight);
+        combo.Move(-1);
+        Assert.Equal(3, combo.Highlight);
+        Assert.False(combo.IsAllowed(4));
+        Assert.True(Loaded(5, selected: 0).IsAllowed(4));
+    }
+
     private static CampaignCombo Loaded(int entries, int selected, int rowsDisplayed = 13)
     {
         var combo = new CampaignCombo(138f, 132f, 271f, 15f, rowsDisplayed);

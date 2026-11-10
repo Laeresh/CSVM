@@ -60,6 +60,10 @@ public sealed class CampaignCombo
     /// <summary>The first entry of the visible window, which scrolling moves.</summary>
     public int First { get; private set; }
 
+    /// <summary>Which entries may be picked, every one while null. The open list greys the rest and
+    /// <see cref="Move"/> steps over them; the owner still refuses such a pick itself.</summary>
+    public Func<int, bool>? Allowed { get; set; }
+
     /// <summary>The field's own words: the selected entry, or "" when there are none.</summary>
     public string Text => Selected >= 0 && Selected < _entries.Count ? _entries[Selected] : string.Empty;
 
@@ -103,7 +107,8 @@ public sealed class CampaignCombo
     }
 
     /// <summary>Moves the cursor inside the open list, wrapping the way every launchscreen list
-    /// wraps, and scrolls the window to keep the cursor in it.</summary>
+    /// wraps, and scrolls the window to keep the cursor in it. It steps on past a refused entry
+    /// (<see cref="Allowed"/>).</summary>
     public bool Move(int dir)
     {
         if (!Open || dir == 0 || _entries.Count == 0)
@@ -111,10 +116,19 @@ public sealed class CampaignCombo
             return false;
         }
 
-        Highlight = (((Highlight + dir) % _entries.Count) + _entries.Count) % _entries.Count;
+        int at = Wrap(Highlight + dir);
+        for (int n = 1; n < _entries.Count && !IsAllowed(at); n++)
+        {
+            at = Wrap(at + Math.Sign(dir));
+        }
+
+        Highlight = IsAllowed(at) ? at : Highlight;
         Scroll();
         return true;
     }
+
+    /// <summary>Whether entry <paramref name="index"/> may be picked (<see cref="Allowed"/>).</summary>
+    public bool IsAllowed(int index) => Allowed?.Invoke(index) ?? true;
 
     /// <summary>Closes the list and hands back the entry the cursor was on. The caller applies it
     /// through <see cref="Select"/>, or refuses it and leaves the pick alone. Null when the list
@@ -172,8 +186,10 @@ public sealed class CampaignCombo
             return 0;
         }
 
-        return (((Selected + dir) % _entries.Count) + _entries.Count) % _entries.Count;
+        return Wrap(Selected + dir);
     }
+
+    private int Wrap(int index) => ((index % _entries.Count) + _entries.Count) % _entries.Count;
 
     // Pulls the window over the cursor: it moves only when the cursor has left it, so a list
     // scrolls at its edges rather than keeping the cursor centred.

@@ -118,12 +118,15 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Availability = OriginalAvailable;
         host.Held = () => stamp.DesktopModeNotice?.Visible == true;
         host.Features.Add(new FreeFlightFeature());
-        // The courses a launch would read, so the menu offers no course the flight cannot find.
+        // The courses a launch would read, so the menu offers no course the flight cannot find and
+        // greys the planes the flight would refuse.
+        // Built per call, never once: the paths are read live.
+        Flight.Modes.CourseLibrary Courses() => Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det);
         host.Features.Add(InstantActionFeature.ForGameData(at.Data, chapter =>
         {
-            var library = Flight.Modes.CourseLibrary.ForLaunch(paths().DataRoot, spec.Det);
+            var library = Courses();
             return library.List(chapter).Select(f => (f.Name, library.DisplayName(chapter, f.Name))).ToList();
-        }));
+        }, (chapter, name) => Courses().Load(chapter, name, out _)));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature { SeatLimit = SeatLimit() });

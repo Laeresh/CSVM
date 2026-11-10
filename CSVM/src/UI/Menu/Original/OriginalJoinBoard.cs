@@ -148,11 +148,13 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
     // pads. A shell built without a roster draws nothing at all.
     private IJoinRoster? Roster => _posed ?? _roster;
 
-    /// <summary>Opens the board, the top level's door.</summary>
-    public void Open()
+    /// <summary>Opens the board, the top level's door. A bot's plane list greys an airframe
+    /// <paramref name="admitsBot"/> refuses, which only a door whose mode will race the bots passes.
+    /// ⚠ The top level's door passes none: a local Dogfight may fly the rows next, under no course.</summary>
+    public void Open(Func<int, bool>? admitsBot = null)
     {
         _posed = null;
-        _bots.Reset();
+        _bots.Reset(admitsBot);
         _host.Open(OriginalScreen.JoinBoard);
     }
 
