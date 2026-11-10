@@ -178,7 +178,7 @@ this branch; the format gate reports them before the commit.
 
 **Landed.** `Utils/VolumetricCloudsSetting.cs` and `Utils/GlobalIlluminationSetting.cs` are registered word settings, off by default, resolved from `--volumetric-clouds=on|off` or `--global-illumination=on|off`, the saved word, the `graphics.*` key, then `off`, with `--det` keeping only the flag; the `--proto-*` flags are gone. The VIDEO page shows them as Off/On dropdowns under Post-processing, since the page's two authored checkbox lines are taken by Ocean Waves and Enhanced Graphics.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the plan tree with B11 to B13: build, units 8418 passed / 0 failed, goldens 41 hash-identical, engine 674 passed with one red, `campaign-coop-hangar-owner` (ObjectDisposedException on a `Node3D`, no stack). It passed alone three times and twice in its shard's exact order, so it is intermittent; it also failed once before B11 existed. It stays on the watch-list for E42's battery. `menu-original-tracer-core` walks the VIDEO page to Top 10.
 
 **Original approach (kept for reference).**
 
@@ -211,7 +211,7 @@ saved on logs the cloud and GI lines, and with both off it logs neither.
 
 **Landed.** Each setting's live-apply hook follows the session (`EnhancedLook.FollowWordSettings`): `GameSession.FollowVolumetricClouds` builds the clouds node or drops it, whose exit restores the zone, night, fog and deck, and `FollowGlobalIllumination` rewrites GI on the world and cockpit Environments, then the zone. The zone is held before the bake only for a build with the option on, the session's exit clears `WeatherRig.NightOff`, and the `graphics-volumetric-clouds-gi` suite toggles both live.
 
-**Verified.** <pending orchestrator run>
+**Verified.** `graphics-volumetric-clouds-gi` passes in the full battery (B11's line): C1C's clouds on, off, on, off with the hold, night-off, deck and ground globals following, GI on and off with SDFGI and SSIL following. C1C probes with both on log both lines with zero shader errors; both off match a no-flag probe's node and mesh counts.
 
 **Original approach (kept for reference).**
 
@@ -245,7 +245,7 @@ night, fog and lighting restored exactly when the clouds go off.
 
 **Landed.** The cloud lab has a Volumetric Clouds box and the lighting lab a Global Illumination box, each calling B12's follow after `TakeUnsaved`, which moves the run's word and never the options file. The session's exit puts the resolved word back (`WordSetting.Retake`), so the toggle lasts the flight (Decision 10).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Units cover the unsaved word and its `Retake` (8418 passed in the battery). The boxes' feel at the controls is the author's check in E41.
 
 **Original approach (kept for reference).**
 
