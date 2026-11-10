@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ The slab draws over the rain
 32. ☑ C2's horizon under the clouds (author's check)
 33. ☑ `TerrainShadow.SunAt` ignores the shadow strength
-34. ◐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
+34. ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults (Deck half deferred)
 35. ☐ March the clouds at reduced resolution
 36. ☐ Option defaults: clouds off, GI on with the integrated-GPU fallback
 
@@ -439,7 +439,11 @@ and judges the horizon. If far clouds read wrong, `haze_near_m` (8 km) becomes a
 
 **Verify.** A unit check that `SunAt` matches the shader formula at strengths 0, 0.5 and 1.
 
-## D34 ☐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
+## D34 ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
+
+**Landed.** The desktop half is measured (**Measured (desktop).** below) and the defaults follow from it (Decisions 14 and 15, D35, D36). The Steam Deck half is deferred at the author's call, because the Deck does not start; it is owed before the options ship to Deck players.
+
+**Original approach (kept for reference).**
 
 **Goal.** Measured frame times for each option on and off on the author's desktop and on the Steam
 Deck, and from them the defaults: on, off, or tied to a quality setting.
