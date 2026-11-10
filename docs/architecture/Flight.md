@@ -1053,9 +1053,9 @@ The time-attack race's bookkeeping, engine-free and fed by events, never by a co
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
 (`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished`, `RunReset` and
 `RunAbandoned` carry each pilot's runs, a network host's entry points as much as `Follow`'s local
-feed, `RunReset` excepted, which only `Follow` calls. A live respawn held in the open window (`RunReset`)
-puts the `Racer` `OnApproach`, in a run until its clock starts, which may be after time up; outside the
-window it is an abandon. A `Racer` keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
+feed. A live respawn held in the open window (`RunReset`) puts the `Racer` `OnApproach`, in a run
+until its clock starts, which may be after time up; outside the window it is an abandon. A `Racer`
+keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
 most zones and time to them. `MayStartRun` gates reruns, `MayRespawn` respawns, `BestImproved` records bests and `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and `TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs

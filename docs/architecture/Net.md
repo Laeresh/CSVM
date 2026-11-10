@@ -394,9 +394,9 @@ Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`, whi
 
 ## src/Net/NetRaceMessages.cs
 A network stunt race's five session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's rerun and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a
-seat's own run (`NetRaceRun`: started, a zone split, finished, abandoned) from the machine flying
-it to the host, under the owner's run number and the window's number. Every message names its `Window`. `RaceStateMessage` is the
-host's clock (`NetRacePhase`, how far into it, the window, the host's session clock), and
+seat's own run (`NetRaceRun`: started, a zone split, finished, abandoned, and the approach a held
+live respawn begins) from the machine flying it to the host, under the owner's run number and the
+window's number. Every message names its `Window`. `RaceStateMessage` is the host's clock (`NetRacePhase`, how far into it, the window, the host's session clock), and
 `RaceStandingMessage` one racer's line of its leaderboard with the ranking run's splits and whether its pilot left;
 its width follows its split count, one per zone up to `MaxZones` (255), so a course run of any length a network race takes crosses whole.
 `RaceTouchMessage` is one seat's course pylon touch on the host's clock, which every machine draws and none scores.
