@@ -367,7 +367,8 @@ public sealed class WeatherRig
     public bool HideDeck { get; set; }
 
     /// <summary>Gets or sets whether every rig's camera weather state is held, so crossing the band
-    /// switches no zone. The whiteout stays clear too. Set by the cloud prototype beside <see cref="HideDeck"/>.</summary>
+    /// switches no zone. The whiteout stays clear, and both band zones draw (<see cref="ZoneGate.HeldCullMask"/>).
+    /// Set by <see cref="VolumetricClouds"/> beside <see cref="HideDeck"/>; the first tick after it drops re-reads the state.</summary>
     public bool HoldZone { get; set; }
 
     /// <summary>The unit world direction toward the scene sun, the vector <see cref="WriteSunDirection"/> publishes.</summary>
@@ -1038,8 +1039,8 @@ public sealed class WeatherRig
             int gate = _forcedZone != null ? ZoneNumberOf(_forcedZone) ?? rig.CameraWeatherState
                 : _spec.SkyZoneExplicit ? ZoneNumberOf(_spec.SkyZone) ?? rig.CameraWeatherState
                 : rig.CameraWeatherState;
-            rig.Camera.CullMask = _spec.NoZoneCull
-                ? ZoneGate.OpenCullMask(rig.Camera.CullMask)
+            rig.Camera.CullMask = _spec.NoZoneCull ? ZoneGate.OpenCullMask(rig.Camera.CullMask)
+                : HoldZone ? ZoneGate.HeldCullMask(rig.Camera.CullMask, gate)
                 : ZoneGate.CullMask(rig.Camera.CullMask, gate);
             if (rig.Deck != null)
                 rig.Deck.Visible = !HideDeck && (_spec.NoZoneCull || ZoneGate.Draws(_deckZoneId, gate));
@@ -1047,8 +1048,8 @@ public sealed class WeatherRig
             // built dome keeps it at every state rather than render no sky at all
             // (docs/org/weather.md).
             bool gateDomes = !_spec.NoZoneCull && rig.HorizonDomes.Count > 1;
-            // Held under the cloud prototype, the sky is the upper zone's dome. The slab stands in for
-            // the overcast, and its rifts open onto that sky. The cull mask keeps the held lower state.
+            // Held under the volumetric clouds, the sky is the upper zone's dome. The slab stands in for
+            // the overcast, and its rifts open onto that sky. The cull mask draws both band zones.
             int domeGate = HoldZone && gateDomes ? rig.HorizonDomes.Max(d => d.ZoneId) : gate;
             foreach (var dome in rig.HorizonDomes)
                 dome.Node.Visible = !gateDomes || ZoneGate.Draws(dome.ZoneId, domeGate);

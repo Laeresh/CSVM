@@ -499,8 +499,9 @@ internal static class GraphicsSwitchSuites
         "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
         + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
         + "keep the same node at the word's march divisor between resolutions, "
+        + "and draw both band zones with the camera state held across the band; "
         + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
-        + "values; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
+        + "values, the next tick re-reading the state and narrowing the cull mask to it; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
     internal static void VolumetricCloudsAndGi(TestContext ctx)
     {
         RequireData(ctx, CloudsChapter);
@@ -545,6 +546,20 @@ internal static class GraphicsSwitchSuites
                     }
 
                     standing = node;
+                    if (weather.Mission is { HasCloudBand: true } band)
+                    {
+                        // Held, both band zones draw and the state stays put across the band (D39, C4's mountain tops).
+                        // Released, the next tick re-reads the state and the mask narrows to it.
+                        var zone = ZoneAcross(live, weather, band.CloudBandCentre);
+                        uint both = ZoneGate.LayerFor(1) | ZoneGate.LayerFor(2);
+                        ctx.Check(on ? zone.Under == zone.Before && zone.Over == zone.Before && zone.Mask == both
+                                : zone.Under == 1 && zone.Over == 2 && zone.Mask == ZoneGate.LayerFor(2),
+                            $"at {word} the camera's zone band is {(on ? "both band zones, its state held" : "its own state's alone")} (state {zone.Before} -> under {zone.Under}, over {zone.Over}, band 0x{zone.Mask:X5})");
+                    }
+                    else
+                    {
+                        ctx.Check(false, $"{CloudsChapter} carries a cloud band to cross");
+                    }
                 }
 
                 foreach (string word in new[] { GlobalIlluminationSetting.On, GlobalIlluminationSetting.Off })
@@ -3270,6 +3285,22 @@ internal static class GraphicsSwitchSuites
         int clouds = 0;
         Walk(rig.Session, node => clouds += node is VolumetricClouds ? 1 : 0);
         return $"clouds={clouds} hold={weather.HoldZone} night_off={WeatherRig.NightOff} deck_hidden={weather.HideDeck}";
+    }
+
+    // Two weather ticks, which Step's physics frames do not run: the first pane's camera 500 m under the band,
+    // then 500 m over it. The states each tick leaves, and the camera's zone band after the second.
+    private static (int Before, int Under, int Over, uint Mask) ZoneAcross(Rig rig, WeatherRig weather, float centre)
+    {
+        var pane = rig.Session.Rigs[0];
+        var was = pane.Camera.Position;
+        int before = pane.CameraWeatherState;
+        pane.Camera.Position = new Vector3(was.X, centre - 500f, was.Z);
+        weather.Tick(rig.Session.Rigs);
+        int under = pane.CameraWeatherState;
+        pane.Camera.Position = new Vector3(was.X, centre + 500f, was.Z);
+        weather.Tick(rig.Session.Rigs);
+        pane.Camera.Position = was;
+        return (before, under, pane.CameraWeatherState, pane.Camera.CullMask & ZoneGate.LayerBand);
     }
 
     private static VolumetricClouds? CloudsNode(Rig rig)

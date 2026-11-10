@@ -122,6 +122,23 @@ public class ZoneGateTests
     }
 
     [Fact]
+    public void TheHeldMaskDrawsBothBandZonesAndKeepsTheVolumeZoneGated()
+    {
+        // Under the volumetric clouds: C4's zone-2 mountain tops draw below the band and its zone-1
+        // ground above it. C5's zone-3 streets overlap its zone-1 ground, so they stay on the state.
+        const uint everything = 0xFFFFF;
+        const uint outside = everything & ~ZoneGate.LayerBand;
+        uint band = ZoneGate.LayerFor(1) | ZoneGate.LayerFor(2);
+        Assert.Equal(band, ZoneGate.HeldCullMask(everything, 1) & ZoneGate.LayerBand);
+        Assert.Equal(band, ZoneGate.HeldCullMask(everything, 2) & ZoneGate.LayerBand);
+        Assert.Equal(ZoneGate.LayerFor(3), ZoneGate.HeldCullMask(everything, 3) & ZoneGate.LayerBand);
+        Assert.Equal(outside, ZoneGate.HeldCullMask(everything, 1) & ~ZoneGate.LayerBand);
+
+        // Released, the next tick's plain mask narrows it back: nothing of the hold is OR-ed in to stay.
+        Assert.Equal(ZoneGate.CullMask(everything, 1), ZoneGate.CullMask(ZoneGate.HeldCullMask(everything, 1), 1));
+    }
+
+    [Fact]
     public void SkyZoneNamesResolveToTheStateTheyForce()
     {
         // An explicit --sky-zone drives the gate as well as the fog, or an inspection

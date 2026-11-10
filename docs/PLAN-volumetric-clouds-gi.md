@@ -121,6 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 35. ☑ March the clouds at reduced resolution
 36. ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
 37. ☑ The Volumetric Clouds option chooses the march resolution: off, quarter, half, full
+39. ☑ Zone-gated meshes draw while the clouds hold the zone (author's report: C4's mountain tops)
 
 ### Wave E, tuning and landing
 
@@ -649,6 +650,31 @@ pilot's Options toggle can still arm it.
 **Model recommendation.** medium.
 
 **Verify.** Units: the four words, `on` as `half` from each source, an unknown word, precedence, `--det`, the options-file round trip, and the flag. `graphics-volumetric-clouds-gi` steps off, quarter, full, half and off live: the node stands exactly when not off, the divisor follows the word, and the same node stands between resolutions. `menu-original-tracer-core` walks the VIDEO page. A C1C probe per word logs the march line at its size.
+
+## D39 ☑ Zone-gated meshes draw while the clouds hold the zone (author's report: C4's mountain tops)
+
+**Goal.** The author's report: "The mountain tops from C4 zone2 are cut off /disabled because of our zone work." Under the clouds there is no whiteout to hide the band's switch, and the author wants to see the sky from below and the ground from over the zone switch, so the content the original gates by band zone draws while the zone is held.
+
+**Evidence (confidence: traced).** `WeatherRig.Tick` stops updating a rig's camera weather state while `HoldZone` stands, and the cull mask kept `ZoneGate.CullMask(mask, gate)` on that held state. A camera held in state 1 culled every `zone_id 2` mesh. The census reads `extracted/<CH>/gamez/nodes.json`, world AABBs composed down each node's parent chain as `GameZ.ParseTransform` does. The `zone_id` decode is `docs/formats/gamez.md` ("`zone_id`'s runtime meaning, decompiled") and `docs/org/weather.md` ("The `zone_id` visibility gate").
+
+| Chapter | Built zone 1 / 2 / 3 (log) | What zone 2 or 3 is | Overlap with zone 1 |
+|---|---|---|---|
+| C1 | 1394 / 626 / 0 | the deck (144 tiles at 960 m), 9 `fvol`, the `cloudparent` cards (`g0/l2586`, `g27816/l2586`), the zone-2 dome | none; zone 1 is the whole ground world |
+| C1B, C2, C3 | 1831, 519, 1186 / 0 / 0 | nothing | not applicable |
+| C1C | 144 / 1056 / 0 | the deck, 21 `fvol`, the cloud cards; zone 1 is 144 flat tiles at sea level | none |
+| C2B | 145 / 1198 / 0 | the deck and the cloud cards (its `fvol` are `zone_id -1`); zone 1 is 145 flat tiles at sea level | none |
+| C4 | 456 / 1721 / 0 | 14 mountain-top terrain pieces cut at the 1,050 m deck plane (`g2052`-`g2057`, `g2061`-`g2065`, `g2607`-`g2609`, tops to 1,490 m at `g2064`), the `bhf` fortress (247 meshes, 1,125 to 1,365 m) and its plugs, the `rabaset1` base (`racmplx`, `rabdr`), the deck, 9 `fvol` and the cloud cards | none; 3,057 zone-2/zone-1 pairs share XZ but meet only along a plane within 1 m |
+| C5 | 958 / 0 / 134 | 120 street pieces and 14 lamp posts inside the fog strips (0 to 44 m), the `zone3` dome | **yes**: 35 pairs past half the smaller box, e.g. `g4551` on `g4699` and `g4417` on `g4621`, and 14 share a `model_index` with a zone-1 mesh |
+
+No deck chapter tags an alternate of the same object per band zone, so opening zones 1 and 2 draws nothing twice. C5's zone 3 is the inside look of its fog strips against the zone-1 outside look, so it stays gated by the held state.
+
+**Landed.** `ZoneGate.HeldCullMask(mask, state)` draws zones 1 and 2 both and zone 3 only in state 3; `WeatherRig.Tick` uses it while `HoldZone` stands. The deck stays hidden (`HideDeck`) and the dome gate still shows the upper dome. The fog volumes' body is on the zone-1 layer, which the held mask keeps. Releasing the hold needs no new code: the next `Tick` re-reads the state and the plain `CullMask` narrows the band to it.
+
+**Verified.** The orchestrator viewed the C4 in-layer pair: before, the ground ends in a flat line at the deck plane; after, the massif rises through the cloud. Units, the suite and the sweep are in the commit message; the full battery runs in E42.
+
+**Approach.** Census the zone-gated meshes per chapter by world AABB and name, open the band's two zones under the hold, keep zone 3 on the state, extend the live-toggle suite.
+
+**Verify.** Unit `TheHeldMaskDrawsBothBandZonesAndKeepsTheVolumeZoneGated`. `graphics-volumetric-clouds-gi` ticks the weather with the camera 500 m under and over C1C's band at each word: on, the band is zones 1 and 2 and the state stays held; off, the first tick reads state 1, the second state 2, and the band is zone 2 alone. C4 probes at `--volumetric-clouds=half`, before and after. Under the band (`--pos=-4600,900,-1700 --direction=0,0.18,-0.98`) the peaks sit inside the cloud base, so only the draw count shows them. Inside the layer (`--pos=-4600,1150,-5300 --direction=0,0.12,1`) the before shot ends at a flat line on the deck plane, and the after shot shows the silhouettes. The under-band pose with the clouds off matches a no-flag probe. The 8-chapter `--freecam --graphics=enhanced --volumetric-clouds=half` sweep logs zero shader errors.
 
 # Wave E, tuning and landing
 
