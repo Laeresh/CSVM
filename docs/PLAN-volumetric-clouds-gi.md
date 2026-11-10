@@ -102,8 +102,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Two Enhanced-only video options: Volumetric Clouds and Global Illumination
 12. ☑ Both options switch live in flight
 13. ☑ The cloud lab and the lighting lab toggle the options live
-14. ☐ `clouds` and `gi` lighting layers in `lighting.json`, edited by the lighting lab
-15. ☐ The prototype's live sliders become saved tune fields
+14. ☑ `clouds` and `gi` lighting layers in `lighting.json`, edited by the lighting lab
+15. ☑ The prototype's live sliders become saved tune fields
 
 ### Wave C, remove the prototype scaffolding
 
@@ -267,7 +267,13 @@ only and does not save the video option (Decision 10).
 **⚠ Traps.** After a toggle, the lighting lab must re-read which layer is active, or a save writes the
 wrong layer.
 
-## B14 ☐ `clouds` and `gi` lighting layers in `lighting.json`, edited by the lighting lab
+## B14 ☑ `clouds` and `gi` lighting layers in `lighting.json`, edited by the lighting lab
+
+**Landed.** Any zone block may carry sparse `clouds` and `gi` layers, resolved chapter then mission over the base tune while each option's word stands on, `gi` after `clouds` (`LightingTable.ActiveLayers`, `For`), and `WeatherRig.ReapplyZone` drops its cached tunes so a live toggle takes the right layers. The lighting lab names the layer it edits under its title, re-reads it when a box flips, the panel opens or a Save starts (dropping unsaved edits made over the other layer), and `WithZone` writes into that layer only what differs from the tune beneath it, keeping the base fields and the other layer in place.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.**
 - **The data:** each chapter, mission and zone block in `lighting.json` may carry a `clouds` block and a `gi` block. Each applies over that zone's tune only while its option is on.
@@ -296,7 +302,13 @@ A live check that saving in the lab with GI on leaves the base zone block unchan
 **⚠ Traps.** `WeatherRig.WriteColorAmbient` multiplies the ambient by `ProtoGi.AmbientFloor` while SDFGI
 stands (`ProtoGi.SkyLightLive`). The floor becomes a `gi` field, not a second multiplier on top of it.
 
-## B15 ☐ The prototype's live sliders become saved tune fields
+## B15 ☑ The prototype's live sliders become saved tune fields
+
+**Landed.** The cloud tune gains `head_taper`, `deck_sun` and `deck_ambient`, saved by the cloud lab and read by the volumetric clouds from `CloudShadow.Live`. `ZoneLighting` gains `shadow_strength` (base), `god_rays`, `ambient_floor` and `sdfgi_energy`, applied on every zone apply in `WeatherRig`, so `VolumetricClouds.LabSlider` and the unsaved statics are gone and the defaults reproduce the prototype's values.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The prototype's live-only sliders save, per chapter:
 - the cloud lab's head taper, deck sun taken and deck ambient taken;

@@ -345,17 +345,22 @@ public sealed class WeatherRig
     /// <summary>Gets the fvol volumes <see cref="SetFogVolumes"/> handed in, empty until then.</summary>
     public IReadOnlyList<FogVolumeBox> FogVolumes => _fogVolumes;
 
-    /// <summary>Gets or sets how dark terrain and object shadows fall, 1 fully shaded and 0 none: the
-    /// bake's share (csky_terrain_shadow_strength) and the sun's shadow-map opacity. The lighting lab's slider.</summary>
+    /// <summary>Gets how dark terrain and object shadows fall, 1 fully shaded and 0 none: the bake's share
+    /// (csky_terrain_shadow_strength) and the sun's shadow-map opacity. The zone apply sets it from
+    /// <see cref="ZoneLighting.ShadowStrength"/>.</summary>
     public float ShadowStrength
     {
         get => _sun.ShadowOpacity;
-        set
+        private set
         {
             _sun.ShadowOpacity = value;
             Effects.TerrainShadow.Strength = value;
         }
     }
+
+    /// <summary>Gets the volumetric clouds' light shaft intensity, the zone tune's
+    /// <see cref="ZoneLighting.GodRays"/> as the last zone apply resolved it.</summary>
+    public float GodRays { get; private set; } = 1f;
 
     /// <summary>Gets or sets whether every rig's deck copy is held hidden whatever the zone gate says.
     /// <see cref="VolumetricClouds"/> sets it while it draws in the deck's place.</summary>
@@ -675,13 +680,17 @@ public sealed class WeatherRig
     public void UnregisterExtraLighting(DirectionalLight3D sun)
         => _extraLighting.RemoveAll(e => ReferenceEquals(e.Sun, sun));
 
-    /// <summary>The tune <paramref name="zone"/> lights with under Enhanced, the lab's edit before the file's.</summary>
+    /// <summary>The tune <paramref name="zone"/> lights with under Enhanced, the lab's edit before the file's.
+    /// The file's takes the <c>clouds</c> and <c>gi</c> layers the two options' words stand on for.</summary>
     public ZoneLighting LightingFor(string zone)
     {
         if (_labLighting.TryGetValue(zone, out var edit))
             return edit;
         if (!_tuned.TryGetValue(zone, out var tune))
-            _tuned[zone] = tune = Lighting.For(_spec.Chapter, _spec.Mission, zone);
+        {
+            var layers = LightingTable.ActiveLayers(VolumetricCloudsSetting.Enabled, GlobalIlluminationSetting.Enabled);
+            _tuned[zone] = tune = Lighting.For(_spec.Chapter, _spec.Mission, zone, layers);
+        }
         return tune;
     }
 
@@ -767,6 +776,8 @@ public sealed class WeatherRig
     /// written yet has nothing to redo.</summary>
     public void ReapplyZone()
     {
+        // An option's live toggle ends here, and its word moves which layers the file's tune takes.
+        _tuned.Clear();
         if (_appliedZone is { } fog)
             ApplyZone(fog);
         Resolve(_baseFog);
@@ -1133,9 +1144,7 @@ public sealed class WeatherRig
             return;
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
-        // The GI prototype's SDFGI brings the sky light itself, so the flat fill steps aside down to a
-        // floor. A cave the sky cannot reach keeps that share of the zone's fill instead of going black.
-        env.AmbientLightEnergy = Effects.GlobalIllumination.SkyLightLive ? ambientEnergy * Effects.GlobalIllumination.AmbientFloor : ambientEnergy;
+        env.AmbientLightEnergy = ambientEnergy;
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class
@@ -1732,6 +1741,11 @@ public sealed class WeatherRig
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),
             Scaled(fog.SunAmbient, fog.SunColorAmbient));
+        // Both modes, so a switch to Original puts the untuned 1 back; an untouched strength writes nothing.
+        var tune = Tuning(fog);
+        if (ShadowStrength != tune.ShadowStrength || Effects.TerrainShadow.Strength != tune.ShadowStrength)
+            ShadowStrength = tune.ShadowStrength;
+        GodRays = tune.GodRays;
         if (GraphicsMode.Enhanced)
             ApplyEnhancedLighting(fog);
         else
@@ -1753,6 +1767,15 @@ public sealed class WeatherRig
             _sun.DirectionalShadowFadeStart = tune.FadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
+        // SDFGI brings the sky light itself, so the flat fill steps aside down to the tune's floor.
+        if (Effects.GlobalIllumination.SkyLightLive)
+            ambientEnergy *= tune.AmbientFloor;
+        Effects.GlobalIllumination.Energy = tune.SdfgiEnergy;
+        foreach (var gi in _extraLighting.Select(e => e.Env).Prepend(_env))
+        {
+            if (gi is { SdfgiEnabled: true })
+                gi.SdfgiEnergy = tune.SdfgiEnergy;
+        }
         float sunSpecular = EnhancedSunSpecular(fog);
         var sunColor = fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB);
         var ambientColor = fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB);

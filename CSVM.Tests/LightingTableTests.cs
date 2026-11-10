@@ -36,6 +36,8 @@ public sealed class LightingTableTests
         Assert.Equal((1.25f, 1.1f, 1.15f), (d.GradeAgxContrast, d.GradeContrast, d.GradeSaturation));
         Assert.Equal((1f, 1f, 1f), (d.CloudR, d.CloudG, d.CloudB));
         Assert.Equal((1f, 1f, 1f), (d.SkyR, d.SkyG, d.SkyB));
+        Assert.Equal((1f, 1f, 0f, 0.5f), (d.ShadowStrength, d.GodRays, d.AmbientFloor, d.SdfgiEnergy));
+        Assert.Equal(d, LightingTable.Parse("{}").For("C1", "M01", "zone1", LightingTable.Layers));
         Assert.False(d.TurnsSun);
         Assert.False(d.TunesEnvironment);
         Assert.True((d with { GradeSaturation = 1.3f }).TunesEnvironment);
@@ -131,6 +133,83 @@ public sealed class LightingTableTests
         string off = LightingTable.WithZone(on, "C1", "M01", "zone1", ZoneLighting.Default, none, night: false);
         Assert.False(LightingTable.Parse(off).Night("C1", "M01"));
         Assert.Empty(Keys((JsonObject)JsonNode.Parse(off)!));
+    }
+
+    [Fact]
+    public void ALayerAppliesOnlyWhileItsOptionStandsAndGiLandsAfterClouds()
+    {
+        var table = LightingTable.Parse("""
+            { "C1": { "ZONE1": { "exposure": 1.2, "clouds": { "sun_energy": 0.5, "god_rays": 2 },
+                                 "gi": { "sun_energy": 0.4, "sdfgi_energy": 0.8 } },
+                      "M01": { "zone1": { "clouds": { "sun_energy": 0.6 }, "gi": { "ambient_floor": 0.3 } } } } }
+            """);
+        Assert.Empty(table.Warnings);
+        Assert.Equal(new[] { "exposure" }, table.ChapterFields("C1", "zone1").Keys);
+        Assert.Equal(new[] { "sun_energy", "god_rays" }, table.ChapterFields("C1", "zone1", LightingTable.CloudsLayer).Keys);
+        Assert.Equal(new[] { "ambient_floor" }, table.MissionFields("C1", "M01", "zone1", LightingTable.GiLayer).Keys);
+        Assert.Empty(LightingTable.ActiveLayers(false, false));
+        Assert.Equal(new[] { "clouds", "gi" }, LightingTable.ActiveLayers(true, true));
+
+        var off = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(false, false));
+        Assert.Equal((1.2f, 1.07f, 1f, 0.5f), (off.Exposure, off.SunEnergy, off.GodRays, off.SdfgiEnergy));
+        // The mission's clouds block over the chapter's, both over the base.
+        var clouds = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(true, false));
+        Assert.Equal((1.2f, 0.6f, 2f, 0.5f), (clouds.Exposure, clouds.SunEnergy, clouds.GodRays, clouds.SdfgiEnergy));
+        Assert.Equal(0.5f, table.For("C1", "IA1", "zone1", LightingTable.ActiveLayers(true, false)).SunEnergy);
+        var gi = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(false, true));
+        Assert.Equal((0.4f, 1f, 0.8f, 0.3f), (gi.SunEnergy, gi.GodRays, gi.SdfgiEnergy, gi.AmbientFloor));
+        // Both on: gi applies after clouds, so its sun wins and the clouds' god rays stand.
+        var both = table.For("C1", "M01", "zone1", LightingTable.ActiveLayers(true, true));
+        Assert.Equal((0.4f, 2f, 0.8f, 0.3f), (both.SunEnergy, both.GodRays, both.SdfgiEnergy, both.AmbientFloor));
+    }
+
+    [Fact]
+    public void AMalformedLayerIsAWarningAndTunesNothing()
+    {
+        var table = LightingTable.Parse("""
+            { "C1": { "ZONE1": { "clouds": 3, "gi": { "bogus": 1, "gi": { "exposure": 2 }, "god_rays": "x" } } } }
+            """);
+        Assert.Equal(4, table.Warnings.Count);
+        Assert.Equal(ZoneLighting.Default, table.For("C1", "M01", "zone1", LightingTable.Layers));
+    }
+
+    [Fact]
+    public void ASaveWritesIntoALayerAndKeepsEveryOtherKeyInPlace()
+    {
+        const string existing = """
+            { "_about": "prose",
+              "C1": { "ZONE1": { "exposure": 1.2, "gi": { "sdfgi_energy": 0.8 } }, "ZONE2": { "white": 5 } },
+              "C5": { "M02": { "night": true } } }
+            """;
+        var under = ZoneLighting.Default with { Exposure = 1.2f };
+        var chapter = under with { SunEnergy = 0.5f, GodRays = 2f };
+        var mission = new Dictionary<string, float> { ["sun_energy"] = 0.6f, ["god_rays"] = 2f };
+        string text = LightingTable.WithZone(existing, "C1", "M01", "zone1", chapter, mission, layer: LightingTable.CloudsLayer, under: under);
+        var root = (JsonObject)JsonNode.Parse(text)!;
+        Assert.Equal(new[] { "_about", "C1", "C5" }, Keys(root));
+        var c1 = (JsonObject)root["C1"]!;
+        Assert.Equal(new[] { "ZONE1", "ZONE2", "M01" }, Keys(c1));
+        // The base block's exposure and its gi layer stay; the clouds layer holds only what differs from under.
+        Assert.Equal(new[] { "exposure", "gi", "clouds" }, Keys((JsonObject)c1["ZONE1"]!));
+        Assert.Equal(new[] { "sun_energy", "god_rays" }, Keys((JsonObject)c1["ZONE1"]!["clouds"]!));
+        Assert.Equal(new[] { "sun_energy" }, Keys((JsonObject)c1["M01"]!["ZONE1"]!["clouds"]!));
+
+        var read = LightingTable.Parse(text);
+        Assert.Empty(read.Warnings);
+        Assert.Equal(under, read.For("C1", "M01", "zone1"));
+        Assert.Equal((0.6f, 2f, 0.8f), (read.For("C1", "M01", "zone1", LightingTable.Layers).SunEnergy,
+            read.For("C1", "M01", "zone1", LightingTable.Layers).GodRays, read.For("C1", "M01", "zone1", LightingTable.Layers).SdfgiEnergy));
+
+        // A base save keeps both layers in their order after the fields.
+        string based = LightingTable.WithZone(text, "C1", null, "zone1", ZoneLighting.Default with { White = 7f }, new Dictionary<string, float>());
+        Assert.Equal(new[] { "white", "gi", "clouds" }, Keys((JsonObject)JsonNode.Parse(based)!["C1"]!["ZONE1"]!));
+        Assert.Equal(0.8f, LightingTable.Parse(based).For("C1", "IA1", "zone1", LightingTable.Layers).SdfgiEnergy);
+
+        // A layer saved equal to what it sits over drops out, and a mission left empty with it.
+        string cleared = LightingTable.WithZone(text, "C1", "M01", "zone1", under, new Dictionary<string, float>(), layer: LightingTable.CloudsLayer, under: under);
+        var c1Cleared = (JsonObject)JsonNode.Parse(cleared)!["C1"]!;
+        Assert.Equal(new[] { "ZONE1", "ZONE2" }, Keys(c1Cleared));
+        Assert.Equal(new[] { "exposure", "gi" }, Keys((JsonObject)c1Cleared["ZONE1"]!));
     }
 
     [Fact]

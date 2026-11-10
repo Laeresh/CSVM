@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -14,17 +15,27 @@ namespace CSVM.Session.World;
 /// mission, then a <see cref="ZoneLighting"/> block per weather zone (<c>ZONE1</c> to <c>ZONE3</c>).
 /// A block holds only the fields that differ from what it sits over. A chapter block sits over the
 /// defaults, and a mission block over its chapter's, so a later chapter edit still reaches the mission.
-/// A mission's <c>night</c> flag marks a moonlit mission (CONTEXT.md). Keys beginning with <c>_</c>
-/// are prose, and a malformed entry is a warning, never fatal. The lighting lab writes through
-/// <see cref="WithZone"/>, keeping every other key and its order.
+/// A zone block's <see cref="Layers"/> are sparse blocks applied over the resolved zone while their
+/// option stands on, each chapter then mission. A mission's <c>night</c> flag marks a moonlit
+/// mission (CONTEXT.md), <c>_</c> keys are prose, and a malformed entry is a warning, never fatal.
+/// The lighting lab writes through <see cref="WithZone"/>, keeping every other key and its order.
 /// </summary>
 public sealed class LightingTable
 {
     /// <summary>The committed file, read through Godot in an exported build, where it lives in the pck.</summary>
     public const string DefaultPath = "res://data/lighting.json";
 
+    /// <summary>The layer that applies while Volumetric Clouds stands on.</summary>
+    public const string CloudsLayer = "clouds";
+
+    /// <summary>The layer that applies while Global Illumination stands on.</summary>
+    public const string GiLayer = "gi";
+
     /// <summary>The table with nothing in it, what a missing or unreadable file gives.</summary>
     public static readonly LightingTable None = new();
+
+    /// <summary>Every layer in the order they apply: <c>gi</c> after <c>clouds</c> (PLAN-volumetric-clouds-gi Decision 11).</summary>
+    public static readonly IReadOnlyList<string> Layers = new[] { CloudsLayer, GiLayer };
 
     private const string NightKey = "night";
 
@@ -61,6 +72,10 @@ public sealed class LightingTable
     /// <summary>Whether a key names a weather zone (<c>zone1</c> to <c>zone9</c>, any case).</summary>
     public static bool IsZoneKey(string key) =>
         key.Length == 5 && key.StartsWith("zone", StringComparison.OrdinalIgnoreCase) && key[4] is >= '1' and <= '9';
+
+    /// <summary>The layers that apply with the clouds and GI on or off, in their order.</summary>
+    public static IReadOnlyList<string> ActiveLayers(bool clouds, bool gi) =>
+        clouds && gi ? Layers : clouds ? new[] { CloudsLayer } : gi ? new[] { GiLayer } : Array.Empty<string>();
 
     /// <summary>Reads the shipped table, logging each warning. A missing file tunes nothing.</summary>
     public static LightingTable Load()
@@ -113,7 +128,7 @@ public sealed class LightingTable
                 if (key.StartsWith('_'))
                     continue;
                 if (IsZoneKey(key))
-                    entry.Zones[key] = ReadBlock($"{chapter}/{key}", child, table._warnings);
+                    ReadZone($"{chapter}/{key}", key, child, entry.Zones, table._warnings);
                 else if (child is JsonObject mission)
                     entry.Missions[key] = ReadMission($"{chapter}/{key}", mission, table._warnings);
                 else
@@ -125,14 +140,15 @@ public sealed class LightingTable
         return table;
     }
 
-    /// <summary>The file's text with one zone's chapter block and mission block written. The chapter
-    /// block holds <paramref name="chapterLighting"/>'s differences from the defaults. The mission
-    /// block holds the <paramref name="missionFields"/> that differ from the chapter's. An empty block
-    /// is dropped, and so is a mission left with no zone and no night flag. A non-null
-    /// <paramref name="night"/> sets the mission's flag, false removing it; null leaves it as the file has it.
-    /// Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
+    /// <summary>The file's text with one zone's chapter and mission blocks, or their <paramref name="layer"/>,
+    /// written. The chapter block holds <paramref name="chapterLighting"/>'s differences from <paramref name="under"/>
+    /// (the defaults when null), the mission block the <paramref name="missionFields"/> that differ from it.
+    /// An empty block is dropped, and so is a mission left with no zone and no night flag. A non-null
+    /// <paramref name="night"/> sets the mission's flag (false removes it). Throws
+    /// <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
     public static string WithZone(string? existing, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null)
+        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null,
+        string? layer = null, ZoneLighting? under = null)
     {
         JsonObject root;
         if (string.IsNullOrWhiteSpace(existing))
@@ -154,7 +170,7 @@ public sealed class LightingTable
 
         string zoneKey = zone.ToUpperInvariant();
         var chapterNode = Child(root, chapter);
-        Put(chapterNode, zoneKey, Block(chapterLighting.Differences(ZoneLighting.Default)));
+        PutFields(chapterNode, zoneKey, layer, chapterLighting.Differences(under ?? ZoneLighting.Default));
         if (mission != null)
         {
             var missionNode = Child(chapterNode, mission);
@@ -163,7 +179,7 @@ public sealed class LightingTable
             else if (night == false)
                 Remove(missionNode, NightKey);
             var over = chapterLighting.Over(missionFields).Differences(chapterLighting);
-            Put(missionNode, zoneKey, Block(over));
+            PutFields(missionNode, zoneKey, layer, over);
             if (missionNode.Count == 0)
                 Remove(chapterNode, mission);
         }
@@ -175,10 +191,11 @@ public sealed class LightingTable
     /// <summary>Writes one zone's blocks into the file at <paramref name="diskPath"/>
     /// (<see cref="WithZone"/>), creating it when absent.</summary>
     public static void Save(string diskPath, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null)
+        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null,
+        string? layer = null, ZoneLighting? under = null)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithZone(existing, chapter, mission, zone, chapterLighting, missionFields, night),
+        File.WriteAllText(diskPath, WithZone(existing, chapter, mission, zone, chapterLighting, missionFields, night, layer, under),
             new UTF8Encoding(false));
     }
 
@@ -191,23 +208,40 @@ public sealed class LightingTable
     public bool Night(string chapter, string mission) =>
         _chapters.TryGetValue(chapter, out var c) && c.Missions.TryGetValue(mission, out var m) && m.Night;
 
-    /// <summary>A chapter zone block's fields as the file holds them.</summary>
-    public IReadOnlyDictionary<string, float> ChapterFields(string chapter, string zone) =>
-        _chapters.TryGetValue(chapter, out var c) && c.Zones.TryGetValue(zone, out var z) ? z : NoFields;
+    /// <summary>A chapter zone block's fields, or its <paramref name="layer"/>'s, as the file holds them.</summary>
+    public IReadOnlyDictionary<string, float> ChapterFields(string chapter, string zone, string? layer = null) =>
+        _chapters.TryGetValue(chapter, out var c) && c.Zones.TryGetValue(LayerKey(zone, layer), out var z) ? z : NoFields;
 
-    /// <summary>A mission zone block's fields as the file holds them, only what differs from the chapter's.</summary>
-    public IReadOnlyDictionary<string, float> MissionFields(string chapter, string mission, string zone) =>
+    /// <summary>A mission zone block's fields, or its <paramref name="layer"/>'s, as the file holds them.</summary>
+    public IReadOnlyDictionary<string, float> MissionFields(string chapter, string mission, string zone, string? layer = null) =>
         _chapters.TryGetValue(chapter, out var c) && c.Missions.TryGetValue(mission, out var m)
-        && m.Zones.TryGetValue(zone, out var z) ? z : NoFields;
+        && m.Zones.TryGetValue(LayerKey(zone, layer), out var z) ? z : NoFields;
 
     /// <summary>The chapter's tune for one zone, over the defaults.</summary>
     public ZoneLighting ChapterLighting(string chapter, string zone) => ZoneLighting.Default.Over(ChapterFields(chapter, zone));
 
-    /// <summary>The tune one mission's zone lights with: its block over its chapter's over the defaults.</summary>
-    public ZoneLighting For(string chapter, string mission, string zone) =>
-        ChapterLighting(chapter, zone).Over(MissionFields(chapter, mission, zone));
+    /// <summary>The tune one mission's zone lights with: its block over its chapter's over the defaults.
+    /// Then each of <paramref name="layers"/> in turn, its chapter block and then its mission block.</summary>
+    public ZoneLighting For(string chapter, string mission, string zone, IEnumerable<string>? layers = null)
+    {
+        var tune = ChapterLighting(chapter, zone).Over(MissionFields(chapter, mission, zone));
+        foreach (string layer in layers ?? Array.Empty<string>())
+            tune = tune.Over(ChapterFields(chapter, zone, layer)).Over(MissionFields(chapter, mission, zone, layer));
+        return tune;
+    }
 
-    private static Dictionary<string, float> ReadBlock(string where, JsonNode? node, List<string> warnings)
+    // A zone's own key, or the key its layer is held under.
+    private static string LayerKey(string zone, string? layer) => layer == null ? zone : $"{zone}/{layer}";
+
+    // A zone block and each layer inside it, the layers held under their own keys.
+    private static void ReadZone(string where, string zone, JsonNode? node,
+        Dictionary<string, Dictionary<string, float>> zones, List<string> warnings) =>
+        zones[zone] = ReadBlock(where, node, warnings,
+            (layer, child) => zones[LayerKey(zone, layer)] = ReadBlock($"{where}/{layer}", child, warnings, null));
+
+    // One block's fields. A layer key is handed to `layer` where one is allowed, else it reads as an unknown field.
+    private static Dictionary<string, float> ReadBlock(string where, JsonNode? node, List<string> warnings,
+        Action<string, JsonNode?>? layer)
     {
         var fields = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         if (node is not JsonObject block)
@@ -219,6 +253,11 @@ public sealed class LightingTable
         {
             if (key.StartsWith('_'))
                 continue;
+            if (layer != null && Layers.FirstOrDefault(l => l.Equals(key, StringComparison.OrdinalIgnoreCase)) is { } named)
+            {
+                layer(named, value);
+                continue;
+            }
             if (ZoneLighting.Find(key) is not { } field)
             {
                 warnings.Add($"{where}: '{key}' is not a lighting field, ignored");
@@ -254,7 +293,7 @@ public sealed class LightingTable
             }
             else if (IsZoneKey(key))
             {
-                mission.Zones[key] = ReadBlock($"{where}/{key}", child, warnings);
+                ReadZone($"{where}/{key}", key, child, mission.Zones, warnings);
             }
             else
             {
@@ -263,18 +302,6 @@ public sealed class LightingTable
         }
 
         return mission;
-    }
-
-    private static JsonObject Block(Dictionary<string, float> fields)
-    {
-        var block = new JsonObject();
-        foreach (var f in ZoneLighting.Fields)
-        {
-            if (fields.TryGetValue(f.Key, out float v))
-                block[f.Key] = JsonValue.Create(ZoneLighting.Field.Rounded(v));
-        }
-
-        return block;
     }
 
     // The object under the key matched in any case, created at the end when absent.
@@ -286,17 +313,29 @@ public sealed class LightingTable
                 return found;
         }
         var made = new JsonObject();
-        parent[key] = made;
+        parent[Key(parent, key)] = made;
         return made;
     }
 
-    // Sets a block in its place, or drops the key when the block is empty.
-    private static void Put(JsonObject parent, string key, JsonObject block)
+    // One zone's fields written into its block, or into the block's layer. A block left empty is dropped.
+    private static void PutFields(JsonObject parent, string zoneKey, string? layer, Dictionary<string, float> fields)
     {
-        if (block.Count == 0)
-            Remove(parent, key);
-        else
-            parent[Key(parent, key)] = block;
+        var zone = Child(parent, zoneKey);
+        var block = layer == null ? zone : Child(zone, layer);
+        var others = block.Where(kv => ZoneLighting.Find(kv.Key) == null).ToList();
+        // The fields go first in their own order, then every other key (a layer, a note) in its order.
+        block.Clear();
+        foreach (var f in ZoneLighting.Fields)
+        {
+            if (fields.TryGetValue(f.Key, out float v))
+                block[f.Key] = JsonValue.Create(ZoneLighting.Field.Rounded(v));
+        }
+        foreach (var (key, node) in others)
+            block[key] = node;
+        if (block.Count == 0 && layer != null)
+            Remove(zone, layer);
+        if (zone.Count == 0)
+            Remove(parent, zoneKey);
     }
 
     // The key as the object spells it in any case, else as given.

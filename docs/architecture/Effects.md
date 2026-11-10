@@ -81,8 +81,9 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 ## src/Effects/ZoneLighting.cs
 One weather zone's Enhanced lighting tune: sun and ambient energy multipliers in place of the
 conversion factors, sun, ambient and sky tints over the decoded colours, a bearing offset, the AgX
-exposure and white, the Post-processing grade, a cloud tint, and the shadow softness, distance, biases, splits and fade start. The defaults
-are the untuned Enhanced look, which `Launch/EnhancedLook.cs` and `Session/World/WeatherRig.cs` read.
+exposure and white, the Post-processing grade, a cloud tint, and the shadow softness, distance, biases, splits, fade start and strength.
+Three fields read only under an option: `god_rays` (Volumetric Clouds), `ambient_floor` and `sdfgi_energy` (Global Illumination), saved in the matching `clouds` or `gi` layer of `LightingTable.cs`.
+The defaults are the untuned Enhanced look, which `Launch/EnhancedLook.cs` and `Session/World/WeatherRig.cs` read.
 Its field table drives the lighting lab's sliders and the file's keys. `LightingDebug` beside it is
 the `--debug-lighting` grammar, below `Spec` so `SessionSpec` can filter it. `LightingTableTests`.
 Read `Session/World/LightingTable.cs` next.
@@ -162,7 +163,7 @@ Only shaders carrying the terrain shadow's `light()` read it, so `--terrain-shad
 
 ## src/Effects/CloudShadowPattern.cs
 The cloud shadows' tunes and drift, with no engine object touched: the pattern's cell, coverage, darkness, softness and
-ambient share (the noise itself is only in the shader), and the offset that drifts it (`Offset`, wrapped every `Cells`
+ambient share (the noise itself is only in the shader), the volumetric clouds' head taper and deck sun and ambient shares, and the offset that drifts it (`Offset`, wrapped every `Cells`
 cells of the tuned size). `ChooseDrift` takes the below-deck ceiling's scroll (`CeilingDrift`, each triangle's UV-to-X/Z
 map, its top put at the band centre), else the authored wind's sideways part, else `FixedDrift`. Every tune is TUNE. A
 session draws one `Tune`: the constants, or the chapter's entry from `CloudShadowChapters.cs`, whose speed and heading
@@ -176,14 +177,14 @@ Godot's real-time global illumination over the Enhanced world, behind the Global
 `Launch/EnhancedLook.cs`'s `ApplyEnvironment` (the launch and a graphics switch) and from
 `GameSession.FollowGlobalIllumination` (a session build, an Options apply and the lighting lab's box): SDFGI with eight cascades at a 1.5 m finest cell and half vertical
 scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While SDFGI stands
-(`SkyLightLive`) the zone apply keeps only `AmbientFloor` of the flat ambient, since the cascades carry the sky light;
-`Energy` and `AmbientFloor` are the lighting lab's live sliders. Off, or on the faithful path, every field takes a fresh
+(`SkyLightLive`) the zone apply keeps only the tune's `ambient_floor` share of the flat ambient, since the cascades carry the
+sky light, and writes the tune's `sdfgi_energy` into `Energy`, which a later `Apply` takes too. Off, or on the faithful path, every field takes a fresh
 Environment's value. Read `Session/World/VolumetricClouds.cs` next, the cloud option it stands beside.
 
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
-`BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed` and
-`heading`. A missing chapter or field takes the constants; a bad field is a warning, a value out of range is held inside it.
+`BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed`,
+`heading`, and the volumetric clouds' `head_taper`, `deck_sun` and `deck_ambient`. A missing chapter or field takes the constants; a bad field is a warning, a value out of range is held inside it.
 A chapter whose sky is clear holds darkness and ambient 0, which draws no shadow.
 `WithEntry` writes one chapter's entry for the cloud lab and keeps every other key in place, and refuses a file it cannot
 read. `SourceTreePath` is null in an exported build. `CloudShadowChaptersTests`.

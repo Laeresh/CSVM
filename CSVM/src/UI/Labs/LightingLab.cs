@@ -14,11 +14,11 @@ namespace CSVM.UI.Labs;
 /// <summary>
 /// The lighting lab (Shift+F5), built in <c>--freecam</c> alone, its GI box unsaved. Its right-edge panel holds a slider
 /// per <see cref="ZoneLighting"/> field for the camera's zone or one the dropdown holds
-/// (<see cref="WeatherRig.ForceZone"/>). An edit reaches the session
-/// sun, the Environment and the cockpit and spyglass suns through the weather rig. Save writes this
-/// zone's chapter block or the mission's sparse block into <c>lighting.json</c> from the source tree,
-/// and is off in an exported build. A field the mission overrides is marked, with a reset to the
-/// chapter's value. Night lights the mission as moonlit, and a parked plane turns through the sun on its sliders.
+/// (<see cref="WeatherRig.ForceZone"/>). An edit reaches the session sun, the Environment and the
+/// cockpit and spyglass suns through the weather rig. Save writes the edited layer's chapter or
+/// mission block into <c>lighting.json</c> from the source tree, and is off in an exported build.
+/// That layer is <c>gi</c> while GI stands on, else <c>clouds</c> while the clouds do, else the base.
+/// A mission override is marked, with a reset to the chapter's value.
 /// </summary>
 public sealed partial class LightingLab : Node
 {
@@ -48,7 +48,10 @@ public sealed partial class LightingLab : Node
     private string _plane;
     private string? _pick;
     private string _rowsZone = "";
+    // The tune layers the file's tune takes now; the last is the one the sliders edit and Save writes.
+    private IReadOnlyList<string> _layers = LayersNow();
     private CanvasLayer? _layer;
+    private Label? _layerLabel;
     private Label? _status;
     private OptionButton? _zones;
     private CheckButton? _off;
@@ -105,14 +108,24 @@ public sealed partial class LightingLab : Node
     /// <summary>The tune the shown zone lights with, as last applied or pending.</summary>
     public ZoneLighting Edited => EditOf(ShownZone);
 
-    /// <summary>The fields this mission overrides in the shown zone, the marked rows.</summary>
+    /// <summary>The fields this mission overrides in the shown zone's edited layer, the marked rows.</summary>
     public IReadOnlyCollection<string> Overrides => OverridesOf(ShownZone);
+
+    /// <summary>The layer the sliders edit and Save writes: <c>gi</c>, <c>clouds</c> or <c>base</c>.</summary>
+    public string EditedLayer => Layer ?? "base";
 
     /// <summary>The parked plane's holder, null until it first parks.</summary>
     public Node3D? ParkedPlane => _holder;
 
     /// <summary>The parked airframe's node name.</summary>
     public string Plane => _plane;
+
+    // The edited layer, null for the base block.
+    private string? Layer => _layers.Count > 0 ? _layers[^1] : null;
+
+    // Whether to keep processing: the panel is open, an edit is pending, or the rig wears live edits.
+    // A toggle from the cloud lab must drop those edits.
+    private bool Watching => _open || _pending >= 0f || _edits.Count > 0;
 
     public override void _Ready()
     {
@@ -159,6 +172,7 @@ public sealed partial class LightingLab : Node
 
     public override void _Process(double delta)
     {
+        FollowLayer();
         if (_pending >= 0f)
         {
             _pending -= (float)delta;
@@ -167,7 +181,7 @@ public sealed partial class LightingLab : Node
         }
         if (!_open)
         {
-            SetProcess(_pending >= 0f);
+            SetProcess(Watching);
             return;
         }
         _statusTimer += (float)delta;
@@ -198,13 +212,14 @@ public sealed partial class LightingLab : Node
         }
         _open = !_open;
         _layer!.Visible = _open;
-        SetProcess(_open || _pending >= 0f);
+        SetProcess(Watching);
         if (_open)
         {
+            FollowLayer();
             SyncRows();
             UpdateStatus();
         }
-        Log.Info("ui", $"lighting lab {(_open ? "open" : "closed")} {_chapter}/{_mission} {ShownZone} tune={Edited.Describe()}");
+        Log.Info("ui", $"lighting lab {(_open ? "open" : "closed")} {_chapter}/{_mission} {ShownZone} {EditedLayer} layer tune={Edited.Describe()}");
     }
 
     /// <summary>Holds the world in <paramref name="zone"/>, or with null follows the camera again.</summary>
@@ -276,10 +291,32 @@ public sealed partial class LightingLab : Node
         UpdateStatus();
     }
 
-    /// <summary>Writes the shown zone's chapter block: every field the mission does not override goes to
-    /// the chapter, and the overrides stay the mission's. Returns the path written, or null.</summary>
+    /// <summary>Re-reads which layer the options' words make the edited one. When it moved, every
+    /// unsaved edit is dropped, since it was made over the other layer and would save into the wrong one.</summary>
+    public void FollowLayer()
+    {
+        var now = LayersNow();
+        if (now.SequenceEqual(_layers))
+            return;
+        _layers = now;
+        bool dropped = _edits.Count > 0;
+        foreach (string zone in _edits.Keys)
+            _weather.SetLighting(zone, null);
+        _edits.Clear();
+        _overrides.Clear();
+        _note = $"editing the {EditedLayer} layer{(dropped ? ", unsaved edits dropped" : "")}";
+        if (_layerLabel != null)
+            _layerLabel.Text = LayerText();
+        SyncRows();
+        UpdateStatus();
+        Log.Info("ui", $"lighting lab: {_chapter}/{_mission} now edits the {EditedLayer} layer{(dropped ? ", unsaved edits dropped" : "")}");
+    }
+
+    /// <summary>Writes the shown zone's chapter block in the edited layer. Every field the mission does
+    /// not override goes to the chapter, and the overrides stay the mission's. Returns the path written, or null.</summary>
     public string? SaveToChapter()
     {
+        FollowLayer();
         string zone = ShownZone;
         var edit = Edited;
         var overrides = OverridesOf(zone);
@@ -292,10 +329,11 @@ public sealed partial class LightingLab : Node
         return Write(zone, chapter, "chapter");
     }
 
-    /// <summary>Writes the shown zone's mission block: every field that differs from the chapter's.
-    /// Returns the path written, or null.</summary>
+    /// <summary>Writes the edited layer's mission block for the shown zone: every field that differs from
+    /// the chapter's. Returns the path written, or null.</summary>
     public string? SaveToMission()
     {
+        FollowLayer();
         string zone = ShownZone;
         OverridesOf(zone).Clear();
         foreach (var key in Edited.Differences(ChapterSaved(zone)).Keys)
@@ -353,17 +391,33 @@ public sealed partial class LightingLab : Node
         return moved;
     }
 
+    // The layers the options' words make the file's tune take, the weather rig's own choice.
+    private static IReadOnlyList<string> LayersNow() =>
+        LightingTable.ActiveLayers(VolumetricCloudsSetting.Enabled, GlobalIlluminationSetting.Enabled);
+
     private ZoneLighting EditOf(string zone) =>
-        _edits.TryGetValue(zone, out var edit) ? edit : _weather.Lighting.For(_chapter, _mission, zone);
+        _edits.TryGetValue(zone, out var edit) ? edit : _weather.Lighting.For(_chapter, _mission, zone, _layers);
 
     private HashSet<string> OverridesOf(string zone)
     {
         if (!_overrides.TryGetValue(zone, out var set))
-            _overrides[zone] = set = new HashSet<string>(_weather.Lighting.MissionFields(_chapter, _mission, zone).Keys, StringComparer.OrdinalIgnoreCase);
+            _overrides[zone] = set = new HashSet<string>(_weather.Lighting.MissionFields(_chapter, _mission, zone, Layer).Keys, StringComparer.OrdinalIgnoreCase);
         return set;
     }
 
-    private ZoneLighting ChapterSaved(string zone) => _weather.Lighting.ChapterLighting(_chapter, zone);
+    // What the edited layer's chapter block sits over: the defaults for the base, else the mission's
+    // whole tune with the layers before it.
+    private ZoneLighting Under(string zone) =>
+        Layer == null ? ZoneLighting.Default : _weather.Lighting.For(_chapter, _mission, zone, _layers.Take(_layers.Count - 1));
+
+    private ZoneLighting ChapterSaved(string zone) => Under(zone).Over(_weather.Lighting.ChapterFields(_chapter, zone, Layer));
+
+    private string LayerText() => Layer switch
+    {
+        null => "Editing the base tune (Volumetric Clouds and GI off)",
+        LightingTable.GiLayer => "Editing the gi layer (applies while Global Illumination is on)",
+        _ => "Editing the clouds layer (applies while Volumetric Clouds is on)",
+    };
 
     private bool SavedNight() => _weather.Lighting.Night(_chapter, _mission);
 
@@ -384,6 +438,7 @@ public sealed partial class LightingLab : Node
     private void Commit()
     {
         _pending = -1f;
+        SetProcess(Watching);
         string zone = ShownZone;
         _weather.SetLighting(zone, _edits.TryGetValue(zone, out var edit) ? edit : null);
         SyncRows();
@@ -405,12 +460,12 @@ public sealed partial class LightingLab : Node
             mission[key] = ZoneLighting.Find(key)!.Get(edit);
         try
         {
-            LightingTable.Save(SavePath, _chapter, _mission, zone, chapter, mission, _weather.Moonlit);
+            LightingTable.Save(SavePath, _chapter, _mission, zone, chapter, mission, _weather.Moonlit, Layer, Under(zone));
             var table = LightingTable.Parse(File.ReadAllText(SavePath, Encoding.UTF8));
             _weather.ReloadLighting(table);
-            _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone).Keys, StringComparer.OrdinalIgnoreCase);
-            _note = $"saved {_chapter} {zone} to the {what}, {_overrides[zone].Count} mission override(s), to {SavePath}";
-            Log.Info("ui", $"lighting lab: saved {_chapter}/{_mission} {zone} to the {what}: chapter={table.ChapterLighting(_chapter, zone).Describe()} overrides=[{string.Join(",", _overrides[zone])}]");
+            _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone, Layer).Keys, StringComparer.OrdinalIgnoreCase);
+            _note = $"saved {_chapter} {zone} {EditedLayer} layer to the {what}, {_overrides[zone].Count} mission override(s), to {SavePath}";
+            Log.Info("ui", $"lighting lab: saved {_chapter}/{_mission} {zone} {EditedLayer} layer to the {what}: chapter={ChapterSaved(zone).Describe()} overrides=[{string.Join(",", _overrides[zone])}]");
             Commit();
             return SavePath;
         }
@@ -492,6 +547,8 @@ public sealed partial class LightingLab : Node
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 4);
         box.AddChild(new Label { Text = $"LIGHTING LAB  {_chapter}/{_mission}", Modulate = Amber });
+        _layerLabel = Small(LayerText(), Amber);
+        box.AddChild(_layerLabel);
 
         var top = new HBoxContainer();
         _zones = new OptionButton { FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -546,23 +603,10 @@ public sealed partial class LightingLab : Node
                     return;
                 setGi(on);
                 Log.Info("ui", $"lighting lab: global illumination {(on ? "on" : "off")} for this flight");
+                FollowLayer();
             };
             box.AddChild(_gi);
         }
-        box.AddChild(VolumetricClouds.LabSlider("Clouds: god ray intensity", 0f, 4f, () => VolumetricClouds.ShaftScale, v => VolumetricClouds.ShaftScale = v));
-        box.AddChild(VolumetricClouds.LabSlider("Terrain + object shadow strength", 0f, 1f, () => _weather.ShadowStrength, v => _weather.ShadowStrength = v));
-        box.AddChild(VolumetricClouds.LabSlider("GI: ambient floor under SDFGI", 0f, 1f, () => GlobalIllumination.AmbientFloor, v =>
-        {
-            GlobalIllumination.AmbientFloor = v;
-            if (GlobalIllumination.SkyLightLive)
-                _weather.ReapplyZone();
-        }));
-        box.AddChild(VolumetricClouds.LabSlider("GI: SDFGI energy", 0f, 2f, () => GlobalIllumination.Energy, v =>
-        {
-            GlobalIllumination.Energy = v;
-            if (GlobalIllumination.SkyLightLive && GetViewport()?.FindWorld3D()?.Environment is { } env)
-                env.SdfgiEnergy = v;
-        }));
 
         // Three buttons outgrow the column at the default font, so they wrap onto a second line.
         var buttons = new HFlowContainer();
@@ -725,7 +769,7 @@ public sealed partial class LightingLab : Node
         if (_status == null)
             return;
         string zone = _pick != null ? $"{ShownZone} held" : $"{ShownZone}, the camera's";
-        bool matches = Edited == _weather.Lighting.For(_chapter, _mission, ShownZone) && _weather.Moonlit == SavedNight();
+        bool matches = Edited == _weather.Lighting.For(_chapter, _mission, ShownZone, _layers) && _weather.Moonlit == SavedNight();
         string saved = matches ? "matches the saved tune" : "unsaved changes";
         string off = _weather.LightingOff ? " · tune OFF (untuned look)" : "";
         string night = _weather.NightApplied ? " · night" : "";

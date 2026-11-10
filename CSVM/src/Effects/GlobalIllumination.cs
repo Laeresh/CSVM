@@ -20,16 +20,13 @@ internal static class GlobalIllumination
     private const float SsilRadiusM = 20f;
     private const float SsilIntensity = 1.0f;
 
-    /// <summary>Gets or sets SDFGI's energy. Half by default: a sky at full energy over-fills a flat
-    /// world's ground. The lighting lab's slider.</summary>
-    public static float Energy { get; set; } = 0.5f;
-
-    /// <summary>Gets or sets the share of the zone's flat ambient kept while SDFGI stands, 0 by
-    /// default. The lighting lab's floor slider, for caves the GI's sky light cannot reach.</summary>
-    public static float AmbientFloor { get; set; }
+    /// <summary>Gets or sets SDFGI's energy, the zone tune's <see cref="ZoneLighting.SdfgiEnergy"/> as the
+    /// last zone apply resolved it, so an Environment switched on later takes it too.</summary>
+    public static float Energy { get; set; } = ZoneLighting.Default.SdfgiEnergy;
 
     /// <summary>Gets a value indicating whether SDFGI's own sky light stands on the live Environment.
-    /// Then the zone's flat ambient steps aside (<c>WeatherRig.WriteColorAmbient</c>) instead of doubling it.</summary>
+    /// Then the zone's flat ambient steps aside to the tune's <see cref="ZoneLighting.AmbientFloor"/>
+    /// (<c>WeatherRig.ApplyEnhancedLighting</c>) instead of doubling it.</summary>
     public static bool SkyLightLive { get; private set; }
 
     /// <summary>Writes GI onto <paramref name="env"/>: on under Enhanced while the option stands on, a

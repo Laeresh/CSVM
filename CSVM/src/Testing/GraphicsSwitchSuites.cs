@@ -1966,6 +1966,28 @@ internal static class GraphicsSwitchSuites
                         && Fields(saved.MissionFields(Chapter, Mission, held)) == "sun_r:0.9,white:7",
                     $"Save to this mission writes only what differs from the chapter ({Fields(saved.MissionFields(Chapter, Mission, held))})");
 
+                // With GI on the lab edits the gi layer, and a save there leaves the base blocks as they were.
+                string baseBlocks = $"{Fields(saved.ChapterFields(Chapter, held))}|{Fields(saved.MissionFields(Chapter, Mission, held))}";
+                bool giWas = GlobalIlluminationSetting.Enabled;
+                GlobalIlluminationSetting.TakeUnsaved(true);
+                try
+                {
+                    lab.FollowLayer();
+                    lab.Set("sdfgi_energy", 0.9f);
+                    bool giSaved = lab.EditedLayer == LightingTable.GiLayer && lab.SaveToChapter() == scratch;
+                    saved = LightingTable.Parse(System.IO.File.ReadAllText(scratch));
+                    string giBlock = Fields(saved.ChapterFields(Chapter, held, LightingTable.GiLayer));
+                    string after = $"{Fields(saved.ChapterFields(Chapter, held))}|{Fields(saved.MissionFields(Chapter, Mission, held))}";
+                    ctx.Check(giSaved && giBlock == "sdfgi_energy:0.9" && after == baseBlocks
+                            && Fields(saved.MissionFields(Chapter, Mission, held, LightingTable.GiLayer)).Length == 0,
+                        $"a save with GI on writes the gi layer alone (layer {lab.EditedLayer}, gi {giBlock}, base {after}, was {baseBlocks})");
+                }
+                finally
+                {
+                    GlobalIlluminationSetting.TakeUnsaved(giWas);
+                    lab.FollowLayer();
+                }
+
                 lab.ResetToChapter("sun_r");
                 ctx.Check(lab.Edited.SunR == 1f && !lab.Overrides.Contains("sun_r"),
                     $"a reset takes the chapter's value and drops the mark (sun_r {lab.Edited.SunR:0.##})");

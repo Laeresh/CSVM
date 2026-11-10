@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
-using CSVM.Session.World;
 using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
@@ -235,9 +234,6 @@ internal sealed partial class CloudLab : Node
             };
             box.AddChild(_volumetric);
         }
-        box.AddChild(VolumetricClouds.LabSlider("Clouds: head taper", 0f, 0.8f, () => VolumetricClouds.Taper, v => VolumetricClouds.Taper = v));
-        box.AddChild(VolumetricClouds.LabSlider("Deck: sun taken", 0f, 1f, () => VolumetricClouds.DeckSunTaken, v => VolumetricClouds.DeckSunTaken = v));
-        box.AddChild(VolumetricClouds.LabSlider("Deck: ambient taken", 0f, 1f, () => VolumetricClouds.DeckAmbientTaken, v => VolumetricClouds.DeckAmbientTaken = v));
 
         var buttons = new HBoxContainer();
         var save = new Button { Text = $"Save for {_chapter}", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };

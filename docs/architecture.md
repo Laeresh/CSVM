@@ -564,7 +564,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
-- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F5, `--freecam` only): a slider per zone lighting field over a held or followed zone, a parked plane to turn through the sun, with Save into the shipped lighting file.
+- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F5, `--freecam` only): a slider per zone lighting field over a held or followed zone, editing the layer the options make active, a parked plane to turn through the sun, with Save into the shipped lighting file.
 - `src/UI/Labs/LabParking.cs`, the clear-reach ray the weapon and lighting labs park an aircraft along.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
 - `src/UI/Labs/CloudLab.cs`, the cloud lab (Shift+F4, `--freecam` only): a slider per cloud shadow tune and the drift's speed and heading, applied live, a red tint, with Save into the shipped per-chapter file.
@@ -898,7 +898,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/World/VolumetricClouds.cs`, the raymarched cloud slab in place of the deck, the cloud field and the placed cloud sprites (the Volumetric Clouds option), with rifts in a deck and light shafts under them.
-- `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks and the mission `night` flag, read with warnings and written by the lighting lab.
+- `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks with their `clouds` and `gi` layers and the mission `night` flag, read with warnings and written by the lighting lab.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
 - `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).

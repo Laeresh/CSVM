@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -67,61 +66,21 @@ internal sealed partial class VolumetricClouds : Node3D
         (_bottom, _top) = LayerOf(weather.Mission, volumes);
     }
 
-    /// <summary>Gets or sets how far the heads' noise threshold climbs toward each cloud's own top.
-    /// Higher rounds the crown into a fuller dome. The cloud lab's slider.</summary>
-    public static float Taper { get; set; } = 0.3f;
-
-    /// <summary>Gets or sets the light shafts' intensity over the mission's haze gain. The lighting lab's slider.</summary>
-    public static float ShaftScale { get; set; } = 1f;
-
-    /// <summary>Gets or sets the share of the sun the deck takes from the ground under it. An overcast
-    /// passes almost no direct sun. The cloud lab's slider.</summary>
-    public static float DeckSunTaken { get; set; } = 0.97f;
-
-    /// <summary>Gets or sets the share of the ambient light the deck takes from the ground under it,
-    /// through AO. Under SDFGI that dims the GI's bounce too. The cloud lab's slider.</summary>
-    public static float DeckAmbientTaken { get; set; } = 0.6f;
-
     /// <summary>Gets the <c>csky_pc_ground</c> global as last written, zero with no clouds drawing. A suite
     /// reads it here, since reading a global back is an engine error outside the editor.</summary>
     public static Vector4 PublishedGround { get; private set; }
 
+    // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
+    private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
+
     // The heads' shape the slab and its ground shadow share: taper, edge band, billow, lean.
-    private static Vector4 HeadShape => new(Taper, HeadSoft, WarpM, ShearM);
+    private static Vector4 HeadShape => new(Tune.HeadTaper, HeadSoft, WarpM, ShearM);
 
     // The shafts' haze: a mission authoring rain or snow scatters the sun hard, a dry zone faintly.
-    private float ShaftGain => _weather.Mission?.Precip != null ? RainShaftGain : HazeShaftGain;
+    // The zone tune's god rays scale it.
+    private float ShaftGain => (_weather.Mission?.Precip != null ? RainShaftGain : HazeShaftGain) * _weather.GodRays;
 
     private float CoverBias => _hasDeck ? -0.3f : 0.15f;
-
-    /// <summary>A live, unsaved lab slider over one cloud or GI knob, its label and value above it. The
-    /// slider takes no focus, so WASD keeps flying the camera after a click.</summary>
-    public static Control LabSlider(string name, float min, float max, Func<float> get, Action<float> set)
-    {
-        var box = new VBoxContainer();
-        var label = new Label { Modulate = new Color(1, 1, 1, 0.75f) };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        void Show() => label.Text = string.Create(CultureInfo.InvariantCulture, $"{name}  {get():0.00}  (not saved)");
-        Show();
-        var slider = new HSlider
-        {
-            MinValue = min,
-            MaxValue = max,
-            Step = (max - min) / 200f,
-            Value = get(),
-            FocusMode = Control.FocusModeEnum.None,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        };
-        slider.ValueChanged += v =>
-        {
-            set((float)v);
-            Show();
-        };
-        slider.DragEnded += _ => Log.Info("ui", $"lab slider: {name} {get():0.00}");
-        box.AddChild(label);
-        box.AddChild(slider);
-        return box;
-    }
 
     /// <summary>The clouds over <paramref name="worldRoot"/>'s world. They hide the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
@@ -440,13 +399,13 @@ internal sealed partial class VolumetricClouds : Node3D
         // where the pattern is strong. One without a deck draws fuller heads alone.
         material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
         material.SetShaderParameter("cover_bias", CoverBias);
-        material.SetShaderParameter("taper", Taper);
+        material.SetShaderParameter("taper", Tune.HeadTaper);
         material.SetShaderParameter("heads_gain", _hasDeck ? 1.15f : 1f);
         // A deck tears open in rifts and the sun falls through them in shafts. The shafts are strong
         // where the mission authors rain and faint in a dry haze.
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
         material.SetShaderParameter("gap_m", GapM);
-        material.SetShaderParameter("shaft_gain", ShaftGain * ShaftScale);
+        material.SetShaderParameter("shaft_gain", ShaftGain);
         // Off: the held upper zone's dome is the sky a rift shows (WeatherRig.HoldZone).
         material.SetShaderParameter("rift_sky_lift", 0f);
         return material;
@@ -589,8 +548,9 @@ internal sealed partial class VolumetricClouds : Node3D
             RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
         }
         var sun = _weather.SunDirection;
+        var tune = Tune;
         float deckY = bottom + DeckDepthM * 0.4f;
-        PublishedGround = new Vector4(deckY, _hasDeck ? DeckSunTaken : 0f, DeckGaps, GapM);
+        PublishedGround = new Vector4(deckY, _hasDeck ? tune.DeckSunTaken : 0f, DeckGaps, GapM);
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground", PublishedGround);
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
@@ -599,7 +559,7 @@ internal sealed partial class VolumetricClouds : Node3D
         // The slab's heads_gain and its erosion and density_gain defaults, so the ground marches its
         // density, and the ambient share the deck takes.
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_density",
-            new Vector4(_hasDeck ? 1.15f : 1f, 0.55f, 0.025f, _hasDeck ? DeckAmbientTaken : 0f));
+            new Vector4(_hasDeck ? 1.15f : 1f, 0.55f, 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
     }
 
     // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,
@@ -631,15 +591,16 @@ internal sealed partial class VolumetricClouds : Node3D
         Log.Info("world", $"volumetric clouds: band {at} stands clear of the {_placedSprites.Count} placed clouds, layer fitted to them at {lo:0}-{_top:0} m");
     }
 
-    // Rewrites the two live knobs onto the slab's material when a lab moves one.
+    // Rewrites the cloud tune's taper and the zone tune's god rays onto the slab's material when a lab
+    // or a zone apply moves one.
     private void FollowKnobs()
     {
-        float shaft = ShaftGain * ShaftScale;
-        if (_material == null || (Taper == _appliedTaper && shaft == _appliedShaft))
+        float taper = Tune.HeadTaper, shaft = ShaftGain;
+        if (_material == null || (taper == _appliedTaper && shaft == _appliedShaft))
             return;
-        _appliedTaper = Taper;
+        _appliedTaper = taper;
         _appliedShaft = shaft;
-        _material.SetShaderParameter("taper", Taper);
+        _material.SetShaderParameter("taper", taper);
         _material.SetShaderParameter("shaft_gain", shaft);
     }
 }
