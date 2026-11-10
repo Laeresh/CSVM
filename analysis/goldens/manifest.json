@@ -50,7 +50,7 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "2ca089750a810401a9dbc2dbaf251bb1",
+      "hash": "8d091fb5ea4ac8578f362628487dacfd",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume culled past its authored far band and its near puffs on the mission wind; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
