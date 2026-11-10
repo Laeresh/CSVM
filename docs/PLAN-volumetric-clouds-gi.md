@@ -441,7 +441,7 @@ and judges the horizon. If far clouds read wrong, `haze_near_m` (8 km) becomes a
 
 ## D34 ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
 
-**Landed.** The desktop half is measured (**Measured (desktop).** below) and the defaults follow from it (Decisions 14 and 15, D35, D36). The Steam Deck half is deferred at the author's call, because the Deck does not start; it is owed before the options ship to Deck players.
+**Landed.** The desktop half is measured (**Measured (desktop).** below) and the defaults follow from it (Decisions 14 and 15, D35, D36). The Steam Deck half is measured for GI and for the full-resolution clouds (**Measured (Steam Deck, full-resolution clouds).** below); the clouds are measured there again after D35.
 
 **Original approach (kept for reference).**
 
@@ -525,6 +525,49 @@ Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout
   water and ground-cover settings already use (`ShadowQualitySetting.FallbackFor`), if the Deck half
   confirms that SDFGI does not fit there, and off in a headset's VR quality profile until it is
   measured in stereo. It costs at most about 1 ms here at 1080p and 1440p alike.
+
+**Measured (Steam Deck, full-resolution clouds).** The LCD Deck (`RADV VANGOGH`) in Game Mode,
+build `c2a6bb159` as a Linux export in the scratch install `~/CSVM-tmp/d34`, launched over a held
+ssh session with `DISPLAY=:0` and the engine's `--fullscreen` (every shot is 1280x800). The
+desktop's instrument: `--det --perf --no-vsync --mute --frames=600 --screenshot=` with
+`--graphics=enhanced` and the two flags per state, the median of each launch's windows after the
+first two, one discarded warm-up round and three measured rounds with the four states rotated per
+round, a cell the median of the three. `--det` drops the machine fallbacks, so the Deck's own
+words are passed: `--shadow-quality=high --water-quality=flat --ground-cover=off`. A launch without
+`--det` logs those three as `default_integrated_gpu`, and render scale 100 and TAA as the defaults,
+so the runs match a Deck player's settings but for cloud shadows and post-processing, which `--det`
+turns off and a player runs on. Cells as in the desktop table. Run-to-run spread of `gpu_ms` is
+0.17 ms or less in every cell.
+
+| Pose | Both off | Clouds only | GI only | Both on |
+|---|---|---|---|---|
+| C1C under | 4.95, 5.01, 5.06 | 172.93 (+167.98), 133.37, 140.00 | 11.32 (+6.38), 11.39, 11.67 | 184.58 (+179.64), 133.36, 135.09 |
+| C1C graze | 5.59, 5.67, 5.89 | 146.59 (+141.00), 133.37, 146.67 | 11.84 (+6.25), 11.92, 12.00 | 156.53 (+150.94), 133.32, 140.00 |
+| C1C flown | 8.48, 8.62, 8.79 | 82.00 (+73.52), 82.31, 83.33 | 20.89 (+12.42), 21.05, 24.96 | 93.47 (+85.00), 93.59, 99.09 |
+| C3 | 11.78, 11.95, 12.12 | 11.77 (-0.01), 11.96, 12.12 | 19.89 (+8.11), 20.00, 20.00 | 19.91 (+8.13), 20.00, 20.00 |
+
+- **GI costs 6.3 to 12.4 ms of GPU on the Deck**, 10 to 13 times its desktop cost at fewer than
+  half the pixels (PERF-42). It takes the climbing chase camera from 8.6 to 21.1 ms a frame (p95
+  25 ms) and C3's canopy from 12.0 to 20.0 ms, both past the 16.7 ms of 60 Hz at empty poses with
+  no AI, combat or effects. The still C1C poses stay under it (11.4 to 11.9 ms), but those draw
+  little besides the sky.
+- **The full-resolution slab costs 74 to 168 ms of GPU**, 7.5 to 12 frames a second. At the two
+  clouded C1C poses `frame_ms` sits at 133.3 ms (eight 16.67 ms ticks) in every run while `gpu_ms`
+  reads 147 to 185 ms, above the frame interval, so `gpu_ms` there is not a clean cost; `frame_ms`
+  is the player's figure. A quarter of this cost, D35's goal, would still leave 18 to 42 ms, so
+  the clouds stay off on the Deck whatever D35 lands.
+- C3's clouds-only state equals both off to 0.01 ms, the instrument check of the desktop table.
+- **Not shown:** CPU load from AI, combat and effects; cloud shadows and post-processing, on for a
+  Deck player and off here; splitscreen panes (PERF-39); the docked display at 1920x1080, which
+  multiplies both costs by pixels; the C1C above, C1B and C2 poses; a long session's thermal and
+  power state, since each launch runs one or two minutes; and why the clouded frames hold 133.3 ms.
+
+**Deck recommendation.** GI must be off through the integrated-GPU fallback, as D36 plans. The
+Deck counts as integrated: `ShadowQualitySetting.IsIntegratedGpu` reads
+`RenderingServer.GetVideoAdapterType() == IntegratedGpu`, and a launch without `--det` on the Deck
+logs `default_integrated_gpu` as the source of its shadow, water and ground-cover words. The
+fallback must also hold for one pane, since GI alone breaks 60 Hz in a single-pane flight; the
+pilot's Options toggle can still arm it.
 
 **⚠ Traps.** The sim clock lags wall time on the author's rig in late C2. Read the sim-clock cadence, not `physics_ms`.
 
