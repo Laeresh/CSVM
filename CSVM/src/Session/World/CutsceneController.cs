@@ -188,10 +188,9 @@ public sealed partial class CutsceneController : Node
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
-    // The staged `player` marker an intro poses, or null in a session with no aircraft stage, and
-    // the world root it was built under, so Restore can undo a definition's own reparent of it.
+    // The staged `player` marker an intro poses, or null in a session with no aircraft stage. The
+    // stage owns where it parks (AircraftStage.ParkMarker).
     private Node3D? _playerMarker;
-    private Node3D? _markerHome;
     private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
@@ -446,7 +445,6 @@ public sealed partial class CutsceneController : Node
         // parent-driven probe clock through the one path both step through.
         runtime.FastForward = _fastForward;
 
-        _markerHome = runtime.WorldRoot;
         _cutsceneCamera = First(runtime.FindNodes(CameraNode));
         // ⚠ The runtime's root, not the camera's parent right now: this binds AFTER the bootstrap,
         // by which time an intro definition has already reparented the camera into what it frames.
@@ -991,15 +989,7 @@ public sealed partial class CutsceneController : Node
         // The `player` marker goes home too, and for the camera's reason above: left on the frame a
         // definition composed itself onto, it poses the NEXT episode's aeroplane in that frame
         // (docs/architecture.md). ⚠ After the restore codes, whose 951 reads the pose it was left in.
-        if (_playerMarker != null)
-        {
-            if (_markerHome != null && _playerMarker.GetParent() != _markerHome)
-            {
-                AnimRuntime.Reparent(_playerMarker, _markerHome);
-            }
-
-            _playerMarker.Transform = Transform3D.Identity;
-        }
+        _aircraft?.ParkMarker();
 
         foreach (var (camera, fov) in _fov)
         {
@@ -1376,11 +1366,10 @@ public sealed partial class CutsceneController : Node
         Log.Info("anim", $"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
     }
 
-    // Is the marker still where the build and every handoff park it: under the world root, at
-    // identity? A definition that posed it has reparented it, written a transform, or both.
+    // Is the marker still where the build and every handoff park it? A definition that posed it
+    // has reparented it, written a transform, or both. The emitter rule reads the same predicate.
     private bool MarkerParked() =>
-        _playerMarker != null && _playerMarker.GetParent() == _markerHome
-        && _playerMarker.Transform.IsEqualApprox(Transform3D.Identity);
+        _playerMarker != null && _aircraft?.IsParkedMarker(_playerMarker) == true;
 
     private void MirrorCamera()
     {

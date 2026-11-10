@@ -42,6 +42,10 @@ public sealed class EmitterDirector
 
     private readonly Action<string> _count;
 
+    // A host standing in for a pose it does not hold yet: the parked `player` marker. It sits at the
+    // world origin while the flown aircraft is elsewhere. See Tick.
+    private readonly Func<Node3D, bool> _unposed;
+
     // The current runtime batch, bumped once per Tick, i.e. once per AnimRuntime.Advance, which is
     // exactly the granularity at which the data's own instants exist: an event with no START_TIME is
     // "EVENT_OFFSET 0" and every zero-offset run of events fires in one Advance pass
@@ -52,12 +56,13 @@ public sealed class EmitterDirector
     private IEmitterFactory _factory;
 
     public EmitterDirector(IEmitterFactory factory, bool defScopedKeys, bool debug,
-        Action<string> count)
+        Action<string> count, Func<Node3D, bool> unposed)
     {
         _factory = factory;
         _defScopedKeys = defScopedKeys;
         _debug = debug;
         _count = count;
+        _unposed = unposed;
     }
 
     /// <summary>How many emitters this director has actually built (not just started the owning
@@ -300,6 +305,14 @@ public sealed class EmitterDirector
             if (!emitter.IsValid || !GodotObject.IsInstanceValid(node))
             {
                 _active.RemoveAt(i);
+                continue;
+            }
+            // ⚠ Stopped, not skipped: a skipped trail keeps the park as its last point and trips the
+            // teleport guard on the first posed frame. Stopped, it re-homes there, as the original's
+            // emitter starts at the aircraft. Still emitting, so a re-assert does not stack it.
+            if (_unposed(node))
+            {
+                emitter.SustainEnd();
                 continue;
             }
             var xform = node.GlobalTransform;

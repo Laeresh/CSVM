@@ -332,6 +332,8 @@ public sealed class WorldSession
         if (o.Cutscenes != null && cutscenes && o.PlanesGamez is { } planesGamez)
         {
             s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, planesGamez, textures);
+            // speed_cue's puffers ride `player`; parked, it stands for no aircraft pose to emit at.
+            animRuntime.HostUnposed = s.Aircraft.IsParkedMarker;
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)

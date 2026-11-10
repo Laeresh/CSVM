@@ -807,7 +807,7 @@ exists), the per-frame `Tick` follow and `Census`. `AnimRuntime` keeps only the 
 `at_node` sentinel resolution and the `active_state` read. One director per runtime;
 `IEmitterFactory` is the build seam (`Puffer`, `TextureArchive` and the parent node sit behind it),
 so a suite can install a fake. The selector/disposition split across the stops and the emitter-keying
-tradeoff are in this file's own doc comments. Emitter decode: [../org/puffer.md](../org/puffer.md).
+tradeoff are in this file's own doc comments. `Tick` holds an emitter stopped while `AnimRuntime.HostUnposed` names its host (the parked `player` marker, wired to `AircraftStage.IsParkedMarker`), so `speed_cue`'s trail re-homes where a film first poses `player`. Emitter decode: [../org/puffer.md](../org/puffer.md).
 
 ## src/Mech3/Anim/SoundChannel.cs
 One runtime's `SOUND_NODE`/`SOUND` events as a module: `HandleSoundNode` (declare, place and start
@@ -1039,7 +1039,7 @@ the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s para
 holder it hangs under are on its own member, which decide whether it draws in a mission that never
 names it. All carry a rebased gamez index (`PointerBaseOf`) a compiled cross-archive symbol table
 binds; `StageFlown` puts the one flown airframe in the node table, with the cockpit interior the cockpit pass lifted out of it, and parks its hook, taking the airframe it replaces back out so a second human's aeroplane cannot answer for the first's name. A skinned subtree gets its own
-builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
+builder, so `Paint` gives it its stand-in's livery; `ParkMarker` parks the marker and `IsParkedMarker`, the one parked test, says it holds no aircraft pose. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs
 `OpenFor(ArchiveIntent, gamez, textures, soundsZbd, zrdr, mute)` opens the five archives one

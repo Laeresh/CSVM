@@ -85,6 +85,9 @@ public sealed class AircraftStage
     // The flown aircraft's cockpit interior StageFlown indexed beside it, or null.
     private Node3D? _flownInterior;
 
+    // The world root the marker is built under, and parked back under at every handoff.
+    private Node3D? _markerHome;
+
     private AircraftStage() { }
 
     /// <summary>The bodiless <c>player</c> marker, or null when the archive carries no such node.
@@ -160,6 +163,7 @@ public sealed class AircraftStage
             marker.SetMeta(AnimRuntime.IndexMeta, player.Index + pointerBase);
             worldRoot.AddChild(marker);
             stage.PlayerMarker = marker;
+            stage._markerHome = worldRoot;
         }
 
         // The builder over the aircraft archive: the world's own SceneBuilder reads the chapter
@@ -279,6 +283,30 @@ public sealed class AircraftStage
             : "none paintable";
         Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {balmoraled}, {figures}, {props}, {stage.MeshInstances} mesh instances, skins on {paintable}");
         return stage;
+    }
+
+    /// <summary>Whether <paramref name="node"/> is <see cref="PlayerMarker"/> parked where the
+    /// build and every handoff leave it, under the world root at identity. Parked, it holds no
+    /// pose of the flown aircraft until a definition poses it.</summary>
+    public bool IsParkedMarker(Node3D node) =>
+        ReferenceEquals(node, PlayerMarker) && node.GetParent() == _markerHome
+        && node.Transform.IsEqualApprox(Transform3D.Identity);
+
+    /// <summary>Puts <see cref="PlayerMarker"/> back where <see cref="IsParkedMarker"/> reads it as
+    /// parked: under the world root, at identity.</summary>
+    public void ParkMarker()
+    {
+        if (PlayerMarker is not { } marker || _markerHome == null)
+        {
+            return;
+        }
+
+        if (marker.GetParent() != _markerHome)
+        {
+            AnimRuntime.Reparent(marker, _markerHome);
+        }
+
+        marker.Transform = Transform3D.Identity;
     }
 
     /// <summary>Paints one staged subtree in <paramref name="scheme"/>, so a prop wears the livery

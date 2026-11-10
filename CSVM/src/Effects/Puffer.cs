@@ -164,6 +164,18 @@ public sealed partial class Puffer : Node3D
     /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
     public int LiveCount => _liveCount;
 
+    /// <summary>Every live particle's world position, for a suite reading where a real emitter
+    /// laid its puffs.</summary>
+    internal IEnumerable<Vector3> LivePositions
+    {
+        get
+        {
+            var origin = GlobalPosition;
+            for (int i = 0; i < _liveCount; i++)
+                yield return origin + _particles[i].Pos;
+        }
+    }
+
     /// <summary>How many of the live particles the last <c>_Process</c> actually WROTE, which is
     /// what the distance fade decides and <see cref="LiveCount"/> deliberately does not: the fade is
     /// a draw rule, so a culled particle keeps living. Diagnostics, for a suite reading a real

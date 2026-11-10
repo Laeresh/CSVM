@@ -176,7 +176,10 @@ The generic distance-puffer update leaves emitted particles in world space. Cons
 aircraft passes through each puff, and its screen-visible duration falls approximately inversely
 with airspeed. This effect is separate from both chapter cloud-card populations and the
 hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.Hud.SpeedCue`, loading the
-chapter reader verbatim and assigning one private renderer set to each player rig.
+chapter reader verbatim and assigning one private renderer set to each player rig. The animation
+runtime's own `speed_cue` emitter rides CSVM's stand-in `player` marker, which parks at the world
+origin in flight. It is held stopped while parked, so its trail starts where a film first poses
+`player`, as the original's starts at the aircraft, rather than tripping the teleport guard.
 
 CSVM's opt-in enhanced presentation adds a second, camera-local streak field over these wisps
 (`Effects.WindStreaks`). It is a remake invention with nothing behind it in the original data or

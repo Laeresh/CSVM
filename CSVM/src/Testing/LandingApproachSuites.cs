@@ -240,7 +240,9 @@ internal static class LandingApproachSuites
         + "phase, the landing trigger discovers that late-created cone, and flying it starts "
         + "the hosted pickup cutscene beside the caboose, its out-of-flight code holding the "
         + "aircraft where it flew until the film poses player, faces the passenger, runs to handoff "
-        + "and clears the primary pickup objective")]
+        + "and clears the primary pickup objective. speed_cue's cuepuffer1 on player starts its "
+        + "trail where the film poses player rather than at the parked marker by the world origin, "
+        + "so the teleport guard never trips, and still lays its puffs ahead of player")]
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
 
@@ -2396,6 +2398,11 @@ internal static class LandingApproachSuites
             }
             ctx.Check(arm.Count > 0 && arm[0].Visible,
                 $"the train's pickup_timing opens land_on in its first flyable phase");
+            // speed_cue's emitter rides the `player` marker, parked at the world origin until the film poses it.
+            var cues = ctx.Host.GetTree().Root.FindChildren("*puffer_cuepuffer1*", owned: false)
+                .OfType<Puffer>().ToList();
+            int guardsBefore = cues.Sum(p => p.TeleportGuardCount);
+
             // cabpkup_player raises 11 before it moves `player` under the caboose, so the
             // staged pose read in that dispatch is the one to watch.
             var host = world.Runtime.CallbackHost;
@@ -2461,6 +2468,9 @@ internal static class LandingApproachSuites
                     && agentFacing > 0f,
                 $"the player view follows the pickup camera beside the caboose and faces the passenger");
 
+            var stage = world.Session.Aircraft;
+            var marker = stage?.PlayerMarker;
+            int aheadMost = 0;
             float played = 0f;
             for (float t = 0f; t < PlayBudgetS
                     && (cutscene.Playing || !graph.CompletedOf(gated.Number)); t += StepDt)
@@ -2472,10 +2482,30 @@ internal static class LandingApproachSuites
                 {
                     played += StepDt;
                 }
+
+                if (marker != null && !stage!.IsParkedMarker(marker))
+                {
+                    foreach (var cue in cues)
+                    {
+                        var ahead = marker.GlobalTransform * cue.State.AtNodeOffset;
+                        float reach = cue.State.DeviationDistance + 1f;
+                        aheadMost = Math.Max(aheadMost, cue.LivePositions.Count(p => p.DistanceTo(ahead) < reach));
+                    }
+                }
             }
 
+            int guards = cues.Sum(p => p.TeleportGuardCount) - guardsBefore;
+            var nearOrigin = cues.SelectMany(p => p.LivePositions).Count(p => p.Length() < 1000f);
             report.AppendLine($"pickup episode ran {played:0.##} s; " +
-                $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}");
+                $"OBJECTIVE{gated.Number} completed={graph.CompletedOf(gated.Number)}; " +
+                $"cuepuffer1 emitters={cues.Count} guard trips={guards} live={cues.Sum(p => p.LiveCount)} " +
+                $"near-origin={nearOrigin} most-ahead-of-player={aheadMost}");
+            ctx.Check(cues.Count > 0, $"the mission builds speed_cue's cuepuffer1 on the animation runtime");
+            ctx.Same(0, guards,
+                $"the cue trail on 'player' starts where the film poses it, not from the parked marker 8 km off, so the teleport guard never trips");
+            ctx.Same(0, nearOrigin, $"and no cue puff was laid at the parked marker by the world origin");
+            ctx.Check(aheadMost > 0,
+                $"the cue still lays its puffs ahead of 'player' under the caboose ({aheadMost} within the authored deviation)");
             ctx.Check(!cutscene.Playing && played > 2f,
                 $"the authored pickup camera episode runs to its handoff");
             ctx.Check(graph.CompletedOf(gated.Number),

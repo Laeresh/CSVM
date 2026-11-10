@@ -393,6 +393,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// instead of faulting on a closed zip handle.</summary>
     internal IEmitterFactory? EmitterFactory;
 
+    /// <summary>Whether an emitter host's pose stands for nothing yet, so <see cref="Emitters"/>
+    /// holds its emitters stopped instead of driving them from it. Null, the default, drives every
+    /// host. Read live, so it may be set after the bind.</summary>
+    internal Func<Node3D, bool>? HostUnposed;
+
     /// <summary>Where the world's lights are delivered. Null outside a lit session, in which
     /// case LIGHT_STATE is tracked but never rendered.</summary>
     internal WorldLights? Lights;
@@ -877,7 +882,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="DefScopedPufferKeys"/> and <see cref="DebugMotions"/> as they stand then. Set all
     /// three before binding; flipping one afterwards does not reach the director.</summary>
     internal EmitterDirector Emitters => _emitters ??= new EmitterDirector(
-        EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
+        EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count,
+        node => HostUnposed?.Invoke(node) == true);
 
     /// <summary>The live motion collection and its registration rules. `internal` so a suite can
     /// ask <c>Airborne</c>, the retirement hold's own mechanism, and <c>OwesBounce</c> beside
