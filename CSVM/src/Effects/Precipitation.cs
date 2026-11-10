@@ -15,6 +15,12 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed partial class Precipitation : Node3D
 {
+    /// <summary>The field's draw order while a volumetric cloud slab stands, after the slab and the puffers
+    /// drawn over it. The slab reads opaque depth alone, so drawn later it paints the cloud over rain in
+    /// front of it. All sit past the world flare (<see cref="UI.Boards.HeadLockedQuads.WorldFlarePriority"/>
+    /// and its three rings) and under the stereo whiteout at 109.</summary>
+    internal const int OverSlabPriority = UI.Boards.HeadLockedQuads.WorldFlarePriority + 6;
+
     // --- TUNE: the feel, pending the user's A/B against the original ---
     private const float RainBoxHalf = 30f;   // camera-centred wrap-box half-extent (m), rain …
     private const float SnowBoxHalf = 30f;   // … and snow
@@ -36,8 +42,8 @@ public sealed partial class Precipitation : Node3D
     // Self-animating: fall/wind drift over csky_time, wrapped into a box centred on the camera.
     // POSITION is set directly, so instances stay at the node origin; only the AABB below keeps
     // them visible. INSTANCE_CUSTOM.xyz is the fixed base fraction, .w a flutter phase.
-    // ⚠ Never use Godot's TIME here. This module has no per-frame C# hook, so csky_time is the
-    // only handle on the animation, TIME kept the rain falling through a halted clock.
+    // ⚠ Never use Godot's TIME here. csky_time is the only handle on the animation, and TIME kept
+    // the rain falling through a halted clock.
     private const string ShaderCode = """
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -112,6 +118,12 @@ public sealed partial class Precipitation : Node3D
     private const string FlatFlake = "offset = (INV_VIEW_MATRIX[0].xyz * VERTEX.x + INV_VIEW_MATRIX[1].xyz * VERTEX.y) * sz;";
 
     private MultiMesh _mm = null!;
+    private ShaderMaterial _material = null!;
+    private int _priority;
+
+    /// <summary>Gets or sets the field's draw order: 0, depth-sorted with the world's transparents, or
+    /// <see cref="OverSlabPriority"/> while the volumetric clouds stand. A field takes a change on its next frame.</summary>
+    internal static int DrawPriority { get; set; }
 
     /// <summary>Builds the field for a mission's precipitation, or null if there is none.
     /// <paramref name="cloudBottom"/>/<paramref name="cloudTop"/> are the <c>CLOUD_COVER</c>
@@ -125,6 +137,14 @@ public sealed partial class Precipitation : Node3D
         var field = new Precipitation();
         field.Init(p, cloudBottom, cloudTop);
         return field;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_priority == DrawPriority)
+            return;
+        _priority = DrawPriority;
+        _material.RenderPriority = _priority;
     }
 
     /// <summary>The shader text: the flat one, or under <paramref name="stereo"/> the same text with
@@ -191,7 +211,8 @@ public sealed partial class Precipitation : Node3D
 
         string code = CodeFor(Mech3.StereoFacing.Live);
         ShaderCensus.Note(code);
-        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
+        _priority = DrawPriority;
+        var mat = _material = new ShaderMaterial { Shader = new Shader { Code = code }, RenderPriority = _priority };
         mat.SetShaderParameter("sprite", rain ? MakeStreakTexture() : MakeFlakeTexture());
         mat.SetShaderParameter("tint", new Vector3(tint.R, tint.G, tint.B));
         mat.SetShaderParameter("box_half", new Vector3(boxHalf, boxHalf, boxHalf));

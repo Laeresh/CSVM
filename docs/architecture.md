@@ -406,6 +406,7 @@ rows).
 - `src/Effects/CloudShadow.cs`, the Enhanced cloud shadows' one owner: the `csky_cloud_shadow*` globals every sun term reads, drawn by day in a cloudy mission.
 - `src/Effects/CloudShadowPattern.cs`, the cloud shadows' world-anchored noise pattern and its drift source (ceiling scroll, sideways wind, fixed), engine-free.
 - `src/Effects/CloudShadowChapters.cs`, the shipped per-chapter cloud shadow tunes in `CSVM/data/cloud_shadows.json`: read with warnings, and one chapter's entry written by the cloud lab.
+- `src/Effects/GlobalIllumination.cs`, Godot's SDFGI plus SSIL over the Enhanced world (the Global Illumination option), the Environment switches sized for a chapter.
 - `src/Effects/TerrainShadowRaster.cs`, the bake's compute: ground heights at the texel centres, then the grazing-line sweep along the sun's azimuth.
 - `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/OceanSeas.cs`, the shipped per-chapter seas in `CSVM/data/ocean_seas.json`: read with warnings, and one chapter's entry written by the ocean lab.
@@ -563,7 +564,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
 - `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/Labs/OceanLab.cs`, the ocean lab (Shift+F1, `--freecam` only): a slider per sea field, applied live, with Save into the shipped seas file.
-- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F5, `--freecam` only): a slider per zone lighting field over a held or followed zone, a parked plane to turn through the sun, with Save into the shipped lighting file.
+- `src/UI/Labs/LightingLab.cs`, the lighting lab (Shift+F5, `--freecam` only): a slider per zone lighting field over a held or followed zone, editing the layer the options make active, a parked plane to turn through the sun, with Save into the shipped lighting file.
 - `src/UI/Labs/LabParking.cs`, the clear-reach ray the weapon and lighting labs park an aircraft along.
 - `src/UI/Labs/VegetationLab.cs`, the vegetation lab (Shift+F2, `--freecam` only): the seed and a slider per listed kind's value, a texture pick and a mask brush, handed to the session, with Save into the vegetation sidecar and its mask.
 - `src/UI/Labs/CloudLab.cs`, the cloud lab (Shift+F4, `--freecam` only): a slider per cloud shadow tune and the drift's speed and heading, applied live, a red tint, with Save into the shipped per-chapter file.
@@ -714,7 +715,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
 - `src/Utils/SoundModeSetting.cs`, the sound mode (Original or Enhanced Sound) and the Hit Confirm switch, resolved from the options file, Original with no confirm under `--det`.
 - `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
-- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
+- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level, global illumination and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
@@ -736,6 +737,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VegetationModelsSetting.cs`, how far the Rich vegetation draws its near 3D models (off, near, far): the flag/saved/config `WordSetting` lookup over near on every machine, re-ranged live.
 - `src/Utils/CloudShadowSetting.cs`, whether Enhanced draws the cloud shadows (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, read every frame.
 - `src/Utils/PostProcessingSetting.cs`, whether Enhanced grades the lit world (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, applied live.
+- `src/Utils/VolumetricCloudsSetting.cs`, whether Enhanced draws the volumetric clouds and at which march resolution (off, quarter, half, full): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
+- `src/Utils/GlobalIlluminationSetting.cs`, whether Enhanced lights with SDFGI plus SSIL (off, on): the flag/saved/config `WordSetting` lookup over on, off on an integrated GPU or under `--det`, applied live, with an unsaved lab word.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
@@ -894,7 +897,8 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
-- `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks and the mission `night` flag, read with warnings and written by the lighting lab.
+- `src/Session/World/VolumetricClouds.cs`, the raymarched cloud slab in place of the deck, the cloud field and the placed cloud sprites (the Volumetric Clouds option), with rifts in a deck and light shafts under them.
+- `src/Session/World/LightingTable.cs`, the shipped Enhanced lighting tune in `CSVM/data/lighting.json`: per chapter, mission and zone sparse blocks with their `clouds` and `gi` layers and the mission `night` flag, read with warnings and written by the lighting lab.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
 - `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).

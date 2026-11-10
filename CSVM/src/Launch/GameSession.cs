@@ -312,6 +312,7 @@ public partial class GameSession : Node3D
     private OceanStage? _ocean;
     private Effects.TerrainShadow? _terrainShadow;
     private Effects.CloudShadow? _cloudShadow;
+    private VolumetricClouds? _volumetricClouds;
     // A full world stood for a plane, which the terrain shadow bake needs; false on a node subtree.
     private bool _fullWorld;
     private SceneBuilder? _worldScene;
@@ -393,6 +394,9 @@ public partial class GameSession : Node3D
 
     /// <summary>The static world's scene builder, null outside a built world. Read by the suites.</summary>
     internal SceneBuilder? WorldScene => _worldScene;
+
+    /// <summary>The zone and weather rig, null where the world has no weather. Read by the suites.</summary>
+    internal WeatherRig? Weather => _sky?.Weather;
 
     /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
     /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
@@ -860,9 +864,16 @@ public partial class GameSession : Node3D
         _fullWorld = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
         // Before the ocean stage, whose shore mask is baked from what draws.
         FollowShadowDecals();
+        // The volumetric clouds hold the zone before the bake, so the sun they aim gets a terrain shadow.
+        // A live toggle leaves the new bearing to the on-demand bake (TerrainShadow._Process).
+        if (VolumetricCloudsSetting.Enabled && GraphicsMode.Enhanced && _sky?.Weather is { } held)
+            held.HoldZone = true;
         FollowTerrainShadow();
         BuildCloudShadow();
-        _labs!.BuildCloudLab(() => _cloudShadow);
+        _labs!.BuildCloudLab(() => _cloudShadow, SetVolumetricCloudsForFlight);
+        FollowVolumetricClouds();
+        // An Options apply in the menu reached no session, so the launcher's Environment follows here.
+        FollowGlobalIllumination();
         if (OceanStage.Eligible(_spec, state.NodeSubtree != null) && _plane != null)
         {
             var ocean = _ocean = new OceanStage(_spec, _plane, _worldScene, _sessionTextures, state.WorldRuntime, () => _surfaceVehicles,
@@ -870,7 +881,7 @@ public partial class GameSession : Node3D
             _labs!.BuildOceanLab(ocean.Saved, ocean.Sea, () => ocean.Ocean, ocean.Apply);
         }
         if (state.NodeSubtree == null)
-            _labs!.BuildLightingLab(state, _sky?.Weather, _liveryResolver);
+            _labs!.BuildLightingLab(state, _sky?.Weather, _liveryResolver, SetGlobalIlluminationForFlight);
         var gamez = state.Gamez;
         // The labs' ground under the cursor, built on the first ray, so a session that never asks never pays for it.
         var ground = new Lazy<Vector3[]>(() =>
@@ -925,6 +936,7 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("clutter");
         _sky?.CloudField?.FollowGraphicsMode();
         _sky?.FollowGraphicsMode();
+        _volumetricClouds?.Follow(enhanced);
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
         SwitchProfile.Mark("lights");
@@ -1017,6 +1029,11 @@ public partial class GameSession : Node3D
             FollowPanes(1, leaving: true);
             // A line still open when the session ends leaves no field for the keyboard to type into.
             ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
+            // A lab's toggle lasts the flight: the resolved words stand again for the next session.
+            // The clouds' own exit cleared the night flag, and this static backs it up.
+            VolumetricCloudsSetting.Lookup.Retake();
+            GlobalIlluminationSetting.Lookup.Retake();
+            WeatherRig.NightOff = false;
         }
     }
 
@@ -1239,6 +1256,43 @@ public partial class GameSession : Node3D
             if (rig.Controller?.Dressing.Pass?.Env is { } env)
                 EnhancedLook.ApplyGrade(env, GraphicsMode.Enhanced, tune);
         }
+    }
+
+    /// <summary>The Volumetric Clouds word on the running world: the clouds built while it names a march
+    /// resolution and freed while it is off. Freeing them puts the zone switch, whiteout, night, fog and
+    /// deck back at once. A move between resolutions keeps the clouds, which read the divisor each frame.</summary>
+    internal void FollowVolumetricClouds()
+    {
+        // The cloud shadows' layer first, so a slab built now reads the clouds layer's shape.
+        if (_cloudShadow != null && GodotObject.IsInstanceValid(_cloudShadow))
+            _cloudShadow.FollowLayer();
+        if (VolumetricCloudsSetting.Enabled == (_volumetricClouds != null))
+            return;
+        if (_volumetricClouds == null)
+        {
+            BuildVolumetricClouds();
+            return;
+        }
+        // Out of the tree here, so its exit restores the originals and zeroes the ground globals now.
+        Drop(_volumetricClouds);
+        _volumetricClouds = null;
+        Log.Info("world", $"volumetric clouds: removed, the originals restored");
+    }
+
+    /// <summary>The Global Illumination word on the world's Environment and each cockpit pass's copy,
+    /// then the zone, whose flat ambient steps aside while SDFGI stands. A standing word moves nothing.</summary>
+    internal void FollowGlobalIllumination()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        if (_env == null || _env.SdfgiEnabled == (enhanced && GlobalIlluminationSetting.Enabled))
+            return;
+        Effects.GlobalIllumination.Apply(_env, enhanced);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
+                Effects.GlobalIllumination.Apply(env, enhanced);
+        }
+        _sky?.Weather?.ReapplyZone();
     }
 
     /// <summary>Hides the original's painted shadow decals while our shadow maps draw: Enhanced, with a
@@ -2810,12 +2864,40 @@ public partial class GameSession : Node3D
         }
         var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
         var (authored, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
-        var tunes = Effects.CloudShadowChapters.Load().For(_spec.Chapter);
-        var drift = tunes.Drift(authored);
-        _cloudShadow = Effects.CloudShadow.Create(drift, source, cloudy, weather.NightApplied);
-        _cloudShadow.Tune = tunes;
+        _cloudShadow = Effects.CloudShadow.Create(authored, source, cloudy, weather.NightApplied,
+            Effects.CloudShadowChapters.Load(), _spec.Chapter);
         _plane.AddChild(_cloudShadow);
-        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {tunes.Describe()}");
+        var drift = _cloudShadow.Drift;
+        Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {(_cloudShadow.CloudsLayer ? "clouds layer " : string.Empty)}{_cloudShadow.Tune.Describe()}");
+    }
+
+    // The volumetric clouds, over a full weathered world alone. They hide the deck, the cloud field
+    // and the placed sprites themselves.
+    private void BuildVolumetricClouds()
+    {
+        var weather = _sky?.Weather;
+        if (!_fullWorld || _plane == null || weather == null)
+        {
+            Log.Info("world", $"volumetric clouds: need a flown or freecam world, nothing built");
+            return;
+        }
+        _volumetricClouds = VolumetricClouds.Create(_plane, weather, _sky!.CloudField, _worldScene,
+            weather.FogVolumes, _unplacedWatch?.CloudDeck != null);
+        _plane.AddChild(_volumetricClouds);
+    }
+
+    // A lab's control: this flight stands on the word, and the options file is left alone.
+    private void SetVolumetricCloudsForFlight(string word)
+    {
+        VolumetricCloudsSetting.TakeUnsaved(word);
+        FollowVolumetricClouds();
+    }
+
+    // The lighting lab's toggle, unsaved as the cloud lab's is.
+    private void SetGlobalIlluminationForFlight(bool on)
+    {
+        GlobalIlluminationSetting.TakeUnsaved(on);
+        FollowGlobalIllumination();
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.

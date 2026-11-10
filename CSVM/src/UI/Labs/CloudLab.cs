@@ -10,9 +10,10 @@ namespace CSVM.UI.Labs;
 /// <summary>
 /// The cloud lab (Shift+F4), built in <c>--freecam</c> alone. A panel down the right edge holds a
 /// slider per cloud-shadow tune (<see cref="CloudShadowPattern.Tune"/>) and the drift's speed and
-/// heading. A tint lights the shadows red, so the pattern and its drift show plainly. Every
-/// edit only writes globals, so it applies at once. Save writes the chapter's tunes and the drift's
-/// speed and heading into <see cref="CloudShadowChapters"/>; the tint is never saved.
+/// heading. A red tint shows the pattern and its drift, and every edit applies at once. Save writes
+/// the tunes and the drift into <see cref="CloudShadowChapters"/>, the clouds layer while the volumetric
+/// clouds stand, else the base tune. A layer change drops unsaved edits. A button steps the volumetric clouds through
+/// off, quarter, half and full for this flight without saving the video option.
 /// </summary>
 internal sealed partial class CloudLab : Node
 {
@@ -28,12 +29,15 @@ internal sealed partial class CloudLab : Node
     private readonly string _chapter;
     private readonly string? _savePath;
     private readonly List<(Row Row, HSlider Slider, Label Value)> _rows = new();
-    private Vector2 _startDrift;
     private float _heading;
     private CloudShadowPattern.Tune _saved = CloudShadowPattern.Tune.Default;
+    // The layer the sliders edit and Save writes: the clouds layer, else the base tune.
+    private bool _editsClouds;
     private string _note = "";
     private CanvasLayer? _layer;
     private CheckButton? _tint;
+    private Button? _volumetric;
+    private Label? _layerLabel;
     private Label? _status;
     private bool _open;
     private bool _syncing;
@@ -52,6 +56,12 @@ internal sealed partial class CloudLab : Node
     /// <summary>Whether the panel is showing. Nothing is built until it first opens.</summary>
     public bool IsOpen => _open;
 
+    /// <summary>Gets what the Volumetric Clouds button calls: the option's next word for this flight, the
+    /// video option unsaved. Null hides the button.</summary>
+    public Action<string>? SetVolumetric { get; init; }
+
+    private string EditedLayer => _editsClouds ? "clouds layer" : "base tune";
+
     public override void _Ready() => SetProcess(false);
 
     public override void _UnhandledInput(InputEvent @event)
@@ -65,6 +75,7 @@ internal sealed partial class CloudLab : Node
 
     public override void _Process(double delta)
     {
+        FollowLayer();
         _statusTimer += (float)delta;
         if (_statusTimer >= StatusPeriod)
         {
@@ -83,27 +94,48 @@ internal sealed partial class CloudLab : Node
         SetProcess(_open);
         if (_open)
         {
+            FollowLayer();
             SyncRows();
             UpdateStatus();
         }
-        Log.Info("ui", $"cloud lab {(_open ? "open" : "closed")} {Describe()}");
+        Log.Info("ui", $"cloud lab {(_open ? "open" : "closed")} {EditedLayer} {Describe()}");
     }
 
-    /// <summary>Every tune back to the chapter's saved entry, the drift to the session's start, the tint off.</summary>
+    /// <summary>Every tune back to the chapter's saved entry in the edited layer, the tint off.</summary>
     public void RevertToSaved()
     {
         if (_clouds() is not { } clouds)
             return;
         clouds.Tune = _saved;
-        clouds.Drift = _saved.Drift(_startDrift);
+        clouds.Drift = _saved.Drift(clouds.Authored);
         _heading = SavedHeading();
         clouds.Tint = Vector3.Zero;
         SyncRows();
         Log.Info("ui", $"cloud lab: reverted {Describe()}");
     }
 
-    /// <summary>Writes the standing tunes as the chapter's entry. Returns the path written, or null where
-    /// Save is off or the file there is not a JSON object.</summary>
+    /// <summary>Re-reads which layer the Volumetric Clouds word makes the edited one. When it moved, the
+    /// shadows take that layer's saved tune, dropping every unsaved edit made over the other.</summary>
+    public void FollowLayer()
+    {
+        if (_clouds() is not { } clouds || !IsInstanceValid(clouds))
+            return;
+        clouds.FollowLayer();
+        if (clouds.CloudsLayer == _editsClouds)
+            return;
+        _editsClouds = clouds.CloudsLayer;
+        _saved = clouds.Saved;
+        _heading = SavedHeading();
+        _note = $"editing the {EditedLayer}, unsaved edits dropped";
+        if (_layerLabel != null)
+            _layerLabel.Text = LayerText();
+        SyncRows();
+        UpdateStatus();
+        Log.Info("ui", $"cloud lab: {_chapter} now edits the {EditedLayer} {Describe()}");
+    }
+
+    /// <summary>Writes the standing tunes into the edited layer of the chapter's entry. Returns the path
+    /// written, or null where Save is off or the file there is not a JSON object.</summary>
     public string? Save()
     {
         if (_clouds() is not { } clouds)
@@ -114,10 +146,12 @@ internal sealed partial class CloudLab : Node
             UpdateStatus();
             return null;
         }
+        FollowLayer();
         try
         {
             clouds.Tune = clouds.Tune with { DriftSpeed = clouds.Drift.Length(), Heading = _heading };
-            CloudShadowChapters.Save(_savePath, _chapter, clouds.Tune);
+            CloudShadowChapters.Save(_savePath, _chapter, clouds.Tune, _editsClouds);
+            clouds.Reload(CloudShadowChapters.Parse(System.IO.File.ReadAllText(_savePath, System.Text.Encoding.UTF8)));
         }
         catch (Exception ex) when (ex is System.IO.InvalidDataException or System.IO.IOException or UnauthorizedAccessException)
         {
@@ -126,9 +160,9 @@ internal sealed partial class CloudLab : Node
             UpdateStatus();
             return null;
         }
-        _saved = clouds.Tune.Clamped();
-        _note = $"saved {_chapter} to {_savePath}";
-        Log.Info("ui", $"cloud lab: saved {_chapter} {Describe()} to {_savePath}");
+        _saved = clouds.Saved;
+        _note = $"saved {_chapter}'s {EditedLayer} to {_savePath}";
+        Log.Info("ui", $"cloud lab: saved {_chapter}'s {EditedLayer} {Describe()} to {_savePath}");
         SyncRows();
         UpdateStatus();
         return _savePath;
@@ -141,8 +175,15 @@ internal sealed partial class CloudLab : Node
         return label;
     }
 
+    private static string VolumetricText() =>
+        $"Volumetric Clouds: {VolumetricCloudsSetting.Lookup.Label(VolumetricCloudsSetting.Word)} (this flight, not saved)";
+
     private static string ValueText(Row row, CloudShadow c) =>
         $"{row.Field.Show(row.Get(c))}   (saved {row.Field.Show(row.Saved())})";
+
+    private string LayerText() => _editsClouds
+        ? "Editing the clouds layer (applies while Volumetric Clouds is on)"
+        : "Editing the base tune (Volumetric Clouds off)";
 
     private string Describe() => _clouds() is { } c
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture,
@@ -150,7 +191,10 @@ internal sealed partial class CloudLab : Node
         : "no cloud shadows standing";
 
     // The saved heading, else the session's starting drift's, so a saved speed of 0 keeps a direction.
-    private float SavedHeading() => _saved.Heading ?? CloudShadowPattern.HeadingOf(_startDrift);
+    private float SavedHeading() => _saved.Heading ?? CloudShadowPattern.HeadingOf(Authored());
+
+    // The mission's own drift, before a saved speed or heading turns it.
+    private Vector2 Authored() => _clouds()?.Authored ?? Vector2.Zero;
 
     // A row per tune. Speed and heading move the live drift, whose heading the lab holds itself, so a
     // speed taken through 0 keeps its direction.
@@ -162,7 +206,7 @@ internal sealed partial class CloudLab : Node
             if (f == CloudShadowPattern.SpeedField)
             {
                 rows.Add(new(f, c => c.Drift.Length(), (c, v) => c.Drift = CloudShadowPattern.Toward(_heading, v),
-                    () => _saved.Drift(_startDrift).Length()));
+                    () => _saved.Drift(Authored()).Length()));
             }
             else if (f == CloudShadowPattern.HeadingField)
             {
@@ -182,8 +226,12 @@ internal sealed partial class CloudLab : Node
 
     private void BuildUi()
     {
-        _startDrift = _clouds()?.Drift ?? Vector2.Zero;
-        _saved = _clouds()?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
+        if (_clouds() is { } clouds)
+        {
+            clouds.FollowLayer();
+            _editsClouds = clouds.CloudsLayer;
+            _saved = clouds.Saved;
+        }
         _heading = SavedHeading();
         _layer = new CanvasLayer { Layer = HudLayers.Lab, Visible = false };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -203,11 +251,13 @@ internal sealed partial class CloudLab : Node
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 4);
         box.AddChild(new Label { Text = $"CLOUD LAB  cloud shadows  {_chapter}", Modulate = Amber });
+        _layerLabel = Small(LayerText(), Amber);
+        box.AddChild(_layerLabel);
 
         foreach (var row in Rows())
             AddRow(box, row);
 
-        _tint = new CheckButton { Text = "Tint the shadows red", FocusMode = Control.FocusModeEnum.None };
+        _tint = new CheckButton { Text = "Tint the shadows (red heads, blue deck)", FocusMode = Control.FocusModeEnum.None };
         _tint.Toggled += on =>
         {
             if (_syncing || _clouds() is not { } c)
@@ -216,6 +266,20 @@ internal sealed partial class CloudLab : Node
             Log.Info("ui", $"cloud lab: {Describe()}");
         };
         box.AddChild(_tint);
+        if (SetVolumetric is { } setVolumetric)
+        {
+            // Off, quarter, half and full in turn, for comparing the march resolutions live.
+            _volumetric = new Button { FocusMode = Control.FocusModeEnum.None };
+            _volumetric.Pressed += () =>
+            {
+                var words = VolumetricCloudsSetting.Words;
+                setVolumetric(words[(VolumetricCloudsSetting.Lookup.IndexOf(VolumetricCloudsSetting.Word) + 1) % words.Count]);
+                _volumetric.Text = VolumetricText();
+                Log.Info("ui", $"cloud lab: volumetric clouds {VolumetricCloudsSetting.Word} for this flight");
+                FollowLayer();
+            };
+            box.AddChild(_volumetric);
+        }
 
         var buttons = new HBoxContainer();
         var save = new Button { Text = $"Save for {_chapter}", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
@@ -227,7 +291,7 @@ internal sealed partial class CloudLab : Node
         box.AddChild(buttons);
         _status = Small("");
         box.AddChild(_status);
-        box.AddChild(Small("Save writes the tunes and the drift's speed and heading for this chapter; the tint stays live only. RMB looks, the sliders take the left button · Shift+F4 hides this panel", Dim));
+        box.AddChild(Small("Save writes the tunes and the drift's speed and heading into the edited layer for this chapter; the tint stays live only. RMB looks, the sliders take the left button · Shift+F4 hides this panel", Dim));
 
         margin.AddChild(box);
         panel.AddChild(margin);
@@ -271,6 +335,8 @@ internal sealed partial class CloudLab : Node
 
     private void SyncRows()
     {
+        if (_volumetric != null)
+            _volumetric.Text = VolumetricText();
         if (_clouds() is not { } c)
             return;
         _syncing = true;

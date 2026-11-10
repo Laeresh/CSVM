@@ -234,8 +234,9 @@ sub-dict). Decoded fully on this install:
 | `GRAVITY` | float | fall-rate multiplier, data units, **SNOW `1.0`, RAIN `3.0`** (rain falls ~3× faster) |
 | `ALPHA_GRADIENT` | float pair | `[0.5, 0.0]` everywhere, `[0]` is the peak opacity (the field is quite translucent) |
 
-Observed values (this install): **SNOW**, C4/IA1 + C4/M01. **RAIN**, C1C/IA1 + C2B/IA1
-(byte-identical to each other). C1/C5 IA1 carry **no** block. (The user recalled "rain" in
+Observed values (this install, the `TYPE` entry in each mission's `ZBD/<chapter>/<mission>/zrdr.zbd`):
+**SNOW**, C4/IA1 and C4/M01 to M04. **RAIN**, C1C/IA1, M01, MP1, MP3, C2B/IA1, M04, MP1, MP3 and
+C4/M05 (`ZBD/C4/M05/zrdr.zbd`), the two IA1 blocks byte-identical to each other. C1/C5 IA1 carry **no** block. (The user recalled "rain" in
 the Rocky Mountains while the data says SNOW, at flight speed gray streaking flakes read
 either way; the data drives it, the A/B confirms.)
 

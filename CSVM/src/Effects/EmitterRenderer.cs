@@ -70,6 +70,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
 """;
 
+    /// <summary>Enhanced only: the volumetric slab's transmittance from the eye to the instance, which every
+    /// sprite drawn over the slab multiplies its alpha by. It reads exactly 1 with no slab drawing
+    /// (csky_pc_veil_at). The declaration goes before <c>vertex()</c> and <see cref="VeilSet"/> inside it.</summary>
+    internal const string VeilDecl = "varying flat float v_veil;\n#include \"res://shaders/csky_volumetric_clouds.gdshaderinc\"";
+
+    /// <summary>The <c>vertex()</c> line that sets <see cref="VeilDecl"/>'s varying.</summary>
+    internal const string VeilSet = "v_veil = csky_pc_veil_at(CAMERA_POSITION_WORLD, MODEL_MATRIX[3].xyz);";
+
     private const string ShaderCode = """
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -125,7 +133,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // background, nothing where it only adds to one already fogged (org/puffer.md).
             vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
             ALBEDO = mix(ALBEDO, FOG_TARGET, csky_fog_amount(fog_world, CAMERA_POSITION_WORLD));
-            ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
+            ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * softVEIL_MUL;
             COMPOSITE
         }
         """;
@@ -299,6 +307,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         ((_mix?.Drawn ?? 0) + (_add?.Drawn ?? 0), (_mix ?? _add)?.Layers ?? 0u,
          (_mixAbove?.Drawn ?? 0) + (_addAbove?.Drawn ?? 0), (_mixAbove ?? _addAbove)?.Layers ?? 0u);
 
+    /// <summary>Gets or sets the render priority every layer draws at: 0, or past the volumetric slab while
+    /// one draws (<c>Session.World.VolumetricClouds</c>). The slab reads opaque depth alone, so drawn later
+    /// it would paint its cloud over a puffer in front of it. Each layer takes a change on its next publish.</summary>
+    internal static int DrawPriority { get; set; }
+
     private bool AnyAdditive
     {
         get
@@ -441,12 +454,13 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // this project delivers must compile the shader it always compiled. GAIN_MUL sits
             // before the fog mix, so a fogged fireball dims instead of blooming through the wall.
             .Replace("GAIN_DECL", enhanced
-                ? "varying flat float v_gain;" + (shaded ? "\nvarying flat float v_shade;" : "")
+                ? "varying flat float v_gain;" + (shaded ? "\nvarying flat float v_shade;" : "") + "\n" + VeilDecl
                 : "")
             .Replace("GAIN_SET", enhanced
-                ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "")
+                ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "") + "\n    " + VeilSet
                 : "")
             .Replace("GAIN_MUL", enhanced ? " * v_gain" : "")
+            .Replace("VEIL_MUL", enhanced ? " * v_veil" : "")
             // The hole is empty AND at end of line on every other variant, so their text stays
             // byte for byte. The sun direction it reads is csky_atmosphere's, in every variant.
             .Replace("SHADE_BLOCK", shaded ? "\n" + SmokeShadeBody : "");
@@ -472,7 +486,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
         private MultiMeshInstance3D _mmi = null!;
         private MultiMesh _mm = null!;
+        private ShaderMaterial _material = null!;
         private int _written;
+
+        // The priority the material last took, kept so a frame asks the engine nothing.
+        private int _priority;
 
         // The frame's instances, handed to the engine in one call by Publish. Three engine calls per
         // particle cost a busy dogfight's opening seconds about 2.4 ms a frame.
@@ -500,7 +518,8 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             var mat = Mech3.ShaderTwins.Follow(new ShaderMaterial(), ShaderFor(!additive, owner._softParticles));
             mat.SetShaderParameter("atlas", owner._atlas);
             mat.SetShaderParameter("frame_count", (float)owner._frameCount);
-            var layer = new Layer();
+            mat.RenderPriority = DrawPriority;
+            var layer = new Layer { _material = mat, _priority = DrawPriority };
             layer._mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
@@ -577,6 +596,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
         public void Publish(uint layers)
         {
+            if (_priority != DrawPriority)
+            {
+                _priority = DrawPriority;
+                _material.RenderPriority = _priority;
+            }
             // Written only on a change, like the count below, and never over another system's mask.
             if (_mmi != null && OwnsLayers && _mmi.Layers != layers)
             {

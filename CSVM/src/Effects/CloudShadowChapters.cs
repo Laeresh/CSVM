@@ -13,13 +13,18 @@ namespace CSVM.Effects;
 /// The shipped per-chapter cloud shadow tunes, <c>CSVM/data/cloud_shadows.json</c>: one object per
 /// chapter holding <see cref="CloudShadowPattern.Tune"/> fields under <see cref="Keys"/>. A missing
 /// chapter or field takes the constants in <see cref="CloudShadowPattern"/>. An unknown field or a
-/// value that is not a number is reported, never fatal. Keys beginning with <c>_</c> are prose. The
-/// cloud lab writes one chapter's entry through <see cref="WithEntry"/>, keeping every other key.
+/// value that is not a number is reported, never fatal. Keys beginning with <c>_</c> are prose. An
+/// entry's sparse <see cref="CloudsLayer"/> block applies over it while the volumetric clouds stand,
+/// so tuning under them leaves the clouds-off look alone. The cloud lab writes one chapter's entry, or
+/// its layer, through <see cref="WithEntry"/>, keeping every other key.
 /// </summary>
 public sealed class CloudShadowChapters
 {
     /// <summary>The committed file, read through Godot in an exported build, where it lives in the pck.</summary>
     public const string DefaultPath = "res://data/cloud_shadows.json";
+
+    /// <summary>The block inside an entry that applies while Volumetric Clouds stands on.</summary>
+    public const string CloudsLayer = "clouds";
 
     /// <summary>An entry's field names, in the order the lab writes them.</summary>
     public static readonly IReadOnlyList<string> Keys = CloudShadowPattern.Fields.Select(f => f.Key).ToArray();
@@ -31,6 +36,8 @@ public sealed class CloudShadowChapters
     };
 
     private readonly Dictionary<string, CloudShadowPattern.Tune> _entries = new(StringComparer.OrdinalIgnoreCase);
+    // Each entry with its clouds layer applied, for the chapters that carry one.
+    private readonly Dictionary<string, CloudShadowPattern.Tune> _clouds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings = new();
 
     /// <summary>What the file got wrong, one line each.</summary>
@@ -75,53 +82,63 @@ public sealed class CloudShadowChapters
                 chapters._warnings.Add($"{key} is not an object, it takes the defaults");
                 continue;
             }
-            chapters._entries[key] = ReadEntry(key, fields, chapters._warnings);
+            var tune = chapters._entries[key] = ReadEntry(key, fields, CloudShadowPattern.Tune.Default, chapters._warnings);
+            if (Find(fields, CloudsLayer) is { } layer)
+            {
+                if (layer is JsonObject over)
+                    chapters._clouds[key] = ReadEntry($"{key}/{CloudsLayer}", over, tune, chapters._warnings);
+                else
+                    chapters._warnings.Add($"{key}/{CloudsLayer} is not an object, ignored");
+            }
         }
         return chapters;
     }
 
     /// <summary>The file's text with <paramref name="chapter"/>'s entry replaced by every field of
-    /// <paramref name="tune"/>. Every other key keeps its place and value; a new chapter is appended.
+    /// <paramref name="tune"/>, its <see cref="CloudsLayer"/> block kept. With <paramref name="clouds"/>
+    /// only that block is replaced, by the fields where <paramref name="tune"/> differs from the entry,
+    /// and dropped when none does. Every other key keeps its place and value; a new chapter is appended.
     /// Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object,
     /// so a Save never replaces a file it cannot read.</summary>
-    public static string WithEntry(string? existing, string chapter, CloudShadowPattern.Tune tune)
+    public static string WithEntry(string? existing, string chapter, CloudShadowPattern.Tune tune, bool clouds = false)
     {
         var root = Mech3.VegetationSidecar.ObjectToRewrite(existing, "cloud shadows");
 
         string name = chapter.ToUpperInvariant();
-        var entry = new JsonObject();
+        var old = Find(root, name) as JsonObject ?? new JsonObject();
         var held = tune.Clamped();
+        var under = clouds ? ReadEntry(name, old, CloudShadowPattern.Tune.Default, new List<string>()) : (CloudShadowPattern.Tune?)null;
+        var fields = new JsonObject();
         foreach (var f in CloudShadowPattern.Fields)
         {
-            if (f.Get(held) is { } v)
-                entry[f.Key] = JsonValue.Create(Math.Round((double)v, 3));
+            if (f.Get(held) is { } v && (under is not { } u || Rounded(f.Get(u)) != Rounded(v)))
+                fields[f.Key] = JsonValue.Create(Math.Round((double)v, 3));
         }
 
-        // Rebuilt key by key, since a JsonObject cannot replace a member in its place.
-        var rebuilt = new JsonObject();
-        bool placed = false;
-        foreach (var (key, node) in root)
+        JsonObject entry;
+        if (clouds)
         {
-            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
-            {
-                if (!placed)
-                    rebuilt[name] = entry;
-                placed = true;
-                continue;
-            }
-            rebuilt[key] = node?.DeepClone();
+            entry = Replaced(old, CloudsLayer, fields.Count > 0 ? fields : null);
         }
-        if (!placed)
-            rebuilt[name] = entry;
-        return rebuilt.ToJsonString(Written) + Environment.NewLine;
+        else
+        {
+            // The fields first, then the layer and any note in their order.
+            entry = fields;
+            foreach (var (key, node) in old)
+            {
+                if (!CloudShadowPattern.Fields.Any(f => f.Key == key))
+                    entry[key] = node?.DeepClone();
+            }
+        }
+        return Replaced(root, name, entry).ToJsonString(Written) + Environment.NewLine;
     }
 
-    /// <summary>Writes <paramref name="chapter"/>'s entry into the file at <paramref name="diskPath"/>,
-    /// creating it when absent.</summary>
-    public static void Save(string diskPath, string chapter, CloudShadowPattern.Tune tune)
+    /// <summary>Writes <paramref name="chapter"/>'s entry, or with <paramref name="clouds"/> its layer
+    /// (<see cref="WithEntry"/>), into the file at <paramref name="diskPath"/>, creating it when absent.</summary>
+    public static void Save(string diskPath, string chapter, CloudShadowPattern.Tune tune, bool clouds = false)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithEntry(existing, chapter, tune), new UTF8Encoding(false));
+        File.WriteAllText(diskPath, WithEntry(existing, chapter, tune, clouds), new UTF8Encoding(false));
     }
 
     /// <summary>The project's copy of the file while the game runs from the source tree. Null in an
@@ -129,16 +146,49 @@ public sealed class CloudShadowChapters
     public static string? SourceTreePath() =>
         Godot.OS.HasFeature("editor") ? Godot.ProjectSettings.GlobalizePath(DefaultPath) : null;
 
-    /// <summary>The chapter's saved tunes, or the constants when the file has no entry for it.</summary>
-    public CloudShadowPattern.Tune For(string chapter) =>
-        _entries.TryGetValue(chapter, out var tune) ? tune : CloudShadowPattern.Tune.Default;
+    /// <summary>The chapter's saved tunes, or the constants when the file has no entry for it. With
+    /// <paramref name="clouds"/> its <see cref="CloudsLayer"/> block applies over them.</summary>
+    public CloudShadowPattern.Tune For(string chapter, bool clouds = false) =>
+        clouds && _clouds.TryGetValue(chapter, out var layered) ? layered
+        : _entries.TryGetValue(chapter, out var tune) ? tune : CloudShadowPattern.Tune.Default;
 
-    private static CloudShadowPattern.Tune ReadEntry(string chapter, JsonObject fields, List<string> warnings)
+    // A value as the file writes it, so a layer holds only what a reader would see differ.
+    private static double? Rounded(float? value) => value is { } v ? Math.Round((double)v, 3) : null;
+
+    // The member under `key` in any case, null when absent.
+    private static JsonNode? Find(JsonObject parent, string key) =>
+        parent.FirstOrDefault(kv => kv.Key.Equals(key, StringComparison.OrdinalIgnoreCase)).Value;
+
+    // `parent` rebuilt with the member under `key` (any case) replaced in its place, or appended, since
+    // a JsonObject cannot replace a member in its place. A null `value` drops it.
+    private static JsonObject Replaced(JsonObject parent, string key, JsonNode? value)
     {
-        var tune = CloudShadowPattern.Tune.Default;
+        var rebuilt = new JsonObject();
+        bool placed = false;
+        foreach (var (k, node) in parent)
+        {
+            if (k.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!placed && value != null)
+                    rebuilt[key] = value;
+                placed = true;
+                continue;
+            }
+            rebuilt[k] = node?.DeepClone();
+        }
+        if (!placed && value != null)
+            rebuilt[key] = value;
+        return rebuilt;
+    }
+
+    // The fields in `fields` over `start`. The clouds layer is read on its own (Parse).
+    private static CloudShadowPattern.Tune ReadEntry(string chapter, JsonObject fields, CloudShadowPattern.Tune start,
+        List<string> warnings)
+    {
+        var tune = start;
         foreach (var (key, node) in fields)
         {
-            if (key.StartsWith('_'))
+            if (key.StartsWith('_') || key.Equals(CloudsLayer, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (node is not JsonValue value || !value.TryGetValue(out double number) || !double.IsFinite(number))
             {

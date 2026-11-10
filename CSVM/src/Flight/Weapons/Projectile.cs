@@ -1468,6 +1468,10 @@ public sealed partial class ProjectilePool : Node3D
         return (below, belowLayers, above, aboveLayers);
     }
 
+    /// <summary>The materials the first tracer pool and the gun smoke draw with now: their own, or
+    /// the veiled twins while the volumetric slab stands.</summary>
+    internal (Material Tracer, Material Smoke) WornMaterials() => (_tracerMm[0].Worn, _smokeMm.Worn);
+
     /// <summary>Where each muzzle-flash quad drawn this frame is pinned, in world space: the
     /// texture's left edge, which <see cref="RenderSprites"/> keeps on the muzzle as the quad
     /// shrinks. The instrument behind the flash-to-muzzle gap suite.</summary>
@@ -3568,8 +3572,32 @@ public sealed partial class ProjectilePool : Node3D
     // A round or a flash draws only for cameras on its own side (Mech3.ZoneGate.PointZone).
     // Without a band every instance takes the lower list, on the world's layer. The upper list is
     // built on its first instance, so a session with nothing above a band adds no node.
+    // While the volumetric slab stands, both sides wear a veiled twin and draw after it with the puffers
+    // (MultiMeshEmitterRenderer.DrawPriority). With no slab they wear the pool's own StandardMaterial3D.
     private sealed class BandedPool
     {
+        // The text Godot generates for AddMultiMesh's StandardMaterial3D. Its alpha takes the slab's
+        // transmittance from the eye to the instance, as a puffer's does.
+        private const string VeiledCode = """
+            shader_type spatial;
+            render_mode BLEND_MODE, depth_draw_never, cull_disabled, unshaded;
+            uniform sampler2D texture_albedo : source_color, filter_linear_mipmap, repeat_disable;
+            VEIL_DECL
+
+            void vertex() {
+                VEIL_SET
+            }
+
+            void fragment() {
+                vec4 albedo_tex = texture(texture_albedo, UV) * COLOR;
+                ALBEDO = albedo_tex.rgb;
+                ALPHA = albedo_tex.a * v_veil;
+            }
+            """;
+
+        // One veiled shader per blend, keyed by additive, shared by every pool in the process.
+        private static readonly Dictionary<bool, Shader> VeiledShaders = new();
+
         private readonly MultiMesh _below;
         private readonly MultiMeshInstance3D _belowMmi;
         private readonly System.Func<(MultiMesh, MultiMeshInstance3D)> _makeAbove;
@@ -3577,6 +3605,10 @@ public sealed partial class ProjectilePool : Node3D
         private MultiMeshInstance3D? _aboveMmi;
         private int _belowCount;
         private int _aboveCount;
+
+        // The twin, built the first time a slab stands, and the priority both sides last took.
+        private ShaderMaterial? _veiled;
+        private int _priority;
 
         public BandedPool(MultiMesh below, MultiMeshInstance3D belowMmi, System.Func<(MultiMesh, MultiMeshInstance3D)> makeAbove)
         {
@@ -3599,6 +3631,9 @@ public sealed partial class ProjectilePool : Node3D
         public (int Below, uint BelowLayers, int Above, uint AboveLayers) Sides =>
             (_below.VisibleInstanceCount, _belowMmi.Layers, _above?.VisibleInstanceCount ?? 0, _aboveMmi?.Layers ?? 0u);
 
+        // The material the lower side draws with now.
+        public Material Worn => _belowMmi.MaterialOverride ?? _below.Mesh.SurfaceGetMaterial(0);
+
         public void Begin()
         {
             _belowCount = 0;
@@ -3609,7 +3644,10 @@ public sealed partial class ProjectilePool : Node3D
         {
             bool above = zone == 2;
             if (above && _above == null)
+            {
                 (_above, _aboveMmi) = _makeAbove();
+                Dress(_aboveMmi);
+            }
             var mm = above ? _above! : _below;
             int n = above ? _aboveCount++ : _belowCount++;
             if (n >= mm.InstanceCount)
@@ -3620,6 +3658,13 @@ public sealed partial class ProjectilePool : Node3D
 
         public void End(bool banded)
         {
+            if (_priority != MultiMeshEmitterRenderer.DrawPriority)
+            {
+                _priority = MultiMeshEmitterRenderer.DrawPriority;
+                Dress(_belowMmi);
+                if (_aboveMmi != null)
+                    Dress(_aboveMmi);
+            }
             _below.VisibleInstanceCount = Mathf.Min(_belowCount, _below.InstanceCount);
             uint below = Mech3.ZoneGate.PointLayers(banded ? 1 : -1);
             if (_belowMmi.Layers != below)
@@ -3630,6 +3675,32 @@ public sealed partial class ProjectilePool : Node3D
             uint above = Mech3.ZoneGate.PointLayers(2);
             if (_aboveMmi.Layers != above)
                 _aboveMmi.Layers = above;
+        }
+
+        private static ShaderMaterial Veiled(StandardMaterial3D source)
+        {
+            bool additive = source.BlendMode == BaseMaterial3D.BlendModeEnum.Add;
+            string code = VeiledCode.Replace("BLEND_MODE", additive ? "blend_add" : "blend_mix")
+                .Replace("VEIL_DECL", MultiMeshEmitterRenderer.VeilDecl)
+                .Replace("VEIL_SET", MultiMeshEmitterRenderer.VeilSet);
+            ShaderCensus.Note(code);
+            if (!VeiledShaders.TryGetValue(additive, out var shader))
+                VeiledShaders[additive] = shader = new Shader { Code = code };
+            var mat = new ShaderMaterial { Shader = shader };
+            mat.SetShaderParameter("texture_albedo", source.AlbedoTexture);
+            return mat;
+        }
+
+        // ⚠ Keep the StandardMaterial3D with no slab: the faithful path and Enhanced with the clouds off
+        // must draw exactly what they drew before.
+        private void Dress(MultiMeshInstance3D mmi)
+        {
+            if (_priority != 0)
+            {
+                _veiled ??= Veiled((StandardMaterial3D)_below.Mesh.SurfaceGetMaterial(0));
+                _veiled.RenderPriority = _priority;
+            }
+            mmi.MaterialOverride = _priority == 0 ? null : _veiled;
         }
     }
 
