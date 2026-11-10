@@ -445,12 +445,78 @@ Deck, and from them the defaults: on, off, or tied to a quality setting.
 - The slab is one full-screen march.
 - Neither has been measured.
 
-**Approach.** <TODO: the measuring instrument; read `docs/verification.md` for the rule on frame
-timing, and the Deck notes (`--det`, the held ssh session).>
+**Approach.** The instrument is a `--perf` probe through `RunProbe.ps1`, the same launch the
+`-Perf` stage makes (`--det --perf --no-vsync --mute --frames=600 --screenshot=`), with
+`--graphics=enhanced` and the two flags set per state. `-Perf` itself cannot take the flags, since
+its scenarios are fixed in `analysis/perf/scenarios.json`. The verdict term is `gpu_ms`, the root
+viewport's GPU time per frame (PERF-1, PERF-2, PERF-11), read beside `frame_ms` and the window's
+`p95_ms`. Each launch gives ten 60-frame windows; the first two are dropped (shader compilation and
+SDFGI's cascade fill) and the run's figure is the median of the other eight. Each pose runs one
+discarded warm-up round and then three measured rounds, the four states interleaved in a rotated
+order within each round (PERF-9, PERF-48); a cell is the median of the three runs. The Deck half
+uses the same probe over ssh under `--det` with a held session, and judges on the Deck (PERF-42).
 
 **Model recommendation.** medium.
 
-**Verify.** <TODO: the numbers and the chapters and poses they were taken at.>
+**Verify.** The table under **Measured (desktop)**, at 1920x1080 (`RunProbe.ps1 -Resolution`), with
+one pose repeated at 2560x1440. The poses, all `--freecam` but the flown one:
+- **C1C under:** C1C/M01, `--pos=-3694,800,-12482 --direction=0,0.6,-1`, under the base (layer
+  1055 to 1955 m) in the rain, looking up into the deck (D31's pose).
+- **C1C graze:** the same point, `--direction=0,0.15,-1`, so the rays cross the layer at a shallow
+  angle: the pose that looks through the layer.
+- **C1C above:** `--pos=-3694,2300,-12482 --direction=0,-0.25,-1`, over the tops, looking down
+  through the layer.
+- **C1C flown:** `--chapter=C1C --plane=player_bhawk --hold=0.2,0.1,0,1` (no mission, so no intro
+  film; IA1's spawn at 1230 m), a chase camera climbing inside the layer, the moving camera that
+  makes SDFGI scroll its cascades.
+- **C1B:** `--pos=-6748,300,-8885 --direction=0.242,0.1,0.970`, the golden's point looking up at
+  the fitted layer (986 to 3404 m) and its 1620 hidden placed clouds.
+- **C2:** `--pos=-5722,186,-3457 --direction=-0.438,0.1,-0.899`, the golden's point over the city,
+  the fitted layer (986 to 3456 m) over the upper half of the frame.
+- **C3:** `--pos=-4518,400,-2015 --direction=-0.35,-0.35,-1`, the golden's canopy pose. C3 has no
+  layer, so its clouds-only state must equal both off; it does to 0.01 ms, the check that the
+  instrument reads the option and nothing else (METHOD-12).
+
+**Measured (desktop).** RTX 5080, Enhanced at its `--det` defaults (shadow quality ultra, TAA,
+render scale 100). Each cell: median `gpu_ms` (its change against both off), median `frame_ms`,
+median window `p95_ms`, all in ms. Run-to-run spread of `gpu_ms` across the three runs is 0.06 ms
+or less in every cell but two (C1C graze both on, 9.03 to 9.46; C1C above both on, 7.40 to 7.70).
+Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout.
+
+| Pose | Both off | Clouds only | GI only | Both on |
+|---|---|---|---|---|
+| C1C under | 0.60, 0.94, 1.39 | 9.53 (+8.93), 9.82, 10.00 | 1.17 (+0.57), 1.52, 1.52 | 10.13 (+9.54), 10.42, 10.42 |
+| C1C graze | 0.83, 1.18, 1.39 | 8.42 (+7.59), 8.70, 9.09 | 1.42 (+0.59), 1.75, 1.85 | 9.41 (+8.58), 9.70, 9.72 |
+| C1C above | 0.64, 0.99, 1.39 | 6.97 (+6.33), 7.26, 7.41 | 1.25 (+0.61), 1.56, 1.64 | 7.54 (+6.90), 7.81, 8.07 |
+| C1C flown | 0.91, 1.38, 1.39 | 5.17 (+4.26), 5.45, 5.79 | 1.90 (+0.99), 2.25, 2.38 | 6.13 (+5.23), 6.41, 6.83 |
+| C1B | 1.26, 1.59, 1.67 | 6.92 (+5.66), 7.20, 7.41 | 1.86 (+0.60), 2.18, 2.38 | 7.51 (+6.26), 7.81, 7.95 |
+| C2 | 1.39, 2.23, 2.38 | 7.17 (+5.78), 7.47, 7.58 | 2.13 (+0.74), 2.71, 2.78 | 7.90 (+6.51), 8.21, 8.33 |
+| C3 | 1.75, 2.27, 2.38 | 1.75 (+0.00), 2.26, 2.38 | 2.54 (+0.80), 2.94, 3.03 | 2.54 (+0.80), 2.93, 3.03 |
+| C1C under, 2560x1440 (one run) | 0.91, 1.27, 1.39 | 16.54 (+15.63), 16.85, 17.54 | 1.63 (+0.72), 1.98, 2.08 | 17.19 (+16.28), 17.53, 18.06 |
+
+- **The slab costs 4.3 to 8.9 ms of GPU at 1080p and 15.6 ms at 1440p**, the deck, field and
+  sprites it hides already netted out. It grows 1.75 times for 1.78 times the pixels, so the cost
+  is the per-pixel march (`steps = 40`, up to 60 on a long span, each sample with five sun taps,
+  plus 16 shaft samples under the base) at full resolution. It is costliest under the deck looking
+  up, where the shafts run as well, and through the layer at a shallow angle.
+- **GI costs 0.57 to 0.99 ms of GPU at 1080p and 0.72 ms at 1440p**, the most on the moving camera
+  (SDFGI scrolling its cascades) and in C3's canopy (0.80). It adds to the slab roughly linearly:
+  both on is the two deltas summed to within 0.4 ms.
+- **Not shown:** CPU load from AI, combat and effects, since the poses are empty and GPU-bound;
+  splitscreen panes and the spyglass disc, which `gpu_ms` leaves out (PERF-39, PERF-47); 4K and
+  the stereo eye sizes; fast flight's cascade scroll beyond the one climbing pose; and the Deck,
+  where engine-native costs grow far more than here (PERF-42).
+
+**Desktop recommendation (the author's call; no default changed).**
+- `--volumetric-clouds`: **off by default.** On the fastest current desktop GPU the march alone
+  takes 77 to 91 % of a 1080p frame at the clouded poses and passes the 120 Hz refresh period by itself
+  at 1440p, before any CPU or combat load; 4K and the VR eye sizes multiply it by pixels. Shadow
+  Quality does not govern its cost, so tying it there would mislabel the setting. A lower-resolution
+  march with the TAA resolve, or fewer steps, would bring it back for review.
+- `--global-illumination`: **on for a discrete GPU, off by the integrated-GPU fallback** the shadow,
+  water and ground-cover settings already use (`ShadowQualitySetting.FallbackFor`), if the Deck half
+  confirms that SDFGI does not fit there, and off in a headset's VR quality profile until it is
+  measured in stereo. It costs at most about 1 ms here at 1080p and 1440p alike.
 
 **⚠ Traps.** The sim clock lags wall time on the author's rig in late C2. Read the sim-clock cadence, not `physics_ms`.
 
