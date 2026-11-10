@@ -68,13 +68,13 @@ internal static class TerrainShadowRaster
     }
 
     /// <summary>The sun's share reaching a fragment at height <paramref name="y"/> under a texel's
-    /// <paramref name="line"/> and blocker <paramref name="distance"/>: 1 lit, 0 shaded. The ramp
-    /// between spans <paramref name="grow"/> per metre of distance, at least <paramref name="least"/>.
+    /// <paramref name="line"/> and blocker <paramref name="distance"/>: 1 lit, 1 - <paramref name="strength"/>
+    /// shaded. The ramp between spans <paramref name="grow"/> per metre of distance, at least <paramref name="least"/>.
     /// <c>csky_terrain_shadow.gdshaderinc</c> spells the same.</summary>
-    public static float Lit(float line, float distance, float y, float grow, float least)
+    public static float Lit(float line, float distance, float y, float grow, float least, float strength = 1f)
     {
         float soft = Math.Max(distance * grow, least);
-        return 1f - Math.Clamp(((line - y) / soft) + 0.5f, 0f, 1f);
+        return 1f - (strength * Math.Clamp(((line - y) / soft) + 0.5f, 0f, 1f));
     }
 
     // Rows r0..r1 of the ground: every triangle's plane at the texel centres inside it, the highest

@@ -72,6 +72,7 @@
     "graphics-twins-world-release": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-vegetation-quality": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "graphics-view-distance": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
+    "graphics-volumetric-clouds-gi": "builds the volumetric cloud slab, whose shader text no other windowed suite makes, so a real renderer must compile it",
     "graphics-water-quality": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "ground-shadow": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",
     "heat-shimmer": "switches graphics modes, and a switch makes texts for every shader key the process holds, so what it makes depends on the shard",

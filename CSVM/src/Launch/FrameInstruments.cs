@@ -64,6 +64,10 @@ internal sealed class FrameInstruments
     // of draws, prims and the root viewport's gpu_ms.
     private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws, _perfDiscPrims, _perfDiscGpu;
 
+    // The volumetric clouds' reduced march over the frames it ran (VolumetricClouds.MarchTime).
+    private int _perfMarchFrames;
+    private double _perfMarchGpu;
+
     // The --perf GC readout. Built with the first --perf frame, so a run without the flag
     // subscribes to no runtime events at all.
     private GcTrace? _gcTrace;
@@ -328,6 +332,12 @@ internal sealed class FrameInstruments
         _perfDiscShadowDraws += discShadowDraws;
         _perfDiscPrims += discPrims;
         _perfDiscGpu += discGpuMs;
+        if (Session.World.VolumetricClouds.MarchTime is { } march)
+        {
+            _perfMarchFrames++;
+            _perfMarchGpu += march.Read().GpuMs;
+        }
+
         if (_perfFrames < PerfWindowFrames)
         {
             return;
@@ -396,10 +406,18 @@ internal sealed class FrameInstruments
             Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0} disc_prims={_perfDiscPrims / n:0} disc_gpu_ms={_perfDiscGpu / n:0.000}");
         }
 
+        // The volumetric clouds' reduced march, a viewport gpu_ms leaves out, said while it ran.
+        if (_perfMarchFrames > 0)
+        {
+            Log.Info("perf", $"cloud_march sim_frame={simFrame} frames={_perfMarchFrames} march_gpu_ms={_perfMarchGpu / _perfMarchFrames:0.000}");
+        }
+
         _perfClock = 0;
         _perfFrames = 0;
         _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
         _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = _perfDiscPrims = _perfDiscGpu = 0;
+        _perfMarchFrames = 0;
+        _perfMarchGpu = 0;
     }
 }

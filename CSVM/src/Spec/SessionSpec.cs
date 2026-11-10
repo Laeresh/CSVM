@@ -2551,11 +2551,10 @@ public sealed record SessionSpec
             }
 
             setting = candidate;
-            word = arg[prefix.Length..];
-            if (!candidate.IsWord(word))
+            word = candidate.Known(arg[prefix.Length..]);
+            if (word == null)
             {
-                notes.Add(new Note("world", $"{prefix}{word} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
-                word = null;
+                notes.Add(new Note("world", $"{arg} is not one of {string.Join("/", candidate.Words)}, keeping the saved option's value"));
             }
 
             return true;

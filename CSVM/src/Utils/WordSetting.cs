@@ -45,8 +45,8 @@ public readonly record struct SettingContext(bool Det, bool Enhanced, int Panes)
 /// <summary>
 /// One word-valued setting, registered once in <see cref="WordSettings.All"/>: its words, config key,
 /// flag, options-file field, fallback, row and live-apply hook. Highest first, the lookup reads
-/// the flag, the saved word, the config key, then the fallback. A word outside <see cref="Words"/> reads
-/// as never set and falls through. The options store, the spec parser, the Options pages, the launch
+/// the flag, the saved word, the config key, then the fallback. A word outside <see cref="Words"/> and
+/// <see cref="Legacy"/> reads as never set and falls through. The options store, the spec parser, the Options pages, the launch
 /// and the apply walk the registry. Each setting keeps its own rules in its own file, such as the
 /// FSR 2.2 clamp in <see cref="RenderScaleSetting"/>.
 /// </summary>
@@ -87,6 +87,10 @@ public sealed class WordSetting
 
     /// <summary>What a row shows for each of <see cref="Words"/>, index for index.</summary>
     public IReadOnlyList<string> Labels { get; init; }
+
+    /// <summary>Words an earlier build accepted, each read as the word it maps to, wherever a flag,
+    /// saved word or config key spells it. Null where the setting never retired a word.</summary>
+    public IReadOnlyDictionary<string, string>? Legacy { get; init; }
 
     /// <summary>Whether a row steps only under Enhanced, keeping its word under Original.</summary>
     public bool EnhancedOnly { get; init; }
@@ -137,6 +141,13 @@ public sealed class WordSetting
         return -1;
     }
 
+    /// <summary><paramref name="word"/> as one of <see cref="Words"/>: itself, the word a
+    /// <see cref="Legacy"/> one maps to, or null for a null or unknown word.</summary>
+    public string? Known(string? word) =>
+        IsWord(word) ? word
+        : word != null && Legacy != null && Legacy.TryGetValue(word, out string? now) ? now
+        : null;
+
     /// <summary>The label for <paramref name="word"/>, or the word itself where it is not one of
     /// <see cref="Words"/>.</summary>
     public string Label(string word)
@@ -157,6 +168,9 @@ public sealed class WordSetting
     public ResolvedWord Resolve(string? flagWord, string? savedWord, string? configWord, string fallback,
         string? fallbackRule = null)
     {
+        flagWord = Known(flagWord);
+        savedWord = Known(savedWord);
+        configWord = Known(configWord) ?? configWord;
         if (IsWord(flagWord))
         {
             return new ResolvedWord(flagWord!, SettingSource.Flag);

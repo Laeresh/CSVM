@@ -384,8 +384,9 @@ internal sealed class InspectionLabs
 
     /// <summary>The lighting lab (Shift+F5), in <c>--freecam</c> over a world with weather alone. It puts
     /// the zone's Enhanced tune on sliders, applied live through <paramref name="weather"/>, and saves
-    /// into the shipped file. Its parked plane is the anim lab's stage prop (<see cref="ParkedProp"/>).</summary>
-    public void BuildLightingLab(BuildState state, WeatherRig? weather, LiveryResolver livery)
+    /// into the shipped file. Its parked plane is the anim lab's stage prop (<see cref="ParkedProp"/>), and
+    /// its GI box switches the effect for this flight through <paramref name="setGi"/>.</summary>
+    public void BuildLightingLab(BuildState state, WeatherRig? weather, LiveryResolver livery, Action<bool> setGi)
     {
         var spec = _in.Spec;
         if (!spec.Freecam || weather == null || weather.ZoneNames.Count == 0)
@@ -396,19 +397,24 @@ internal sealed class InspectionLabs
             plane => ParkedProp(state, livery, plane).Model)
         {
             Debug = spec.DebugLighting,
+            SetGlobalIllumination = setGi,
         });
         Log.Info("ui", $"lighting lab ready (Shift+F5), save {savePath ?? "off in an exported build"}");
     }
 
     /// <summary>The cloud lab (Shift+F4), in <c>--freecam</c> alone: the cloud shadows' tunes, drift and
-    /// tint on sliders, applied live to <paramref name="clouds"/>. Save writes the shipped file.
+    /// tint on sliders, applied live to <paramref name="clouds"/>. Save writes the shipped file. Its
+    /// volumetric button steps their word for this flight through <paramref name="setVolumetric"/>.
     /// Every other mode builds none.</summary>
-    public void BuildCloudLab(Func<CloudShadow?> clouds)
+    public void BuildCloudLab(Func<CloudShadow?> clouds, Action<string> setVolumetric)
     {
         if (!_in.Spec.Freecam)
             return;
         string? savePath = CloudShadowChapters.SourceTreePath();
-        _in.WorldRoot.AddChild(new CloudLab(clouds, _in.Spec.Chapter.ToUpperInvariant(), savePath));
+        _in.WorldRoot.AddChild(new CloudLab(clouds, _in.Spec.Chapter.ToUpperInvariant(), savePath)
+        {
+            SetVolumetric = setVolumetric,
+        });
         Log.Info("ui", $"cloud lab ready (Shift+F4), save {savePath ?? "off in an exported build"}");
     }
 

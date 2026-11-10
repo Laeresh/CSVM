@@ -122,6 +122,22 @@ public class TerrainShadowRasterTests
         Assert.Equal(1f, TerrainShadowRaster.Lit(TerrainShadowRaster.Empty, 0f, -50f, 0.02f, 4f));
     }
 
+    // The strength scales the shade as the shader's 1 - strength * clamp(...) does. The CPU twin and
+    // the shader agree at every strength.
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(0.5f)]
+    [InlineData(1f)]
+    public void TheStrengthScalesTheShadeAsTheShaderDoes(float strength)
+    {
+        float Shader(float line, float distance, float y) =>
+            1f - (strength * Math.Clamp(((line - y) / Math.Max(distance * 0.02f, 4f)) + 0.5f, 0f, 1f));
+        Assert.Equal(Shader(10f, 0f, 12f), TerrainShadowRaster.Lit(10f, 0f, 12f, 0.02f, 4f, strength), 5);
+        Assert.Equal(Shader(10f, 0f, 9f), TerrainShadowRaster.Lit(10f, 0f, 9f, 0.02f, 4f, strength), 5);
+        Assert.Equal(Shader(10f, 1000f, 15f), TerrainShadowRaster.Lit(10f, 1000f, 15f, 0.02f, 4f, strength), 5);
+        Assert.Equal(1f - strength, TerrainShadowRaster.Lit(10f, 0f, 8f, 0.02f, 4f, strength), 5);
+    }
+
     private static int At(TerrainShadowRaster.Result r, float x, float z) =>
         ((int)MathF.Floor((z - r.Origin.Y) / Cell) * r.Width) + (int)MathF.Floor((x - r.Origin.X) / Cell);
 

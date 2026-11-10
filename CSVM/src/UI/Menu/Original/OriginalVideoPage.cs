@@ -67,6 +67,12 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's post-processing dropdown, under Shadow Distance in the scrolled window.</summary>
     public const string PostProcessingKey = "POSTPROCESSING";
 
+    /// <summary>The page's volumetric clouds dropdown, under Post-processing in the scrolled window.</summary>
+    public const string VolumetricCloudsKey = "VOLUMETRICCLOUDS";
+
+    /// <summary>The page's global illumination dropdown, under Volumetric Clouds in the scrolled window.</summary>
+    public const string GlobalIlluminationKey = "GLOBALILLUMINATION";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -163,6 +169,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(CloudShadowsKey, CSVM.Utils.CloudShadowSetting.Lookup, "Cloud Shadows"),
         Word(ShadowDistanceKey, CSVM.Utils.ShadowDistanceSetting.Lookup, "Shadow Distance"),
         Word(PostProcessingKey, CSVM.Utils.PostProcessingSetting.Lookup, "Post-processing"),
+        Word(VolumetricCloudsKey, CSVM.Utils.VolumetricCloudsSetting.Lookup, "Volumetric Clouds"),
+        Word(GlobalIlluminationKey, CSVM.Utils.GlobalIlluminationSetting.Lookup, "Global Illumination"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,
@@ -233,8 +241,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     public bool ResolutionPinned => _choices.ResolutionPinned;
 
     /// <summary>The first dropdown row the window shows. It is 0 with Monitor on the top line. On the
-    /// bottom line 1 puts View Distance, 2 Vegetation, 3 3D Vegetation, 4 Ground Cover, 5 Cloud
-    /// Shadows and 6 VR Mode.</summary>
+    /// bottom line 1 puts View Distance, each step the next dropdown, and 10 VR Mode at the foot.</summary>
     public int Top => _top;
 
     /// <summary>The graphics mode word the page would apply.</summary>

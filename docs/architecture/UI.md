@@ -929,9 +929,9 @@ a panel down the right edge with one slider per `Effects/ZoneLighting.cs` field 
 follows the camera's zone or holds the world in one (`WeatherRig.ForceZone`). An edit goes to `WeatherRig.SetLighting`,
 which lights the session sun, the Environment and every registered clone with it; the grade fields reach the Environment only while Post-processing is on, the sky tint the dome through `csky_tune_sky_tint` and the cloud tint the deck and the cloud sprites through `csky_tune_cloud_tint` and the whiteout overlay directly. A field the mission overrides is
 marked with a reset to the chapter's value. Save to chapter and Save to this mission write through `LightingTable.WithZone`
-and are off in an exported build. Entry off shows the untuned look. Night relights the mission as moonlit
-(`WeatherRig.SetMoonlit`) and either Save writes its flag. A parked plane, the anim lab's stage prop placed by
-`LabParking.cs`, turns on heading, pitch and bank sliders. `--debug-lighting` is the scripted twin.
+and are off in an exported build. The sliders edit one layer, named under the title: `gi` while Global Illumination stands on, else `clouds` while Volumetric Clouds does, else the base block. That layer's blocks hold only what differs from the tune beneath them, and never a field that belongs in another layer (`god_rays` in `clouds`, the GI fields in `gi`); the save note names an edit so left unsaved.
+`FollowLayer` re-reads the layer when either box flips, the panel opens or a Save starts, and drops any unsaved edit made over the other layer, so a Save never writes the wrong one. Entry off shows the untuned look. Night relights the mission as moonlit
+(`WeatherRig.SetMoonlit`) and either Save writes its flag. A parked plane, the anim lab's stage prop placed by `LabParking.cs`, turns on heading, pitch and bank sliders. `--debug-lighting` is the scripted twin.
 
 ## src/UI/Labs/LabParking.cs
 The ray the weapon lab's stand-off and the lighting lab's parked plane share: how far along a line from a point is
@@ -970,9 +970,10 @@ button row per entry (rebuilt only when `Course.Sequence` is a new list), Up, Do
 ## src/UI/Labs/CloudLab.cs
 The cloud lab (Shift+F4), built by `InspectionLabs.BuildCloudLab` in `--freecam` alone. A panel down the right edge holds
 one slider per `Effects/CloudShadowPattern.cs` `Tune` field and the drift's speed and heading, each beside its saved value.
-Every edit writes the `Effects/CloudShadow.cs` globals at once, so no shader rebuilds. A switch tints the shadows red, so the
-pattern and its drift show plainly; the tint is never saved. Revert to saved, and Save, which writes the chapter's entry
-through `Effects/CloudShadowChapters.cs` into the source tree's file and is off in an exported build. The status line says
+Every edit writes the `Effects/CloudShadow.cs` globals at once, so no shader rebuilds; the volumetric head taper and deck
+shares reach `Session/World/VolumetricClouds.cs` on its next frame. A switch tints the shadows red, so the
+pattern and its drift show plainly; the tint is never saved. A button steps the Volumetric Clouds option through off, quarter, half and full for the flight (`VolumetricCloudsSetting.TakeUnsaved`), unsaved. Revert to saved, and Save, which writes the chapter's entry
+through `Effects/CloudShadowChapters.cs` into the source tree's file and is off in an exported build. The sliders edit one layer, named under the title: the entry's `clouds` block while the volumetric clouds stand, holding only what differs from the entry, else the entry itself. `FollowLayer` re-reads it when the word moves, the panel opens or a Save starts, and the shadows then take that layer's saved tune, dropping unsaved edits. The status line says
 whether the shadows draw, since a clear or night mission shows none.
 
 ## src/UI/Labs/CourseDraft.cs

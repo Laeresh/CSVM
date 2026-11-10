@@ -37,6 +37,13 @@ internal static class GraphicsSwitchSuites
     // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string FlatWaterChapter = "C2B";
 
+    // The chapter the volumetric clouds suite flies: a deck under a cloud band, so every part of the slab draws.
+    private const string CloudsChapter = "C1C";
+
+    // CloudsState with the clouds off and on.
+    private const string CloudsOff = "clouds=0 hold=False night_off=False deck_hidden=False";
+    private const string CloudsOn = "clouds=1 hold=True night_off=True deck_hidden=True";
+
     // The chapter the vegetation lab suite edits: every one of its clutter kinds is listed.
     private const string VegetationChapter = "C1";
 
@@ -484,6 +491,134 @@ internal static class GraphicsSwitchSuites
         finally
         {
             WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-volumetric-clouds-gi",
+        "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
+        + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
+        + "keep the same node at the word's march divisor between resolutions, move a puffer's draw past the slab "
+        + "and back with its Enhanced text dimmed by the slab's transmittance, "
+        + "swap the tracers and gun smoke to veiled twins at the puffers' priority and back to their own materials, "
+        + "move the rain past them and back, give the cloud shadows the chapter's clouds layer and back, "
+        + "and draw both band zones with the camera state held across the band; "
+        + "then free it with the zone hold, night flag, deck hide and ground-shadow global back at their off "
+        + "values, the next tick re-reading the state and narrowing the cull mask to it; GI on and off turns SDFGI and SSIL on the session Environment and off again")]
+    internal static void VolumetricCloudsAndGi(TestContext ctx)
+    {
+        RequireData(ctx, CloudsChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var wasClouds = VolumetricCloudsSetting.Lookup.Current;
+        var wasGi = GlobalIlluminationSetting.Lookup.Current;
+        try
+        {
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, GlobalIlluminationSetting.Off);
+            var live = Open(ctx, enhanced: true, chapter: CloudsChapter);
+            try
+            {
+                if (!live.Built || live.Session.Weather is not { } weather)
+                {
+                    ctx.Check(false, $"the Enhanced {CloudsChapter} session builds with weather");
+                    return;
+                }
+
+                string off = CloudsState(live, weather);
+                ctx.Check(off == CloudsOff && PcGround() == Vector4.Zero,
+                    $"built with the option off, no clouds stand and nothing is held ({off}, csky_pc_ground {PcGround()})");
+                // A puffer built before the clouds, whose layer must follow them past the slab and back.
+                var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+                image.Fill(Colors.White);
+                var puffer = new MultiMeshEmitterRenderer(TextureUpload.Create(image), 1, new[] { false }, softParticles: false);
+                var pufferOwner = new Node3D();
+                ctx.Host.AddChild(pufferOwner);
+                puffer.Attach(pufferOwner, 1, cullMargin: 1f);
+                var pufferMaterial = (ShaderMaterial)pufferOwner.GetChild<MultiMeshInstance3D>(0).MaterialOverride;
+                ctx.Check(pufferMaterial.Shader.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal)
+                    && !MultiMeshEmitterRenderer.VariantCode(true, false, enhanced: false, stereo: false).Contains("csky_pc_veil", StringComparison.Ordinal),
+                    $"the Enhanced puffer text dims each particle by the slab's transmittance, and the faithful text carries no such term");
+                // A weapon pool built before the clouds, whose sprites must follow the puffers past the slab and back.
+                var weapons = new Flight.Weapons.ProjectilePool(new TextureArchive(ctx.ChapterTextures("C1")), null, null);
+                ctx.Host.AddChild(weapons);
+                VolumetricClouds? standing = null;
+                foreach (var (word, divisor) in new[]
+                {
+                    (VolumetricCloudsSetting.Off, 0), (VolumetricCloudsSetting.Quarter, 4), (VolumetricCloudsSetting.Full, 1),
+                    (VolumetricCloudsSetting.Half, 2), (VolumetricCloudsSetting.Off, 0),
+                })
+                {
+                    ApplyOption(live, VolumetricCloudsSetting.Lookup, word);
+                    bool on = divisor > 0;
+                    string state = CloudsState(live, weather);
+                    var node = CloudsNode(live);
+                    // C1C draws a layer, so on writes the ground global.
+                    ctx.Check(on ? state == CloudsOn && PcGround() != Vector4.Zero : state == CloudsOff && PcGround() == Vector4.Zero,
+                        $"a live move to {word} {(on ? "builds the clouds and holds the zone" : "frees them and restores the zone")} ({state}, csky_pc_ground {PcGround()})");
+                    if (on)
+                    {
+                        // Between resolutions the same node stands and only re-marches.
+                        ctx.Check(VolumetricClouds.MarchDivisor == divisor && (standing == null || node == standing),
+                            $"at {word} the march divisor is {divisor} on {(standing == null ? "the clouds just built" : "the same clouds node")} (divisor {VolumetricClouds.MarchDivisor}, same node {node == standing})");
+                    }
+
+                    puffer.Show(0);
+                    int wantPriority = on ? Precipitation.OverSlabPriority - 1 : 0;
+                    ctx.Check(pufferMaterial.RenderPriority == wantPriority,
+                        $"at {word} a puffer draws at priority {wantPriority}, {(on ? "after the slab and before the rain" : "among the world's transparents")} ({pufferMaterial.RenderPriority})");
+                    int wantRain = on ? Precipitation.OverSlabPriority : 0;
+                    ctx.Check(Precipitation.DrawPriority == wantRain,
+                        $"at {word} the rain draws at priority {wantRain}, {(on ? "after the puffers over the slab" : "among the world's transparents")} ({Precipitation.DrawPriority})");
+                    ctx.Check(CloudShadow.Live is { } shadows && shadows.CloudsLayer == on && shadows.Tune == shadows.Saved,
+                        $"at {word} the cloud shadows take the chapter's {(on ? "clouds layer" : "base tune")} ({(CloudShadow.Live is { } s ? $"clouds layer {s.CloudsLayer}, {s.Tune.Describe()}" : "none standing")})");
+                    weapons._Process(0.0);
+                    var (tracer, smoke) = weapons.WornMaterials();
+                    bool veiled = tracer is ShaderMaterial { Shader: { } ts } && smoke is ShaderMaterial { Shader: { } ss }
+                        && ts.Code.Contains("blend_add", StringComparison.Ordinal) && ss.Code.Contains("blend_mix", StringComparison.Ordinal)
+                        && ts.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal) && ss.Code.Contains("csky_pc_veil_at(", StringComparison.Ordinal);
+                    ctx.Check(on ? veiled && tracer.RenderPriority == wantPriority && smoke.RenderPriority == wantPriority
+                            : tracer is StandardMaterial3D { RenderPriority: 0 } && smoke is StandardMaterial3D { RenderPriority: 0 },
+                        $"at {word} the tracers and gun smoke draw {(on ? $"veiled twins at priority {wantPriority}, with the puffers" : "their own StandardMaterial3D at 0")} ({tracer.GetType().Name} {tracer.RenderPriority}, {smoke.GetType().Name} {smoke.RenderPriority})");
+                    standing = node;
+                    if (weather.Mission is { HasCloudBand: true } band)
+                    {
+                        // Held, both band zones draw and the state stays put across the band, so C4's mountain tops show.
+                        // Released, the next tick re-reads the state and the mask narrows to it.
+                        var zone = ZoneAcross(live, weather, band.CloudBandCentre);
+                        uint both = ZoneGate.LayerFor(1) | ZoneGate.LayerFor(2);
+                        ctx.Check(on ? zone.Under == zone.Before && zone.Over == zone.Before && zone.Mask == both
+                                : zone.Under == 1 && zone.Over == 2 && zone.Mask == ZoneGate.LayerFor(2),
+                            $"at {word} the camera's zone band is {(on ? "both band zones, its state held" : "its own state's alone")} (state {zone.Before} -> under {zone.Under}, over {zone.Over}, band 0x{zone.Mask:X5})");
+                    }
+                    else
+                    {
+                        ctx.Check(false, $"{CloudsChapter} carries a cloud band to cross");
+                    }
+                }
+
+                pufferOwner.QueueFree();
+                weapons.QueueFree();
+
+                foreach (string word in new[] { GlobalIlluminationSetting.On, GlobalIlluminationSetting.Off })
+                {
+                    ApplyOption(live, GlobalIlluminationSetting.Lookup, word);
+                    bool on = word == GlobalIlluminationSetting.On;
+                    ctx.Check(live.Env.SdfgiEnabled == on && live.Env.SsilEnabled == on,
+                        $"a live move of GI to {word} leaves SDFGI {(on ? "on" : "off")} (sdfgi={live.Env.SdfgiEnabled} ssil={live.Env.SsilEnabled})");
+                }
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            ctx.Check(!WeatherRig.NightOff, $"the closed session leaves the night flag off");
+        }
+        finally
+        {
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, wasClouds.Word ?? VolumetricCloudsSetting.Default);
+            // Off, the --det fallback, since the shared Default is on.
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, wasGi.Word ?? GlobalIlluminationSetting.Off);
             Restore(wasEnhanced);
         }
     }
@@ -1899,6 +2034,28 @@ internal static class GraphicsSwitchSuites
                         && Fields(saved.MissionFields(Chapter, Mission, held)) == "sun_r:0.9,white:7",
                     $"Save to this mission writes only what differs from the chapter ({Fields(saved.MissionFields(Chapter, Mission, held))})");
 
+                // With GI on the lab edits the gi layer, and a save there leaves the base blocks as they were.
+                string baseBlocks = $"{Fields(saved.ChapterFields(Chapter, held))}|{Fields(saved.MissionFields(Chapter, Mission, held))}";
+                bool giWas = GlobalIlluminationSetting.Enabled;
+                GlobalIlluminationSetting.TakeUnsaved(true);
+                try
+                {
+                    lab.FollowLayer();
+                    lab.Set("sdfgi_energy", 0.9f);
+                    bool giSaved = lab.EditedLayer == LightingTable.GiLayer && lab.SaveToChapter() == scratch;
+                    saved = LightingTable.Parse(System.IO.File.ReadAllText(scratch));
+                    string giBlock = Fields(saved.ChapterFields(Chapter, held, LightingTable.GiLayer));
+                    string after = $"{Fields(saved.ChapterFields(Chapter, held))}|{Fields(saved.MissionFields(Chapter, Mission, held))}";
+                    ctx.Check(giSaved && giBlock == "sdfgi_energy:0.9" && after == baseBlocks
+                            && Fields(saved.MissionFields(Chapter, Mission, held, LightingTable.GiLayer)).Length == 0,
+                        $"a save with GI on writes the gi layer alone (layer {lab.EditedLayer}, gi {giBlock}, base {after}, was {baseBlocks})");
+                }
+                finally
+                {
+                    GlobalIlluminationSetting.TakeUnsaved(giWas);
+                    lab.FollowLayer();
+                }
+
                 lab.ResetToChapter("sun_r");
                 ctx.Check(lab.Edited.SunR == 1f && !lab.Overrides.Contains("sun_r"),
                     $"a reset takes the chapter's value and drops the mark (sun_r {lab.Edited.SunR:0.##})");
@@ -3147,6 +3304,50 @@ internal static class GraphicsSwitchSuites
         EnhancedLook.ApplyWaterQuality(rig.Session);
         Step(rig);
     }
+
+    // A word setting's live apply as an Options accept makes it, then the steps a reading waits for. The
+    // word rides the flag slot, so no saved option reaches it; a null rig only stores the word.
+    private static void ApplyOption(Rig? rig, WordSetting setting, string word)
+    {
+        setting.ResolveFrom(word, null, new SettingContext(Det: true, Enhanced: GraphicsMode.Enhanced, Panes: 1));
+        if (rig == null)
+            return;
+        setting.Apply?.Invoke(new LiveWorld(rig.Sun, rig.Session));
+        Step(rig);
+    }
+
+    // The clouds node count under the session, the zone hold, the night flag and the deck hide.
+    private static string CloudsState(Rig rig, WeatherRig weather)
+    {
+        int clouds = 0;
+        Walk(rig.Session, node => clouds += node is VolumetricClouds ? 1 : 0);
+        return $"clouds={clouds} hold={weather.HoldZone} night_off={WeatherRig.NightOff} deck_hidden={weather.HideDeck}";
+    }
+
+    // Two weather ticks, which Step's physics frames do not run: the first pane's camera 500 m under the band,
+    // then 500 m over it. The states each tick leaves, and the camera's zone band after the second.
+    private static (int Before, int Under, int Over, uint Mask) ZoneAcross(Rig rig, WeatherRig weather, float centre)
+    {
+        var pane = rig.Session.Rigs[0];
+        var was = pane.Camera.Position;
+        int before = pane.CameraWeatherState;
+        pane.Camera.Position = new Vector3(was.X, centre - 500f, was.Z);
+        weather.Tick(rig.Session.Rigs);
+        int under = pane.CameraWeatherState;
+        pane.Camera.Position = new Vector3(was.X, centre + 500f, was.Z);
+        weather.Tick(rig.Session.Rigs);
+        pane.Camera.Position = was;
+        return (before, under, pane.CameraWeatherState, pane.Camera.CullMask & ZoneGate.LayerBand);
+    }
+
+    private static VolumetricClouds? CloudsNode(Rig rig)
+    {
+        VolumetricClouds? found = null;
+        Walk(rig.Session, node => found ??= node as VolumetricClouds);
+        return found;
+    }
+
+    private static Vector4 PcGround() => VolumetricClouds.PublishedGround;
 
     // A Vegetation Quality apply as the Options accept makes it, then the steps a reading waits for.
     private static void ApplyVegetation(Rig rig, string word)

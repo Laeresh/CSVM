@@ -533,6 +533,9 @@ public partial class Launcher : Node3D
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+        // The volumetric clouds' altitude-split fog (Session/World/VolumetricClouds.cs); a zero layer leaves it off.
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_fog",
+            RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         // The fullbright world's per-mission brightness from the weather's SUNLIGHT:
         // 1.0 = fullbright (no darkening) for static views / missions without weather; --fly
         // overrides it from WeatherState.WorldLight below.

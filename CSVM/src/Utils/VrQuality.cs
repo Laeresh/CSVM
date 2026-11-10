@@ -4,10 +4,10 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>What a session flies at in place of the flat words. It names the profile that won, the
-/// anti-aliasing method, the root viewport's MSAA, the sun's shadow level and the foveation switch.
-/// A null word leaves the flat resolution alone.</summary>
+/// anti-aliasing method, the root viewport's MSAA, the sun's shadow level, the global illumination
+/// word and the foveation switch. A null word leaves the flat resolution alone.</summary>
 public readonly record struct VrQualityPlan(
-    string Profile, string? AntiAliasing, string? Msaa, string? ShadowQuality, bool Foveation);
+    string Profile, string? AntiAliasing, string? Msaa, string? ShadowQuality, string? GlobalIllumination, bool Foveation);
 
 /// <summary>
 /// The VR quality profile: what a headset session renders at in place of the flat options. It
@@ -41,6 +41,10 @@ public static class VrQuality
     /// from the world origin (docs/architecture/Utils.md).</summary>
     public const string ShadowQuality = ShadowQualitySetting.Low;
 
+    /// <summary>The Enhanced global illumination word under the profile. Off until SDFGI is measured
+    /// at the stereo eye sizes.</summary>
+    public const string GlobalIllumination = GlobalIlluminationSetting.Off;
+
     /// <summary>Whether the profile shades the eye's edges coarser. Off: the time it saves does not
     /// pay for the coarser mips it lifts the night city's window textures toward
     /// (docs/architecture/Utils.md).</summary>
@@ -63,14 +67,14 @@ public static class VrQuality
 
     /// <summary>The plan the launcher resolved for this process, set once before any viewport is
     /// built. Every later resolve of a word the plan names reads it in place of the flag.</summary>
-    public static VrQualityPlan Current { get; set; } = new(None, null, null, null, false);
+    public static VrQualityPlan Current { get; set; } = new(None, null, null, null, null, false);
 
     /// <summary>The plan a session flies at: the profile's words under <paramref name="headset"/>
     /// unless <paramref name="profileFlag"/> asks for <see cref="Flat"/>, nothing without one. A
     /// setting's own flag beats the profile's word for that setting, with or without a headset; the
     /// foveation flag needs one.</summary>
     public static VrQualityPlan Resolve(bool headset, string? profileFlag, string? antiAliasingFlag,
-        string? msaaFlag, string? shadowFlag, string? foveationFlag)
+        string? msaaFlag, string? shadowFlag, string? giFlag, string? foveationFlag)
     {
         bool on = headset && Lookup.Resolve(profileFlag, null, null, Vr).Word == Vr;
         bool foveation = headset && (foveationFlag != null ? foveationFlag == "on" : on && Foveation);
@@ -79,6 +83,7 @@ public static class VrQuality
             antiAliasingFlag ?? (on ? AntiAliasing : null),
             msaaFlag ?? (on ? Msaa : null),
             shadowFlag ?? (on ? ShadowQuality : null),
+            giFlag ?? (on ? GlobalIllumination : null),
             foveation);
     }
 
@@ -97,5 +102,5 @@ public static class VrQuality
     public static string? Describe(in VrQualityPlan plan) =>
         plan.Profile == None && plan.Msaa == null
             ? null
-            : $"vr quality: profile={plan.Profile} anti_aliasing={plan.AntiAliasing ?? "flat"} msaa={plan.Msaa ?? "project"} shadow_quality={plan.ShadowQuality ?? "flat"} foveation={(plan.Foveation ? "on" : "off")}";
+            : $"vr quality: profile={plan.Profile} anti_aliasing={plan.AntiAliasing ?? "flat"} msaa={plan.Msaa ?? "project"} shadow_quality={plan.ShadowQuality ?? "flat"} global_illumination={plan.GlobalIllumination ?? "flat"} foveation={(plan.Foveation ? "on" : "off")}";
 }

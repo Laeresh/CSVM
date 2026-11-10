@@ -10,11 +10,18 @@ namespace CSVM.Effects;
 /// so authored differences between missions survive. The plain shadow values replace the
 /// <c>EnhancedLook</c> constants, whose defaults live here. The shipped file
 /// (<c>Session/World/LightingTable</c>) holds a sparse block per chapter and mission zone, and
-/// <c>WeatherRig</c> applies the resolved block on every zone apply. Pure, so it
-/// unit-tests without a session. Decode of the zone light: docs/org/weather.md.
+/// <c>WeatherRig</c> applies the resolved block on every zone apply. A block's optional
+/// <c>clouds</c> and <c>gi</c> layers are sparse blocks of these fields too. Pure, so it
+/// unit-tests without a session (zone light decode: docs/org/weather.md).
 /// </summary>
 public sealed record ZoneLighting
 {
+    /// <summary>The layer that applies while Volumetric Clouds stands on.</summary>
+    public const string CloudsLayer = "clouds";
+
+    /// <summary>The layer that applies while Global Illumination stands on.</summary>
+    public const string GiLayer = "gi";
+
     /// <summary>The tune with nothing saved: the current Enhanced look.</summary>
     public static readonly ZoneLighting Default = new();
 
@@ -58,6 +65,16 @@ public sealed record ZoneLighting
         new("split2", "Split 2", Shadows, 0.01f, 1f, 0.005f, l => l.Split2, (l, v) => l with { Split2 = v }),
         new("split3", "Split 3", Shadows, 0.01f, 1f, 0.005f, l => l.Split3, (l, v) => l with { Split3 = v }),
         new("fade_start", "Fade start", Shadows, 0f, 1f, 0.01f, l => l.FadeStart, (l, v) => l with { FadeStart = v }),
+        new("shadow_strength", "Terrain + object shadow strength", Shadows, 0f, 1f, 0.01f, l => l.ShadowStrength, (l, v) => l with { ShadowStrength = v },
+            "the terrain bake's share and the sun's shadow-map opacity, 1 fully shaded"),
+        new("god_rays", "God-ray intensity", Clouds, 0f, 4f, 0.01f, l => l.GodRays, (l, v) => l with { GodRays = v },
+            "over the mission's haze gain; draws only with Volumetric Clouds on"),
+        new("ambient_floor", "Ambient fill under SDFGI", Gi, 0f, 2f, 0.01f, l => l.AmbientFloor, (l, v) => l with { AmbientFloor = v },
+            "the zone's flat ambient added back on lit world surfaces, which SDFGI replaces; 1 is the GI-off fill"),
+        new("self_lit_emission", "Self-lit glow into SDFGI", Gi, 0f, 8f, 0.05f, l => l.SelfLitEmission, (l, v) => l with { SelfLitEmission = v },
+            "light self-lit surfaces give lit models near them; SDFGI takes a change only when it re-voxelises, so toggle GI or move on"),
+        new("sdfgi_energy", "SDFGI energy", Gi, 0f, 2f, 0.01f, l => l.SdfgiEnergy, (l, v) => l with { SdfgiEnergy = v },
+            "reads only with Global Illumination on"),
     };
 
     private const string Sun = "Sun";
@@ -67,6 +84,8 @@ public sealed record ZoneLighting
     private const string Tonemap = "Tonemap";
     private const string Grade = "Post-processing grade";
     private const string Shadows = "Shadows";
+    private const string Clouds = "Volumetric clouds";
+    private const string Gi = "Global illumination";
 
     /// <summary>⚠ TUNE. The sun's Godot energy per unit of authored <c>SUNLIGHT_DIFFUSE</c>. Anchored on the
     /// modal day zone (diffuse 1.5) landing on the 1.6 the faithful path hardcodes.</summary>
@@ -171,6 +190,26 @@ public sealed record ZoneLighting
     /// shadow dissolves into the haze rather than cutting off.</summary>
     public float FadeStart { get; init; } = 0.8f;
 
+    /// <summary>How dark terrain and object shadows fall, 1 fully shaded and 0 none. A base field, since
+    /// C1B's caves need it with both options off.</summary>
+    public float ShadowStrength { get; init; } = 1f;
+
+    /// <summary>The volumetric clouds' light shafts over the mission's haze gain, a <c>clouds</c> layer field.</summary>
+    public float GodRays { get; init; } = 1f;
+
+    /// <summary>The share of the zone's flat ambient added back as emission on the lit world while SDFGI
+    /// stands, a <c>gi</c> layer field. SDFGI replaces the Environment's ambient inside its cascades, so
+    /// without it a roofed or tunnelled surface reads black. 1, the GI-off fill, by default.</summary>
+    public float AmbientFloor { get; init; } = 1f;
+
+    /// <summary>TUNE, a <c>gi</c> layer field. The gain on the colour self-lit (<c>lighting: false</c>) surfaces
+    /// hand SDFGI as emission. A self-lit hangar then lights the models inside it.</summary>
+    public float SelfLitEmission { get; init; } = 1f;
+
+    /// <summary>SDFGI's energy, a <c>gi</c> layer field. Half by default: a sky at full energy
+    /// over-fills a flat world's ground.</summary>
+    public float SdfgiEnergy { get; init; } = 0.5f;
+
     /// <summary>Whether the bearing is offset at all. An unoffset bearing must stay bit-identical, since
     /// the terrain bake is keyed by it.</summary>
     public bool TurnsSun => SunYaw != 0f || SunPitch != 0f;
@@ -247,6 +286,15 @@ public sealed record ZoneLighting
     {
         /// <summary>The value <see cref="ZoneLighting.Default"/> holds.</summary>
         public float Default => Get(ZoneLighting.Default);
+
+        /// <summary>The one layer the field belongs in, <see cref="CloudsLayer"/> or <see cref="GiLayer"/>, since it
+        /// draws only under that option. Null for a field any block may hold.</summary>
+        public string? Layer => Group switch
+        {
+            Clouds => CloudsLayer,
+            Gi => GiLayer,
+            _ => null,
+        };
 
         /// <summary>A value as the file writes it: four decimals, so a float's tail never reads as a change.</summary>
         public static double Rounded(float v) => Math.Round((double)v, 4);

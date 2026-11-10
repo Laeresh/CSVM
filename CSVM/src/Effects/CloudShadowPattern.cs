@@ -34,6 +34,18 @@ public static class CloudShadowPattern
     /// <summary>TUNE: the noise band a shadow's edge ramps across, half each side of its centre.</summary>
     public const float Softness = 0.12f;
 
+    /// <summary>TUNE: how far the volumetric heads' noise threshold climbs toward each cloud's own top.
+    /// Higher rounds the crown into a fuller dome.</summary>
+    public const float HeadTaper = 0.3f;
+
+    /// <summary>TUNE: the share of the sun the volumetric deck takes from the ground under it. An
+    /// overcast passes almost no direct sun.</summary>
+    public const float DeckSunTaken = 0.97f;
+
+    /// <summary>TUNE: the share of the ambient light the volumetric deck takes from the ground under it,
+    /// through AO. Under SDFGI that dims the GI's bounce too.</summary>
+    public const float DeckAmbientTaken = 0.6f;
+
     /// <summary>TUNE: the fastest drift a ceiling scroll gives, metres per second. The scroll's speed
     /// in metres rests on an estimate of the ceiling's height (<see cref="CeilingDrift"/>).</summary>
     public const float MaxCeilingDrift = 20f;
@@ -65,6 +77,12 @@ public static class CloudShadowPattern
             t => t.Softness, (t, v) => t with { Softness = v }),
         SpeedField,
         HeadingField,
+        new Field("head_taper", "Volumetric: head taper", 0f, 0.8f, 0.01f, "0.00",
+            t => t.HeadTaper, (t, v) => t with { HeadTaper = v }),
+        new Field("deck_sun", "Volumetric: deck sun taken", 0f, 1f, 0.01f, "0.00",
+            t => t.DeckSunTaken, (t, v) => t with { DeckSunTaken = v }),
+        new Field("deck_ambient", "Volumetric: deck ambient taken", 0f, 1f, 0.01f, "0.00",
+            t => t.DeckAmbientTaken, (t, v) => t with { DeckAmbientTaken = v }),
     };
 
     // Below this, metres per second, a source offers no drift and the next one is read.
@@ -163,11 +181,12 @@ public static class CloudShadowPattern
 
     private static double Wrap(double x, double period) => x - (Math.Floor(x / period) * period);
 
-    /// <summary>The pattern's tunes as one session draws them. The constants are the defaults; the
-    /// cloud lab edits a live copy. A null <see cref="DriftSpeed"/> or <see cref="Heading"/> keeps
-    /// the mission's own.</summary>
+    /// <summary>The pattern's tunes as one session draws them, the volumetric clouds' shape and deck
+    /// among them. The constants are the defaults; the cloud lab edits a live copy. A null
+    /// <see cref="DriftSpeed"/> or <see cref="Heading"/> keeps the mission's own.</summary>
     public readonly record struct Tune(float Darkness, float PatternSize, float Coverage, float Softness, float Ambient,
-        float? DriftSpeed, float? Heading)
+        float? DriftSpeed, float? Heading, float HeadTaper = CloudShadowPattern.HeadTaper,
+        float DeckSunTaken = CloudShadowPattern.DeckSunTaken, float DeckAmbientTaken = CloudShadowPattern.DeckAmbientTaken)
     {
         /// <summary>The shipped tunes.</summary>
         public static Tune Default => new(CloudShadowPattern.Darkness, CloudShadowPattern.PatternSize,

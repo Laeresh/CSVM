@@ -78,10 +78,11 @@ path. Suite `xr-sprite-facing`; golden `c1-moon-xr-sim`.
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
 with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is
-`-1`, or is in that set. Four members: `Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the
+`-1`, or is in that set. The members: `Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the
 visual layer a gated zone's meshes are MOVED onto, 0 for `-1`/`0`, i.e. leave on the default
-layer), `CullMask(mask, state)` (narrows the band to one zone, every other bit untouched) and
-`OpenCullMask(mask)` (the whole band back, for `--no-zone-cull` and the launcher camera's per-session
+layer), `CullMask(mask, state)` (narrows the band to one zone, every other bit untouched),
+`HeldCullMask(mask, state)` (zones 1 and 2 both, zone 3 still by state, while the volumetric clouds
+hold the zone) and `OpenCullMask(mask)` (the whole band back, for `--no-zone-cull` and the launcher camera's per-session
 reset). Constraints and evidence live on the class itself; see `CSVM.Tests/ZoneGateTests.cs`.
 
 ## src/Mech3/ConflictRank.cs

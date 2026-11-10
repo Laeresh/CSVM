@@ -26,6 +26,11 @@ global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2
 // takes the sky tint the fog colour takes, the cloud deck and every cloud sprite the cloud tint.
 global uniform vec3 csky_tune_sky_tint = vec3(1.0);
 global uniform vec3 csky_tune_cloud_tint = vec3(1.0);
+// Zero unless SDFGI stands, Enhanced text only (WeatherRig.ApplyEnhancedLighting). The fill is the zone's
+// flat ambient, linear, which SDFGI replaces; the lit world adds it back as emission. The self-lit
+// world's gain hands its own colour to SDFGI as emission.
+global uniform vec3 csky_gi_ambient_fill = vec3(0.0);
+global uniform float csky_gi_self_lit = 0.0;
 
 // The per-view fog table (Session/World/FogViewTable.cs). Splitscreen panes and spyglass pictures
 // each sit in their own camera weather state, so each wears its own zone's fog, world light and
@@ -203,6 +208,8 @@ bool csky_night_fog(vec3 fog_linear) {
 // and exactly one flown band in the install (C2 ZONE1, 256-1024 m) is inside the flight envelope,
 // so no render in seven of eight chapters can tell one altitude curve from another. Changing it
 // would be a guess dressed as a symmetry.
+global uniform vec4 csky_pc_fog;
+
 float csky_fog_amount(vec3 fog_world, vec3 camera_world) {
     vec2 fog_range = csky_fog_range;
     vec2 fog_alt = csky_fog_alt;
@@ -212,11 +219,24 @@ float csky_fog_amount(vec3 fog_world, vec3 camera_world) {
         fog_alt = view.zw;
     }
     float d = distance(fog_world.xz, camera_world.xz);
+    // The volumetric clouds split the ray at the layer: the share below it crosses the held lower
+    // zone's fog, the share above it the upper zone's range (csky_pc_fog: layer, upper near/far).
+    float above = 0.0;
+    if (csky_pc_fog.x > 0.0 && csky_view_count <= 1) {
+        float lo = min(fog_world.y, camera_world.y);
+        float hi = max(fog_world.y, camera_world.y);
+        above = clamp((hi - csky_pc_fog.x) / max(hi - lo, 0.001), 0.0, 1.0);
+    }
     // max() only guards the divisor: no shipped FOG_RANGES has near == far (and the no-fog range
     // is 1e8/1e9), but a divide-by-zero here would NaN the whole world, not one surface.
     float span = max(fog_range.y - fog_range.x, 0.001);
-    float ramp = clamp((d - fog_range.x) / span, 0.0, 1.0);
-    return ramp * (1.0 - smoothstep(fog_alt.x, fog_alt.y, fog_world.y));
+    float ramp = clamp((d * (1.0 - above) - fog_range.x) / span, 0.0, 1.0);
+    float below_fog = ramp * (1.0 - smoothstep(fog_alt.x, fog_alt.y, min(fog_world.y, csky_pc_fog.x > 0.0 ? csky_pc_fog.x - 1.0 : fog_world.y)));
+    if (above <= 0.0) {
+        return below_fog;
+    }
+    float upper = clamp((d * above - csky_pc_fog.y) / max(csky_pc_fog.z - csky_pc_fog.y, 0.001), 0.0, 1.0);
+    return 1.0 - (1.0 - below_fog) * (1.0 - upper);
 }
 
 #endif

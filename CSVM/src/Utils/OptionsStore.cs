@@ -532,7 +532,7 @@ public sealed class OptionsStore
             };
             foreach (var setting in WordSettings.All)
             {
-                def.Words[setting] = ReadShaped(root, setting.SavedField, setting.IsWord);
+                def.Words[setting] = setting.Known(ReadShaped(root, setting.SavedField, static _ => true));
             }
 
             return def;

@@ -569,10 +569,10 @@ public class OriginalOptionsTests
         Wheel(host, 200f, 300f, -1);
         Assert.Equal(0, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.MonitorKey).Visible);
-        Wheel(host, 200f, 300f, 9);
-        Assert.Equal(8, host.Module.Video.Top);
+        Wheel(host, 200f, 300f, 11);
+        Assert.Equal(10, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
-        Wheel(host, 200f, 300f, -7);
+        Wheel(host, 200f, 300f, -9);
         Assert.Equal(1, host.Module.Video.Top);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
 
@@ -595,10 +595,10 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
         Assert.Equal(1, host.Module.Video.Top);
 
-        // Down scrolls both Vegetation rows, Ground Cover, Cloud Shadows, Shadow Distance, Post-processing and VR Mode in.
-        // It stops on VR Mode where live, then crosses both checkboxes. Under the window the column holds only value
-        // rows, so Down from the checkbox leaves for ACCEPT CHANGES, with CANCEL CHANGES under it.
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 9 : 8); i++)
+        // Down scrolls every dropdown under View Distance in, stopping on VR Mode where live, then crosses both checkboxes.
+        // Under the window the column holds only value rows, so Down from the checkbox leaves for ACCEPT CHANGES, with
+        // CANCEL CHANGES under it.
+        for (int i = 0; i < (OperatingSystem.IsWindows() ? 11 : 10); i++)
         {
             Down(host);
         }
@@ -639,7 +639,7 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Assert.Equal(8, host.Module.Video.Top);
+        Assert.Equal(10, host.Module.Video.Top);
         Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
@@ -986,6 +986,10 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalVideoPage.ShadowDistanceKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.PostProcessingKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.VolumetricCloudsKey, host.FocusedKey);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.GlobalIlluminationKey, host.FocusedKey);
         if (OperatingSystem.IsWindows())
         {
             Down(host);
@@ -1281,7 +1285,7 @@ public class OriginalOptionsTests
         Assert.True(down.Enabled);
         var window = Assert.Single(Lists(host)).Window;
         Assert.Equal(up.X, window.ThumbX);
-        Assert.Equal(7f / 15f * window.TrackHeight, window.ThumbHeight, 3);
+        Assert.Equal(7f / 17f * window.TrackHeight, window.ThumbHeight, 3);
         var composed = Compose(host);
         Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
         var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
@@ -1293,25 +1297,20 @@ public class OriginalOptionsTests
         // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
         Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
         Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
-        // Seven more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Click(host, OriginalVideoPage.WindowKey + ":down");
-        Assert.Equal(8, host.Module.Video.Top);
+        // Nine more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
+        for (int i = 0; i < 9; i++)
+        {
+            Click(host, OriginalVideoPage.WindowKey + ":down");
+        }
+
+        Assert.Equal(10, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
-        Click(host, OriginalVideoPage.WindowKey + ":up");
+        for (int i = 0; i < 10; i++)
+        {
+            Click(host, OriginalVideoPage.WindowKey + ":up");
+        }
+
         Assert.Equal(0, host.Module.Video.Top);
     }
 
@@ -1731,7 +1730,8 @@ public class OriginalOptionsTests
                 OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
                 OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey,
                 OriginalVideoPage.VegetationQualityKey, OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey,
-                OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.ShadowDistanceKey, OriginalVideoPage.PostProcessingKey, OriginalVideoPage.VrModeKey,
+                OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.ShadowDistanceKey, OriginalVideoPage.PostProcessingKey,
+                OriginalVideoPage.VolumetricCloudsKey, OriginalVideoPage.GlobalIlluminationKey, OriginalVideoPage.VrModeKey,
                 OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
                 OriginalVideoPage.WindowKey + ":up", OriginalVideoPage.WindowKey + ":down",

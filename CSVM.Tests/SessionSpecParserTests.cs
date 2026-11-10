@@ -538,6 +538,19 @@ public class SessionSpecParserTests
         Assert.Equal(4f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=huge" }).TerrainShadowCell);
     }
 
+    /// <summary><c>--volumetric-clouds=</c> names off or a march resolution, reads the retired on as half,
+    /// and absent or unknown leaves the saved option's word.</summary>
+    [Fact]
+    public void VolumetricCloudsFlagCarriesItsWord()
+    {
+        var clouds = Utils.VolumetricCloudsSetting.Lookup;
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).WordFlags[clouds]);
+        foreach (string word in new[] { "off", "quarter", "half", "full" })
+            Assert.Equal(word, SessionSpec.Parse(new[] { "--fly", $"--volumetric-clouds={word}" }).WordFlags[clouds]);
+        Assert.Equal("half", SessionSpec.Parse(new[] { "--fly", "--volumetric-clouds=on" }).WordFlags[clouds]);
+        Assert.Null(SessionSpec.Parse(new[] { "--fly", "--volumetric-clouds=eighth" }).WordFlags[clouds]);
+    }
+
     /// <summary><c>--hd-models=</c> names the model folder, empty naming none, and absent leaves
     /// config.json's; <c>--no-hd-models</c> is its own switch, so it holds in either order.</summary>
     [Fact]

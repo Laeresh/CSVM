@@ -455,7 +455,7 @@ muzzle light (the first-person pair joins the `WorldLights` point term in origin
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
-ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring.
+ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring. The sprite pools (tracers, tips, muzzle and impact flashes, gun smoke) are `StandardMaterial3D` MultiMeshes. While the volumetric slab stands, each wears a `ShaderMaterial` twin of that material at `Effects/EmitterRenderer.cs`'s `DrawPriority`, its alpha dimmed by `csky_pc_veil_at` as a puffer's is; with no slab it wears its own again.
 
 ## src/Flight/Weapons/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round
