@@ -58,6 +58,8 @@ who leave it off.
 | 11 | Both layers on: in which order? | **`gi` applies after `clouds`.** |
 | 12 | Where does terrain and object shadow strength live? | **The base zone tune**, not `clouds`: C1B's caves need it with the option off too. |
 | 13 | Goldens with the options on? | **No.** |
+| 14 | The slab costs 4-9 ms of GPU at 1080p on an RTX 5080 (D34). Ship it as is? | **No: march at reduced resolution first (D35)**, judged by the author against full resolution. |
+| 15 | The options' defaults? | **Clouds off; GI on, off through the existing integrated-GPU fallback** (D36), pending the Deck half of D34. |
 
 ## ⚠ Read this before implementing anything
 
@@ -111,10 +113,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, defects and cost
 
-31. ☐ The slab draws over the rain
+31. ☑ The slab draws over the rain
 32. ☑ C2's horizon under the clouds (author's check)
 33. ☑ `TerrainShadow.SunAt` ignores the shadow strength
-34. ☐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
+34. ◐ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults
+35. ☐ March the clouds at reduced resolution
+36. ☐ Option defaults: clouds off, GI on with the integrated-GPU fallback
 
 ### Wave E, tuning and landing
 
@@ -519,6 +523,32 @@ Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout
   measured in stereo. It costs at most about 1 ms here at 1080p and 1440p alike.
 
 **⚠ Traps.** The sim clock lags wall time on the author's rig in late C2. Read the sim-clock cadence, not `physics_ms`.
+
+## D35 ☐ March the clouds at reduced resolution
+
+**Goal.** The slab costs about a quarter of its full-resolution GPU time at the D34 poses, with no visible loss the author objects to against full resolution.
+
+**Evidence (confidence: direction-sound).** D34: the slab adds 4.3 to 8.9 ms at 1080p and 15.6 ms at 1440p on an RTX 5080, scaling with pixel count (1.78x the pixels cost 1.75x). The cost is the per-pixel march (40 to 60 steps, 5 sun taps each, 16 shaft samples under the base). The magnitude a lower resolution saves is TUNE until measured.
+
+**Approach.** <TODO: the agent reads how the slab draws (a full-screen quad at priority 104 reading `depth_texture`) and picks the smallest workable route in Godot 4.7. Candidates: march into a half- or quarter-resolution target (a SubViewport or a compositor effect) and upsample against full-resolution depth so edges against terrain stay sharp; or march a checkerboard and reproject. Keep D31's draw order and the clouds-over-flare rule.> A lab or flag switch between full and reduced resolution lets the author compare.
+
+**Model recommendation.** high: renderer plumbing in Godot 4.7 with depth-aware upsampling.
+
+**Verify.** D34's instrument and poses, before and after; screenshots of full against reduced resolution at the C1C under, graze and above poses for the author; the 8-chapter sweep for shader errors; the full battery.
+
+**⚠ Traps.** Upsampling without depth bleeds cloud over near terrain edges and aircraft. A half-resolution target with TAA on top can shimmer at layer edges; compare with TAA as the player runs it.
+
+## D36 ☐ Option defaults: clouds off, GI on with the integrated-GPU fallback
+
+**Goal.** A fresh install runs with Volumetric Clouds off and Global Illumination on, except where the integrated-GPU fallback the shadow, water and ground-cover settings already use turns GI off (Decision 15).
+
+**Evidence (confidence: traced for the fallback, lead-only for the Deck).** `ShadowQualitySetting.FallbackFor` is the existing integrated-GPU fallback (named by the D34 agent). GI costs 0.6 to 1.0 ms on the desktop; the Deck half of D34 decides whether the fallback must cover it.
+
+**Approach.** Default `GlobalIlluminationSetting` to on, with the fallback; keep `VolumetricCloudsSetting` off. Update the settings' unit tests and `docs/cli.md`. <TODO: check the VR quality profile; the D34 agent advises GI off there until measured in stereo.>
+
+**Model recommendation.** medium.
+
+**Verify.** Unit tests for the default and the fallback; the full battery (goldens run under `--det`, which keeps only the flag, so they must not move).
 
 # Wave E, tuning and landing
 
