@@ -80,7 +80,8 @@ internal sealed class LiveSettings
         // A headset session's profile stands in for the flat words' flags. It resolves before any of
         // them, and a flat launch gets nothing from it.
         var vrQuality = VrQuality.Resolve(XrSession.WillBoot(spec.XrSim), spec.XrQuality,
-            spec.WordFlags[AntiAliasingSetting.Lookup], spec.Msaa, spec.WordFlags[ShadowQualitySetting.Lookup], spec.XrFoveation);
+            spec.WordFlags[AntiAliasingSetting.Lookup], spec.Msaa, spec.WordFlags[ShadowQualitySetting.Lookup],
+            spec.WordFlags[GlobalIlluminationSetting.Lookup], spec.XrFoveation);
         VrQuality.Current = vrQuality;
         // Every word setting under the same --det rule, before any viewport or session builds, since
         // both read the words. They share the mode's line, so a softer or slower run than expected
@@ -233,13 +234,14 @@ internal sealed class LiveSettings
         _cover = null;
     }
 
-    // The word settings' flags, with the VR profile's anti-aliasing and shadow words in place of an
+    // The word settings' flags, with the VR profile's anti-aliasing, shadow and GI words in place of an
     // absent flag under a headset (VrQuality.Current). A flat launch gets the spec's own.
     private static WordValues Flags(SessionSpec spec)
     {
         var flags = spec.WordFlags.Copy();
         flags[AntiAliasingSetting.Lookup] = VrQuality.Current.AntiAliasing ?? flags[AntiAliasingSetting.Lookup];
         flags[ShadowQualitySetting.Lookup] = VrQuality.Current.ShadowQuality ?? flags[ShadowQualitySetting.Lookup];
+        flags[GlobalIlluminationSetting.Lookup] = VrQuality.Current.GlobalIllumination ?? flags[GlobalIlluminationSetting.Lookup];
         return flags;
     }
 

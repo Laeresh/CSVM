@@ -550,7 +550,8 @@ internal static class GraphicsSwitchSuites
         finally
         {
             ApplyOption(null, VolumetricCloudsSetting.Lookup, wasClouds.Word ?? VolumetricCloudsSetting.Default);
-            ApplyOption(null, GlobalIlluminationSetting.Lookup, wasGi.Word ?? GlobalIlluminationSetting.Default);
+            // Off, the --det fallback, since the shared Default is on.
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, wasGi.Word ?? GlobalIlluminationSetting.Off);
             Restore(wasEnhanced);
         }
     }

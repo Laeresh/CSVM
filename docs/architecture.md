@@ -715,7 +715,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
 - `src/Utils/SoundModeSetting.cs`, the sound mode (Original or Enhanced Sound) and the Hit Confirm switch, resolved from the options file, Original with no confirm under `--det`.
 - `src/Utils/CameraZoomMemory.cs`, the Keep Camera Zoom option and the external-view zoom it remembers in the options file, read by the chase camera.
-- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
+- `src/Utils/VrQuality.cs`, the VR quality profile: the anti-aliasing, MSAA, shadow level, global illumination and foveation a headset session flies at in place of the flat words, each beaten by its own flag.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/ShaderCensus.cs`, every shader text a suite hands to Godot, as hashes in its report row, so a headless shard's shaders can be shown compiled by a windowed one.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
@@ -738,7 +738,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/CloudShadowSetting.cs`, whether Enhanced draws the cloud shadows (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, read every frame.
 - `src/Utils/PostProcessingSetting.cs`, whether Enhanced grades the lit world (off, on): the flag/saved/config `WordSetting` lookup over on, off under `--det`, applied live.
 - `src/Utils/VolumetricCloudsSetting.cs`, whether Enhanced draws the volumetric clouds (off, on): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
-- `src/Utils/GlobalIlluminationSetting.cs`, whether Enhanced lights with SDFGI plus SSIL (off, on): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
+- `src/Utils/GlobalIlluminationSetting.cs`, whether Enhanced lights with SDFGI plus SSIL (off, on): the flag/saved/config `WordSetting` lookup over on, off on an integrated GPU or under `--det`, applied live, with an unsaved lab word.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.

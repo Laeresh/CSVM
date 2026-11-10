@@ -4,22 +4,39 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The Volumetric Clouds and Global Illumination options. Each defaults off, resolves as its
-/// siblings do, round-trips through the options file and takes an unsaved lab word.</summary>
+/// <summary>The Volumetric Clouds and Global Illumination options. Clouds default off and GI on, off on
+/// an integrated GPU. Each resolves as its siblings do, round-trips through the options file and takes
+/// an unsaved lab word.</summary>
 public class VolumetricCloudsAndGiSettingTests
 {
     public static TheoryData<string> Settings => new() { VolumetricCloudsSetting.Key, GlobalIlluminationSetting.Key };
 
-    /// <summary>Both resolve off with nothing set, under <c>--det</c> or not, and are registered.</summary>
+    /// <summary>Both resolve off under <c>--det</c> with nothing set, and are registered.</summary>
     [Theory]
     [MemberData(nameof(Settings))]
-    public void BothDefaultOffAndAreRegistered(string key)
+    public void BothFallBackOffUnderDetAndAreRegistered(string key)
     {
         var setting = Of(key);
         Assert.Contains(setting, WordSettings.All);
         Assert.True(setting.EnhancedOnly);
-        Assert.Equal("off", setting.Fallback(new SettingContext(Det: false, Enhanced: true, Panes: 1)).Word);
         Assert.Equal("off", setting.Fallback(new SettingContext(Det: true, Enhanced: true, Panes: 1)).Word);
+    }
+
+    /// <summary>The clouds fall back off on every machine.</summary>
+    [Fact]
+    public void TheCloudsDefaultOff() =>
+        Assert.Equal("off", VolumetricCloudsSetting.Lookup.Fallback(new SettingContext(Det: false, Enhanced: true, Panes: 1)).Word);
+
+    /// <summary>GI falls back on for a discrete GPU, off for an integrated one, and off under
+    /// <c>--det</c> on either, each fallback naming its rule.</summary>
+    [Fact]
+    public void GiFallsBackOnForADiscreteGpuOnly()
+    {
+        Assert.Equal((GlobalIlluminationSetting.On, (string?)null), Rule(GlobalIlluminationSetting.FallbackFor(det: false, integrated: false)));
+        Assert.Equal((GlobalIlluminationSetting.Off, GlobalIlluminationSetting.IntegratedRule),
+            Rule(GlobalIlluminationSetting.FallbackFor(det: false, integrated: true)));
+        Assert.Equal((GlobalIlluminationSetting.Off, GlobalIlluminationSetting.DetRule), Rule(GlobalIlluminationSetting.FallbackFor(det: true, integrated: false)));
+        Assert.Equal((GlobalIlluminationSetting.Off, GlobalIlluminationSetting.DetRule), Rule(GlobalIlluminationSetting.FallbackFor(det: true, integrated: true)));
     }
 
     /// <summary>The flag beats the saved word, which beats the config key, which beats the fallback.</summary>
@@ -84,4 +101,10 @@ public class VolumetricCloudsAndGiSettingTests
         key == VolumetricCloudsSetting.Key ? VolumetricCloudsSetting.Lookup : GlobalIlluminationSetting.Lookup;
 
     private static (string, SettingSource) Pair(ResolvedWord resolved) => (resolved.Word, resolved.Source);
+
+    private static (string, string?) Rule(ResolvedWord resolved)
+    {
+        Assert.Equal(SettingSource.Default, resolved.Source);
+        return (resolved.Word, resolved.Rule);
+    }
 }

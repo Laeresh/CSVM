@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 33. ☑ `TerrainShadow.SunAt` ignores the shadow strength
 34. ☑ Frame cost of the slab and SDFGI, desktop and Steam Deck, and the option defaults (Deck half deferred)
 35. ☐ March the clouds at reduced resolution
-36. ☐ Option defaults: clouds off, GI on with the integrated-GPU fallback
+36. ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
 
 ### Wave E, tuning and landing
 
@@ -542,13 +542,19 @@ Every state is GPU-bound: `frame_ms` sits 0.3 to 0.8 ms over `gpu_ms` throughout
 
 **⚠ Traps.** Upsampling without depth bleeds cloud over near terrain edges and aircraft. A half-resolution target with TAA on top can shimmer at layer edges; compare with TAA as the player runs it.
 
-## D36 ☐ Option defaults: clouds off, GI on with the integrated-GPU fallback
+## D36 ☑ Option defaults: clouds off, GI on with the integrated-GPU fallback
+
+**Landed.** `GlobalIlluminationSetting.Default` is `on`, and its fallback is `FallbackFor(det, integrated)`: `off` under `--det` (`default_det`, as `CloudShadowSetting` and `PostProcessingSetting` do), `off` on an integrated GPU (`default_integrated_gpu`, read through `ShadowQualitySetting.IntegratedGpu` as ground cover does), otherwise `on`. The renderer is asked only off `--det`, so the goldens and suites keep GI off unless their command line asks. The VR quality profile carries a GI word, `off`, beside its shadow word: a headset session stands GI off in place of the saved word, and `--global-illumination=` beats the profile, as `--shadow-quality=` does. `VolumetricCloudsSetting` stays `off` everywhere, unchanged. The `graphics-volumetric-clouds-gi` suite's restore falls back to `off`, the `--det` word, in place of the shared default.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A fresh install runs with Volumetric Clouds off and Global Illumination on, except where the integrated-GPU fallback the shadow, water and ground-cover settings already use turns GI off (Decision 15).
 
 **Evidence (confidence: traced for the fallback, lead-only for the Deck).** `ShadowQualitySetting.FallbackFor` is the existing integrated-GPU fallback (named by the D34 agent). GI costs 0.6 to 1.0 ms on the desktop; the Deck half of D34 decides whether the fallback must cover it.
 
-**Approach.** Default `GlobalIlluminationSetting` to on, with the fallback; keep `VolumetricCloudsSetting` off. Update the settings' unit tests and `docs/cli.md`. <TODO: check the VR quality profile; the D34 agent advises GI off there until measured in stereo.>
+**Approach.** Default `GlobalIlluminationSetting` to on, with the fallback; keep `VolumetricCloudsSetting` off. Update the settings' unit tests and `docs/cli.md`. The VR quality profile (`Utils/VrQuality.cs`) is the mechanism that stands a headset session's anti-aliasing and shadow words in for the flat ones, through `LiveSettings.Flags`; it takes a GI word, `off`, until SDFGI is measured in stereo.
 
 **Model recommendation.** medium.
 

@@ -16,11 +16,12 @@ public class VrQualityTests
     [Fact]
     public void AFlatSessionReplacesNothing()
     {
-        var plan = VrQuality.Resolve(headset: false, null, null, null, null, null);
+        var plan = VrQuality.Resolve(headset: false, null, null, null, null, null, null);
         Assert.Equal(VrQuality.None, plan.Profile);
         Assert.Null(plan.AntiAliasing);
         Assert.Null(plan.Msaa);
         Assert.Null(plan.ShadowQuality);
+        Assert.Null(plan.GlobalIllumination);
         Assert.False(plan.Foveation);
         Assert.Null(VrQuality.Describe(plan));
     }
@@ -28,22 +29,24 @@ public class VrQualityTests
     [Fact]
     public void AFlatSessionKeepsItsOwnFlagsAndNeverFoveates()
     {
-        var plan = VrQuality.Resolve(headset: false, VrQuality.Vr, "fxaa", "2x", "medium", "on");
+        var plan = VrQuality.Resolve(headset: false, VrQuality.Vr, "fxaa", "2x", "medium", "on", "on");
         Assert.Equal(VrQuality.None, plan.Profile);
         Assert.Equal("fxaa", plan.AntiAliasing);
         Assert.Equal("2x", plan.Msaa);
         Assert.Equal("medium", plan.ShadowQuality);
+        Assert.Equal("on", plan.GlobalIllumination);
         Assert.False(plan.Foveation);
     }
 
     [Fact]
     public void AHeadsetFliesTheProfileByDefault()
     {
-        var plan = VrQuality.Resolve(headset: true, null, null, null, null, null);
+        var plan = VrQuality.Resolve(headset: true, null, null, null, null, null, null);
         Assert.Equal(VrQuality.Vr, plan.Profile);
         Assert.Equal(DisplayWords.AntiAliasingOff, plan.AntiAliasing);
         Assert.Equal("4x", plan.Msaa);
         Assert.Equal(ShadowQualitySetting.Low, plan.ShadowQuality);
+        Assert.Equal(GlobalIlluminationSetting.Off, plan.GlobalIllumination);
         Assert.Equal(VrQuality.Foveation, plan.Foveation);
         Assert.Contains("profile=vr", VrQuality.Describe(plan));
     }
@@ -61,25 +64,27 @@ public class VrQualityTests
     [Fact]
     public void FlatQualityUnderAHeadsetKeepsTheFlatWords()
     {
-        var plan = VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, null);
+        var plan = VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, null, null);
         Assert.Equal(VrQuality.Flat, plan.Profile);
         Assert.Null(plan.AntiAliasing);
         Assert.Null(plan.Msaa);
         Assert.Null(plan.ShadowQuality);
+        Assert.Null(plan.GlobalIllumination);
         Assert.False(plan.Foveation);
     }
 
     [Fact]
     public void ASettingsOwnFlagBeatsTheProfile()
     {
-        var plan = VrQuality.Resolve(headset: true, null, "taa", "2x", "ultra", "on");
+        var plan = VrQuality.Resolve(headset: true, null, "taa", "2x", "ultra", "on", "on");
         Assert.Equal(VrQuality.Vr, plan.Profile);
         Assert.Equal("taa", plan.AntiAliasing);
         Assert.Equal("2x", plan.Msaa);
         Assert.Equal("ultra", plan.ShadowQuality);
+        Assert.Equal("on", plan.GlobalIllumination);
         Assert.True(plan.Foveation);
-        Assert.False(VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, "off").Foveation);
-        Assert.True(VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, "on").Foveation);
+        Assert.False(VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, null, "off").Foveation);
+        Assert.True(VrQuality.Resolve(headset: true, VrQuality.Flat, null, null, null, null, "on").Foveation);
     }
 
     [Fact]

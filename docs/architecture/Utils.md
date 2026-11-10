@@ -426,9 +426,11 @@ cloud lab's toggle: it moves the run's word and never the options file, and the 
 (`WordSetting.Retake`). The VIDEO page shows it as the Volumetric Clouds dropdown under Post-processing.
 
 ## src/Utils/GlobalIlluminationSetting.cs
-Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIllumination.cs`): `off` or `on`. It resolves as
-`VolumetricCloudsSetting` does: `--global-illumination=`, the saved `globalIllumination` word, the
-`graphics.globalIllumination` key, then `off`. Its live-apply hook follows the session, which writes GI on the world's
+Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIllumination.cs`): `off` or `on`. It resolves
+`--global-illumination=` (or a headset's VR quality profile, `off`), the saved `globalIllumination` word, the
+`graphics.globalIllumination` key, then `FallbackFor(det, integrated)`: `on` on a discrete GPU, `off` on an integrated one
+(`default_integrated_gpu`, the GPU test `ShadowQualitySetting` holds) until the Steam Deck measures SDFGI, and `off` under `--det`
+(`default_det`), so a golden lights without GI unless its command line asks. Its live-apply hook follows the session, which writes GI on the world's
 Environment and each cockpit pass's copy, then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
 lighting lab's toggle, unsaved as the cloud lab's is. The VIDEO page shows it as the Global Illumination dropdown under
 Volumetric Clouds.
@@ -579,7 +581,7 @@ under `--det` it holds no store, so it reads on, seeds the near end and writes n
 ## src/Utils/VrQuality.cs
 The VR quality profile: what a headset or `--xr-sim` session flies at in place of the flat words, resolved once by `Launch/LiveSettings.cs`
 before any viewport is built (`XrSession.WillBoot`) and kept in `Current`. Anti-aliasing off (MSAA carries the edges, no
-temporal history to smear on a head turn), the project's 4x MSAA, shadow quality `low` (no penumbra) and foveation off. On
+temporal history to smear on a head turn), the project's 4x MSAA, shadow quality `low` (no penumbra), GI off (unmeasured in stereo) and foveation off. On
 Godot 4.7.0 and 4.7.1 a sun with an angular distance costs more the farther the camera is from the world origin (the PCSS
 search radius takes the cascade's world-space near plane against a view-space depth, fixed in 4.7.2), which the VR cockpit,
 drawn in the main world, pays at every pixel: at 3072x3264 per eye Ultra cost 20-43 ms where `low` costs 5.7-6.3. A setting's
