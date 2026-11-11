@@ -1555,7 +1555,7 @@ public partial class GameSession : Node3D
 
         if (_menuDriven)
         {
-            MenuRefusal = $"The course {wanted.Chapter}/{wanted.Name} cannot be flown: {refusal}.";
+            MenuRefusal = Course.RefusalText(wanted.Chapter, wanted.Name, refusal);
             Log.Warn("flight", $"course {wanted.Chapter}/{wanted.Name}: {refusal}; back to the menu");
             return false;
         }

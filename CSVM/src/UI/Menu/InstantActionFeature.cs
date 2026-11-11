@@ -354,7 +354,7 @@ public sealed class InstantActionFeature : IMenuFeature
     /// plane's is its airframe's), in the words a refused launch shows. Null where it admits each or none flies.</summary>
     public string? PlaneRefusal(IEnumerable<string> planes) =>
         LaunchCourse != null && _picked?.Refuses(planes) is { } why
-            ? $"The course {_picked.Chapter}/{_picked.Name} cannot be flown: {why}."
+            ? Flight.Modes.Course.RefusalText(_picked.Chapter, _picked.Name, why)
             : null;
 
     /// <summary>Whether a seat may pick <paramref name="node"/>, a stock node: see <see cref="PlaneRefusal"/>.</summary>

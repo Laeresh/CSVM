@@ -935,7 +935,8 @@ race directly.
 a host that knows no approach plays the pair as a plain abandon: it takes the abandon, refuses the
 approach's newer run number as a run already superseded, counts the fresh run's start only in its
 open window, and refuses the abandon a crash on that approach names, a run it never took. A host
-that knows the approach takes both.
+that knows the approach takes both. Builds of one MAJOR.MINOR share a lobby
+(`BuildVersionMessage`), so kind 5 must not reach a patch release of a minor that lacks it.
 
 **The leaderboard and the clock.** The host sends a racer's line whenever its record of that racer
 changes, then its clock once a second (`MatchStateCadence`'s tick) and at once on every change of

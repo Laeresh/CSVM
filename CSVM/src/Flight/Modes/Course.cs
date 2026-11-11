@@ -125,6 +125,10 @@ public sealed record Course(
         return rules with { CourseBarred = (ushort)barred };
     }
 
+    /// <summary>The sentence a menu shows for a course that cannot launch, <paramref name="why"/> its reason.</summary>
+    public static string RefusalText(string chapter, string name, string why) =>
+        $"The course {chapter}/{name} cannot be flown: {why}.";
+
     /// <summary>Why the course refuses a launch seating <paramref name="planes"/>, stock nodes, or
     /// null where it admits each. A node outside the eleven passes, as a bot's does.</summary>
     public string? Refuses(IEnumerable<string> planes)
