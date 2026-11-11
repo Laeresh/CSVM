@@ -1,8 +1,8 @@
 #ifndef CSKY_CLOUD_SHADOW_INC
 #define CSKY_CLOUD_SHADOW_INC
 
-// The Enhanced cloud shadows (Effects/CloudShadow.cs owns all four globals, the tint and ambient ones
-// declared below). The vec4 is the pattern's drift offset in metres (X, Z), one over the lattice cell
+// The Enhanced cloud shadows (Effects/CloudShadow.cs owns all five globals, the tint, ambient and band
+// ones declared below). The vec4 is the pattern's drift offset in metres (X, Z), one over the lattice cell
 // in metres, and the darkness at a shadow's core; a darkness of 0 draws nothing. The vec2 is the noise
 // band over which a shadow's edge ramps. The tunes behind them live in Effects/CloudShadowPattern.cs.
 global uniform vec4 csky_cloud_shadow;
@@ -210,6 +210,23 @@ float csky_cloud_sun(vec3 world) {
         return deck;
     }
     return (1.0 - csky_cloud_shadow.w * csky_cloud_cover_lit(world)) * deck;
+}
+
+// The mission's cloud band in metres (bottom, top), (0, 0) with none (Effects/CloudShadow.cs).
+global uniform vec2 csky_cloud_shadow_band;
+
+// The clouds' share of the sun on an aircraft at `world`. The flat pattern and the deck fade to clear
+// through the band, so a plane over it flies in the clear; with no band they shade it at any altitude.
+// The volumetric heads keep their own march, which starts at the plane's height and reaches above the band.
+float csky_cloud_sun_aloft(vec3 world) {
+    vec2 band = csky_cloud_shadow_band;
+    float above = band.y > band.x ? smoothstep(band.x, band.y, world.y) : 0.0;
+    float deck = mix(csky_pc_deck_sun(world), 1.0, above);
+    if (csky_cloud_shadow.w <= 0.0) {
+        return deck;
+    }
+    float heads = 1.0 - csky_cloud_shadow.w * csky_cloud_cover_lit(world);
+    return mix(heads, 1.0, csky_pc_ground_sun.w > 0.0 ? 0.0 : above) * deck;
 }
 
 // The ambient light's share left at a world position, for a fragment's AO: 1 in the clear or with

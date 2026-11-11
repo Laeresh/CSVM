@@ -37,8 +37,8 @@ float csky_terrain_baked_sun(vec3 world) {
 }
 
 // The sun's share reaching a world position, which every Enhanced ground, water, building and
-// vegetation arm scales its sun by: the terrain's baked shadow under the clouds' shadow. Aircraft
-// never read it.
+// vegetation arm scales its sun by: the terrain's baked shadow under the clouds' shadow. Aircraft read
+// the bake with csky_cloud_sun_aloft instead, which clears above the cloud band.
 float csky_terrain_sun(vec3 world) {
     return csky_terrain_baked_sun(world) * csky_cloud_sun(world);
 }

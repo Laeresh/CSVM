@@ -10,7 +10,7 @@ namespace CSVM.Effects;
 /// The Enhanced cloud shadows' one owner: a node under the world root that writes the
 /// <c>csky_cloud_shadow*</c> globals <c>csky_cloud_shadow.gdshaderinc</c> declares. Every arm that
 /// scales its sun by <c>csky_terrain_sun</c> reads them: ground, water, buildings, vegetation. One
-/// global moves every pane at once, and no aircraft arm reads it. The pattern drifts on the shader clock
+/// global moves every pane at once, and an aircraft too, up to the mission's cloud band. The pattern drifts on the shader clock
 /// (<see cref="CloudShadowPattern"/>). It draws only under Enhanced, with the Cloud Shadows word on,
 /// in a cloudy mission, outside a night zone. Leaving the tree puts the off state back.
 /// </summary>
@@ -22,13 +22,16 @@ internal sealed partial class CloudShadow : Node
     private static readonly StringName EdgeParam = "csky_cloud_shadow_edge";
     private static readonly StringName TintParam = "csky_cloud_shadow_tint";
     private static readonly StringName AmbientParam = "csky_cloud_shadow_ambient";
+    private static readonly StringName BandParam = "csky_cloud_shadow_band";
 
     private static bool _registered;
     private static Vector2 _publishedEdge;
     private static Vector3 _publishedTint;
     private static float _publishedAmbient;
+    private static Vector2 _publishedBand;
 
     private readonly bool _cloudy;
+    private readonly Vector2 _band;
     private readonly string _chapter;
     private CloudShadowChapters _chapters;
     private bool _night;
@@ -38,9 +41,10 @@ internal sealed partial class CloudShadow : Node
     private double _shiftX, _shiftZ;
 
     private CloudShadow(Vector2 authored, CloudShadowPattern.DriftSource source, bool cloudy, bool night,
-        CloudShadowChapters chapters, string chapter)
+        CloudShadowChapters chapters, string chapter, Vector2 band)
     {
         Name = "CloudShadow";
+        _band = band;
         Authored = authored;
         Source = source;
         _cloudy = cloudy;
@@ -106,6 +110,7 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd(EdgeParam, RenderingServer.GlobalShaderParameterType.Vec2, CloudShadowPattern.Edge);
         RenderingServer.GlobalShaderParameterAdd(TintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         RenderingServer.GlobalShaderParameterAdd(AmbientParam, RenderingServer.GlobalShaderParameterType.Float, 0f);
+        RenderingServer.GlobalShaderParameterAdd(BandParam, RenderingServer.GlobalShaderParameterType.Vec2, Vector2.Zero);
         // The volumetric clouds' ground shadow (VolumetricClouds.PublishGround); a zero deck share leaves it off.
         RenderingServer.GlobalShaderParameterAdd("csky_pc_ground", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_ground_sun", RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 1f, 0f, 0f));
@@ -118,21 +123,23 @@ internal sealed partial class CloudShadow : Node
         _publishedEdge = CloudShadowPattern.Edge;
         _publishedTint = Vector3.Zero;
         _publishedAmbient = 0f;
+        _publishedBand = Vector2.Zero;
     }
 
     /// <summary>Puts the off state back, so every sun term reads exactly 1 for the clouds.</summary>
     public static void Withdraw()
     {
         Live = null;
-        Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f);
+        Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f, Vector2.Zero);
     }
 
     /// <summary>The shadows for a mission drifting at <paramref name="authored"/>, drawn while
     /// <paramref name="cloudy"/> and the zone is not <paramref name="night"/>. The tune is
-    /// <paramref name="chapters"/>' entry for <paramref name="chapter"/> in the standing layer, else the constants.</summary>
+    /// <paramref name="chapters"/>' entry for <paramref name="chapter"/> in the standing layer, else the constants.
+    /// <paramref name="band"/> is the mission's cloud band (bottom, top), zero with none.</summary>
     public static CloudShadow Create(Vector2 authored, CloudShadowPattern.DriftSource source, bool cloudy, bool night,
-        CloudShadowChapters? chapters = null, string chapter = "") =>
-        new(authored, source, cloudy, night, chapters ?? new CloudShadowChapters(), chapter);
+        CloudShadowChapters? chapters = null, string chapter = "", Vector2 band = default) =>
+        new(authored, source, cloudy, night, chapters ?? new CloudShadowChapters(), chapter, band);
 
     /// <summary>The drift of <paramref name="dome"/>'s scrolling surfaces (<see cref="CloudShadowPattern.CeilingDrift"/>),
     /// their ceiling put at <paramref name="altitude"/>, or null where none scrolls. The arrays come
@@ -247,10 +254,15 @@ internal sealed partial class CloudShadow : Node
         return xf;
     }
 
-    private static void Write(Vector4 value, Vector2 edge, Vector3 tint, float ambient)
+    private static void Write(Vector4 value, Vector2 edge, Vector3 tint, float ambient, Vector2 band)
     {
         if (!_registered)
             return;
+        if (band != _publishedBand)
+        {
+            _publishedBand = band;
+            RenderingServer.GlobalShaderParameterSet(BandParam, band);
+        }
         if (edge != _publishedEdge)
         {
             _publishedEdge = edge;
@@ -276,11 +288,12 @@ internal sealed partial class CloudShadow : Node
     {
         if (!Draws)
         {
-            Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f);
+            // The band still stands: the volumetric deck still shades an aircraft with the noise shadows off.
+            Write(OffValue, CloudShadowPattern.Edge, Vector3.Zero, 0f, _band);
             return;
         }
         var tunes = Tune.Clamped();
         var offset = Offset();
-        Write(new Vector4(offset.X, offset.Y, 1f / tunes.PatternSize, tunes.Darkness), tunes.Edge, Tint, tunes.Ambient);
+        Write(new Vector4(offset.X, offset.Y, 1f / tunes.PatternSize, tunes.Darkness), tunes.Edge, Tint, tunes.Ambient, _band);
     }
 }
