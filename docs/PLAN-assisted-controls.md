@@ -81,8 +81,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the assist
 
 11. ☑ The assist law: stick and yaw input to a `FlightInput`, pure and unit-tested
-12. ☐ Wire the assist into the human input path for every device, the mouse included
-13. ☐ The autogyro under the assist
+12. ☑ Wire the assist into the human input path for every device, the mouse included
+13. ☑ The autogyro under the assist
 14. ☐ Tune the assist and the level camera at the controls
 
 ## Dependency and parallelism notes
@@ -298,7 +298,33 @@ constants, which this project has decoded only in part; close the loop on vertic
 Horizon-relative pitch and plane-axis elevator differ once banked; a test at zero bank cannot tell
 them apart.
 
-## B12 ☐ Wire the assist into the human input path
+## B12 ☑ Wire the assist into the human input path
+
+**Landed.** One seam, `FlightController.Steered`, at the return of `ReadKeyboard`, where the keys,
+pads, flight sticks and mouse are already summed and clamped in the plant's signs. A seat with
+`IsHumanPiloted` set and its own profile's `ControlScheme` on Assisted hands that stick to
+`AssistedFlight.Steer` with the seat's `_model` and the sim step's dt; every other seat passes it as
+read, and AI and remote seats never reach the keyboard arm at all. `FlightControllerBuild` carries
+`ControlScheme` over `_controls.Profile` like `MouseFlying`, and `ApplyProfile` copies it, so the
+launch read and a CONTROLS page accepted over the pause both reach the seat. The seat's
+`AssistedState` is reset by the `ControlScheme` setter when the value changes, by `Respawn` (which
+also runs at first spawn), and on every held step, since a held aircraft is placed rather than
+flown. A wholly held seat (`FlightControlHold.All`, a pause sheet over network flight) feeds its
+centred stick through the same seam, so under Assisted it levels and holds the climb. Centring, per
+device: the keyboard ramp assigns exactly 0; a pad's pitch passes `PadCurve` (0 inside 0.15); a
+flight stick's full axis reads `ControlValue.None` inside its stamped 0.02; the mouse's `Gate` is 0
+inside 0.1. Only a flight stick whose centre has drifted past its own deadzone rests off zero, and
+the seam adds no band for it: a band of even 0.02 would swallow a pad's first 0.12 of raw travel past
+its deadzone, since `PadCurve` squares. Docs: `docs/assisted-flight.md` "The wiring",
+`docs/controls.md`, `docs/architecture/Flight.md`. Suite `flight-assisted-seat` (in
+`AssistedFlightSuites.cs` beside the law's suite, which owns the flown helpers it reuses): a held
+roll-left key raw under Original against through the law under Assisted, the state reset on a
+switch, an accepted profile and a respawn but not on an accept that keeps the scheme, and an AI seat
+on Assisted reading raw without priming the law.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With Assisted selected, every human device (keyboard, pad, flight stick, mouse) flies
 through the assist; with Original selected, nothing changes.
@@ -322,7 +348,23 @@ Original-scheme run of the complete `RunTests.ps1` unchanged against main.
 **⚠ Traps.** AI pilots and remote planes must never pass through the assist; gate on the human
 seat's own option, not a global.
 
-## B13 ☐ The autogyro under the assist
+## B13 ☑ The autogyro under the assist
+
+**Landed.** No law branch (B11 found `is_autogyro` reaches no plant term). Keys, pad and flight
+stick never pass the autogyro exchange, which lives in `MouseFlight.Read` alone, so the one change
+is that `FlightController.MouseFlightRead` asks `Read` for an aeroplane's mapping while the seat is
+Assisted: the cursor reaches the law as roll and nothing exchanges the law's output afterwards.
+`flight-assisted-seat` flies the Hoplite through the seat for 3 s on the left key and on a cursor
+left of centre and checks a left turn of over 20 degrees banked over 10 degrees left; the bank is
+what a cursor exchanged before the law would not produce (it would reach the law as yaw, which the
+law passes to the rudder with the wings held level). The suite also reads the cursor under both
+schemes: yaw under Original, roll under Assisted. Measured: the left key turns the Hoplite 103.5
+degrees in 3 s at up to 80.1 degrees of bank, the cursor at -0.8 turns it 71.8 degrees at up to 64.0.
+A mutant that kept the exchange under Assisted failed the suite: 73.5 degrees of turn at 0.0 bank.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With Assisted selected, stick left turns the autogyro left, as for any plane (Decision 10).
 

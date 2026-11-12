@@ -607,6 +607,7 @@ public partial class FlightController : Node3D
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
+    private AssistedState _assisted;             // the Assisted law's carry; default on spawn, hold and a scheme switch
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private int _cannonHitsLogged;               // the same for the cannon cues; see LogsCannonHit
@@ -1190,6 +1191,14 @@ public partial class FlightController : Node3D
     /// </summary>
     internal bool FarFieldPlant => _model != null && _model.FarFieldPlant;
 
+    // The Assisted law's carry, for a suite that checks when the seat hands it a fresh one.
+    internal AssistedState AssistedStateForTest => _assisted;
+
+    // Whether this seat's stick flies through the Assisted law, gated on the seat's own profile. An
+    // AI or remote seat never reads the keyboard arm. The person check keeps an AI seat's held
+    // stick off the assist whatever its profile says.
+    private bool Assisted => IsHumanPiloted && ControlScheme == Bindings.ControlScheme.Assisted;
+
     // A remote airframe is a pose that arrives late, never a stick that arrives late. It takes no
     // arm at all: a neutral hold answers any incidental read, and no device is touched. That wins
     // over a supplied stick, whose pose is not this machine's to write.
@@ -1468,6 +1477,7 @@ public partial class FlightController : Node3D
         ApplyPresence();
         SetLever(_spawnThrottle);
         _controls.CentreKeys();  // a fresh airframe spawns with the stick centred
+        _assisted = default;     // and the assist primes afresh from it
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
@@ -2237,14 +2247,15 @@ public partial class FlightController : Node3D
             _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
             SetLever(0f);        // the throttle ramp is input-driven and no input is read while held
             _lastInput = default; // control surfaces sit neutral
+            _assisted = default;  // a held seat is placed, so the assist primes where it is let go
         }
         else
         {
-            // A wholly held seat commands nothing. The stick centres over the lever it was left on,
-            // so the aeroplane flies on as trimmed, not held still or cut to idle. The narrower
-            // hold leaves the stick and the throttle exactly as the pilot works them.
+            // A wholly held seat's stick centres over its lever, through the assist under Assisted.
+            // The aeroplane flies on as trimmed, not held still or cut to idle. The narrower hold
+            // leaves the stick and the throttle exactly as the pilot works them.
             var input = EffectiveHold == FlightControlHold.All
-                ? new FlightInput { Throttle = _throttle }
+                ? Steered(new FlightInput { Throttle = _throttle }, dt)
                 : InputSource.Read(dt);
             // ⚠ Leave now if a held respawn inside that read began a start count. Flying on would
             // step and sweep from the walk's first point, which can stand inside structure.
@@ -3939,14 +3950,22 @@ public partial class FlightController : Node3D
             _throttle = Mathf.MoveToward(_throttle, _throttleSetting, ThrottleRate * dt);
 
         var mouse = MouseFlightRead();
-        return new FlightInput
-        {
-            Pitch = Mathf.Clamp(stick.Pitch + mouse.Pitch, -1f, 1f),
-            Roll = Mathf.Clamp(stick.Roll + mouse.Roll, -1f, 1f),
-            Yaw = Mathf.Clamp(stick.Yaw + mouse.Yaw, -1f, 1f),
-            Throttle = _throttle,
-        };
+        return Steered(
+            new FlightInput
+            {
+                Pitch = Mathf.Clamp(stick.Pitch + mouse.Pitch, -1f, 1f),
+                Roll = Mathf.Clamp(stick.Roll + mouse.Roll, -1f, 1f),
+                Yaw = Mathf.Clamp(stick.Yaw + mouse.Yaw, -1f, 1f),
+                Throttle = _throttle,
+            },
+            dt);
     }
+
+    // The Assisted scheme's one seam: a person's seat on it flies the summed stick as a turn and a
+    // climb (docs/assisted-flight.md). Every other seat's stick passes as read. Each device centres
+    // to an exact zero, which is what the law's climb hold waits for.
+    private FlightInput Steered(FlightInput stick, float dt) =>
+        Assisted ? AssistedFlight.Steer(stick, _model, ref _assisted, dt) : stick;
 
     // What the mouse adds to this tick's stick. It adds nothing at all unless this seat flies with
     // the mouse and the free-look control is up. That is the original's own guard: the mouse
@@ -3960,7 +3979,8 @@ public partial class FlightController : Node3D
         var stick = Mouse.Stick(this);
         // The wheel is the original's third mouse axis and this port reads two, so it passes zero.
         // An aeroplane takes no yaw from the mouse and an autogyro no roll (docs/controls.md).
-        return MouseFlight.Read(stick.X, stick.Y, 0f, Stats?.IsAutogyro ?? false);
+        // ⚠ Not under Assisted: the law wants the cursor as stick, and finds the autogyro's own yaw.
+        return MouseFlight.Read(stick.X, stick.Y, 0f, (Stats?.IsAutogyro ?? false) && !Assisted);
     }
 
     // Whether this seat would take the mouse on this frame. For a suite that reads the decision on

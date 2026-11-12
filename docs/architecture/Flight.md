@@ -1311,7 +1311,7 @@ target. Inside `RudderBand` the turn is flat on rudder; a centred stick holds th
 nose; full sideways stick is the hardest turn that holds height, found by a vertical-speed loop on
 `AssistedState.TurnCap`; a held pull loops and a release inverted rolls upright. The separate yaw
 input lands on the rudder after the loops. It writes only a `FlightInput` and carries its state in
-the caller's `AssistedState`. Engine-free. Design: [../assisted-flight.md](../assisted-flight.md).
+the caller's `AssistedState`; `FlightController` is the one caller in flight. Engine-free. Design: [../assisted-flight.md](../assisted-flight.md).
 
 ## src/Flight/Airframe/AnalogAxes.cs
 The two analogue shares of a seat's flight command. `Pad` bends pitch and roll through `PadCurve`
@@ -1503,7 +1503,8 @@ as `Pilot` does, so `FlightController` exposes a public field for none; `Bind` c
 resolving the `IFlightInputSource`, beside the `IWorldQuery` seam. A seat whose pose arrives over the
 wire takes no stick arm at all: the buffer's presence IS the ownership, so no seat is half remote.
 The same partial holds `ApplyProfile`, the one method a seat takes a keymap, mouse scheme,
-sensitivity and chase camera through, at build and on a Controls page accepted in flight.
+sensitivity, chase camera and control scheme through, at build and on a Controls page accepted in
+flight. `ControlScheme`'s setter hands the Assisted law a fresh state when the value changes.
 
 ## src/Flight/Airframe/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
@@ -1541,7 +1542,7 @@ weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`) and the AI's weapons tick `AiWeaponsDrive`. The seat's keymap and device readers are `SeatControls`; this node performs what each of those
-reports, and holds the state the engine can only hold as state. Every physics query runs through the
+reports, and holds the state the engine can only hold as state. A person's seat on the Assisted scheme passes the keyboard arm's summed stick, and a wholly held seat's centred one, through `AssistedFlight.Steer` at one seam (`Steered`), with the mouse read before the autogyro exchange; the law's `AssistedState` is reset on a respawn, a held step and a scheme switch ([../assisted-flight.md](../assisted-flight.md)). Every physics query runs through the
 one `IWorldQuery` bound in `Bind`, and contact detection is `AircraftContactSweep`'s: one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and

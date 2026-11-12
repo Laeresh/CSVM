@@ -130,6 +130,21 @@ public partial class FlightController
         set => _controls.Profile.ChaseCamera = value;
     }
 
+    /// <summary>Whether this seat's stick flies through the Assisted law
+    /// (<see cref="AssistedFlight"/>). The seat's own profile's value, read through each frame like
+    /// <see cref="MouseFlying"/> and set through <see cref="ApplyProfile"/>. A change hands the law
+    /// a fresh state, so the new scheme primes from the plane as it flies now.</summary>
+    public Bindings.ControlScheme ControlScheme
+    {
+        get => _controls.Profile.ControlScheme;
+        set
+        {
+            if (value != _controls.Profile.ControlScheme)
+                _assisted = default;
+            _controls.Profile.ControlScheme = value;
+        }
+    }
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default. Under the launch gate no file is read at all
@@ -143,7 +158,7 @@ public partial class FlightController
     }
 
     /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme, mouse
-    /// sensitivity and chase camera, and recomposes the prompts that name them. That is the whole of
+    /// sensitivity, chase camera and control scheme, and recomposes the prompts that name them. That is the whole of
     /// what a seat takes from its player's keymap. ⚠ Copy a profile value in this one method only.
     /// The build's saved read and a Controls page accepted in flight both come through here. An
     /// accepted edit cannot reach a value copied elsewhere until the seat is rebuilt.</summary>
@@ -156,6 +171,7 @@ public partial class FlightController
         MouseFlying = profile.MouseFlying;
         MouseSensitivity = profile.MouseSensitivity;
         ChaseCamera = profile.ChaseCamera;
+        ControlScheme = profile.ControlScheme;
         ComposeControlPrompts();
     }
 

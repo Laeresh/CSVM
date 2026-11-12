@@ -11,6 +11,8 @@ is remake-only and the original game has nothing like it. The law is
 
 - [What the law does](#what-the-law-does)
 - [The contract](#the-contract)
+- [The wiring](#the-wiring)
+- [The mouse and the autogyro under the assist](#the-mouse-and-the-autogyro-under-the-assist)
 - [Why not the AI's steering law](#why-not-the-ais-steering-law)
 - [What the plant does, and how the law follows from it](#what-the-plant-does-and-how-the-law-follows-from-it)
 - [The autogyro](#the-autogyro)
@@ -46,8 +48,41 @@ other field pass through untouched.
 
 The caller owns one `AssistedState` per seat and hands it a fresh `default` on spawn, respawn and a
 scheme switch; the first step primes it from the plane. The climb hold engages only on a Pitch of
-exactly zero, which is what the keyboard ramp, the pad's deadzone and the mouse's gate all produce at
-centre.
+exactly zero, which is what every device produces at centre.
+
+## The wiring
+
+`FlightController` is the one caller. Its keyboard arm (`ReadKeyboard`) sums the keys, the pads, the
+flight sticks and the mouse into one clamped `FlightInput`, and its return goes through `Steered`:
+a seat with `IsHumanPiloted` set and its own profile's `ControlScheme` on Assisted hands that stick
+to `Steer`, and every other seat passes it as read. The sum is in the plant's signs already, the
+separate yaw input sits in its Yaw, and the throttle is the live lever. The `dt` is the sim step's.
+
+- **Only a person's seat.** An AI seat reads `PilotInputSource` and a remote seat a neutral
+  scripted hold, so neither reaches the keyboard arm. A seat that does read it with
+  `IsHumanPiloted` clear stays on the raw stick whatever its profile says.
+- **The scheme is the seat's own.** It is `BindingProfile.ControlScheme` on the seat's keymap
+  profile, taken through `ApplyProfile` at build and when a Controls page is accepted over the
+  pause, so each player's seat in splitscreen and multiplayer flies its own choice.
+- **The state resets** when `ControlScheme`'s setter sees a different value, on every `Respawn`
+  (which also runs at first spawn), and on every held step (`Held`), since a held aircraft is
+  placed rather than flown. An accept that keeps the scheme keeps the state.
+- **A wholly held seat** (`FlightControlHold.All`, and a pause sheet over a multiplayer flight)
+  feeds a centred stick through the same seam, so under Assisted the plane levels its wings and
+  holds its climb rather than flying on with its bank.
+- **Each device centres to exactly zero.** The keyboard ramp assigns 0 when its key is up; a pad's
+  pitch and roll pass `AnalogAxes.PadCurve`, zero inside 0.15; a flight stick's full-axis binding
+  reads `ControlValue.None` inside its stamped deadzone (0.02); the mouse's `MouseFlight.Gate` is zero
+  inside 0.1. A flight stick whose centre has drifted past its own deadzone reads a small pitch,
+  and the law takes that as a slow climb or dive rather than the hold. The seam adds no band of its
+  own, because a band wide enough to matter would also swallow the pad's finest pitch, which
+  `PadCurve` squares.
+
+## The mouse and the autogyro under the assist
+
+`MouseFlight.Read`'s autogyro exchange puts the cursor's sideways travel on the yaw. Under Assisted
+the seat asks `Read` for an aeroplane's mapping instead, so the cursor reaches the law as roll like
+every other device, and nothing exchanges the law's output afterwards.
 
 ## Why not the AI's steering law
 
@@ -114,8 +149,9 @@ vertical the bank has no meaning and the bank loop stands down.
 ## The autogyro
 
 `is_autogyro` reaches no flight-plant term ([`org/flightModel.md`](org/flightModel.md)), so the
-law flies the Hoplite unchanged. The one rule is at the caller: feed the assist the raw stick from
-before `MouseFlight`'s autogyro exchange, or the assist's roll and yaw are swapped a second time.
+law flies the Hoplite unchanged. The one rule is at the caller: the assist takes the stick from
+before `MouseFlight`'s autogyro exchange ([the wiring](#the-mouse-and-the-autogyro-under-the-assist)),
+so stick left banks the Hoplite left and turns it left on every device.
 
 ## The tuning constants
 
@@ -151,4 +187,10 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
   under 10 m at a steady rate and full pull, against the same stick flown raw losing over 40 m
   (METHOD-9); that centring levels the wings inside 2 s; that a held pull closes a loop on the entry
   heading; and that a pull released over the top is upright on the reversed heading inside 4 s.
-- Neither layer judges the feel. That is the player's at the controls.
+- The engine suite `flight-assisted-seat` flies the scheme through a seat's own device reader. A
+  held roll-left key reads raw under Original and through the law under Assisted; a scheme switch
+  and a respawn reset the state while an accept that keeps the scheme does not; an AI seat on
+  Assisted reads the raw stick and never primes the law; and the Hoplite turns left on the left key
+  and on a cursor left of centre, banking into the turn, which a cursor exchanged before the law
+  would not do.
+- None of these layers judges the feel. That is the player's at the controls.

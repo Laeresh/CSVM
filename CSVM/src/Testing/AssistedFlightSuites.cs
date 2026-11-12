@@ -1,4 +1,5 @@
 using System;
+using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using Godot;
@@ -6,7 +7,8 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The Assisted control law flown through a real seat's sim step on the shipped airframes.
-/// Each step the law's output is the controller's stick, and the result is read off the plant.</summary>
+/// Each step the law's output is the controller's stick, and the result is read off the plant. The
+/// seat suite then flies the scheme through the seat's own device reader.</summary>
 internal static class AssistedFlightSuites
 {
     private const float Dt = 1f / 60f;
@@ -44,6 +46,26 @@ internal static class AssistedFlightSuites
         }
 
         ctx.Note($"the law's deflections fly the decoded plant; the feel of them is the user's to judge (B14)");
+    }
+
+    [Suite("flight-assisted-seat",
+        "the Assisted scheme wired into a seat's own stick reader: a held roll-left key reads "
+        + "straight through under Original and through the law under Assisted, the switch and a "
+        + "respawn hand the law a fresh state while an accept that keeps the scheme does not, an AI "
+        + "seat on Assisted reads the raw stick and never primes the law, and the Hoplite under "
+        + "Assisted turns left on the left key and on a cursor left of centre, banking into the "
+        + "turn because the cursor reaches the law before the autogyro exchange")]
+    internal static void FlightAssistedSeat(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk", "player_autogyro");
+        var plane = PlaneStats.Load(ctx.Zrdr, "player_bhawk");
+        var gyro = PlaneStats.Load(ctx.Zrdr, "player_autogyro");
+        SchemesDiffer(ctx, plane);
+        AiSeatStaysRaw(ctx, plane);
+        AutogyroTurnsLeft(ctx, gyro, mouse: false);
+        AutogyroTurnsLeft(ctx, gyro, mouse: true);
+        ctx.Note($"one seam, ReadKeyboard's return, carries every device through the law on a person's Assisted seat");
     }
 
     private static void HeldTurnAndRelease(TestContext ctx, PlaneStats stats, string plane)
@@ -195,27 +217,148 @@ internal static class AssistedFlightSuites
         }
     }
 
+    private static void SchemesDiffer(TestContext ctx, PlaneStats stats)
+    {
+        var seat = Place(ctx, new FlightModel(stats), null, human: true);
+        try
+        {
+            var raw = HoldLeft(seat, 30);
+            ctx.Check(raw.Roll == 1f && raw.Yaw == 0f && raw.Pitch == 0f,
+                $"ABLE-TO-FAIL CONTROL: under Original a held roll-left key reads straight through (roll {raw.Roll:0.###}, yaw {raw.Yaw:0.###}, pitch {raw.Pitch:0.###})");
+
+            seat.ControlScheme = ControlScheme.Assisted;
+            ctx.Check(!seat.AssistedStateForTest.Primed, $"the switch to Assisted hands the law a fresh state");
+            var assisted = HoldLeft(seat, 1);
+            ctx.Check(assisted.Yaw > 0.1f && seat.AssistedStateForTest.Primed,
+                $"under Assisted the same key reads through the law, which adds the turn's rudder (yaw {assisted.Yaw:0.###}, roll {assisted.Roll:0.###})");
+
+            seat.ControlScheme = ControlScheme.Original;
+            var back = HoldLeft(seat, 1);
+            ctx.Check(!seat.AssistedStateForTest.Primed && back.Yaw == 0f && back.Roll == 1f,
+                $"switching back resets the state and reads the key raw again (yaw {back.Yaw:0.###})");
+
+            // The pause CONTROLS page reaches a seat through ApplyProfile.
+            var profile = BindingProfile.Defaults(default, true);
+            profile.ControlScheme = ControlScheme.Assisted;
+            seat.ApplyProfile(profile);
+            HoldLeft(seat, 1);
+            ctx.Check(seat.ControlScheme == ControlScheme.Assisted && seat.AssistedStateForTest.Primed,
+                $"an accepted profile puts the seat on Assisted ({seat.ControlScheme})");
+            seat.ApplyProfile(profile);
+            ctx.Check(seat.AssistedStateForTest.Primed, $"an accept that keeps the scheme keeps the law's state");
+            seat.Respawn();
+            ctx.Check(!seat.AssistedStateForTest.Primed, $"a respawn hands the law a fresh state");
+        }
+        finally
+        {
+            seat.HoldActionForTest(InputAction.RollLeft, false);
+            seat.Free();
+        }
+    }
+
+    private static void AiSeatStaysRaw(TestContext ctx, PlaneStats stats)
+    {
+        var seat = Place(ctx, new FlightModel(stats), null, human: false);
+        try
+        {
+            seat.ControlScheme = ControlScheme.Assisted;
+            var read = HoldLeft(seat, 30);
+            ctx.Check(read.Roll == 1f && read.Yaw == 0f && !seat.AssistedStateForTest.Primed,
+                $"an AI seat on Assisted reads the raw stick and never primes the law (roll {read.Roll:0.###}, yaw {read.Yaw:0.###})");
+        }
+        finally
+        {
+            seat.HoldActionForTest(InputAction.RollLeft, false);
+            seat.Free();
+        }
+    }
+
+    // Three seconds of left stick, the key or a cursor left of centre, flown through the seat.
+    private static void AutogyroTurnsLeft(TestContext ctx, PlaneStats stats, bool mouse)
+    {
+        var plant = new FlightModel(stats);
+        var seat = Place(ctx, plant, null, human: true);
+        string device = mouse ? "cursor" : "key";
+        try
+        {
+            seat.ControlScheme = ControlScheme.Assisted;
+            if (mouse)
+            {
+                seat.MouseFlying = true;
+                seat.Mouse.StickForTest = new Vector2(-0.8f, 0f);
+                var cursor = seat.MouseFlightRead();
+                seat.ControlScheme = ControlScheme.Original;
+                var exchanged = seat.MouseFlightRead();
+                seat.ControlScheme = ControlScheme.Assisted;
+                ctx.Check(exchanged.Yaw > 0.7f && exchanged.Roll == 0f,
+                    $"ABLE-TO-FAIL CONTROL: under Original the cursor yaws the Hoplite, the decoded exchange (yaw {exchanged.Yaw:0.###}, roll {exchanged.Roll:0.###})");
+                ctx.Check(cursor.Roll > 0.7f && cursor.Yaw == 0f,
+                    $"under Assisted the law reads the cursor as stick, un-exchanged (roll {cursor.Roll:0.###}, yaw {cursor.Yaw:0.###})");
+            }
+
+            float entry = HeadingDeg(plant);
+            float bank = 0f;
+            for (int i = 0; i < Mathf.RoundToInt(3f / Dt); i++)
+            {
+                if (!mouse)
+                    seat.HoldActionForTest(InputAction.RollLeft, true);
+                seat.SimStep(Dt);
+                bank = Mathf.Max(bank, BankDeg(plant));
+            }
+
+            float turned = Mathf.Wrap(HeadingDeg(plant) - entry, -180f, 180f);
+            ctx.Check(turned > 20f && bank > 10f,
+                $"[player_autogyro] left {device} under Assisted turns {turned:0.0} degrees left in 3 s, banked up to {bank:0.0} degrees left");
+            ctx.Note($"[player_autogyro] left {device}: {turned:0.0} degrees left in 3 s, bank up to {bank:0.0} degrees");
+        }
+        finally
+        {
+            seat.HoldActionForTest(InputAction.RollLeft, false);
+            seat.Mouse.StickForTest = null;
+            seat.Free();
+        }
+    }
+
+    // The seat's own read after `steps` ticks of the roll-left key, the ramp reaching full at 24.
+    private static FlightInput HoldLeft(FlightController seat, int steps)
+    {
+        var read = default(FlightInput);
+        for (int i = 0; i < steps; i++)
+        {
+            seat.HoldActionForTest(InputAction.RollLeft, true);
+            read = seat.ReadKeyboard(Dt);
+        }
+
+        return read;
+    }
+
     private static Rig Build(TestContext ctx, PlaneStats stats)
     {
         var plant = new FlightModel(stats);
         var stick = new AssistedStick(plant);
+        return new Rig(Place(ctx, plant, stick, human: true), plant, stick);
+    }
+
+    // A seat over `plant`, flown by `source` or, with none, by its own devices.
+    private static FlightController Place(TestContext ctx, FlightModel plant, IFlightInputSource? source, bool human)
+    {
         var seat = new FlightController();
         seat.Bind(new FlightControllerBuild
         {
             PlaneModel = new Node3D { Name = "AssistedLawModel" },
             PlayerIndex = 0,
-            IsHumanPiloted = true,
-            InputSource = stick,
-            UseKeyboard = false,
+            IsHumanPiloted = human,
+            InputSource = source,
+            UseKeyboard = source == null,
             PadDevices = Array.Empty<int>(),
             AllowPause = false,
         });
 
         // Off the identity heading (DIAG-19), level, at four fifths of the airframe's top speed.
         var spawn = new Vector3(0f, SpawnAltitudeM, 0f);
-        seat.Setup(plant, null, new CamParams(), spawn, spawn + new Vector3(1f, 0f, -1f), 1f, stats.FdSpeed * 0.8f);
+        seat.Setup(plant, null, new CamParams(), spawn, spawn + new Vector3(1f, 0f, -1f), 1f, plant.Stats.FdSpeed * 0.8f);
         ctx.Host.AddChild(seat);
-        return new Rig(seat, plant, stick);
+        return seat;
     }
 
     private static float BankDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Atan2(m.Attitude.X.Y, m.Attitude.Y.Y));
