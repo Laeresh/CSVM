@@ -39,6 +39,14 @@ internal sealed partial class VolumetricClouds : Node3D
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
+    // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun; a
+    // storm dims the sun, greys the ambient and lets fewer, taller heads stand.
+    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1";
+    private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.5;amb_floor=0.15;light_k=1.5;sun_gain=2.4";
+    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.7;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.6;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.0";
+    // A storm's heads tower this far over the layer floor.
+    private const float StormDepthM = 2450f;
+
     // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
     private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
@@ -103,6 +111,8 @@ internal sealed partial class VolumetricClouds : Node3D
     public static MeasuredRenderTime? MarchTime { get; private set; }
 
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
+    private static bool PrototypeOn => System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") == "1";
+
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
     // The heads' shape the slab and its ground shadow share: taper, edge band, billow, lean.
@@ -113,6 +123,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private float ShaftGain => (_weather.Mission?.Precip != null ? RainShaftGain : HazeShaftGain) * _weather.GodRays;
 
     private float CoverBias => _hasDeck ? -0.3f : 0.15f;
+
+    private bool Storm => _weather.Mission?.Precip != null;
 
     /// <summary>The clouds over <paramref name="worldRoot"/>'s world. They hide the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
@@ -420,10 +432,41 @@ internal sealed partial class VolumetricClouds : Node3D
             return csky_pc_cover_shaped(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
         }
 
+        uniform sampler3D low_tex : filter_linear, repeat_enable;
+        uniform float fast_cover = 0.0;
+        uniform float low_m = 1440.0;
+        uniform float warp_gain = 2.0;
+        uniform float top_lo = 0.35;
+        uniform float top_hi = 0.65;
+
+        uniform sampler2D tops_tex : filter_linear, repeat_enable;
+
+        // The tops texture's sixteen-bit height, split over red and green.
+        float pc_top_tex(vec2 uv) {
+            vec2 t = texture(tops_tex, uv).rg;
+            return t.r * (65280.0 / 65535.0) + t.g * (255.0 / 65535.0);
+        }
+
+        // csky_pc_cover_shaped with its warp and each cloud's own top read from the low texture.
+        float pc_cover_fast(vec3 p) {
+            float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
+            vec3 lw = texture(low_tex, p / low_m).rgb;
+            vec2 warp = (lw.rg - 0.5) * warp_gain;
+            vec3 q = p + vec3(warp.x * warp_m * (0.4 + h) + shear_m * h, 0.0, warp.y * warp_m * (0.4 + h));
+            float broad = pc_top_tex(q.xz / 7920.0);
+            float fine = pc_top_tex(q.xz / 2880.0 + 0.37);
+            float top = mix(0.3, 1.0, smoothstep(top_lo, top_hi, broad * 0.75 + fine * 0.25));
+            float r = h / top;
+            float rc = clamp(r, 0.0, 1.0);
+            float rise = taper * pow(rc, 2.5) - taper * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
+            float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
+            return smoothstep(lo - head_soft * 0.5, lo + head_soft * 0.5, csky_cloud_noise(q));
+        }
+
         // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
         // erodes into billows. The detail noise then frays the base and pocks the crown.
         float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
-            float c = clamp(pc_cover_shaped(p) * heads_gain, 0.0, 1.0) * cover_max;
+            float c = clamp((fast_cover > 0.5 ? pc_cover_fast(p) : pc_cover_shaped(p)) * heads_gain, 0.0, 1.0) * cover_max;
             if (c <= 0.0) {
                 return 0.0;
             }
@@ -734,7 +777,9 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("look", 1);
         material.SetShaderParameter("shape_tex", CloudNoise.Shape);
         material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-        string set = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty;
+        material.SetShaderParameter("low_tex", CloudNoise.Low);
+        material.SetShaderParameter("tops_tex", CloudNoise.Tops);
+        string set = (Storm ? StormPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
         foreach (var pair in set.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = pair.Split('=');
@@ -751,6 +796,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private void Rebuild()
     {
         FreeBuilt();
+        if (PrototypeOn && Storm && _bottom is { } floor && _top is { } roof)
+            _top = Mathf.Max(roof, floor + StormDepthM);
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
         _built = root;

@@ -13,9 +13,18 @@ internal static class CloudNoise
 {
     private static ImageTexture3D? _shape;
     private static ImageTexture3D? _detail;
+    private static ImageTexture3D? _low;
+    private static ImageTexture? _tops;
 
     /// <summary>Gets the 128³ shape texture.</summary>
     public static ImageTexture3D Shape => _shape ??= Build(128, ShapeTexel);
+
+    /// <summary>Gets the 64³ low texture: two Perlin warps and a Perlin height field.</summary>
+    public static ImageTexture3D Low => _low ??= Build(64, LowTexel);
+
+    /// <summary>Gets the 512² tops texture: a Perlin height field over four cells, fine enough that
+    /// its linear filter leaves no terraces on the crowns.</summary>
+    public static ImageTexture Tops => _tops ??= BuildTops(512);
 
     /// <summary>Gets the 32³ detail texture.</summary>
     public static ImageTexture3D Detail => _detail ??= Build(32, DetailTexel);
@@ -49,16 +58,39 @@ internal static class CloudNoise
         return texture;
     }
 
+    private static ImageTexture BuildTops(int n)
+    {
+        var data = new byte[n * n * 2];
+        Parallel.For(0, n, y =>
+        {
+            for (int x = 0; x < n; x++)
+            {
+                // Sixteen bits, since a crown's height reads straight off it.
+                float v = Unit01(PerlinFbm((x + 0.5f) / n, (y + 0.5f) / n, 0.5f, 4, 1, 404u));
+                int q = Math.Clamp((int)MathF.Round(v * 65535f), 0, 65535);
+                int i = ((y * n) + x) * 2;
+                data[i] = (byte)(q >> 8);
+                data[i + 1] = (byte)(q & 255);
+            }
+        });
+        return ImageTexture.CreateFromImage(Image.CreateFromData(n, n, false, Image.Format.Rg8, data));
+    }
+
     private static byte ToByte(float v) => (byte)Math.Clamp((int)MathF.Round(v * 255f), 0, 255);
 
     private static (float, float, float, float) ShapeTexel(float x, float y, float z)
     {
-        float perlin = Math.Clamp((PerlinFbm(x, y, z, 4, 5) * 0.5f) + 0.5f, 0f, 1f);
+        float perlin = Math.Clamp((PerlinFbm(x, y, z, 4, 5, 101u) * 0.5f) + 0.5f, 0f, 1f);
         float worley = WorleyFbm(x, y, z, 4);
         // Perlin's broad mass dilated by the Worley cells, so its edges bulge into billows.
         float perlinWorley = worley + (perlin * (1f - worley));
         return (perlinWorley, WorleyFbm(x, y, z, 8), WorleyFbm(x, y, z, 16), WorleyFbm(x, y, z, 32));
     }
+
+    private static (float, float, float, float) LowTexel(float x, float y, float z) =>
+        (Unit01(PerlinFbm(x, y, z, 2, 1, 202u)), Unit01(PerlinFbm(x, y, z, 2, 1, 303u)), Unit01(PerlinFbm(x, y, z, 4, 3, 404u)), 1f);
+
+    private static float Unit01(float v) => Math.Clamp((v * 0.5f) + 0.5f, 0f, 1f);
 
     private static (float, float, float, float) DetailTexel(float x, float y, float z) =>
         (WorleyFbm(x, y, z, 2), WorleyFbm(x, y, z, 4), WorleyFbm(x, y, z, 8), 1f);
@@ -90,12 +122,12 @@ internal static class CloudNoise
         return 1f - Math.Clamp(MathF.Sqrt(best), 0f, 1f);
     }
 
-    private static float PerlinFbm(float x, float y, float z, int freq, int octaves)
+    private static float PerlinFbm(float x, float y, float z, int freq, int octaves, uint seed)
     {
         float sum = 0f, amp = 1f, norm = 0f;
         for (int o = 0; o < octaves; o++)
         {
-            sum += Perlin(x, y, z, freq << o) * amp;
+            sum += Perlin(x, y, z, freq << o, seed) * amp;
             norm += amp;
             amp *= 0.5f;
         }
@@ -103,7 +135,7 @@ internal static class CloudNoise
     }
 
     // Gradient noise over `freq` cells per tile, wrapping, in about [-1, 1].
-    private static float Perlin(float x, float y, float z, int freq)
+    private static float Perlin(float x, float y, float z, int freq, uint seed)
     {
         float px = x * freq, py = y * freq, pz = z * freq;
         int ix = (int)MathF.Floor(px), iy = (int)MathF.Floor(py), iz = (int)MathF.Floor(pz);
@@ -111,7 +143,7 @@ internal static class CloudNoise
         float ux = Fade(fx), uy = Fade(fy), uz = Fade(fz);
         float Corner(int dx, int dy, int dz)
         {
-            uint h = Hash(Mod(ix + dx, freq), Mod(iy + dy, freq), Mod(iz + dz, freq), 101u);
+            uint h = Hash(Mod(ix + dx, freq), Mod(iy + dy, freq), Mod(iz + dz, freq), seed);
             float gx = (Unit(h) * 2f) - 1f, gy = (Unit(Mix(h, 1u)) * 2f) - 1f, gz = (Unit(Mix(h, 2u)) * 2f) - 1f;
             float len = MathF.Max(MathF.Sqrt((gx * gx) + (gy * gy) + (gz * gz)), 1e-4f);
             return ((gx * (fx - dx)) + (gy * (fy - dy)) + (gz * (fz - dz))) / len;
