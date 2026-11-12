@@ -2864,8 +2864,9 @@ public partial class GameSession : Node3D
         }
         var wind = weather.Mission?.WindStatic ?? Vector3.Zero;
         var (authored, source) = Effects.CloudShadowPattern.ChooseDrift(ceiling, wind);
+        var band = weather.Mission is { HasCloudBand: true } banded ? new Vector2(banded.CloudBottom, banded.CloudTop) : Vector2.Zero;
         _cloudShadow = Effects.CloudShadow.Create(authored, source, cloudy, weather.NightApplied,
-            Effects.CloudShadowChapters.Load(), _spec.Chapter);
+            Effects.CloudShadowChapters.Load(), _spec.Chapter, band);
         _plane.AddChild(_cloudShadow);
         var drift = _cloudShadow.Drift;
         Log.Info("world", $"cloud shadows: cloudy={(cloudy ? "yes" : "no")} drift=({drift.X:0.##},{drift.Y:0.##}) m/s from {source}{(ceiling is { } c ? $" (ceiling {c.X:0.##},{c.Y:0.##})" : string.Empty)} night={(weather.NightApplied ? "yes" : "no")} {Utils.CloudShadowSetting.Lookup.Describe()} {_spec.Chapter} {(_cloudShadow.CloudsLayer ? "clouds layer " : string.Empty)}{_cloudShadow.Tune.Describe()}");

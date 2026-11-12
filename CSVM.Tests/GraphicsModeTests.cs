@@ -407,6 +407,43 @@ public class GraphicsModeTests
         Assert.True(worst < 1.5f / width * 0.2f, $"the ramp read through the texels strays {worst:0.0000} from the exact one");
     }
 
+    /// <summary>Under Enhanced an aircraft's own light() scales its sun by the terrain and banded cloud shadows.
+    /// The cockpit pass and the stereo interior hand it their world position. Original and --terrain-shadows=off
+    /// keep Godot's own light.</summary>
+    [Fact]
+    public void AnEnhancedPlaneTakesTheTerrainAndCloudShadow()
+    {
+        try
+        {
+            GraphicsMode.Set(true);
+            string flat = PlaneText(xrInterior: false);
+            Assert.Contains("void light()", flat);
+            Assert.Contains("csky_cloud_sun_aloft(", flat);
+            Assert.Contains("+ light_origin", flat);
+            Assert.Contains($"+ {CSVM.Mech3.SceneBuilder.XrOriginGlobal}", PlaneText(xrInterior: true));
+            ShadowQualitySetting.TerrainShadows = false;
+            Assert.DoesNotContain("void light()", PlaneText(xrInterior: false));
+            ShadowQualitySetting.TerrainShadows = true;
+            GraphicsMode.Set(false);
+            Assert.DoesNotContain("void light()", PlaneText(xrInterior: false));
+        }
+        finally
+        {
+            ShadowQualitySetting.TerrainShadows = true;
+            GraphicsMode.Resolve("original");
+        }
+    }
+
+    // An aircraft's surface: shaded, lit, fogged and textured, with the original's per-vertex sun.
+    private static string PlaneText(bool xrInterior)
+    {
+        var method = typeof(CSVM.Mech3.SceneBuilder).GetMethod("BiasShaderCode", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var args = method.GetParameters().Select(p => p.ParameterType == typeof(bool)
+            ? (object)(p.Name is "shaded" or "textured" or "lit" or "fogged" or "sunVertexLit" || (p.Name == "xrInterior" && xrInterior))
+            : Activator.CreateInstance(p.ParameterType)!).ToArray();
+        return (string)method.Invoke(null, args)!;
+    }
+
     // A lit, fogged, textured world surface, the painted coasts' case.
     private static string WorldText(bool blend, bool scissor, bool paintedCoast, bool water = false)
     {

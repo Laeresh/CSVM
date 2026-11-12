@@ -523,9 +523,6 @@ void fragment() {
     private static readonly string WaterSpecularLiteral =
         WaterSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static readonly string AircraftSpecularLiteral =
-        AircraftSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
-
     // ⚠ Keep these process-wide, not per builder. A per-builder memo made every later builder compile
     // a text already live, on the frame path where an AI spawn builds an aircraft (PERF-22). Anything
     // an instance field varies the text by belongs in the key (`DebugClutterFlag`). Each entry holds
@@ -928,13 +925,13 @@ void fragment() {
     /// own diffuse and specular from <c>csky_terrain_shadow.gdshaderinc</c>, the directional light
     /// scaled by <paramref name="sun"/>. That is the arm's expression for the bake's share at its
     /// fragment. <paramref name="specular"/> is the arm's SPECULAR, which <c>light()</c> cannot
-    /// read. The cloud lab's tint is read at the world position <paramref name="tintAt"/>.</summary>
-    internal static string TerrainShadowLight(string sun, float specular, string tintAt) => $@"
+    /// read. The cloud lab's tint is read at the world position <paramref name="tintAt"/>; null takes none.</summary>
+    internal static string TerrainShadowLight(string sun, float specular, string? tintAt) => $@"
 void light() {{
     vec3 csky_diffuse, csky_specular;
     csky_terrain_light(LIGHT_IS_DIRECTIONAL ? {sun} : 1.0, NORMAL, LIGHT, VIEW, LIGHT_COLOR, ATTENUATION, ROUGHNESS,
         {(0.16f * specular * specular).ToString("0.0####", System.Globalization.CultureInfo.InvariantCulture)}, SPECULAR_AMOUNT, csky_diffuse, csky_specular);
-    DIFFUSE_LIGHT += csky_diffuse + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint({tintAt}) : vec3(0.0));
+    DIFFUSE_LIGHT += csky_diffuse{(tintAt == null ? "" : $" + (LIGHT_IS_DIRECTIONAL ? csky_cloud_tint({tintAt}) : vec3(0.0))")};
     SPECULAR_LIGHT += csky_specular;
 }}";
 
@@ -2709,6 +2706,17 @@ void light() {{
             sb.AppendLine(TerrainShadowInclude);
             sb.AppendLine("varying vec3 v_terrain_pos;");
         }
+        // An Enhanced aircraft takes the same light(), its share read per vertex. The shadows' cells dwarf a
+        // plane, and splitscreen and the Deck would pay per fragment.
+        bool planeShadow = shaded && !sunLit && GraphicsMode.Enhanced && ShadowQualitySetting.TerrainShadows;
+        if (planeShadow)
+        {
+            sb.AppendLine(TerrainShadowInclude);
+            sb.AppendLine("varying float v_plane_sun;");
+            // The cockpit pass's eye (CockpitOverlay), zero for a plane drawn in the world itself.
+            if (!xrInterior)
+                sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
+        }
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -2774,6 +2782,11 @@ void light() {{
         // at the fragment's world X/Z, so a sheet shown after the bake still draws.
         string oceanVertex = oceanHide || swash ? "    v_ocean_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
         string terrainVertex = terrainShadow ? "    v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n" : "";
+        // Where the model frame's origin stands in the world: the XR origin, else the cockpit pass's eye or zero.
+        string originAt = xrInterior ? XrOriginGlobal : "light_origin";
+        string planeVertex = !planeShadow ? ""
+            : $"    vec3 csky_plane_at = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + {originAt};\n"
+              + "    v_plane_sun = csky_terrain_baked_sun(csky_plane_at) * csky_cloud_sun_aloft(csky_plane_at);\n";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2785,7 +2798,7 @@ void light() {{
                     + "        ? sun_fill_rgb : sun_ambient_rgb;\n"
                     + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + sun_diffuse_rgb\n"
                     + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), sun_dir), 0.0)\n"
-                    + $"        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + {(xrInterior ? XrOriginGlobal : "light_origin")})), 0.0, 1.0);\n"
+                    + $"        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + {originAt})), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
         // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights
         // as the linear gain they make on the clamped product, per vertex as the original evaluates
@@ -2802,7 +2815,7 @@ void light() {{
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
+{clutterVertex}{ghostVertex}{oceanVertex}{planeVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
 
 void fragment() {{");
         }
@@ -2810,7 +2823,7 @@ void fragment() {{");
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{planeVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2876,7 +2889,7 @@ void fragment() {{");
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
             sb.AppendLine("    METALLIC = 0.0;");
-            sb.AppendLine($"    SPECULAR = {AircraftSpecularLiteral};");
+            sb.AppendLine($"    SPECULAR = {AircraftSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture)};");
             // NORMAL is outward here: the vertex stage pre-negated it and Godot flipped it back.
             if (GraphicsMode.Enhanced)
                 sb.AppendLine("    LIGHT_VERTEX = VERTEX + NORMAL * shadow_lookup_offset;");
@@ -2963,6 +2976,8 @@ void fragment() {{");
         sb.AppendLine("}");
         if (terrainShadow)
             sb.AppendLine(TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", waterLit ? WaterSpecular : 0f, "v_terrain_pos"));
+        else if (planeShadow)
+            sb.AppendLine(TerrainShadowLight("v_plane_sun", AircraftSpecular, null));
         return sb.ToString();
     }
 
