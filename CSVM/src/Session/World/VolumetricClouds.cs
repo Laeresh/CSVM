@@ -214,7 +214,7 @@ internal sealed partial class VolumetricClouds : Node3D
             if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
                 discard;
             }
-            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam)));
+            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam))) * cloud_fog;
             albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
         }
 
@@ -384,15 +384,110 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float warp_m = 320.0;
         uniform float shear_m = 260.0;
 
+        // PROTOTYPE (clouds-look): look 1 reads the baked Perlin-Worley noise (CloudNoise) and lights
+        // the body with a short-stepped sun march and multiple-scattering octaves.
+        uniform int look = 0;
+        uniform sampler3D shape_tex : filter_linear, repeat_enable;
+        uniform sampler3D detail_tex : filter_linear, repeat_enable;
+        uniform float shape_m = 3000.0;
+        uniform float detail_tile_m = 500.0;
+        uniform float detail_erode = 0.35;
+        uniform float base_erode = 1.0;
+        uniform float pw_density = 0.04;
+        uniform float light_step_m = 25.0;
+        uniform float light_k = 1.0;
+        uniform float cover_max = 1.0;
+        uniform float ms_a = 0.5;
+        uniform float ms_b = 0.6;
+        uniform float ms_c = 0.5;
+        uniform float phase_g = 0.6;
+        uniform float phase_back = 0.25;
+        uniform float sun_gain = 2.2;
+        uniform float amb_gain = 0.9;
+        uniform float amb_floor = 0.35;
+        uniform vec3 amb_top_rgb = vec3(0.55, 0.68, 0.92);
+        uniform float amb_fog_mix = 0.35;
+        uniform float powder_k = 0.0;
+        uniform float cloud_fog = 1.0;
+        uniform float wind_ms = 0.0;
+
+        float pc_remap(float x, float a, float b, float c, float d) {
+            return c + (x - a) / max(b - a, 1e-4) * (d - c);
+        }
+
         // The heads' coverage at `p`, the function the ground shadow reads too.
         float pc_cover_shaped(vec3 p) {
             return csky_pc_cover_shaped(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
         }
 
+        // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
+        // erodes into billows. The detail noise then frays the base and pocks the crown.
+        float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
+            float c = clamp(pc_cover_shaped(p) * heads_gain, 0.0, 1.0) * cover_max;
+            if (c <= 0.0) {
+                return 0.0;
+            }
+            float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
+            vec3 q = p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y) + vec3(TIME * wind_ms, 0.0, 0.0);
+            vec4 s = texture(shape_tex, q / shape_m);
+            float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
+            float base = clamp(pc_remap(s.r, (wfbm - 1.0) * base_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
+            float d = clamp(pc_remap(base * smoothstep(0.0, 0.04, h), 1.0 - c, 1.0, 0.0, 1.0), 0.0, 1.0);
+            if (detail && d > 0.0) {
+                vec3 n = texture(detail_tex, q / detail_tile_m).rgb;
+                float hf = n.r * 0.625 + n.g * 0.25 + n.b * 0.125;
+                float m = mix(hf, 1.0 - hf, clamp(h * 6.0, 0.0, 1.0));
+                d = clamp(pc_remap(d, m * detail_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
+            }
+            return d;
+        }
+
         // The cumulus heads at `p` over the pattern's coverage.
         float pc_heads(vec3 p, float bottom, float top) {
+            if (look == 1) {
+                return pc_heads_pw(p, bottom, top, true) * (pw_density / max(density_gain, 1e-6));
+            }
             float c = pc_cover_shaped(p) * heads_gain;
             return csky_pc_density(p, bottom, top, c, detail_m, erosion);
+        }
+
+        // The sun's optical depth from `p`: six taps doubling from light_step_m. The first two read
+        // the detail, so the billows shade each other.
+        float pc_sun_od_pw(vec3 p, float bottom, float top) {
+            float od = 0.0;
+            float t = 0.0;
+            float dt = light_step_m;
+            for (int i = 0; i < 6; i++) {
+                vec3 q = p + csky_sun_dir * (t + dt * 0.5);
+                if (q.y > top) {
+                    break;
+                }
+                od += pc_heads_pw(q, bottom, top, i < 2) * pw_density * light_k * dt;
+                t += dt;
+                dt *= 2.0;
+            }
+            return od;
+        }
+
+        float pc_hg(float cos_theta, float g) {
+            return csky_pc_phase(cos_theta, g) * 4.0 * 3.14159265;
+        }
+
+        // The sun reaching the eye through optical depth `od`. Thinner, flatter octaves stand in
+        // for the light scattered more than once.
+        float pc_sun_ms(float od, float cos_theta) {
+            float sun = 0.0;
+            float a = 1.0;
+            float b = 1.0;
+            float c = 1.0;
+            for (int o = 0; o < 4; o++) {
+                float phase = mix(pc_hg(cos_theta, phase_g * c), pc_hg(cos_theta, -0.3 * c), phase_back);
+                sun += b * exp(-od * a) * phase;
+                a *= ms_a;
+                b *= ms_b;
+                c *= ms_c;
+            }
+            return sun;
         }
 
         // The deck at `p`, torn by the rifts.
@@ -448,6 +543,12 @@ internal sealed partial class VolumetricClouds : Node3D
         // The lit cloud body from the march's two weights, before fog: the sun through its own shadow
         // plus the sky's ambient. The mission's SUNLIGHT dims it and the zone tune tints it.
         vec3 pc_colour(vec2 w, vec3 dir, vec3 cam) {
+            if (look == 1) {
+                // The sun's phase is in w.y already (pc_sun_ms); the sky lights the rest bluish.
+                vec3 amb = mix(amb_top_rgb, csky_fog_color_at(cam), amb_fog_mix) * amb_gain;
+                vec3 sun1 = sun_rgb * max(csky_sun_light.y, 0.35) * sun_gain;
+                return (amb * w.x + sun1 * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
+            }
             float cos_theta = dot(dir, csky_sun_dir);
             float phase = mix(csky_pc_phase(cos_theta, 0.0), csky_pc_phase(cos_theta, 0.6), 0.5) * 4.0 * 3.14159265;
             vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain;
@@ -520,7 +621,8 @@ internal sealed partial class VolumetricClouds : Node3D
             float clear = t0;
             int i = 0;
             while (i < step_budget && t < t1) {
-                if (pc_density(eye + dir * t, bottom, top) > 0.001) {
+                vec3 sp = eye + dir * t;
+                if ((look == 1 ? max(pc_heads_pw(sp, bottom, top, false), pc_deck(sp, bottom)) : pc_density(sp, bottom, top)) > 0.001) {
                     break;
                 }
                 clear = t;
@@ -546,6 +648,7 @@ internal sealed partial class VolumetricClouds : Node3D
             vec2 w = vec2(0.0);
             float trans = 1.0;
             float sun_step = max((top - bottom) * 0.3, 20.0);
+            float cos_theta = dot(dir, csky_sun_dir);
             while (i < step_budget && trans > 0.01 && t < t1) {
                 float dt = pc_step(t, span_step);
                 vec3 p = eye + dir * t;
@@ -553,8 +656,15 @@ internal sealed partial class VolumetricClouds : Node3D
                 if (d > 0.001) {
                     float ext = d * density_gain * dt;
                     float a = 1.0 - exp(-ext);
-                    float sun_t = pc_sun(p, sun_step, bottom, top);
-                    w += trans * a * pc_light(p, sun_t);
+                    if (look == 1) {
+                        float od = pc_sun_od_pw(p, bottom, top) + pc_deck_od(p, bottom);
+                        float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
+                        float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
+                        w += trans * a * vec2(mix(amb_floor, 1.0, h), pc_sun_ms(od, cos_theta) * powder);
+                    } else {
+                        float sun_t = pc_sun(p, sun_step, bottom, top);
+                        w += trans * a * pc_light(p, sun_t);
+                    }
                     trans *= 1.0 - a;
                 }
                 t += dt;
@@ -611,7 +721,31 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
         material.SetShaderParameter("gap_m", GapM);
         material.SetShaderParameter("shaft_gain", ShaftGain);
+        ApplyPrototype(material);
         return material;
+    }
+
+    // PROTOTYPE (clouds-look): CSVM_CLOUD_LOOK=1 turns the baked-noise look on, and CSVM_CLOUD_SET
+    // ("name=v;name=a,b,c") overrides any float or vec3 uniform, for tuning without a rebuild.
+    private void ApplyPrototype(ShaderMaterial material)
+    {
+        if (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") != "1")
+            return;
+        material.SetShaderParameter("look", 1);
+        material.SetShaderParameter("shape_tex", CloudNoise.Shape);
+        material.SetShaderParameter("detail_tex", CloudNoise.Detail);
+        string set = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty;
+        foreach (var pair in set.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=');
+            var parts = kv[1].Split(',');
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (parts.Length == 3)
+                material.SetShaderParameter(kv[0].Trim(), new Vector3(float.Parse(parts[0], inv), float.Parse(parts[1], inv), float.Parse(parts[2], inv)));
+            else
+                material.SetShaderParameter(kv[0].Trim(), float.Parse(parts[0], inv));
+        }
+        Log.Info("world", $"volumetric clouds: prototype look 1, set [{set}]");
     }
 
     private void Rebuild()
