@@ -63,6 +63,15 @@ public sealed class BindingProfile
         set => _mouseSensitivity = SensitivityScale.Clamp(value);
     }
 
+    /// <summary>This seat's control scheme, Original until a player picks Assisted. Per seat for the
+    /// reason <see cref="MouseFlying"/> is, and saved in the same file. ⚠ Setting it writes nothing
+    /// else. The one-time move of <see cref="ChaseCamera"/> to Level is the Controls page's edit
+    /// (<c>ControlsFeature.ControlScheme</c>), so a loaded file keeps both fields as saved.</summary>
+    public ControlScheme ControlScheme { get; set; }
+
+    /// <summary>This seat's chase camera, Original until a player picks Level.</summary>
+    public ChaseCamera ChaseCamera { get; set; }
+
     /// <summary>The shipped keymap for a seat flying <paramref name="pad"/>, which may be
     /// <c>default</c> for a seat with no pad.</summary>
     public static BindingProfile Defaults(DeviceId pad, bool readsKeyboard)

@@ -1534,8 +1534,9 @@ public class OriginalOptionsTests
 
         var board = Compose(host);
         var arrows = board.Pictures.Where(p => p.Art.Name == seat.Art!.Name).ToArray();
-        Assert.Equal(2, arrows.Length);
-        Assert.Equal(arrows[0].X, arrows[1].X);
+        // The seat, mouse-scheme and two assist choosers, every arrow in one column.
+        Assert.Equal(4, arrows.Length);
+        Assert.All(arrows, a => Assert.Equal(arrows[0].X, a.X));
 
         var title = board.Lines.Single(l => l.Text == "Mouse");
         Assert.Equal(scheme.Y, title.Y);
@@ -1592,6 +1593,37 @@ public class OriginalOptionsTests
 
         Assert.True(controls.MouseFlying);
         Assert.Equal(new[] { 1 }, written);
+    }
+
+    /// <summary>The grown panel's two choosers read Original on a fresh seat. A press on Controls
+    /// stages Assisted and moves Camera to Level, a press on Camera puts it back, and ACCEPT CHANGES
+    /// writes both. The plate is drawn as head, two bands and tail, its door and plaques a band lower.</summary>
+    [Fact]
+    public void TheAssistPanelStagesTheSchemeAndCameraOnAGrownPlate()
+    {
+        var controls = Controls(out _, out var written);
+        var host = Host(controls: controls);
+        host.Module.Controls.Open();
+        Assert.Equal("Original", Row(host, OriginalControlsPage.SchemeKey).Label);
+        Assert.Equal("Original", Row(host, OriginalControlsPage.CameraKey).Label);
+        var seat = Row(host, OriginalControlsPage.PlayerKey);
+        var scheme = Row(host, OriginalControlsPage.SchemeKey);
+        Assert.Equal(seat.X + seat.Width, scheme.X + scheme.Width);
+        Assert.Equal(420f + 69f, Row(host, OriginalControlsPage.KeysDoorKey).Y);
+        Assert.Equal(4, Compose(host).Backdrop.Count(p => p.Art.Name == "PP_CpBack.png"));
+
+        Click(host, OriginalControlsPage.SchemeKey);
+        Assert.Equal("Assisted", Row(host, OriginalControlsPage.SchemeKey).Label);
+        Assert.Equal("Level", Row(host, OriginalControlsPage.CameraKey).Label);
+        Click(host, OriginalControlsPage.CameraKey);
+        Assert.Equal("Original", Row(host, OriginalControlsPage.CameraKey).Label);
+        Assert.Empty(written);
+
+        Click(host, OriginalControlsPage.AcceptKey);
+
+        Assert.Equal(new[] { 1 }, written);
+        Assert.Equal(ControlScheme.Assisted, controls.ControlScheme);
+        Assert.Equal(ChaseCamera.Original, controls.ChaseCamera);
     }
 
     [Fact]
@@ -1769,6 +1801,7 @@ public class OriginalOptionsTests
             {
                 OriginalControlsPage.PlayerKey, OriginalControlsPage.MouseKey,
                 OriginalControlsPage.SensitivityKey,
+                OriginalControlsPage.SchemeKey, OriginalControlsPage.CameraKey,
                 OriginalControlsPage.KeysDoorKey, OriginalControlsPage.AcceptKey,
                 OriginalControlsPage.CancelKey,
             },
@@ -1783,7 +1816,7 @@ public class OriginalOptionsTests
              (float)(slot.Height - mouse.Int("Bottom") - mouse.Int("Top"))),
             Rect(Row(host, OriginalControlsPage.SensitivityKey)));
 
-        RowsAreClearOfEachOther(host, rows, "CONTROLS", 5);
+        RowsAreClearOfEachOther(host, rows, "CONTROLS", 8);
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a
@@ -2037,6 +2070,8 @@ public class OriginalOptionsTests
         // unmeasured plate has no band to repeat and no height to cap the growth against. Leaving
         // it out would take the whole plate-growth rule out of these facts.
         "PP_GoBack.png" => (566, 289),
+        // The CONTROLS plate, which grows by one band for the assist panel.
+        "PP_CpBack.png" => (566, 306),
         "PM_B_Paper.png" => (160, 112),
         "PP_B_Large.png" => (120, 148),
         "PP_B_Check8.png" => (16, 128),

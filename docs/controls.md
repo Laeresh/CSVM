@@ -292,6 +292,26 @@ levels doubles `s` (`s = 2^((level - 50) / 25)`), so the ends land exactly on
 0.25 and 4 and every step reads the same in either direction. A step is 5
 levels, the slider's own key step, which multiplies `s` by about 1.15.
 
+## Assisted controls and the level chase camera
+
+Two remake-only choices, per seat and per player, stand on the launchscreen's
+CONTROLS page in a third panel under the Mouse panel: **Controls**, reading
+**Original** or **Assisted**, and **Camera**, reading **Original** or
+**Level**. Both read Original on a new install, so the port flies as the
+original until a player opts in, and both apply under Original and Enhanced
+graphics alike. They are staged and saved like the mouse scheme above: ACCEPT
+CHANGES keeps them, CANCEL CHANGES puts them back, and they are written to that
+player's own keymap file (`bindings_p<n>.json`, fields `controlScheme` and
+`chaseCamera`). A pad-only splitscreen seat takes them too.
+
+Choosing Assisted moves Camera to Level at that moment, once. A player who then
+puts Camera back to Original keeps it there; only a later change of Controls to
+Assisted moves it again.
+
+Neither choice changes the flight yet. The assist that turns the stick into a
+turn and a climb, and the chase view without bank, are the later items of
+[PLAN-assisted-controls.md](PLAN-assisted-controls.md).
+
 ## Any mode
 
 | Input | Pad | Does |

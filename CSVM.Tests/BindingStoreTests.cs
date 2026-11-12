@@ -78,6 +78,64 @@ public class BindingStoreTests
         Assert.False(loaded.MouseFlying);
     }
 
+    /// <summary>The control scheme and the chase camera ride in the seat's file as words, Original
+    /// on a fresh profile, and come back as saved.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheControlSchemeAndChaseCamera()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile);
+        Assert.Contains("\"controlScheme\": \"original\"", json);
+        Assert.Contains("\"chaseCamera\": \"original\"", json);
+
+        profile.ControlScheme = ControlScheme.Assisted;
+        profile.ChaseCamera = ChaseCamera.Level;
+        json = BindingStore.Serialize(1, profile);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
+
+        Assert.Contains("\"controlScheme\": \"assisted\"", json);
+        Assert.Contains("\"chaseCamera\": \"level\"", json);
+        Assert.Equal(ControlScheme.Assisted, loaded.ControlScheme);
+        Assert.Equal(ChaseCamera.Level, loaded.ChaseCamera);
+        AssertSameMaps(profile, loaded);
+    }
+
+    /// <summary>Assisted with the camera put back to Original is a saved state of its own, not one a
+    /// load re-derives.</summary>
+    [Fact]
+    public void AnAssistedSeatWithTheOriginalCameraLoadsAsSaved()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        profile.ControlScheme = ControlScheme.Assisted;
+
+        var loaded = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true);
+
+        Assert.Equal(ControlScheme.Assisted, loaded.ControlScheme);
+        Assert.Equal(ChaseCamera.Original, loaded.ChaseCamera);
+    }
+
+    /// <summary>A file older than the two fields reads Original for both and keeps every row. So does
+    /// a file hand-edited to a word or a kind this build does not read.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("\"ASSISTED\"")]
+    [InlineData("\"auto\"")]
+    [InlineData("1")]
+    public void AnOlderOrHandEditedFileReadsTheOriginalSchemeAndCamera(string? field)
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile);
+        json = json.Replace("\"controlScheme\": \"original\",", field == null ? string.Empty : $"\"controlScheme\": {field},", StringComparison.Ordinal)
+            .Replace("\"chaseCamera\": \"original\",", field == null ? string.Empty : $"\"chaseCamera\": {field},", StringComparison.Ordinal);
+        Assert.DoesNotContain("\"original\"", json, StringComparison.Ordinal);
+
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
+
+        Assert.Equal(ControlScheme.Original, loaded.ControlScheme);
+        Assert.Equal(ChaseCamera.Original, loaded.ChaseCamera);
+        AssertSameMaps(profile, loaded);
+    }
+
     /// <summary>The shipped sensitivity is written and read back as the unscaled multiplier, and a
     /// moved one comes back as moved.</summary>
     [Fact]

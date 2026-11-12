@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, options and the level chase camera
 
-1. ☐ The two options: control scheme and chase camera, persisted, in the controls settings
+1. ☑ The two options: control scheme and chase camera, persisted, in the controls settings
 2. ☐ The level chase camera: the chase rig without bank, continuous over the top of a loop
 
 ### Wave B, the assist
@@ -97,7 +97,34 @@ A2 and B13 have landed. `FlightController.cs` is touched by B12 only.
 
 # Wave A, options and the level chase camera
 
-## A1 ☐ The two options: control scheme and chase camera
+## A1 ☑ The two options: control scheme and chase camera
+
+**Landed.** Both options are per-seat fields of the keymap profile, copying mouse flight's pattern
+end to end, because mouse flight is the existing per-player controls option (the options file is
+process-wide). `Bindings/ControlScheme.cs` holds the enums `ControlScheme { Original, Assisted }`
+and `ChaseCamera { Original, Level }`; `BindingProfile.ControlScheme` and `.ChaseCamera` carry them
+(default Original); `BindingStore` saves them as `"controlScheme"`/`"chaseCamera"` words in
+`bindings_p<n>.json`, a missing or unknown word reading Original with no version bump.
+`ControlsFeature.ControlScheme`/`.ChaseCamera` stage them with the maps, and the `ControlScheme`
+setter is the one-time write: a change to Assisted also stages Level, and a camera put back to
+Original stays. `MenuControlsSeats` and `StickProfileResolver.WithoutStickRows` copy them where
+they copy the mouse fields. The menu is Original's CONTROLS page (`OriginalControlsPage.cs`): a
+third panel ("Controls" and "Camera" choosers in the Controller Type column), the plate grown by one
+band of `CP_BackGround.png`'s own art, the door and plaques one band lower. Docs:
+`docs/controls.md` "Assisted controls and the level chase camera", `docs/architecture/Bindings.md`,
+`docs/architecture/UI.md`, `docs/org/menu-inventory.md`'s ControlsPrefs row. Tests:
+`BindingStoreTests` (round-trip, Assisted with the Original camera, older and hand-edited files),
+`ControlsFeatureTests` (Level once, per seat, Cancel), `OriginalOptionsTests` (the panel's rows,
+the grown plate, the clearance facts over the fixture and the install).
+⚠ **The flight seat does not take the two fields yet.** `FlightControllerBuild.ApplyProfile`
+(`CSVM/src/Flight/Airframe/`, outside A1's files) copies only the keymap and the two mouse fields,
+so B12 (and A2 for the camera) adds `ControlScheme = profile.ControlScheme;` and
+`ChaseCamera = profile.ChaseCamera;` there, with seat properties over `_controls.Profile` like
+`MouseFlying`'s. Both the launch read and a pause-accepted CONTROLS page reach the seat through it.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The controls settings offer "Control scheme: Original / Assisted" and "Chase camera:
 Original / Level", both Original on a new install, persisted, and readable by the flight code per

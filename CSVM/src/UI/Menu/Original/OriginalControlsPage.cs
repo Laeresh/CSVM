@@ -10,8 +10,9 @@ namespace CSVM.UI.Menu.Original;
 /// The CONTROLS page behind the Options hub, one page module over the decoded
 /// <c>[@ControlsPrefs@]</c> section and the shared <see cref="ControlsFeature"/>. The seat chooser
 /// takes the Controller Type row and the flying-scheme chooser the Mouse panel's title line. The
-/// authored Mouse Sensitivity slider and the KEYS AND BUTTONS door (<see cref="OriginalKeysPage"/>)
-/// follow. Its edits are staged in the feature, so its ACCEPT CHANGES writes the keymaps and its
+/// authored Mouse Sensitivity slider follows. A third panel, the plate grown by a band of its own art,
+/// holds the control scheme and chase camera choosers. The KEYS AND BUTTONS door
+/// (<see cref="OriginalKeysPage"/>) stands under it. Its edits are staged in the feature, so its ACCEPT CHANGES writes the keymaps and its
 /// CANCEL CHANGES drops the whole visit.
 /// </summary>
 public sealed class OriginalControlsPage : IOriginalOptionsPage
@@ -29,6 +30,14 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     /// <summary>The page's Mouse Sensitivity slider, the authored one, which sets the Fly scheme's
     /// sensitivity.</summary>
     public const string SensitivityKey = "CP_S_MOUSE";
+
+    /// <summary>The page's control-scheme chooser, Original or Assisted, on the title line of the
+    /// panel the plate grows for it. A remake-only chooser.</summary>
+    public const string SchemeKey = "CONTROLSCHEME";
+
+    /// <summary>The page's chase-camera chooser, Original or Level, on the grown panel's second line.
+    /// A remake-only chooser.</summary>
+    public const string CameraKey = "CHASECAMERA";
 
     /// <summary>The page's door onto the KEYS AND BUTTONS page.</summary>
     public const string KeysDoorKey = "CP_B_KEYS";
@@ -52,6 +61,16 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     private const float MouseY = 391f;
     private const float MouseTitleY = 364f;
     private const float MouseDescY = 373f;
+    private const float JoystickTitleY = 294f;
+    private const float JoystickDescY = 303f;
+
+    // The plate's repeated band in CP_BackGround.png's own pixels. It is the Mouse panel, cut in the
+    // middle of the dark gaps above it (y 127 to 141) and below it (196 to 210). The third panel
+    // stands two bands under Controller Type. The door and the plaques move one band down.
+    private const string PlateKey = "CP_BACKGROUND";
+    private const int PlateBandY = 134;
+    private const int PlateBandHeight = 69;
+    private const float AssistDy = 2 * PlateBandHeight;
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
@@ -102,8 +121,10 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             rows.Add(_host.PlaqueRow(PlayerKey, PlayerWord(), 0, Seated, 0));
             rows.Add(_host.PlaqueRow(MouseKey, MouseWord(), 1, MouseSchemeLive, 0));
             rows.Add(_host.PlaqueRow(SensitivityKey, SensitivityWord(), 2, MouseSchemeLive, 0));
-            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 3, true, 0));
-            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, 4);
+            rows.Add(_host.PlaqueRow(SchemeKey, SchemeWord(), 3, Seated, 0));
+            rows.Add(_host.PlaqueRow(CameraKey, CameraWord(), 4, Seated, 0));
+            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 5, true, 0));
+            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, 6);
             return;
         }
 
@@ -126,8 +147,14 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
                 }
             },
             MouseSchemeLive));
-        _chrome.AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0);
-        _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey);
+        var schemeBox = SchemeBox(screen);
+        rows.Add(new OriginalRow(SchemeKey, SchemeWord(), OriginalRowKind.Dropdown,
+            schemeBox.X, schemeBox.Y, schemeBox.Width, schemeBox.Height, Seated, 0, arrow));
+        var cameraBox = CameraBox(screen);
+        rows.Add(new OriginalRow(CameraKey, CameraWord(), OriginalRowKind.Dropdown,
+            cameraBox.X, cameraBox.Y, cameraBox.Width, cameraBox.Height, Seated, 0, arrow));
+        _chrome.AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0, PlateBandHeight);
+        _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey, PlateBandHeight);
     }
 
     void IOriginalOptionsPage.Lists(List<OriginalList> lists)
@@ -149,6 +176,8 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             PlayerKey => StepPlayer(direction),
             MouseKey => StepMouseScheme(),
             SensitivityKey => StepSensitivity(direction),
+            SchemeKey => StepControlScheme(),
+            CameraKey => StepChaseCamera(),
             _ => false,
         };
     }
@@ -164,6 +193,12 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
                 break;
             case MouseKey:
                 StepMouseScheme();
+                break;
+            case SchemeKey:
+                StepControlScheme();
+                break;
+            case CameraKey:
+                StepChaseCamera();
                 break;
             case KeysDoorKey:
                 _keys.Open();
@@ -212,7 +247,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             return;
         }
 
-        _chrome.ComposePlate(screen, "CP_BACKGROUND", layers.Backdrop);
+        ComposePlate(screen, layers.Backdrop);
         _chrome.ComposePageTitle(screen, "CP_T_TITLE", "CONTROLS", layers.Lines);
         var lines = layers.Lines;
         if (screen.Widget("CP_T_JoystickTitle") is { } title)
@@ -248,10 +283,25 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
                 mouseDescription.Int("Width", (int)DescWidth), OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
+        // The grown panel's two choosers carry a title each, left of the chooser on its own line.
+        float assistTitleX = screen.Widget("CP_T_JoystickTitle")?.Int("X", (int)TitleX) ?? TitleX;
+        foreach (var (word, box) in new[] { ("Controls", SchemeBox(screen)), ("Camera", CameraBox(screen)) })
+        {
+            lines.Add(new BoardLine(word, assistTitleX, box.Y, Math.Max(1f, box.X - assistTitleX),
+                OriginalOptionsChrome.TitleFont, BoardInk.Row));
+        }
+
+        var joystickDesc = screen.Widget("CP_T_JoystickDesc");
+        lines.Add(new BoardLine(
+            "Assisted turns and climbs where the stick points. Level keeps the chase camera level.",
+            joystickDesc?.Int("X", (int)DescX) ?? DescX,
+            (joystickDesc?.Int("Y", (int)JoystickDescY) ?? JoystickDescY) + AssistDy,
+            joystickDesc?.Int("Width", (int)DescWidth) ?? DescWidth, OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
+
         if (screen.Widget("CP_T_KeysDesc") is { } keys)
         {
             lines.Add(new BoardLine(OriginalOptionsChrome.Untagged(keys.Text ?? string.Empty),
-                keys.Int("X"), keys.Int("Y"), keys.Int("Width"), OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
+                keys.Int("X"), keys.Int("Y") + PlateBandHeight, keys.Int("Width"), OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
         for (int i = 0; i < rows.Count; i++)
@@ -280,6 +330,21 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             drop?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight);
     }
 
+    // The two assist choosers stand in the right half of the seat box's column, like the Mouse
+    // panel's. Their lines are Controller Type's title and box lines, two bands down.
+    private static (float X, float Y, float Width, float Height) SchemeBox(MenuLayoutScreen screen)
+    {
+        var column = PlayerBox(screen);
+        float titleY = screen.Widget("CP_T_JoystickTitle")?.Int("Y", (int)JoystickTitleY) ?? JoystickTitleY;
+        return (column.X + (column.Width / 2f), titleY + AssistDy, column.Width / 2f, column.Height);
+    }
+
+    private static (float X, float Y, float Width, float Height) CameraBox(MenuLayoutScreen screen)
+    {
+        var column = PlayerBox(screen);
+        return (column.X + (column.Width / 2f), column.Y + AssistDy, column.Width / 2f, column.Height);
+    }
+
     // The scheme chooser, on the Mouse Sensitivity title's own line, since the authored slider keeps
     // the panel's only other line. It takes the right half of the Controller Type box's column at
     // that box's item height. Its arrow then ends where the seat row's does, and the panel's title
@@ -293,6 +358,38 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
         float sliderTop = _chrome.SliderBox(screen.Widget(SensitivityKey), MouseX, MouseY).Y;
         return (column.X + half, y, half, Math.Max(1f, Math.Min(column.Height, sliderTop - y)));
     }
+
+    // The plate grown by one band of its own art, as the Game Options page grows its plate. The head,
+    // the band twice, then the tail one band lower. An unmeasured plate stands as the one picture.
+    private void ComposePlate(MenuLayoutScreen screen, List<BoardPicture> backdrop)
+    {
+        if (screen.Widget(PlateKey) is not { Art.Count: > 0 } plate)
+        {
+            return;
+        }
+
+        var art = new BoardArt(BoardArtLibrary.Ui, plate.Art[0], Math.Max(1, plate.Frames));
+        float x = plate.Int("X");
+        float y = plate.Int("Y");
+        if (_host.Measure(plate.Art[0]) is not { } size)
+        {
+            backdrop.Add(new BoardPicture(art, x, y));
+            return;
+        }
+
+        const int below = PlateBandY + PlateBandHeight;
+        backdrop.Add(new BoardPicture(art, x, y, Crop: new BoardCrop(0f, 0f, size.Width, PlateBandY)));
+        backdrop.Add(new BoardPicture(art, x, y + PlateBandY, Crop: new BoardCrop(0f, PlateBandY, size.Width, PlateBandHeight)));
+        backdrop.Add(new BoardPicture(art, x, y + below, Crop: new BoardCrop(0f, PlateBandY, size.Width, PlateBandHeight)));
+        backdrop.Add(new BoardPicture(art, x, y + below + PlateBandHeight,
+            Crop: new BoardCrop(0f, below, size.Width, size.Height - below)));
+    }
+
+    private string SchemeWord() => !Seated ? string.Empty
+        : _controls!.ControlScheme == ControlScheme.Assisted ? "Assisted" : "Original";
+
+    private string CameraWord() => !Seated ? string.Empty
+        : _controls!.ChaseCamera == ChaseCamera.Level ? "Level" : "Original";
 
     private string PlayerWord() => _controls is { } controls && controls.Players.Count > 0
         ? "Player " + controls.Player.ToString(CultureInfo.InvariantCulture)
@@ -340,6 +437,32 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
 
         controls.MouseFlying = !controls.MouseFlying;
         _host.FocusKey(MouseKey);
+        return true;
+    }
+
+    // Each assist chooser has two values, so a step either way is the other one, staged like the
+    // scheme row above. The feature moves the camera to Level when the scheme becomes Assisted.
+    private bool StepControlScheme()
+    {
+        if (_controls is not { } controls || !Seated)
+        {
+            return false;
+        }
+
+        controls.ControlScheme = controls.ControlScheme == ControlScheme.Assisted ? ControlScheme.Original : ControlScheme.Assisted;
+        _host.FocusKey(SchemeKey);
+        return true;
+    }
+
+    private bool StepChaseCamera()
+    {
+        if (_controls is not { } controls || !Seated)
+        {
+            return false;
+        }
+
+        controls.ChaseCamera = controls.ChaseCamera == ChaseCamera.Level ? ChaseCamera.Original : ChaseCamera.Level;
+        _host.FocusKey(CameraKey);
         return true;
     }
 

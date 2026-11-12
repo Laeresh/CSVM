@@ -218,9 +218,16 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device, and the seat's flying scheme (`MouseFlying`) and its `MouseSensitivity`, which
-two players at one machine choose separately. Where a seat's profile comes from is
-`LaunchBindings.cs`.
+names one device, and the seat's `MouseFlying`, `MouseSensitivity`, `ControlScheme` and
+`ChaseCamera`, which two players at one machine choose separately. Its source: `LaunchBindings.cs`.
+
+## src/Bindings/ControlScheme.cs
+The two remake-only choices a seat makes beside its keymap: `ControlScheme` (Original or Assisted)
+and `ChaseCamera` (Original or Level), both Original by default. Enums rather than switches, so a
+later scheme has a place to go. They live on `BindingProfile.cs` and save in the keymap file; the
+one-time move of the camera to Level when the scheme becomes Assisted is the Controls page's edit
+(`UI/Menu/ControlsFeature.cs`), never a load rule. What the player sees:
+[../controls.md](../controls.md), "Assisted controls and the level chase camera".
 
 ## src/Bindings/SensitivityScale.cs
 The Fly scheme's mouse sensitivity as one set of numbers: a multiplier from 0.25 to 4 with 1 as the
@@ -245,7 +252,7 @@ file and a rename. Named and versioned against the original, which writes 2400 u
 to the registry and points its live array at the loaded buffer, so a record-layout change there
 reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3 adds full-axis and
 stick hat tokens, the lever row reusing the full-axis token, version 4 the `xr` device); an older file
-loads whole, and a row it names keeps the shipped `xr` binding. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
+loads whole, and a row it names keeps the shipped `xr` binding. The seat's four choices top the file, a missing or unknown one reading as shipped. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
 suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`. A file that is no JSON object is moved to `.bad`.
 

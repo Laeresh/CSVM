@@ -155,6 +155,8 @@ public static class StickProfileResolver
         {
             MouseFlying = keymap.MouseFlying,
             MouseSensitivity = keymap.MouseSensitivity,
+            ControlScheme = keymap.ControlScheme,
+            ChaseCamera = keymap.ChaseCamera,
         };
     }
 
