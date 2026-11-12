@@ -8,7 +8,8 @@ namespace CSVM.Flight.Airframe;
 /// </summary>
 public struct AssistedState
 {
-    /// <summary>The flight-path angle a centred stick holds, radians, climb positive.</summary>
+    /// <summary>The climb angle a centred stick holds, radians, climb positive: the nose's when
+    /// the stick was released, the path's at priming.</summary>
     public float HeldClimb;
 
     /// <summary>The nose climb rate the hold has integrated to carry its bias, rad/s.</summary>
@@ -50,6 +51,10 @@ public static class AssistedFlight
 
     /// <summary>TUNE. How far the nose target leans past the held climb per radian the path sits off it.</summary>
     public const float PathGain = 1f;
+
+    /// <summary>TUNE. How many 1/lift_accel_rate seconds of the path's own climb rate count as
+    /// already closing its error. The lean leaves a converging path alone.</summary>
+    public const float PathLead = 2f;
 
     /// <summary>TUNE. Nose climb rate integrated per radian-second the nose sits off its target, 1/s².</summary>
     public const float TrimGain = 2f;
@@ -126,19 +131,24 @@ public static class AssistedFlight
 
         // The climb asked for: a held stick's rate, or a centred stick's hold on the angle it was left at.
         float climbAsk;
+        float noseClimb = Mathf.Asin(Mathf.Clamp(-att.Z.Y, -1f, 1f));
         if (holding)
         {
             // The loop closes on the nose. The path ignores a nose inside liftAOAs' low edge, so a
-            // loop on the path alone cycles across that dead band.
-            float noseClimb = Mathf.Asin(Mathf.Clamp(-att.Z.Y, -1f, 1f));
-            float noseTarget = state.HeldClimb + (PathGain * (state.HeldClimb - climb));
+            // loop on the path alone cycles across that dead band. The lean takes only the error
+            // the path is not already closing, or a release would pull the nose past the held angle.
+            float error = state.HeldClimb - climb;
+            float unclosed = error - (PathLead * climbRate / Mathf.Max(stats.LiftAccelRate, 0.1f));
+            float lean = Mathf.Clamp(unclosed, Mathf.Min(error, 0f), Mathf.Max(error, 0f));
+            float noseTarget = state.HeldClimb + (PathGain * lean);
             climbAsk = (HoldGain * (noseTarget - noseClimb)) + state.ClimbTrim;
             state.ClimbTrim = Mathf.Clamp(state.ClimbTrim + (TrimGain * (noseTarget - noseClimb) * dt), -MaxClimbRate, MaxClimbRate);
         }
         else
         {
             climbAsk = sy * MaxClimbRate;
-            state.HeldClimb = climb;
+            // The nose's climb, not the path's: the path lags a pull, and a hold on it swings the nose back.
+            state.HeldClimb = noseClimb;
         }
 
         // World turn and climb onto body pitch and yaw through the bank. Over the top, or with the

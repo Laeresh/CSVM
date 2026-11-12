@@ -133,6 +133,17 @@ band (about ±7 degrees at a 5 s period). The nose target is the held climb angl
 path's error (`PathGain`), and an integrator (`TrimGain`) carries the nose-down bias the plant's
 bank-to-yaw coupling adds in a turn.
 
+**The held angle is the nose's at release.** While stick Y is off centre the held angle follows the
+nose's climb, and centring keeps the last one. The path lags a pull: after 0.6 s of full stick the nose
+leads it by 25 degrees on the Bloodhawk and 18 on the Hoplite. A hold on the path's angle at release would
+swing the nose back through all of that lag, so the player would see the nose drop and keep only
+part of the climb. The lean takes only the error the path is not already closing: the path's
+climb rate over `PathLead`/`lift_accel_rate` seconds counts as closed, and the lean is bounded
+between zero and the plain error. While the path still converges on the held angle the nose
+stays where it was left. Once the path slows inside the dead band the lean is the plain error,
+as in steady flight. Past `NearVerticalNoseY` the hold stands down, so a pull released with the
+nose within 26 degrees of vertical flies on until the nose comes back below that.
+
 **The hardest level turn is a loop, not a formula.** Lift constants are decoded only in part, so the
 full-stick turn rate `AssistedState.TurnCap` is found in flight: at full stick it rises at
 `CapRecover` while no surface is saturated, and the sink below the held climb, led by its own rate
@@ -166,6 +177,7 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
 | `MaxClimbRate` | 1.5 rad/s | climb rate full stick asks for, past any elevator, so full stick is full pull |
 | `HoldGain` | 2 /s | nose climb rate per radian the nose sits off its target |
 | `PathGain` | 1 | how far the nose target leans per radian the path sits off the held climb |
+| `PathLead` | 2 | how many 1/`lift_accel_rate` seconds of the path's climb rate count as already closing its error |
 | `TrimGain` | 2 /s² | the hold's integrator |
 | `RateGain` | 1 | the roll and pitch correction on measured body rate |
 | `CapGain` | 0.05 (rad/s)/(m/s)/s | turn rate cut per m/s of sink at full stick |
@@ -179,14 +191,18 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
 - `CSVM.Tests/AssistedFlightTests.cs` pins the deflections at fixed states on the default airframe:
   rudder alone inside the band, wings level on a centred stick from either side, full pull at full
   stick in a steep bank against half stick, the held climb angle, a pull at 60 degrees of bank putting
-  climb on the rudder against a wings-level pull, the yaw input passing straight through, and a held
-  pull over the top against a release.
+  climb on the rudder against a wings-level pull, the yaw input passing straight through, a held
+  pull over the top against a release, and a flown pull or push released with the path lagging,
+  which holds the nose's angle and settles the path on it.
 - The engine suite `flight-assisted-law` flies the law through a real seat's sim step
   (`FlightControllerBuild.InputSource`) on the Bloodhawk and the Hoplite, off the identity heading and
   high over an empty world (DIAG-19, INSTR-22). It checks that 12 s of full sideways stick loses
   under 10 m at a steady rate and full pull, against the same stick flown raw losing over 40 m
   (METHOD-9); that centring levels the wings inside 2 s; that a held pull closes a loop on the entry
-  heading; and that a pull released over the top is upright on the reversed heading inside 4 s.
+  heading; that a pull released over the top is upright on the reversed heading inside 4 s; and
+  that a climb or dive released from full, half or gentle stick, wings level or banked, keeps its
+  nose within 4 degrees of where it was left, never pitching back faster than 15 deg/s, and settles
+  its path within 3 degrees of that angle in 8 s.
 - The engine suite `flight-assisted-seat` flies the scheme through a seat's own device reader. A
   held roll-left key reads raw under Original and through the law under Assisted; a scheme switch
   and a respawn reset the state while an accept that keeps the scheme does not; an AI seat on

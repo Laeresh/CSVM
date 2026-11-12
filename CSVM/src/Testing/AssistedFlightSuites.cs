@@ -25,14 +25,21 @@ internal static class AssistedFlightSuites
     private const float LevelWithinS = 2f;
     private const float UprightWithinS = 4f;
     private const float LoopWithinS = 20f;
+    private const float ReleaseS = 8f;
+    private const float ReleaseLagDeg = 4f;
+    private const float ReleaseBackDeg = 4f;
+    private const float ReleaseBackRateDeg = 15f;
+    private const float ReleaseSettleDeg = 3f;
 
     [Suite("flight-assisted-law",
         "the Assisted control law flown into a real seat's plant on the Bloodhawk and the Hoplite, "
         + "heading off-axis: a held full-left stick settles into a steady left turn at full pull "
         + "that loses under 10 m in 12 s where the same stick flown raw falls "
         + "past 40 m, centring the stick levels the wings inside 2 s and keeps them there, a held "
-        + "pull flies a whole loop back to level on the entry heading, and a pull released over the "
-        + "top rolls upright on the reversed heading inside 4 s")]
+        + "pull flies a whole loop back to level on the entry heading, a pull released over the "
+        + "top rolls upright on the reversed heading inside 4 s, and a climb or dive released from "
+        + "full, half or gentle stick, wings level or banked, keeps its nose within 4 degrees of "
+        + "where it was left and settles its path within 3 degrees of that nose angle")]
     internal static void FlightAssistedLaw(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -43,6 +50,9 @@ internal static class AssistedFlightSuites
             HeldTurnAndRelease(ctx, stats, plane);
             Loop(ctx, stats, plane);
             Immelmann(ctx, stats, plane);
+            // Full stick for 0.6 s: held longer it reaches the near-vertical band, where the hold stands down.
+            foreach (var (pitch, roll, held) in new[] { (1f, 0f, 0.6f), (-1f, 0f, 0.6f), (0.5f, 0f, 1.5f), (-0.5f, 0f, 1.5f), (0.2f, 0f, 1.5f), (0.5f, 0.6f, 1.5f), (-0.5f, -0.6f, 1.5f) })
+                ClimbRelease(ctx, stats, plane, pitch, roll, held);
         }
 
         ctx.Note($"the law's deflections fly the decoded plant; the feel of them is the user's to judge (B14)");
@@ -217,6 +227,51 @@ internal static class AssistedFlightSuites
         }
     }
 
+    // Stick Y held from level flight, then centred. The nose stays where it was left, and the path
+    // settles on the nose's climb at release.
+    private static void ClimbRelease(TestContext ctx, PlaneStats stats, string plane, float pitch, float roll, float heldS)
+    {
+        var rig = Build(ctx, stats);
+        try
+        {
+            rig.Stick.Stick = new FlightInput { Pitch = pitch, Roll = roll, Throttle = 1f };
+            for (int i = 0; i < Mathf.RoundToInt(heldS / Dt); i++)
+                rig.Seat.SimStep(Dt);
+
+            float sign = Mathf.Sign(pitch);
+            float noseAt = NoseDeg(rig.Plant), pathAt = ClimbDeg(rig.Plant);
+            rig.Stick.Stick = new FlightInput { Roll = roll, Throttle = 1f };
+            float prev = noseAt, worstBack = 0f, worstRate = 0f, settled = 0f, lowest = rig.Plant.Position.Y, over = 0f;
+            int steps = Mathf.RoundToInt(ReleaseS / Dt), tail = Mathf.RoundToInt(1f / Dt);
+            for (int i = 0; i < steps; i++)
+            {
+                rig.Seat.SimStep(Dt);
+                float nose = NoseDeg(rig.Plant);
+                worstBack = Mathf.Max(worstBack, sign * (noseAt - nose));
+                over = Mathf.Max(over, sign * (nose - noseAt));
+                worstRate = Mathf.Max(worstRate, -sign * (nose - prev) / Dt);
+                prev = nose;
+                lowest = Mathf.Min(lowest, rig.Plant.Position.Y);
+                if (i >= steps - tail)
+                    settled += ClimbDeg(rig.Plant) / tail;
+            }
+
+            string run = $"[{plane}] stick Y {pitch:+0.0;-0.0} X {roll:0.0} for {heldS:0.0} s";
+            ctx.Check(sign * (noseAt - pathAt) > ReleaseLagDeg,
+                $"ABLE-TO-FAIL CONTROL: {run}: the path lags the nose by {sign * (noseAt - pathAt):0.0} degrees at release, which a hold on the path's angle swings the nose back through");
+            ctx.Check(worstBack < ReleaseBackDeg && worstRate < ReleaseBackRateDeg,
+                $"{run}: released at a nose of {noseAt:0.0} degrees, the nose falls back at most {worstBack:0.0} degrees, at up to {worstRate:0.0} deg/s");
+            ctx.Check(Mathf.Abs(settled - noseAt) < ReleaseSettleDeg,
+                $"{run}: the path settles at {settled:0.0} degrees, the nose's {noseAt:0.0} at release");
+            ctx.Check(lowest > AltitudeFloorM, $"{run}: stays above {AltitudeFloorM:0} m ({lowest:0} m)");
+            ctx.Note($"{run}: nose {noseAt:0.0} path {pathAt:0.0} at release; nose fell back {worstBack:0.0} deg at up to {worstRate:0.0} deg/s and ran on {over:0.0}; path {settled:0.0} after {ReleaseS:0} s");
+        }
+        finally
+        {
+            rig.Seat.Free();
+        }
+    }
+
     private static void SchemesDiffer(TestContext ctx, PlaneStats stats)
     {
         var seat = Place(ctx, new FlightModel(stats), null, human: true);
@@ -362,6 +417,8 @@ internal static class AssistedFlightSuites
     }
 
     private static float BankDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Atan2(m.Attitude.X.Y, m.Attitude.Y.Y));
+
+    private static float NoseDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-m.Attitude.Z.Y, -1f, 1f)));
 
     private static float ClimbDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
 

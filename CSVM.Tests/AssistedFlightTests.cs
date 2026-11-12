@@ -104,6 +104,39 @@ public class AssistedFlightTests
         Assert.Equal(0f, released.Pitch, 3);
     }
 
+    /// <summary>A pull or push released holds the nose where it was left, not the lagging path, and
+    /// the path then settles on that angle.</summary>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(-1f)]
+    public void AReleasedPull_HoldsTheNoseWhereItWasLeft(float pitch)
+    {
+        var plant = Level();
+        var state = default(AssistedState);
+        var stick = new FlightInput { Pitch = pitch, Throttle = 1f };
+        for (int i = 0; i < 36; i++)
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+
+        float sign = Mathf.Sign(pitch), noseAt = NoseDeg(plant), back = 0f;
+        Assert.True(sign * (noseAt - PathDeg(plant)) > 10f, $"the path lags the nose at release ({noseAt} against {PathDeg(plant)})");
+        stick.Pitch = 0f;
+        plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+        // Captured on the last pull step, one step of pitch rate before noseAt.
+        Assert.True(Mathf.Abs(noseAt - Mathf.RadToDeg(state.HeldClimb)) < 1.5f, $"it holds {Mathf.RadToDeg(state.HeldClimb)}, the nose's {noseAt}");
+        for (int i = 0; i < 480; i++)
+        {
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+            back = Mathf.Max(back, sign * (noseAt - NoseDeg(plant)));
+        }
+
+        Assert.True(back < 3f, $"the nose falls back {back} degrees from {noseAt}");
+        Assert.True(Mathf.Abs(PathDeg(plant) - noseAt) < 2f, $"the path settles at {PathDeg(plant)} against the nose's {noseAt} at release");
+    }
+
+    private static float NoseDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-m.Attitude.Z.Y, -1f, 1f)));
+
+    private static float PathDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+
     private static FlightInput Steer(FlightModel plant, FlightInput stick)
     {
         var state = default(AssistedState);

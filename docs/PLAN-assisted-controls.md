@@ -430,3 +430,20 @@ asked after the run. Record each tuned value with its reason in the landing comm
 
 **⚠ Traps.** A live symptom is evidence about the build that was running; confirm the build before
 filing anything from this session.
+
+**Found at the controls.** "Moving up or down and releasing the stick moves the plane strongly in
+the other direction keeping only a small part of the climb afterwards." The hold captured the
+path's climb angle at release, and the path lags a pull by 6 to 25 degrees, so the hold swung the
+nose back through that whole lag and settled on the path's angle. Measured in
+`flight-assisted-law` on the Bloodhawk and Hoplite (full stick 0.6 s, half and 0.2 for 1.5 s,
+half with 0.6 sideways, each up and down, then 8 s centred): the nose fell back 9 to 37 degrees
+at 17 to 64 deg/s, and the path kept only the angle it had at release. The fix holds the nose's
+angle at release (`AssistedFlight`'s else branch), and the path lean counts the path's own
+climb rate over `PathLead`/`lift_accel_rate` seconds as already closing the error, bounded
+between zero and the plain error, so a converging path no longer pulls the nose past the held
+angle. `ClimbTrim` is kept across a pull: the banked releases, which carry it, met the same
+bounds. After the fix the nose falls back at most 3.1 degrees at up to 12.4 deg/s and the path
+settles within 2.2 degrees of the release nose (checked at 4 degrees, 15 deg/s and 3 degrees; the
+path's lag at release over 4 degrees is the able-to-fail control). The turn, wings-level, loop and
+Immelmann checks read as before, and a unit test,
+`AReleasedPull_HoldsTheNoseWhereItWasLeft`, pins the capture on the default airframe.
