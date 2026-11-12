@@ -516,15 +516,17 @@ internal sealed partial class VolumetricClouds : Node3D
             float span_step = len / float(n);
             float t = t0 + pc_step(t0, span_step) * dither;
             // The clear air before the first cloud, density alone, in double steps. The search is most
-            // of a ray's cost; the bisection's fourth pass restores the surface's precision.
+            // of a ray's cost; the bisection's fourth pass restores the surface's precision. Inside the
+            // deck it takes single steps: a thin cell is a sliver a double step crosses in rings.
             float clear = t0;
             int i = 0;
             while (i < step_budget && t < t1) {
-                if (pc_density(eye + dir * t, bottom, top) > 0.001) {
+                vec3 p = eye + dir * t;
+                if (pc_density(p, bottom, top) > 0.001) {
                     break;
                 }
                 clear = t;
-                t += pc_step(t, span_step) * 2.0;
+                t += pc_step(t, span_step) * (deck_cover > 0.0 && p.y < bottom + deck_depth_m ? 1.0 : 2.0);
                 i++;
             }
             if (t >= t1) {
