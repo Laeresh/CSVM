@@ -122,7 +122,13 @@ so B12 (and A2 for the camera) adds `ControlScheme = profile.ControlScheme;` and
 `ChaseCamera = profile.ChaseCamera;` there, with seat properties over `_controls.Profile` like
 `MouseFlying`'s. Both the launch read and a pause-accepted CONTROLS page reach the seat through it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree (A1, A2, B11, B12 and B13 with
+main merged in): build, units 8462 passed and 0 failed of 8468 (6 skipped for missing extracted
+data), engine 679 passed and 0 failed with engine errors clean, goldens 41 shots hash-identical. The
+first pass failed one unit, `SuiteShardsTests`, because `chase-level`, `flight-assisted-law` and
+`flight-assisted-seat` carried no weight in `analysis/engine-suite-weights.json`; their measured
+shard times were added and the unit stage re-run green. The 8-chapter `--freecam` regression was not
+run separately: no item touches world loading.
 
 **Original approach (kept for reference).**
 
@@ -197,7 +203,13 @@ out of every battery. Existing `chase-rig` and `chase-trail` pass unchanged,
 as do the 245 camera, chase and XR view unit tests. A respawn (`Snap`) and the spectator `Watch`
 take the seat's last choice, so a respawn settles on the level frame.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree (A1, A2, B11, B12 and B13 with
+main merged in): build, units 8462 passed and 0 failed of 8468 (6 skipped for missing extracted
+data), engine 679 passed and 0 failed with engine errors clean, goldens 41 shots hash-identical. The
+first pass failed one unit, `SuiteShardsTests`, because `chase-level`, `flight-assisted-law` and
+`flight-assisted-seat` carried no weight in `analysis/engine-suite-weights.json`; their measured
+shard times were added and the unit stage re-run green. The 8-chapter `--freecam` regression was not
+run separately: no item touches world loading.
 
 **Original approach (kept for reference).**
 
@@ -255,7 +267,13 @@ wings level 0.72 / 1.37 s after centring, a held pull closing the loop in 11.8 /
 heading, and a release over the top upright in 1.30 / 2.80 s on the reversed heading.
 `CSVM.Tests/AssistedFlightTests.cs` pins the fixed-state deflections.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree (A1, A2, B11, B12 and B13 with
+main merged in): build, units 8462 passed and 0 failed of 8468 (6 skipped for missing extracted
+data), engine 679 passed and 0 failed with engine errors clean, goldens 41 shots hash-identical. The
+first pass failed one unit, `SuiteShardsTests`, because `chase-level`, `flight-assisted-law` and
+`flight-assisted-seat` carried no weight in `analysis/engine-suite-weights.json`; their measured
+shard times were added and the unit stage re-run green. The 8-chapter `--freecam` regression was not
+run separately: no item touches world loading.
 
 **Original approach (kept for reference).**
 
@@ -322,7 +340,13 @@ roll-left key raw under Original against through the law under Assisted, the sta
 switch, an accepted profile and a respawn but not on an accept that keeps the scheme, and an AI seat
 on Assisted reading raw without priming the law.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree (A1, A2, B11, B12 and B13 with
+main merged in): build, units 8462 passed and 0 failed of 8468 (6 skipped for missing extracted
+data), engine 679 passed and 0 failed with engine errors clean, goldens 41 shots hash-identical. The
+first pass failed one unit, `SuiteShardsTests`, because `chase-level`, `flight-assisted-law` and
+`flight-assisted-seat` carried no weight in `analysis/engine-suite-weights.json`; their measured
+shard times were added and the unit stage re-run green. The 8-chapter `--freecam` regression was not
+run separately: no item touches world loading.
 
 **Original approach (kept for reference).**
 
@@ -362,7 +386,13 @@ schemes: yaw under Original, roll under Assisted. Measured: the left key turns t
 degrees in 3 s at up to 80.1 degrees of bank, the cursor at -0.8 turns it 71.8 degrees at up to 64.0.
 A mutant that kept the exchange under Assisted failed the suite: 73.5 degrees of turn at 0.0 bank.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `RunTests.ps1` on the merged plan tree (A1, A2, B11, B12 and B13 with
+main merged in): build, units 8462 passed and 0 failed of 8468 (6 skipped for missing extracted
+data), engine 679 passed and 0 failed with engine errors clean, goldens 41 shots hash-identical. The
+first pass failed one unit, `SuiteShardsTests`, because `chase-level`, `flight-assisted-law` and
+`flight-assisted-seat` carried no weight in `analysis/engine-suite-weights.json`; their measured
+shard times were added and the unit stage re-run green. The 8-chapter `--freecam` regression was not
+run separately: no item touches world loading.
 
 **Original approach (kept for reference).**
 
