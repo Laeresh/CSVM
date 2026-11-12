@@ -45,6 +45,9 @@ internal sealed partial class VolumetricClouds : Node3D
     // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not (#345).
     private const int ShaftDivisor = 2;
 
+    // The most zeppelin hulls the march leaves clear at once (the shader's clear_hulls).
+    private const int MaxClearedHulls = 8;
+
     private static readonly StringName MarchOnParam = "march_on";
     private static readonly StringName MarchShaftsOnlyParam = "march_shafts_only";
     private static readonly StringName ShaftsOnlyParam = "shafts_only";
@@ -53,6 +56,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private static readonly StringName MarchLensParam = "march_lens";
     private static readonly StringName ViewCameraParam = "view_camera";
     private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
+    private static readonly StringName ClearHullsParam = "clear_hulls";
+    private static readonly StringName ClearHullCountParam = "clear_hull_count";
 
     private readonly Node3D _worldRoot;
     private readonly WeatherRig _weather;
@@ -60,6 +65,10 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly SceneBuilder? _scene;
     private readonly List<(MeshInstance3D Node, Aabb World)> _placedSprites = new();
     private readonly List<MeshInstance3D> _hidden = new();
+    private readonly ZeppelinRuntime? _zeppelins;
+    // Each zeppelin's host and its bounding radius about the host's origin, and their clearings as last written.
+    private readonly List<(Node3D Host, float Radius)> _hulls = new();
+    private readonly Vector4[] _hullClearings = new Vector4[MaxClearedHulls];
     private readonly bool _hasDeck;
     private ShaderMaterial? _material;
     // The reduced march (MarchShader), its target, the target's render time and its size, zero while off.
@@ -78,10 +87,11 @@ internal sealed partial class VolumetricClouds : Node3D
     private bool _hiding;
 
     private VolumetricClouds(Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
-        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck)
+        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck, ZeppelinRuntime? zeppelins)
     {
         Name = "VolumetricClouds";
         _hasDeck = hasDeck;
+        _zeppelins = zeppelins;
         _worldRoot = worldRoot;
         _weather = weather;
         _field = field;
@@ -102,6 +112,10 @@ internal sealed partial class VolumetricClouds : Node3D
     /// of its own, which <c>gpu_ms</c> leaves out (verification PERF-39).</summary>
     public static MeasuredRenderTime? MarchTime { get; private set; }
 
+    /// <summary>Gets how many zeppelin hulls the clouds took to keep clear. A hidden one is skipped each
+    /// frame, and past <see cref="MaxClearedHulls"/> the rest are.</summary>
+    public int HullCount => _hulls.Count;
+
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
@@ -117,10 +131,11 @@ internal sealed partial class VolumetricClouds : Node3D
     /// <summary>The clouds over <paramref name="worldRoot"/>'s world. They hide the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
     /// placed. They draw the slab over the band or <paramref name="volumes"/>, and
-    /// <paramref name="hasDeck"/> draws the overcast deck under the heads.</summary>
+    /// <paramref name="hasDeck"/> draws the overcast deck under the heads. The <paramref name="zeppelins"/>'
+    /// hulls stay clear of cloud.</summary>
     public static VolumetricClouds Create(Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
-        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck) =>
-        new(worldRoot, weather, field, scene, volumes, hasDeck);
+        SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck, ZeppelinRuntime? zeppelins) =>
+        new(worldRoot, weather, field, scene, volumes, hasDeck, zeppelins);
 
     /// <summary>The layer's altitudes: the mission's cloud band where it authors one, else the fvol
     /// volumes' vertical union, else none.</summary>
@@ -148,6 +163,7 @@ internal sealed partial class VolumetricClouds : Node3D
     {
         CollectPlacedSprites();
         FitLayerToSprites();
+        CollectHulls();
         Follow(GraphicsMode.Enhanced);
     }
 
@@ -279,7 +295,8 @@ internal sealed partial class VolumetricClouds : Node3D
             vec4 trace;
             // The reduced march ignored the scene, so it serves every pixel whose scene stands outside
             // the marched span. Terrain or an aircraft inside the layer marches here at full resolution.
-            bool inside = span.y >= 0.0 && scene > span.x && scene < min(span.y, span.x + far_m);
+            // A ray a hull clears marches here too, or a far hull's clearing blurs to a texel of the target.
+            bool inside = span.y >= 0.0 && (scene > span.x && scene < min(span.y, span.x + far_m) || pc_hull_clearing(eye, dir).x > 0.0);
             bool reduced = pc_reduced(eye, INV_VIEW_MATRIX, INV_PROJECTION_MATRIX);
             // The target's left half holds the layer's trace and its right half the shafts'
             // quarters. The clamp keeps the filter off the seam between them.
@@ -383,6 +400,26 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float head_soft = 0.16;
         uniform float warp_m = 320.0;
         uniform float shear_m = 260.0;
+        // The zeppelins' hulls the clouds leave clear: each one's centre and bounding radius.
+        """ + $"\nuniform vec4 clear_hulls[{MaxClearedHulls}];\n" + """
+        uniform int clear_hull_count = 0;
+
+        // The share of cloud a ray leaves out and how far along it. A ray passing within a hull's
+        // radius marches no cloud short of the hull's far side, the edge softened out to 1.5 radii.
+        // Cloud between the eye and the hull is what hides it, so a pocket round the hull alone would not do.
+        vec2 pc_hull_clearing(vec3 eye, vec3 dir) {
+            vec2 best = vec2(0.0);
+            for (int i = 0; i < clear_hull_count; i++) {
+                vec3 to = clear_hulls[i].xyz - eye;
+                float r = clear_hulls[i].w;
+                float along = dot(to, dir);
+                float f = 1.0 - smoothstep(r, r * 1.5, length(to - dir * max(along, 0.0)));
+                if (f > best.x) {
+                    best = vec2(f, along + r);
+                }
+            }
+            return best;
+        }
 
         // The heads' coverage at `p`, the function the ground shadow reads too.
         float pc_cover_shaped(vec3 p) {
@@ -404,6 +441,11 @@ internal sealed partial class VolumetricClouds : Node3D
         // The whole field at `p`: the heads over the deck.
         float pc_density(vec3 p, float bottom, float top) {
             return max(pc_heads(p, bottom, top), pc_deck(p, bottom));
+        }
+
+        // The field the eye sees at `p`, `t` along its ray, less what pc_hull_clearing's `clear` leaves out.
+        float pc_seen(vec3 p, float t, vec2 clear, float bottom, float top) {
+            return pc_density(p, bottom, top) * (1.0 - clear.x * step(t, clear.y));
         }
 
         // The deck's optical depth along the sun ray from `p`, two taps over the ray's span through
@@ -515,11 +557,12 @@ internal sealed partial class VolumetricClouds : Node3D
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
             float span_step = len / float(n);
             float t = t0 + pc_step(t0, span_step) * dither;
+            vec2 hull_clear = pc_hull_clearing(eye, dir);
             // The clear air before the first cloud, density alone.
             float clear = t0;
             int i = 0;
             while (i < step_budget && t < t1) {
-                if (pc_density(eye + dir * t, bottom, top) > 0.001) {
+                if (pc_seen(eye + dir * t, t, hull_clear, bottom, top) > 0.001) {
                     break;
                 }
                 clear = t;
@@ -535,7 +578,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float hi = t;
             for (int k = 0; k < 3; k++) {
                 float mid = (clear + hi) * 0.5;
-                if (pc_density(eye + dir * mid, bottom, top) > 0.001) {
+                if (pc_seen(eye + dir * mid, mid, hull_clear, bottom, top) > 0.001) {
                     hi = mid;
                 } else {
                     clear = mid;
@@ -548,7 +591,7 @@ internal sealed partial class VolumetricClouds : Node3D
             while (i < step_budget && trans > 0.01 && t < t1) {
                 float dt = pc_step(t, span_step);
                 vec3 p = eye + dir * t;
-                float d = pc_density(p, bottom, top);
+                float d = pc_seen(p, t, hull_clear, bottom, top);
                 if (d > 0.001) {
                     float ext = d * density_gain * dt;
                     float a = 1.0 - exp(-ext);
@@ -621,7 +664,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _built = root;
         AddChild(root);
         string layer = _bottom is { } b && _top is { } t ? $"layer {b:0}-{t:0} m" : "no cloud band";
-        Log.Info("world", $"volumetric clouds: {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}");
+        Log.Info("world", $"volumetric clouds: {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}, hulls clear={_hulls.Count}");
     }
 
     private string BuildSlab(Node3D root)
@@ -678,6 +721,7 @@ internal sealed partial class VolumetricClouds : Node3D
     {
         if (_material == null || _march == null || _marchView == null || !IsInsideTree())
             return;
+        FollowHulls(_material, _march);
         var viewport = GetViewport();
         var camera = viewport.GetCamera3D();
         bool shaftsOnly = MarchDivisor == 1;
@@ -709,6 +753,38 @@ internal sealed partial class VolumetricClouds : Node3D
         _material.SetShaderParameter(MarchEyeParam, view.Origin);
         _material.SetShaderParameter(MarchBackParam, view.Basis.Z);
         _material.SetShaderParameter(MarchLensParam, new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y)));
+    }
+
+    // Each zeppelin's host and the radius about its origin that holds the whole hull, whichever way it turns.
+    private void CollectHulls()
+    {
+        _hulls.Clear();
+        if (_zeppelins == null)
+            return;
+        var hosts = new List<Node3D>();
+        _zeppelins.CollectHosts(hosts);
+        foreach (var host in hosts)
+        {
+            var box = SubtreeBounds.WorldAabb(host);
+            _hulls.Add((host, box.GetCenter().DistanceTo(host.GlobalPosition) + box.Size.Length() * 0.5f));
+        }
+    }
+
+    // Writes where each standing hull is now onto both marches, so the cloud in front of it stays clear.
+    private void FollowHulls(ShaderMaterial slab, ShaderMaterial march)
+    {
+        if (_hulls.Count == 0)
+            return;
+        int n = 0;
+        foreach (var (host, radius) in _hulls)
+        {
+            if (n < MaxClearedHulls && GodotObject.IsInstanceValid(host) && host.IsVisibleInTree())
+                _hullClearings[n++] = new Vector4(host.GlobalPosition.X, host.GlobalPosition.Y, host.GlobalPosition.Z, radius);
+        }
+        slab.SetShaderParameter(ClearHullsParam, _hullClearings);
+        slab.SetShaderParameter(ClearHullCountParam, n);
+        march.SetShaderParameter(ClearHullsParam, _hullClearings);
+        march.SetShaderParameter(ClearHullCountParam, n);
     }
 
     // The placed cloud sprites: every mesh instance under the world root wearing a pooled material.
