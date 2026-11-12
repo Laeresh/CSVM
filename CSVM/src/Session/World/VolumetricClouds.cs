@@ -42,7 +42,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
     private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
-    // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not (#345).
+    // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not.
     private const int ShaftDivisor = 2;
 
     private static readonly StringName MarchOnParam = "march_on";
