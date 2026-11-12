@@ -42,7 +42,12 @@ internal sealed partial class VolumetricClouds : Node3D
     // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
     private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
+    // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not (#345).
+    private const int ShaftDivisor = 2;
+
     private static readonly StringName MarchOnParam = "march_on";
+    private static readonly StringName MarchShaftsOnlyParam = "march_shafts_only";
+    private static readonly StringName ShaftsOnlyParam = "shafts_only";
     private static readonly StringName MarchEyeParam = "march_eye";
     private static readonly StringName MarchBackParam = "march_back";
     private static readonly StringName MarchLensParam = "march_lens";
@@ -62,6 +67,7 @@ internal sealed partial class VolumetricClouds : Node3D
     private SubViewport? _marchView;
     private MeasuredRenderTime? _marchTime;
     private Vector2I _marchSize;
+    private bool _marchShaftsOnly;
     private float? _bottom;
     private float? _top;
     // The layer was fitted to the placed clouds, so the upper zone is no air above it to split the fog by.
@@ -88,7 +94,8 @@ internal sealed partial class VolumetricClouds : Node3D
     public static Vector4 PublishedGround { get; private set; }
 
     /// <summary>Gets the march's resolution divisor, the Volumetric Clouds word's, read each frame so a
-    /// live move re-marches. At 1 the quad marches every pixel; 2 or 4 march a half- or quarter-size target.</summary>
+    /// live move re-marches. At 1 the quad marches the layer per pixel, the shafts at half size. At 2
+    /// or 4 a half- or quarter-size target marches both.</summary>
     public static int MarchDivisor => VolumetricCloudsSetting.MarchDivisor;
 
     /// <summary>Gets the reduced march's render time while it runs, else null. Its target is a viewport
@@ -183,6 +190,8 @@ internal sealed partial class VolumetricClouds : Node3D
         // from any other camera, a pane, a spyglass or a second eye, marches every pixel itself.
         uniform sampler2D march_texture : filter_linear, repeat_disable;
         uniform bool march_on = false;
+        // The target holds the shafts alone (a divisor of 1): the quad marches the layer per pixel.
+        uniform bool march_shafts_only = false;
         uniform vec3 march_eye;
         uniform vec3 march_back;
         uniform vec2 march_lens;
@@ -244,6 +253,16 @@ internal sealed partial class VolumetricClouds : Node3D
             pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
         }
 
+        // The shafts' light at this pixel's depth from the target's right half, at column `x` of the
+        // left half (the shafts' quarters, pc_shaft_at).
+        float pc_reduced_shafts(vec2 uv, float x, vec2 span, float scene) {
+            float l0 = min(span.y >= 0.0 ? span.x : shaft_far_m, shaft_far_m);
+            if (l0 <= 1.0) {
+                return 0.0;
+            }
+            return pc_shaft_at(texture(march_texture, vec2(0.5 + x, uv.y)), min(scene, l0) / l0);
+        }
+
         void vertex() {
             POSITION = vec4(VERTEX.xy, 1.0, 1.0);
         }
@@ -261,24 +280,25 @@ internal sealed partial class VolumetricClouds : Node3D
             // The reduced march ignored the scene, so it serves every pixel whose scene stands outside
             // the marched span. Terrain or an aircraft inside the layer marches here at full resolution.
             bool inside = span.y >= 0.0 && scene > span.x && scene < min(span.y, span.x + far_m);
-            if (!inside && pc_reduced(eye, INV_VIEW_MATRIX, INV_PROJECTION_MATRIX)) {
-                // The target's left half holds the layer's trace and its right half the shafts'
-                // quarters. The clamp keeps the filter off the seam between them.
-                float edge = 1.0 / float(textureSize(march_texture, 0).x);
-                float x = clamp(SCREEN_UV.x, edge, 1.0 - edge) * 0.5;
+            bool reduced = pc_reduced(eye, INV_VIEW_MATRIX, INV_PROJECTION_MATRIX);
+            // The target's left half holds the layer's trace and its right half the shafts'
+            // quarters. The clamp keeps the filter off the seam between them.
+            float edge = 1.0 / float(max(textureSize(march_texture, 0).x, 1));
+            float x = clamp(SCREEN_UV.x, edge, 1.0 - edge) * 0.5;
+            // The march's start offset moves by the golden ratio every frame. TAA then averages the
+            // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
+            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
+            if (reduced && !march_shafts_only && !inside) {
                 trace = vec4(texture(march_texture, vec2(x, SCREEN_UV.y)).xyz, 0.0);
                 // In front of the layer the scene hides it, so the edge stays at this pixel's own depth.
                 if (span.y < 0.0 || scene <= span.x) {
                     trace.xyz = vec3(0.0, 0.0, 1.0);
                 }
-                float l0 = min(span.y >= 0.0 ? span.x : shaft_far_m, shaft_far_m);
-                if (l0 > 1.0) {
-                    trace.w = pc_shaft_at(texture(march_texture, vec2(0.5 + x, SCREEN_UV.y)), min(scene, l0) / l0);
-                }
+                trace.w = pc_reduced_shafts(SCREEN_UV, x, span, scene);
+            } else if (reduced && march_shafts_only) {
+                // The shafts are soft haze, so the target serves them; the cloud edges stay per pixel.
+                trace = vec4(pc_layer(eye, dir, span, scene, dither), pc_reduced_shafts(SCREEN_UV, x, span, scene));
             } else {
-                // The march's start offset moves by the golden ratio every frame. TAA then averages the
-                // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
-                float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
                 trace = pc_trace(eye, dir, span, scene, dither);
             }
             vec3 albedo = vec3(0.0);
@@ -300,6 +320,8 @@ internal sealed partial class VolumetricClouds : Node3D
         // The main view's camera and inverse projection, written before each draw (FollowCamera).
         uniform mat4 view_camera;
         uniform mat4 view_inv_projection;
+        // The quad marches the layer itself (a divisor of 1), so the left half stays clear.
+        uniform bool shafts_only = false;
 
         void fragment() {
             vec3 eye = view_camera[3].xyz;
@@ -309,7 +331,11 @@ internal sealed partial class VolumetricClouds : Node3D
             vec3 dir = csky_pc_ray_dir(uv, view_inv_projection, view_camera);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
             float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
-            COLOR = UV.x < 0.5 ? vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0) : pc_shafts(eye, dir, span, 1e9, dither);
+            if (UV.x < 0.5) {
+                COLOR = shafts_only ? vec4(0.0, 0.0, 1.0, 0.0) : vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0);
+            } else {
+                COLOR = pc_shafts(eye, dir, span, 1e9, dither);
+            }
         }
         """;
 
@@ -645,28 +671,34 @@ internal sealed partial class VolumetricClouds : Node3D
         return "one full-screen march";
     }
 
-    // Before each draw, once every camera has moved: aims the reduced march at the view's camera. A
-    // divisor of 1, no camera, or a headset's two eyes leave every pixel to the quad.
+    // Before each draw, once every camera has moved: aims the reduced march at the view's camera. At a
+    // divisor of 1 the target traces the shafts alone, at ShaftDivisor, while a shaft gain stands. No
+    // camera, or a headset's two eyes, leave every pixel to the quad.
     private void FollowCamera()
     {
         if (_material == null || _march == null || _marchView == null || !IsInsideTree())
             return;
         var viewport = GetViewport();
         var camera = viewport.GetCamera3D();
-        int divisor = MarchDivisor;
-        bool on = divisor > 1 && camera != null && !viewport.UseXR;
+        bool shaftsOnly = MarchDivisor == 1;
+        int divisor = shaftsOnly ? ShaftDivisor : MarchDivisor;
+        bool on = camera != null && !viewport.UseXR && (!shaftsOnly || ShaftGain > 0f);
         var full = (Vector2I)viewport.GetVisibleRect().Size;
         // Two halves side by side: the layer's trace, then the shafts' (MarchShader).
         var size = on ? new Vector2I(Math.Max((full.X + divisor - 1) / divisor, 1) * 2, Math.Max((full.Y + divisor - 1) / divisor, 1)) : Vector2I.Zero;
-        if (size != _marchSize)
+        if (size != _marchSize || shaftsOnly != _marchShaftsOnly)
         {
             _marchSize = size;
+            _marchShaftsOnly = shaftsOnly;
             _marchView.RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
             if (on)
                 _marchView.Size = size;
             _material.SetShaderParameter(MarchOnParam, on);
+            _material.SetShaderParameter(MarchShaftsOnlyParam, shaftsOnly);
+            _march.SetShaderParameter(ShaftsOnlyParam, shaftsOnly);
             MarchTime = on ? _marchTime : null;
-            Log.Info("world", $"volumetric clouds: march at {(on ? $"1/{divisor} resolution, {size.X / 2}x{size.Y}" : "full resolution")}");
+            string what = !on ? "full resolution" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
+            Log.Info("world", $"volumetric clouds: march at {what}");
         }
         if (!on)
             return;
@@ -767,6 +799,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _marchView = null;
         _marchTime = null;
         _marchSize = Vector2I.Zero;
+        _marchShaftsOnly = false;
         MarchTime = null;
         if (_built == null)
             return;
