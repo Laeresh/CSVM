@@ -41,9 +41,11 @@ internal sealed partial class VolumetricClouds : Node3D
 
     // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun; a
     // storm dims the sun, greys the ambient and lets fewer, taller heads stand.
-    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1";
-    private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.5;amb_floor=0.15;light_k=1.5;sun_gain=2.4";
-    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.7;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.6;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.0";
+    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5";
+    private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4";
+    // An overcast deck under the heads: a lighter base, and the heads broken up over it.
+    private const string DeckPreset = ClearPreset + ";amb_floor=0.45;cover_max=0.7;amb_gain=0.7";
+    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.7;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.6;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3";
     // A storm's heads tower this far over the layer floor.
     private const float StormDepthM = 2450f;
 
@@ -409,6 +411,12 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float light_step_m = 25.0;
         uniform float light_k = 1.0;
         uniform float cover_max = 1.0;
+        uniform float base_rag = 0.0;
+        uniform float deck_scale = 1.6;
+        uniform float deck_k = 0.6;
+        uniform float deck_erode = 0.0;
+        uniform float amb_occ = 0.0;
+        uniform float amb_od_k = 0.25;
         uniform float ms_a = 0.5;
         uniform float ms_b = 0.6;
         uniform float ms_c = 0.5;
@@ -475,7 +483,7 @@ internal sealed partial class VolumetricClouds : Node3D
             vec4 s = texture(shape_tex, q / shape_m);
             float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
             float base = clamp(pc_remap(s.r, (wfbm - 1.0) * base_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
-            float d = clamp(pc_remap(base * smoothstep(0.0, 0.04, h), 1.0 - c, 1.0, 0.0, 1.0), 0.0, 1.0);
+            float d = clamp(pc_remap(base * smoothstep(0.0, 0.04 + base_rag * (1.0 - s.g), h), 1.0 - c, 1.0, 0.0, 1.0), 0.0, 1.0);
             if (detail && d > 0.0) {
                 vec3 n = texture(detail_tex, q / detail_tile_m).rgb;
                 float hf = n.r * 0.625 + n.g * 0.25 + n.b * 0.125;
@@ -483,6 +491,27 @@ internal sealed partial class VolumetricClouds : Node3D
                 d = clamp(pc_remap(d, m * detail_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
             }
             return d;
+        }
+
+        // The deck over the baked noise: csky_pc_deck_density's sheet, its body the Perlin-Worley
+        // shape, so its underside lumps like stratocumulus.
+        float pc_deck_pw(vec3 p, float bottom) {
+            float deck_top = bottom + deck_depth_m;
+            if (deck_cover <= 0.0 || p.y < bottom || p.y > deck_top) {
+                return 0.0;
+            }
+            float h = (p.y - bottom) / max(deck_depth_m, 1.0);
+            float prof = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
+            vec3 q = p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y);
+            vec4 s = texture(shape_tex, q / (shape_m * deck_scale));
+            float n = s.r * 0.6 + (s.g * 0.625 + s.b * 0.25 + s.a * 0.125) * 0.4;
+            float body = clamp((n - (1.0 - deck_cover)) / max(deck_cover * 0.5, 0.05), 0.0, 1.0);
+            if (body > 0.0) {
+                vec3 dn = texture(detail_tex, q / detail_tile_m).rgb;
+                float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
+                body = clamp(pc_remap(body, hf * deck_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
+            }
+            return body * prof * (pw_density / max(density_gain, 1e-6)) * deck_k;
         }
 
         // The cumulus heads at `p` over the pattern's coverage.
@@ -535,6 +564,9 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // The deck at `p`, torn by the rifts.
         float pc_deck(vec3 p, float bottom) {
+            if (look == 1) {
+                return pc_deck_pw(p, bottom) * csky_pc_deck_gaps(p, deck_gaps, gap_m);
+            }
             float deck = csky_pc_deck_density(p, bottom, bottom + deck_depth_m, deck_cover, detail_m);
             return deck * csky_pc_deck_gaps(p, deck_gaps, gap_m);
         }
@@ -703,7 +735,8 @@ internal sealed partial class VolumetricClouds : Node3D
                         float od = pc_sun_od_pw(p, bottom, top) + pc_deck_od(p, bottom);
                         float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
                         float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
-                        w += trans * a * vec2(mix(amb_floor, 1.0, h), pc_sun_ms(od, cos_theta) * powder);
+                        float amb = mix(amb_floor, 1.0, h) * mix(1.0, exp(-od * amb_od_k), amb_occ);
+                        w += trans * a * vec2(amb, pc_sun_ms(od, cos_theta) * powder);
                     } else {
                         float sun_t = pc_sun(p, sun_step, bottom, top);
                         w += trans * a * pc_light(p, sun_t);
@@ -779,7 +812,7 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("detail_tex", CloudNoise.Detail);
         material.SetShaderParameter("low_tex", CloudNoise.Low);
         material.SetShaderParameter("tops_tex", CloudNoise.Tops);
-        string set = (Storm ? StormPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
+        string set = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
         foreach (var pair in set.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = pair.Split('=');
