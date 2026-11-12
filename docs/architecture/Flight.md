@@ -1304,6 +1304,15 @@ axis and takes that travel's own 0.1, a port rule and not a decoded one. Pure an
 suite drives it with no window; `FlightController` sums what it returns into the keyboard and pad
 deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
+## src/Flight/Airframe/AssistedFlight.cs
+The Assisted control scheme's law, remake-only: the pilot's summed stick read as a world turn rate
+and climb rate, projected through the bank onto elevator and rudder, with aileron tracking a bank
+target. Inside `RudderBand` the turn is flat on rudder; a centred stick holds the climb angle on the
+nose; full sideways stick is the hardest turn that holds height, found by a vertical-speed loop on
+`AssistedState.TurnCap`; a held pull loops and a release inverted rolls upright. The separate yaw
+input lands on the rudder after the loops. It writes only a `FlightInput` and carries its state in
+the caller's `AssistedState`. Engine-free. Design: [../assisted-flight.md](../assisted-flight.md).
+
 ## src/Flight/Airframe/AnalogAxes.cs
 The two analogue shares of a seat's flight command. `Pad` bends pitch and roll through `PadCurve`
 (0.15 deadzone, squared), the curve `FlightController.StickCurve` forwards to. `Stick` reads the

@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the assist
 
-11. ☐ The assist law: stick and yaw input to a `FlightInput`, pure and unit-tested
+11. ☑ The assist law: stick and yaw input to a `FlightInput`, pure and unit-tested
 12. ☐ Wire the assist into the human input path for every device, the mouse included
 13. ☐ The autogyro under the assist
 14. ☐ Tune the assist and the level camera at the controls
@@ -193,7 +193,23 @@ so the projection is ill-conditioned near 90 degrees in ordinary flight, not onl
 
 # Wave B, the assist
 
-## B11 ☐ The assist law
+## B11 ☑ The assist law
+
+**Landed.** `AssistedFlight.Steer` in `CSVM/src/Flight/Airframe/AssistedFlight.cs`, pure and not yet
+wired to any seat (B12). The design, the reasons it does not feed `AiControlLaw` an aim point, the
+plant readings behind each loop, the contract B12 wires to and the TUNE constants are in
+[`assisted-flight.md`](assisted-flight.md). `is_autogyro` reaches no plant term, so the law flies
+the autogyro unchanged; B13 reduces to feeding the raw stick from before `MouseFlight`'s exchange.
+
+Measured in `flight-assisted-law` (Bloodhawk / Hoplite): 2.1 / 1.9 m lost in 12 s of full left
+stick against 188.9 / 184.8 m for the raw stick, a steady 32.5 / 64.0 deg/s at mean elevator 1.000,
+wings level 0.72 / 1.37 s after centring, a held pull closing the loop in 11.8 / 6.1 s on the entry
+heading, and a release over the top upright in 1.30 / 2.80 s on the reversed heading.
+`CSVM.Tests/AssistedFlightTests.cs` pins the fixed-state deflections.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A pure function from (stick X, stick Y, yaw input, the plane's attitude, velocity and
 angular rates, the airframe) to a `FlightInput`, with no device and no scene in it, covering
