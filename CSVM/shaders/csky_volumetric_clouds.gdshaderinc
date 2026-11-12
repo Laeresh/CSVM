@@ -16,11 +16,17 @@ float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, fl
     if (cover <= 0.0 || p.y < bottom || p.y > deck_top) {
         return 0.0;
     }
+    // Cells about a kilometre across thin the sheet, lift its base and lower its top, so the sun
+    // leaks through the thin ones, the underside reads lumpy rather than one even grey, and from
+    // above the thinnest open onto the ground.
+    float cells = csky_pc_noise3(vec3(p.x, 3.0, p.z) / (detail_m * 6.0), 1911520717u);
+    float thick = mix(0.15, 1.0, smoothstep(0.25, 0.75, cells));
     float h = (p.y - bottom) / max(deck_top - bottom, 1.0);
-    float prof = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
+    float base = (1.0 - thick) * 0.45;
+    float prof = smoothstep(base, base + 0.12, h) * (1.0 - smoothstep(0.3 + 0.25 * thick, 0.5 + 0.5 * thick, h));
     float n = csky_pc_fbm(p / (detail_m * 1.8));
     float body = clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
-    return body * prof;
+    return body * prof * thick;
 }
 
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
