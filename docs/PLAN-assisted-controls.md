@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, options and the level chase camera
 
 1. ☑ The two options: control scheme and chase camera, persisted, in the controls settings
-2. ☐ The level chase camera: the chase rig without bank, continuous over the top of a loop
+2. ☑ The level chase camera: the chase rig without bank, continuous over the top of a loop
 
 ### Wave B, the assist
 
@@ -151,7 +151,55 @@ persist round-trip, and that switching to Assisted flips the camera once and onl
 **⚠ Traps.** Per player, not per machine: in split-seat or co-op each seat has its own choice.
 `<TODO: confirm how a seat's settings reach FlightController in multiplayer.>`
 
-## A2 ☐ The level chase camera
+## A2 ☑ The level chase camera
+
+**Landed.** A seat whose `ChaseCamera` is Level flies the flat chase on a bankless frame. The seat
+takes the field in `FlightControllerBuild.ApplyProfile` (`ChaseCamera` over `_controls.Profile`,
+like `MouseFlying`), and `FlightController` passes `ChaseCamera == Level` to
+`CameraController.Chase`'s new `level` argument. There, before `StepFrames`, the attitude is replaced
+by `Flight/Camera/LevelChase.cs`'s `Step`, so the easing, speed distance, zoom and look-stick swing
+are the existing rig's (Decision 13). The hold (`LevelChaseHold`: the frame's right axis and its
+target level right) is kept per `Shot`; a new shot (respawn, view change) reseeds it and the eased
+frames on the level frame, and a switch from Original in flight eases into it without a cut. The
+VR chase, cockpit and nose are untouched.
+
+The frame rule for the crossing (TUNE values, judged in B14):
+- The target is one of the two level rights ±(forward × up), the one nearer last frame's target,
+  so a loop carries it over the top and the view is upside down there (Decision 5).
+- It flips to the other level only when the wing is more than 90° + `FlipPastRad` (20°) from it.
+  This hysteresis keeps a held knife-edge on one level (Original controls with Level) and keeps a
+  steep assisted turn wobbling about 85° level, where a projection or any fixed function of bank
+  would be ill-conditioned.
+- The frame rolls to the target at `RollRateRad` (240°/s), above the 180°/s aileron roll, measured
+  through the wing so the half turn goes the aircraft's way. The recovery roll from inverted thus
+  reads as the view rolling with the aircraft, about 0.15 s behind it at 180°/s.
+- Within 20° of vertical (`XrMount.VerticalConeCos`, Unrolled's cone) the right and target are
+  carried by projection and nothing flips.
+Why and the rejected rules: `docs/org/cameraViews.md` "The level chase camera (remake-only)".
+
+Tests: `CSVM.Tests/LevelChaseTests.cs` (8 facts at 60 steps/s; every step asserts the forward is
+the aircraft's and the frame turns no more than the nose plus `RollRateRad·dt` + 0.001 rad).
+Measured: the right axis's height stays below 1e-4 (0 to float precision) through a 60° turn, an
+85° turn with a ±3° wobble, a full loop at 90°/s (up equal to the aircraft's, upside down at the
+top), a half loop, after an Immelmann's 180°/s roll upright (from 0.5 s after the roll), and a held
+knife-edge with a ±5° wobble (frame upright throughout); 105° bank holds upright, 115° rolls to the
+inverted level. Largest step: 0.34° (60° turn), 0.58° (85° turn), 1.50° (loop), 4.0° (the roll cap,
+during the Immelmann's roll), with no step against the aircraft's roll. A roll on the vertical
+leaves the right axis fixed. The one tilt: a loop whose nose passes 3° beside vertical tilts the
+right axis up to 5.79° inside the cone, back to level in 2 steps on leaving (largest step 4.27°).
+Engine suites: `chase-level` (`ChaseRigSuites.cs`, the eased rig on a real `Camera3D`): after a
+snap at 60° bank and through 3 s of the turn the view's right axis height is 0, over the loop's top
+the view's up is y −0.928 (the ease trails the 90°/s pitch), the largest frame-to-frame turn is
+1.5°, and the Original chase banks with the same turn. A C1 `--fly` `--hold` capture suite
+photographed level flight, a 76° and an 85° bank (view right axis y −0.004 and 0), and a loop (view
+up y −0.94 at the top) for the user's look, which accepted it; the suite was then dropped to keep 8 s
+out of every battery. Existing `chase-rig` and `chase-trail` pass unchanged,
+as do the 245 camera, chase and XR view unit tests. A respawn (`Snap`) and the spectator `Watch`
+take the seat's last choice, so a respawn settles on the level frame.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** With Level selected, the chase camera follows the plane's heading and pitch but never its
 bank in a turn. Through a loop it pitches over the top with the plane (world upside down at the top)

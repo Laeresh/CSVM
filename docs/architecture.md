@@ -293,6 +293,7 @@ rows).
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/Camera/XrMount.cs`, where a headset's tracking origin sits per view: the seat in first person, the rigid chase, a static camera's held heading, heading only for any other camera.
+- `src/Flight/Camera/LevelChase.cs`, the flat chase's level frame: the aircraft's forward without bank, over the top of a loop, rolling to the other level past knife-edge at a capped rate.
 - `src/Flight/Camera/XrRig.cs`, the VR seat: the XR origin and tracked head, the pane they fly, the per-frame placement and the recenter.
 - `src/Flight/Camera/XrSimEyes.cs`, the `--xr-sim` stand-in's eyes: the pinned head, each eye's view transform and its symmetric projection.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.

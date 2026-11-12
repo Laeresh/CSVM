@@ -167,6 +167,13 @@ public sealed class CameraController
     private Vector3 _xrChaseRight;
     private int _xrChaseShot = -1;
 
+    // The flat level chase's hold and the shot it was taken in. A flat chase in the original
+    // frame clears the hold, so a switch to the level frame eases into it instead of snapping.
+    // Snap and Watch take the seat's last choice, so a respawn settles on the frame it flies.
+    private LevelChaseHold? _levelHold;
+    private int _levelShot = -1;
+    private bool _levelChase;
+
     // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
     // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
     // has no attitude lag of its own. It rides the decoded catch-up, which already trails a roll.
@@ -735,13 +742,13 @@ public sealed class CameraController
         }
     }
 
-    /// <summary>Chase camera: the authored rig at the dynamic radius on two eased aircraft frames.
-    /// The offset's eases at <c>pos_catch_up</c>, the aim's at <c>look_catch_up</c>, both times
-    /// <see cref="CatchUpScale"/>. That scale is taken from the head's swing only, deliberately not the
-    /// look stick's <see cref="PadSwing"/>, a held glance and not a rig change. Only the attitude eases,
-    /// never the head's swing; the stick's swing then turns the finished pose about those frames.
+    /// <summary>Chase camera: the authored rig at the dynamic radius on two eased aircraft frames,
+    /// the attitude's or, when <paramref name="level"/>, <see cref="LevelChase"/>'s. The offset's eases
+    /// at <c>pos_catch_up</c>, the aim's at <c>look_catch_up</c>, both times <see cref="CatchUpScale"/>.
+    /// That scale reads the head's swing only, not the look stick's <see cref="PadSwing"/>.
+    /// Only the attitude eases; the stick's swing then turns the finished pose about those frames.
     /// ⚠ Takes SIM dt but the DRAWN pose; a sim/render gap then shows as plane jitter, which a world lerp would mask.</summary>
-    public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f)
+    public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f, bool level = false)
     {
         if (_headset is { } frame)
         {
@@ -767,8 +774,26 @@ public sealed class CameraController
             return;
         }
 
+        _levelChase = level;
+        if (level)
+        {
+            // A new shot settles on the level frame, as Snap settles the rolled one.
+            if (_levelShot != Shot)
+            {
+                (_levelHold, _framesSeeded) = (null, false);
+            }
+
+            attitude = LevelChase.Step(attitude, _levelHold, dt, out var hold);
+            (_levelHold, _levelShot) = (hold, Shot);
+        }
+        else
+        {
+            (_levelHold, _levelShot) = (null, Shot);
+        }
+
         var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
             _camParams.ThirdpPitchRad);
+        // ⚠ Do not de-bank after this step: the eased frames would trail a banked attitude.
         StepFrames(dt, attitude, CatchUpScale(offset));
         // ⚠ Do not fold the stick into the eased frames: they would trail it. A centred stick
         // skips the turn entirely.
@@ -808,7 +833,7 @@ public sealed class CameraController
             // target's settled pose.
             _framesSeeded = false;
         }
-        Chase(dt, pose.Origin, pose.Basis);
+        Chase(dt, pose.Origin, pose.Basis, level: _levelChase);
     }
 
     /// <summary>Place the camera at its settled pose immediately, spawn, respawn and the weapon
@@ -855,7 +880,7 @@ public sealed class CameraController
             return;
         }
         // The head was just reset and the frames seeded, so a zero step is the settled pose.
-        Chase(0f, planePos, attitude);
+        Chase(0f, planePos, attitude, level: _levelChase);
     }
 
     /// <summary>On entering the paused screenshot freeze, initialise the orbit angles

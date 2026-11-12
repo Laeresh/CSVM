@@ -308,8 +308,14 @@ Choosing Assisted moves Camera to Level at that moment, once. A player who then
 puts Camera back to Original keeps it there; only a later change of Controls to
 Assisted moves it again.
 
-Neither choice changes the flight yet. The assist that turns the stick into a
-turn and a climb, and the chase view without bank, are the later items of
+With Camera on Level the chase view follows the aircraft's heading and pitch but
+not its bank, so a turn never tilts the horizon. It follows the aircraft over the
+top of a loop, the world upside down there, and rolls upright as the aircraft
+rolls upright. The view stays level until the bank passes knife-edge by 20
+degrees, so a held knife-edge keeps it; past that it rolls half a turn to the
+other level, the way the aircraft is rolling. Cockpit, nose and the VR chase are unchanged. The Controls
+choice does not change the flight yet: the assist that turns the stick into a
+turn and a climb is a later item of
 [PLAN-assisted-controls.md](PLAN-assisted-controls.md).
 
 ## Any mode

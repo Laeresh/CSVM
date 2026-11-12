@@ -2633,7 +2633,8 @@ public partial class FlightController : Node3D
                     : default;
                 // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
                 // independent; fed the DRAWN pose, same rule as the rigid views above.
-                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, swing.X, swing.Y);
+                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, swing.X, swing.Y,
+                    ChaseCamera == Bindings.ChaseCamera.Level);
                 logged = swing.Swinging ? CameraView.PadLook
                     : _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
             }
