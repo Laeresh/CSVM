@@ -45,8 +45,6 @@ internal sealed partial class VolumetricClouds : Node3D
     // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not (#345).
     private const int ShaftDivisor = 2;
 
-    // The most zeppelin hulls the march leaves a bubble round at once (the shader's clear_hulls).
-    private const int MaxClearedHulls = 8;
     // The bubble's reach past the hull's bounding radius: room to fly an attack in clear air.
     private const float BubbleMarginM = 400f;
 
@@ -58,8 +56,6 @@ internal sealed partial class VolumetricClouds : Node3D
     private static readonly StringName MarchLensParam = "march_lens";
     private static readonly StringName ViewCameraParam = "view_camera";
     private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
-    private static readonly StringName ClearHullsParam = "clear_hulls";
-    private static readonly StringName ClearHullCountParam = "clear_hull_count";
 
     private readonly Node3D _worldRoot;
     private readonly WeatherRig _weather;
@@ -68,9 +64,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly List<(MeshInstance3D Node, Aabb World)> _placedSprites = new();
     private readonly List<MeshInstance3D> _hidden = new();
     private readonly ZeppelinRuntime? _zeppelins;
-    // Each zeppelin's host and its bubble's radius about the host's origin, and the bubbles as last written.
+    // Each zeppelin's host and its bubble's radius about the host's origin.
     private readonly List<(Node3D Host, float Radius)> _hulls = new();
-    private readonly Vector4[] _hullClearings = new Vector4[MaxClearedHulls];
     private readonly bool _hasDeck;
     private ShaderMaterial? _material;
     // The reduced march (MarchShader), its target, the target's render time and its size, zero while off.
@@ -115,7 +110,7 @@ internal sealed partial class VolumetricClouds : Node3D
     public static MeasuredRenderTime? MarchTime { get; private set; }
 
     /// <summary>Gets how many zeppelin hulls the clouds took to leave a bubble round. A hidden one is skipped
-    /// each frame, and past <see cref="MaxClearedHulls"/> the rest are.</summary>
+    /// each frame, and past the four bubble globals (<see cref="CloudShadow.BubbleParams"/>) the rest are.</summary>
     public int HullCount => _hulls.Count;
 
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
@@ -401,21 +396,6 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float head_soft = 0.16;
         uniform float warp_m = 320.0;
         uniform float shear_m = 260.0;
-        // The bubbles the clouds leave round the zeppelins: each one's centre and radius.
-        """ + $"\nuniform vec4 clear_hulls[{MaxClearedHulls}];\n" + """
-        uniform int clear_hull_count = 0;
-
-        // The share of the field left at `p`: none deep in a zeppelin's bubble, all past its edge.
-        // Only an eye inside the bubble sees the hull clear; from outside the cloud round it still hides it.
-        float pc_bubbles(vec3 p) {
-            float keep = 1.0;
-            for (int i = 0; i < clear_hull_count; i++) {
-                float r = clear_hulls[i].w;
-                keep *= smoothstep(r * 0.7, r, distance(p, clear_hulls[i].xyz));
-            }
-            return keep;
-        }
-
         // The heads' coverage at `p`, the function the ground shadow reads too.
         float pc_cover_shaped(vec3 p) {
             return csky_pc_cover_shaped(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
@@ -433,9 +413,10 @@ internal sealed partial class VolumetricClouds : Node3D
             return deck * csky_pc_deck_gaps(p, deck_gaps, gap_m);
         }
 
-        // The whole field at `p`: the heads over the deck, less the zeppelins' bubbles.
+        // The whole field at `p`: the heads over the deck, less the zeppelins' bubbles. Only an eye
+        // inside a bubble sees its hull clear; from outside, the cloud round it still hides it.
         float pc_density(vec3 p, float bottom, float top) {
-            return max(pc_heads(p, bottom, top), pc_deck(p, bottom)) * pc_bubbles(p);
+            return max(pc_heads(p, bottom, top), pc_deck(p, bottom)) * csky_pc_bubbles(p);
         }
 
         // The deck's optical depth along the sun ray from `p`, two taps over the ray's span through
@@ -710,7 +691,7 @@ internal sealed partial class VolumetricClouds : Node3D
     {
         if (_material == null || _march == null || _marchView == null || !IsInsideTree())
             return;
-        FollowHulls(_material, _march);
+        FollowHulls();
         var viewport = GetViewport();
         var camera = viewport.GetCamera3D();
         bool shaftsOnly = MarchDivisor == 1;
@@ -758,23 +739,27 @@ internal sealed partial class VolumetricClouds : Node3D
             var box = SubtreeBounds.WorldAabb(host);
             _hulls.Add((host, box.GetCenter().DistanceTo(host.GlobalPosition) + box.Size.Length() * 0.5f + BubbleMarginM));
         }
+        if (_hulls.Count > CloudShadow.BubbleParams.Length)
+            Log.Warn("world", $"volumetric clouds: {_hulls.Count} zeppelins, bubbles round the first {CloudShadow.BubbleParams.Length} standing alone");
     }
 
-    // Writes where each standing hull's bubble is now onto both marches.
-    private void FollowHulls(ShaderMaterial slab, ShaderMaterial march)
+    // Publishes where each standing hull's bubble is now, for both marches and the effects' veil. An
+    // empty slot, or every slot with the clouds off (PublishGround), has a zero radius.
+    private void FollowHulls()
     {
         if (_hulls.Count == 0)
             return;
         int n = 0;
         foreach (var (host, radius) in _hulls)
         {
-            if (n < MaxClearedHulls && GodotObject.IsInstanceValid(host) && host.IsVisibleInTree())
-                _hullClearings[n++] = new Vector4(host.GlobalPosition.X, host.GlobalPosition.Y, host.GlobalPosition.Z, radius);
+            if (n < CloudShadow.BubbleParams.Length && GodotObject.IsInstanceValid(host) && host.IsVisibleInTree())
+            {
+                var at = host.GlobalPosition;
+                RenderingServer.GlobalShaderParameterSet(CloudShadow.BubbleParams[n++], new Vector4(at.X, at.Y, at.Z, radius));
+            }
         }
-        slab.SetShaderParameter(ClearHullsParam, _hullClearings);
-        slab.SetShaderParameter(ClearHullCountParam, n);
-        march.SetShaderParameter(ClearHullsParam, _hullClearings);
-        march.SetShaderParameter(ClearHullCountParam, n);
+        for (; n < CloudShadow.BubbleParams.Length; n++)
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.BubbleParams[n], Vector4.Zero);
     }
 
     // The placed cloud sprites: every mesh instance under the world root wearing a pooled material.
@@ -884,6 +869,8 @@ internal sealed partial class VolumetricClouds : Node3D
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
             RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
             RenderingServer.GlobalShaderParameterSet("csky_pc_veil", Vector4.Zero);
+            foreach (var bubble in CloudShadow.BubbleParams)
+                RenderingServer.GlobalShaderParameterSet(bubble, Vector4.Zero);
             return;
         }
         // The layer the effects drawn after the slab march their transmittance through (csky_pc_veil_at).

@@ -16,6 +16,11 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed partial class CloudShadow : Node
 {
+    /// <summary>The volumetric clouds' zeppelin bubbles (csky_volumetric_clouds.gdshaderinc), one global
+    /// each, since a global takes no array.</summary>
+    public static readonly StringName[] BubbleParams =
+        { "csky_pc_bubble0", "csky_pc_bubble1", "csky_pc_bubble2", "csky_pc_bubble3" };
+
     // The globals the include declares: offset X/Z, one over the cell, darkness; the edge band; the
     // lab's tint; and the ambient share.
     private static readonly StringName Param = "csky_cloud_shadow";
@@ -118,6 +123,8 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_veil", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        foreach (var bubble in BubbleParams)
+            RenderingServer.GlobalShaderParameterAdd(bubble, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;
         Published = OffValue;
         _publishedEdge = CloudShadowPattern.Edge;
