@@ -132,7 +132,7 @@ internal static class CloudNoise
                 data[(((z * n) + x) * 2) + 1] = HashByte(x, 0, z, seedG);
             }
         }
-        return ImageTexture.CreateFromImage(Image.CreateFromData(n, n, false, Image.Format.Rg8, data));
+        return CSVM.Utils.TextureUpload.Create(n, n, Image.Format.Rg8, data);
     }
 
     // csky_pc_hash3's value at a lattice corner, to eight bits.
