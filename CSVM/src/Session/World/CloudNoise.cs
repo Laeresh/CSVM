@@ -44,7 +44,7 @@ internal static class CloudNoise
         {
             data = System.IO.File.Exists(cache) ? System.IO.File.ReadAllBytes(cache) : Array.Empty<byte>();
         }
-        catch (System.IO.IOException)
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
         {
             data = Array.Empty<byte>();
         }

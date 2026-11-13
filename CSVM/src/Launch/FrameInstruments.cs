@@ -335,7 +335,7 @@ internal sealed class FrameInstruments
         if (Session.World.VolumetricClouds.MarchTime is { } march)
         {
             _perfMarchFrames++;
-            _perfMarchGpu += march.Read().GpuMs;
+            _perfMarchGpu += march.Read().GpuMs + (Session.World.VolumetricClouds.ResolveTime?.Read().GpuMs ?? 0);
         }
 
         if (_perfFrames < PerfWindowFrames)

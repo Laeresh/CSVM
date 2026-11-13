@@ -39,14 +39,14 @@ internal sealed partial class VolumetricClouds : Node3D
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
-    // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun; a
+    // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun. A
     // storm dims the sun, greys the ambient and lets fewer, taller heads stand, clear air between them.
-    // Its rays run long through that air, so they take coarser steps.
+    // Its steps grow slower with distance, since coarse ones stripe the tall faces seen edge-on.
     private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1";
     private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4";
     // An overcast deck under the heads: a lighter base, and the heads broken up over it.
     private const string DeckPreset = ClearPreset + ";amb_floor=0.45;cover_max=0.7;amb_gain=0.7";
-    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.45;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.08;step_near_m=45";
+    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.45;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.035";
     // A storm's heads tower this far over the layer floor.
     private const float StormDepthM = 2450f;
 
@@ -65,6 +65,12 @@ internal sealed partial class VolumetricClouds : Node3D
     private static readonly StringName ViewCameraParam = "view_camera";
     private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
 
+    // PROTOTYPE (#347): the temporal march's 2x2 order, diagonal first so two frames cover both diagonals.
+    private static readonly Vector2I[] Phases = { new(0, 0), new(1, 1), new(1, 0), new(0, 1) };
+
+    // PROTOTYPE (#347): full marches at half size, resolved over four frames; CSVM_CLOUD_TEMPORAL=0 marches every pixel.
+    private static readonly bool TemporalOn = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_TEMPORAL") != "0";
+
     // PROTOTYPE (clouds-look): CSVM_CLOUD_LOOK=1 starts the baked-noise look; Ctrl+Shift+V swaps it live.
     private static bool _prototype = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") == "1";
 
@@ -77,6 +83,9 @@ internal sealed partial class VolumetricClouds : Node3D
     // The prototype's float uniforms as its preset and CSVM_CLOUD_SET left them (PROTOTYPE, clouds-look).
     private readonly Dictionary<string, float> _protoValues = new();
     private readonly bool _hasDeck;
+    // The temporal resolve's two targets, each the other's history (PROTOTYPE, #347).
+    private readonly ShaderMaterial?[] _resolve = new ShaderMaterial?[2];
+    private readonly SubViewport?[] _resolveViews = new SubViewport?[2];
     private ShaderMaterial? _material;
     // The reduced march (MarchShader), its target, the target's render time and its size, zero while off.
     private ShaderMaterial? _march;
@@ -84,6 +93,11 @@ internal sealed partial class VolumetricClouds : Node3D
     private MeasuredRenderTime? _marchTime;
     private Vector2I _marchSize;
     private bool _marchShaftsOnly;
+    private MeasuredRenderTime? _resolveTime;
+    private bool _temporal;
+    private bool _historyOk;
+    private int _temporalFrame;
+    private Projection _prevViewProjection;
     private float? _bottom;
     private float? _top;
     // The layer was fitted to the placed clouds, so the upper zone is no air above it to split the fog by.
@@ -120,9 +134,13 @@ internal sealed partial class VolumetricClouds : Node3D
     /// of its own, which <c>gpu_ms</c> leaves out (verification PERF-39).</summary>
     public static MeasuredRenderTime? MarchTime { get; private set; }
 
-    // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
+    /// <summary>Gets one temporal resolve target's render time while the temporal march runs, else null.
+    /// The two targets alternate, so one's latest time is a frame's resolve.</summary>
+    public static MeasuredRenderTime? ResolveTime { get; private set; }
+
     private static bool PrototypeOn => _prototype;
 
+    // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
     // The heads' shape the slab and its ground shadow share: taper, edge band, billow, lean.
@@ -228,6 +246,9 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform vec3 march_eye;
         uniform vec3 march_back;
         uniform vec2 march_lens;
+        // At full with the temporal march, the layer's trace comes from the resolve (ResolveShader).
+        uniform bool march_temporal = false;
+        uniform sampler2D resolved_texture : filter_nearest, repeat_disable;
 
         // Whether this view is the camera the reduced march traced. TAA's jitter leaves the lens
         // diagonal alone, and the eye test fails for a headset's eyes and every other camera.
@@ -322,7 +343,7 @@ internal sealed partial class VolumetricClouds : Node3D
             // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
             float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339) * dither_k;
             if (reduced && !march_shafts_only && !inside) {
-                trace = vec4(texture(march_texture, vec2(x, SCREEN_UV.y)).xyz, 0.0);
+                trace = vec4((march_temporal ? texture(resolved_texture, SCREEN_UV) : texture(march_texture, vec2(x, SCREEN_UV.y))).xyz, 0.0);
                 // In front of the layer the scene hides it, so the edge stays at this pixel's own depth.
                 if (span.y < 0.0 || scene <= span.x) {
                     trace.xyz = vec3(0.0, 0.0, 1.0);
@@ -355,19 +376,77 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform mat4 view_inv_projection;
         // The quad marches the layer itself (a divisor of 1), so the left half stays clear.
         uniform bool shafts_only = false;
+        // The temporal march's offset to this frame's pixel of each 2x2 block, in UV (ResolveShader).
+        uniform vec2 jitter = vec2(0.0);
 
         void fragment() {
             vec3 eye = view_camera[3].xyz;
             // The left half traces the layer and the right half the shafts, each over the whole view.
             // The engine's projection has its y up and the canvas its rows down.
-            vec2 uv = vec2(fract(UV.x * 2.0), 1.0 - UV.y);
+            // The shafts' half stays put: the quad filters it at fixed texel centres.
+            vec2 cuv = vec2(fract(UV.x * 2.0), UV.y) + (UV.x < 0.5 ? jitter : vec2(0.0));
+            vec2 uv = vec2(cuv.x, 1.0 - cuv.y);
             vec3 dir = csky_pc_ray_dir(uv, view_inv_projection, view_camera);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
             float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339) * dither_k;
             if (UV.x < 0.5) {
-                COLOR = shafts_only ? vec4(0.0, 0.0, 1.0, 0.0) : vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0);
+                // The alpha keeps the first cloud's distance, where the resolve reprojects from.
+                float hit = 20000.0;
+                vec3 layer = shafts_only ? vec3(0.0, 0.0, 1.0) : pc_layer_hit(eye, dir, span, 1e9, dither, hit);
+                COLOR = vec4(layer, min(hit, 60000.0));
             } else {
                 COLOR = pc_shafts(eye, dir, span, 1e9, dither);
+            }
+        }
+        """;
+
+    // PROTOTYPE (#347): the temporal march's resolve, a full-size canvas. The half-size march traced
+    // one pixel of each 2x2 block this frame, which it keeps. The other three reproject the previous
+    // resolve to this frame, clamped to the fresh traces around them so a disocclusion cannot ghost.
+    private static string ResolveShader() => """
+        shader_type canvas_item;
+        render_mode blend_disabled, unshaded;
+
+        #include "res://shaders/csky_volumetric_clouds.gdshaderinc"
+
+        uniform sampler2D fresh : filter_nearest, repeat_disable;
+        uniform sampler2D history : filter_linear, repeat_disable;
+        uniform mat4 view_camera;
+        uniform mat4 view_inv_projection;
+        uniform mat4 prev_view_projection;
+        uniform ivec2 phase;
+        uniform bool history_ok = false;
+        // The history's share in a fresh pixel.
+        uniform float accum = 0.65;
+
+        void fragment() {
+            ivec2 px = ivec2(FRAGCOORD.xy);
+            // The fresh target's left half holds the layer's trace, its alpha the first cloud's distance.
+            ivec2 cells = ivec2(textureSize(fresh, 0).x / 2, textureSize(fresh, 0).y);
+            ivec2 cell = min(px / 2, cells - 1);
+            vec4 f = texelFetch(fresh, cell, 0);
+            COLOR = f;
+            if (history_ok) {
+                // The fresh pixel blends into its history, so the march's moving dither averages out
+                // instead of hatching the slices. The other three take the history alone.
+                float keep = all(equal(px - (px / 2) * 2, phase)) ? accum : 1.0;
+                vec3 eye = view_camera[3].xyz;
+                vec3 dir = csky_pc_ray_dir(vec2(UV.x, 1.0 - UV.y), view_inv_projection, view_camera);
+                vec4 clip = prev_view_projection * vec4(eye + dir * f.a, 1.0);
+                vec2 prev = clip.xy / max(clip.w, 1e-6) * 0.5 + 0.5;
+                prev.y = 1.0 - prev.y;
+                if (clip.w > 0.0 && all(greaterThanEqual(prev, vec2(0.0))) && all(lessThanEqual(prev, vec2(1.0)))) {
+                    vec3 lo = f.rgb;
+                    vec3 hi = f.rgb;
+                    for (int y = -1; y <= 1; y++) {
+                        for (int x = -1; x <= 1; x++) {
+                            vec3 n = texelFetch(fresh, clamp(cell + ivec2(x, y), ivec2(0), cells - 1), 0).rgb;
+                            lo = min(lo, n);
+                            hi = max(hi, n);
+                        }
+                    }
+                    COLOR = vec4(mix(f.rgb, clamp(texture(history, prev).rgb, lo, hi), keep), f.a);
+                }
             }
         }
         """;
@@ -717,8 +796,9 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_light) premultiplied and
-        // the transmittance.
-        vec3 pc_march(vec3 eye, vec3 dir, float t0, float t1, float dither) {
+        // the transmittance. `hit` is the first cloud's distance, else t1.
+        vec3 pc_march_hit(vec3 eye, vec3 dir, float t0, float t1, float dither, out float hit) {
+            hit = t1;
             float bottom = layer_bottom;
             float top = layer_top;
             float len = t1 - t0;
@@ -754,7 +834,8 @@ internal sealed partial class VolumetricClouds : Node3D
                     clear = mid;
                 }
             }
-            t = min((clear + hi) * 0.5 + pc_step(hi, span_step) * 0.5, t1);
+            hit = (clear + hi) * 0.5;
+            t = min(hit + pc_step(hi, span_step) * 0.5, t1);
             vec2 w = vec2(0.0);
             float trans = 1.0;
             float sun_step = max((top - bottom) * 0.3, 20.0);
@@ -790,14 +871,21 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // A pixel's march through the layer before the fog: the light's weights and the transmittance.
-        vec3 pc_layer(vec3 eye, vec3 dir, vec2 span, float scene, float dither) {
+        // A ray missing the layer reads its `hit` at 20 km.
+        vec3 pc_layer_hit(vec3 eye, vec3 dir, vec2 span, float scene, float dither, out float hit) {
+            hit = 20000.0;
             if (span.y >= 0.0) {
                 float t1 = pc_march_end(span, scene);
                 if (t1 > span.x) {
-                    return pc_march(eye, dir, span.x, t1, dither);
+                    return pc_march_hit(eye, dir, span.x, t1, dither, hit);
                 }
             }
             return vec3(0.0, 0.0, 1.0);
+        }
+
+        vec3 pc_layer(vec3 eye, vec3 dir, vec2 span, float scene, float dither) {
+            float hit;
+            return pc_layer_hit(eye, dir, span, scene, dither, hit);
         }
 
         // A pixel's shaft light by quarters (pc_shaft_light). Under the layer the ray crosses the haze
@@ -840,6 +928,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // ("name=v;name=a,b,c") overrides any float or vec3 uniform, for tuning without a rebuild.
     private void ApplyPrototype(ShaderMaterial material)
     {
+        _protoValues.Clear();
         if (!PrototypeOn)
             return;
         material.SetShaderParameter("look", 1);
@@ -934,6 +1023,30 @@ internal sealed partial class VolumetricClouds : Node3D
         _material.SetShaderParameter("march_texture", _marchView.GetTexture());
         RenderingServer.ViewportSetMeasureRenderTime(_marchView.GetViewportRid(), true);
         _marchTime = new MeasuredRenderTime(_marchView.GetViewportRid());
+        // Siblings draw in tree order, so the resolve targets follow the march they read.
+        for (int i = 0; i < 2; i++)
+        {
+            _resolve[i] = new ShaderMaterial { Shader = new Shader { Code = ResolveShader() } };
+            _resolveViews[i] = new SubViewport
+            {
+                Name = $"resolve{i}",
+                Disable3D = true,
+                UseHdr2D = true,
+                TransparentBg = true,
+                Size = Vector2I.One,
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+            };
+            var rect = new ColorRect { Material = _resolve[i], MouseFilter = Control.MouseFilterEnum.Ignore };
+            rect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            _resolveViews[i]!.AddChild(rect);
+            root.AddChild(_resolveViews[i]);
+            _resolve[i]!.SetShaderParameter("fresh", _marchView.GetTexture());
+            _resolve[i]!.SetShaderParameter("accum", Proto("accum", 0.65f));
+        }
+        for (int i = 0; i < 2; i++)
+            _resolve[i]!.SetShaderParameter("history", _resolveViews[1 - i]!.GetTexture());
+        RenderingServer.ViewportSetMeasureRenderTime(_resolveViews[0]!.GetViewportRid(), true);
+        _resolveTime = new MeasuredRenderTime(_resolveViews[0]!.GetViewportRid());
         RenderingServer.FramePreDraw += FollowCamera;
         return "one full-screen march";
     }
@@ -947,35 +1060,71 @@ internal sealed partial class VolumetricClouds : Node3D
             return;
         var viewport = GetViewport();
         var camera = viewport.GetCamera3D();
-        bool shaftsOnly = MarchDivisor == 1;
-        int divisor = shaftsOnly ? ShaftDivisor : MarchDivisor;
+        bool temporal = MarchDivisor == 1 && TemporalOn;
+        bool shaftsOnly = MarchDivisor == 1 && !temporal;
+        int divisor = shaftsOnly ? ShaftDivisor : temporal ? 2 : MarchDivisor;
         bool on = camera != null && !viewport.UseXR && (!shaftsOnly || ShaftGain > 0f);
+        temporal &= on;
         var full = (Vector2I)viewport.GetVisibleRect().Size;
         // Two halves side by side: the layer's trace, then the shafts' (MarchShader).
         var size = on ? new Vector2I(Math.Max((full.X + divisor - 1) / divisor, 1) * 2, Math.Max((full.Y + divisor - 1) / divisor, 1)) : Vector2I.Zero;
-        if (size != _marchSize || shaftsOnly != _marchShaftsOnly)
+        if (size != _marchSize || shaftsOnly != _marchShaftsOnly || temporal != _temporal)
         {
             _marchSize = size;
             _marchShaftsOnly = shaftsOnly;
+            _temporal = temporal;
+            _historyOk = false;
             _marchView.RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
             if (on)
                 _marchView.Size = size;
+            // The resolve spans the march's 2x2 grid, a pixel over the view on an odd side.
+            foreach (var resolveView in _resolveViews)
+            {
+                resolveView!.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+                if (temporal)
+                    resolveView.Size = new Vector2I(size.X, size.Y * 2);
+            }
             _material.SetShaderParameter(MarchOnParam, on);
             _material.SetShaderParameter(MarchShaftsOnlyParam, shaftsOnly);
+            _material.SetShaderParameter("march_temporal", temporal);
             _march.SetShaderParameter(ShaftsOnlyParam, shaftsOnly);
+            _march.SetShaderParameter("jitter", Vector2.Zero);
             MarchTime = on ? _marchTime : null;
-            string what = !on ? "full resolution" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
+            ResolveTime = temporal ? _resolveTime : null;
+            string what = !on ? "full resolution" : temporal ? $"full resolution, temporal over a 1/2 march, {size.X / 2}x{size.Y}" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
             Log.Info("world", $"volumetric clouds: march at {what}");
         }
         if (!on)
             return;
         var view = camera!.GetCameraTransform();
         var inverse = camera.GetCameraProjection().Inverse();
+        if (temporal)
+            StepTemporal(camera.GetCameraProjection() * new Projection(view.AffineInverse()), new Projection(view), inverse, new Vector2I(size.X, size.Y * 2));
         _march.SetShaderParameter(ViewCameraParam, new Projection(view));
         _march.SetShaderParameter(ViewInvProjectionParam, inverse);
         _material.SetShaderParameter(MarchEyeParam, view.Origin);
         _material.SetShaderParameter(MarchBackParam, view.Basis.Z);
         _material.SetShaderParameter(MarchLensParam, new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y)));
+    }
+
+    // PROTOTYPE (#347): one temporal frame. The march traces this frame's pixel of each 2x2 block. The
+    // resolve target due draws once over the other's history, and the quad reads it.
+    private void StepTemporal(Projection viewProjection, Projection camera, Projection inverse, Vector2I grid)
+    {
+        var phase = Phases[_temporalFrame & 3];
+        int due = _temporalFrame & 1;
+        _temporalFrame++;
+        _march!.SetShaderParameter("jitter", new Vector2((phase.X - 0.5f) / grid.X, (phase.Y - 0.5f) / grid.Y));
+        var resolve = _resolve[due]!;
+        resolve.SetShaderParameter("phase", phase);
+        resolve.SetShaderParameter("history_ok", _historyOk);
+        resolve.SetShaderParameter("prev_view_projection", _prevViewProjection);
+        resolve.SetShaderParameter(ViewCameraParam, camera);
+        resolve.SetShaderParameter(ViewInvProjectionParam, inverse);
+        _resolveViews[due]!.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        _material!.SetShaderParameter("resolved_texture", _resolveViews[due]!.GetTexture());
+        _prevViewProjection = viewProjection;
+        _historyOk = true;
     }
 
     // The placed cloud sprites: every mesh instance under the world root wearing a pooled material.
@@ -1068,6 +1217,11 @@ internal sealed partial class VolumetricClouds : Node3D
         _marchSize = Vector2I.Zero;
         _marchShaftsOnly = false;
         MarchTime = null;
+        _resolve[0] = _resolve[1] = null;
+        _resolveViews[0] = _resolveViews[1] = null;
+        _resolveTime = null;
+        _temporal = false;
+        ResolveTime = null;
         if (_built == null)
             return;
         _built.QueueFree();
