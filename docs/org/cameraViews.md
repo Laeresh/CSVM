@@ -782,7 +782,7 @@ stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
 ## The level chase camera (remake-only)
 
-A seat whose chase camera is Level (`BindingProfile.ChaseCamera`) flies the same rig, easing, speed
+A seat on the Assisted control scheme (`BindingProfile.ControlScheme`) flies the same rig, easing, speed
 distance, zoom and look-stick swing; only the attitude the two eased frames chase changes.
 `LevelChase.Step` replaces the aircraft's attitude with a frame that keeps its forward and takes a
 level right axis. ⚠ Do not de-bank after the ease: the frames would trail a banked attitude and the

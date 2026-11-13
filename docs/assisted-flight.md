@@ -2,7 +2,9 @@
 
 How the Assisted control scheme turns a stick into control-surface deflections, what in the decoded
 plant forces each part of that design, and which numbers are tuning rather than decode. The scheme
-is remake-only and the original game has nothing like it. The law is
+is remake-only and the original game has nothing like it. The same scheme also puts the seat's chase
+view on the level chase camera ([`org/cameraViews.md`](org/cameraViews.md), "The level chase camera");
+this page covers the law alone. The law is
 `CSVM/src/Flight/Airframe/AssistedFlight.cs`, routed from [`architecture.md`](architecture.md) into
 [`architecture/Flight.md`](architecture/Flight.md); the plant it flies is decoded in
 [`org/flightModel.md`](org/flightModel.md).
@@ -208,5 +210,6 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
   and a respawn reset the state while an accept that keeps the scheme does not; an AI seat on
   Assisted reads the raw stick and never primes the law; and the Hoplite turns left on the left key
   and on a cursor left of centre, banking into the turn, which a cursor exchanged before the law
-  would not do.
+  would not do. A banked seat's own chase camera stays level under Assisted and banks under
+  Original.
 - None of these layers judges the feel. That is the player's at the controls.

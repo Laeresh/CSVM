@@ -785,43 +785,31 @@ public class ControlsFeatureTests
         Assert.Equal(SensitivityScale.Max, feature.MouseSensitivity);
     }
 
-    /// <summary>A fresh seat flies Original controls and the Original camera. Choosing Assisted stages
-    /// the Level camera with it, once. A camera put back to Original stays there until a later change
-    /// to Assisted. Nothing reaches the seat until Accept.</summary>
+    /// <summary>A fresh seat flies the Original scheme. Choosing Assisted is staged, and nothing
+    /// reaches the seat until Accept.</summary>
     [Fact]
-    public void AssistedStagesTheLevelCameraOnceAndAcceptWritesBoth()
+    public void AssistedIsStagedAndAcceptWritesIt()
     {
-        var written = new List<(ControlScheme, ChaseCamera)>();
-        var feature = new ControlsFeature((_, profile) => written.Add((profile.ControlScheme, profile.ChaseCamera)));
+        var written = new List<ControlScheme>();
+        var feature = new ControlsFeature((_, profile) => written.Add(profile.ControlScheme));
         var seat = BindingProfile.Defaults(Pad, readsKeyboard: false);
         feature.AddSeat(1, seat, OnePad(), readsKeyboard: false);
         Assert.Equal(ControlScheme.Original, feature.ControlScheme);
-        Assert.Equal(ChaseCamera.Original, feature.ChaseCamera);
 
         feature.ControlScheme = ControlScheme.Assisted;
-        Assert.Equal(ChaseCamera.Level, feature.ChaseCamera);
         Assert.Equal(ControlScheme.Original, seat.ControlScheme);
         Assert.True(feature.Dirty);
 
-        feature.ChaseCamera = ChaseCamera.Original;
-        feature.ControlScheme = ControlScheme.Assisted;
-        Assert.Equal(ChaseCamera.Original, feature.ChaseCamera);
-
         feature.Accept();
 
-        Assert.Equal((ControlScheme.Assisted, ChaseCamera.Original), (seat.ControlScheme, seat.ChaseCamera));
-        Assert.Equal(new[] { (ControlScheme.Assisted, ChaseCamera.Original) }, written);
-
-        feature.ControlScheme = ControlScheme.Original;
-        Assert.Equal(ChaseCamera.Original, feature.ChaseCamera);
-        feature.ControlScheme = ControlScheme.Assisted;
-        Assert.Equal(ChaseCamera.Level, feature.ChaseCamera);
+        Assert.Equal(ControlScheme.Assisted, seat.ControlScheme);
+        Assert.Equal(new[] { ControlScheme.Assisted }, written);
     }
 
-    /// <summary>Each seat holds its own choices: one player's Assisted and Level reach no other seat,
-    /// and Cancel drops a staged pair.</summary>
+    /// <summary>Each seat holds its own scheme: one player's Assisted reaches no other seat, and
+    /// Cancel drops a staged change.</summary>
     [Fact]
-    public void TheAssistChoicesArePerSeatAndCancelDropsThem()
+    public void TheSchemeIsPerSeatAndCancelDropsIt()
     {
         var feature = new ControlsFeature();
         var one = BindingProfile.Defaults(Pad, readsKeyboard: true);
@@ -833,16 +821,16 @@ public class ControlsFeatureTests
         feature.ControlScheme = ControlScheme.Assisted;
         feature.Player = 1;
         Assert.Equal(ControlScheme.Original, feature.ControlScheme);
-        feature.ChaseCamera = ChaseCamera.Level;
+        feature.ControlScheme = ControlScheme.Assisted;
         feature.Cancel();
-        Assert.Equal(ChaseCamera.Original, feature.ChaseCamera);
+        Assert.Equal(ControlScheme.Original, feature.ControlScheme);
 
         feature.Player = 2;
         feature.ControlScheme = ControlScheme.Assisted;
         feature.Accept();
 
-        Assert.Equal((ControlScheme.Original, ChaseCamera.Original), (one.ControlScheme, one.ChaseCamera));
-        Assert.Equal((ControlScheme.Assisted, ChaseCamera.Level), (two.ControlScheme, two.ChaseCamera));
+        Assert.Equal(ControlScheme.Original, one.ControlScheme);
+        Assert.Equal(ControlScheme.Assisted, two.ControlScheme);
     }
 
     /// <summary>A pad-only splitscreen seat has no mouse to give the stick, so the row cannot put it

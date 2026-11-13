@@ -121,17 +121,9 @@ public partial class FlightController
         set => _controls.Profile.MouseSensitivity = value;
     }
 
-    /// <summary>Which frame this seat's flat chase camera follows, the seat's own profile's value,
-    /// read through each frame like <see cref="MouseFlying"/> and set through <see cref="ApplyProfile"/>.
-    /// </summary>
-    public Bindings.ChaseCamera ChaseCamera
-    {
-        get => _controls.Profile.ChaseCamera;
-        set => _controls.Profile.ChaseCamera = value;
-    }
-
     /// <summary>Whether this seat's stick flies through the Assisted law
-    /// (<see cref="AssistedFlight"/>). The seat's own profile's value, read through each frame like
+    /// (<see cref="AssistedFlight"/>) and its flat chase holds the level frame
+    /// (<see cref="Camera.LevelChase"/>). The seat's own profile's value, read through each frame like
     /// <see cref="MouseFlying"/> and set through <see cref="ApplyProfile"/>. A change hands the law
     /// a fresh state, so the new scheme primes from the plane as it flies now.</summary>
     public Bindings.ControlScheme ControlScheme
@@ -158,7 +150,7 @@ public partial class FlightController
     }
 
     /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme, mouse
-    /// sensitivity, chase camera and control scheme, and recomposes the prompts that name them. That is the whole of
+    /// sensitivity and control scheme, and recomposes the prompts that name them. That is the whole of
     /// what a seat takes from its player's keymap. ⚠ Copy a profile value in this one method only.
     /// The build's saved read and a Controls page accepted in flight both come through here. An
     /// accepted edit cannot reach a value copied elsewhere until the seat is rebuilt.</summary>
@@ -170,7 +162,6 @@ public partial class FlightController
         FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
         MouseFlying = profile.MouseFlying;
         MouseSensitivity = profile.MouseSensitivity;
-        ChaseCamera = profile.ChaseCamera;
         ControlScheme = profile.ControlScheme;
         ComposeControlPrompts();
     }

@@ -2,6 +2,7 @@ using System;
 using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -64,7 +65,8 @@ internal static class AssistedFlightSuites
         + "respawn hand the law a fresh state while an accept that keeps the scheme does not, an AI "
         + "seat on Assisted reads the raw stick and never primes the law, and the Hoplite under "
         + "Assisted turns left on the left key and on a cursor left of centre, banking into the "
-        + "turn because the cursor reaches the law before the autogyro exchange")]
+        + "turn because the cursor reaches the law before the autogyro exchange; a banked seat's "
+        + "own chase camera stays level under Assisted and banks with the plane under Original")]
     internal static void FlightAssistedSeat(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -75,6 +77,7 @@ internal static class AssistedFlightSuites
         AiSeatStaysRaw(ctx, plane);
         AutogyroTurnsLeft(ctx, gyro, mouse: false);
         AutogyroTurnsLeft(ctx, gyro, mouse: true);
+        ChaseFollowsTheScheme(ctx, plane);
         ctx.Note($"one seam, ReadKeyboard's return, carries every device through the law on a person's Assisted seat");
     }
 
@@ -394,8 +397,66 @@ internal static class AssistedFlightSuites
         return new Rig(Place(ctx, plant, stick, human: true), plant, stick);
     }
 
-    // A seat over `plant`, flown by `source` or, with none, by its own devices.
-    private static FlightController Place(TestContext ctx, FlightModel plant, IFlightInputSource? source, bool human)
+    // Two seconds of the roll-left key on a seat with its own chase camera, each frame a sim step and
+    // the seat's view step. The scheme alone picks the frame the chase follows.
+    private static void ChaseFollowsTheScheme(TestContext ctx, PlaneStats stats)
+    {
+        var savedClock = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+        GameClock.Current = clock;
+        var panes = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
+        ctx.Host.AddChild(panes);
+        try
+        {
+            foreach (var scheme in new[] { ControlScheme.Original, ControlScheme.Assisted })
+            {
+                var camera = new Camera3D();
+                panes.AddChild(camera);
+                var plant = new FlightModel(stats);
+                var seat = Place(ctx, plant, null, human: true, camera);
+                float tilt = 0f, bank = 0f;
+                try
+                {
+                    seat.ControlScheme = scheme;
+                    for (int i = 0; i < 120; i++)
+                    {
+                        seat.HoldActionForTest(InputAction.RollLeft, true);
+                        seat.SimStep(Dt);
+                        clock.BeginFrame(Dt);
+                        seat._Process(Dt);
+                        bank = Mathf.Max(bank, Mathf.Abs(BankDeg(plant)));
+                        if (i >= 30)
+                            tilt = Mathf.Max(tilt, Mathf.Abs(camera.GlobalBasis.X.Normalized().Y));
+                    }
+                }
+                finally
+                {
+                    seat.HoldActionForTest(InputAction.RollLeft, false);
+                    seat.Free();
+                    camera.QueueFree();
+                }
+
+                if (scheme == ControlScheme.Original)
+                    ctx.Check(bank > 20f && tilt > 0.3f,
+                        $"ABLE-TO-FAIL CONTROL: an Original seat's chase banks with the plane (right axis height {tilt:0.###}, plane banked {bank:0.0} degrees)");
+                else
+                    ctx.Check(bank > 20f && tilt < 0.01f,
+                        $"an Assisted seat's chase stays level (right axis height {tilt:0.#####}, plane banked {bank:0.0} degrees)");
+                ctx.Note($"{scheme} seat's chase: right axis height up to {tilt:0.#####}, plane banked up to {bank:0.0} degrees");
+            }
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(panes);
+            panes.QueueFree();
+            GameClock.Current = savedClock;
+        }
+    }
+
+    // A seat over `plant`, flown by `source` or, with none, by its own devices, chased by `camera`
+    // when one is given.
+    private static FlightController Place(
+        TestContext ctx, FlightModel plant, IFlightInputSource? source, bool human, Camera3D? camera = null)
     {
         var seat = new FlightController();
         seat.Bind(new FlightControllerBuild
@@ -411,7 +472,7 @@ internal static class AssistedFlightSuites
 
         // Off the identity heading (DIAG-19), level, at four fifths of the airframe's top speed.
         var spawn = new Vector3(0f, SpawnAltitudeM, 0f);
-        seat.Setup(plant, null, new CamParams(), spawn, spawn + new Vector3(1f, 0f, -1f), 1f, plant.Stats.FdSpeed * 0.8f);
+        seat.Setup(plant, camera, new CamParams(), spawn, spawn + new Vector3(1f, 0f, -1f), 1f, plant.Stats.FdSpeed * 0.8f);
         ctx.Host.AddChild(seat);
         return seat;
     }

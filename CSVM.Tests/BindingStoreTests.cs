@@ -78,61 +78,64 @@ public class BindingStoreTests
         Assert.False(loaded.MouseFlying);
     }
 
-    /// <summary>The control scheme and the chase camera ride in the seat's file as words, Original
-    /// on a fresh profile, and come back as saved.</summary>
+    /// <summary>The control scheme rides in the seat's file as a word, Original on a fresh profile,
+    /// and comes back as saved.</summary>
     [Fact]
-    public void RoundTrip_PreservesTheControlSchemeAndChaseCamera()
+    public void RoundTrip_PreservesTheControlScheme()
     {
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
         var json = BindingStore.Serialize(1, profile);
         Assert.Contains("\"controlScheme\": \"original\"", json);
-        Assert.Contains("\"chaseCamera\": \"original\"", json);
 
         profile.ControlScheme = ControlScheme.Assisted;
-        profile.ChaseCamera = ChaseCamera.Level;
         json = BindingStore.Serialize(1, profile);
         var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
 
         Assert.Contains("\"controlScheme\": \"assisted\"", json);
-        Assert.Contains("\"chaseCamera\": \"level\"", json);
         Assert.Equal(ControlScheme.Assisted, loaded.ControlScheme);
-        Assert.Equal(ChaseCamera.Level, loaded.ChaseCamera);
         AssertSameMaps(profile, loaded);
     }
 
-    /// <summary>Assisted with the camera put back to Original is a saved state of its own, not one a
-    /// load re-derives.</summary>
-    [Fact]
-    public void AnAssistedSeatWithTheOriginalCameraLoadsAsSaved()
+    /// <summary>A file that still names a <c>chaseCamera</c> field loads whole with the field ignored.
+    /// The scheme alone decides the camera, and the next save drops the field.</summary>
+    [Theory]
+    [InlineData("original", "level")]
+    [InlineData("assisted", "original")]
+    public void AnOldChaseCameraFieldIsIgnored(string scheme, string camera)
     {
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
-        profile.ControlScheme = ControlScheme.Assisted;
+        var json = BindingStore.Serialize(1, profile).Replace(
+            "\"controlScheme\": \"original\",",
+            $"\"controlScheme\": \"{scheme}\", \"chaseCamera\": \"{camera}\",",
+            StringComparison.Ordinal);
+        Assert.Contains("chaseCamera", json, StringComparison.Ordinal);
 
-        var loaded = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true, out string error);
 
-        Assert.Equal(ControlScheme.Assisted, loaded.ControlScheme);
-        Assert.Equal(ChaseCamera.Original, loaded.ChaseCamera);
+        Assert.NotNull(loaded);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(scheme == "assisted" ? ControlScheme.Assisted : ControlScheme.Original, loaded!.ControlScheme);
+        AssertSameMaps(profile, loaded);
+        Assert.DoesNotContain("chaseCamera", BindingStore.Serialize(1, loaded), StringComparison.Ordinal);
     }
 
-    /// <summary>A file older than the two fields reads Original for both and keeps every row. So does
-    /// a file hand-edited to a word or a kind this build does not read.</summary>
+    /// <summary>A file older than the field reads Original and keeps every row. So does a file
+    /// hand-edited to a word or a kind this build does not read.</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("\"ASSISTED\"")]
     [InlineData("\"auto\"")]
     [InlineData("1")]
-    public void AnOlderOrHandEditedFileReadsTheOriginalSchemeAndCamera(string? field)
+    public void AnOlderOrHandEditedFileReadsTheOriginalScheme(string? field)
     {
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
         var json = BindingStore.Serialize(1, profile);
-        json = json.Replace("\"controlScheme\": \"original\",", field == null ? string.Empty : $"\"controlScheme\": {field},", StringComparison.Ordinal)
-            .Replace("\"chaseCamera\": \"original\",", field == null ? string.Empty : $"\"chaseCamera\": {field},", StringComparison.Ordinal);
+        json = json.Replace("\"controlScheme\": \"original\",", field == null ? string.Empty : $"\"controlScheme\": {field},", StringComparison.Ordinal);
         Assert.DoesNotContain("\"original\"", json, StringComparison.Ordinal);
 
         var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
 
         Assert.Equal(ControlScheme.Original, loaded.ControlScheme);
-        Assert.Equal(ChaseCamera.Original, loaded.ChaseCamera);
         AssertSameMaps(profile, loaded);
     }
 

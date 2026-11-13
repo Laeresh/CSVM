@@ -218,16 +218,16 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device, and the seat's `MouseFlying`, `MouseSensitivity`, `ControlScheme` and
-`ChaseCamera`, which two players at one machine choose separately. Its source: `LaunchBindings.cs`.
+names one device, and the seat's `MouseFlying`, `MouseSensitivity` and `ControlScheme`, which two
+players at one machine choose separately. Its source: `LaunchBindings.cs`.
 
 ## src/Bindings/ControlScheme.cs
-The two remake-only choices a seat makes beside its keymap: `ControlScheme` (Original or Assisted)
-and `ChaseCamera` (Original or Level), both Original by default. Enums rather than switches, so a
-later scheme has a place to go. They live on `BindingProfile.cs` and save in the keymap file; the
-one-time move of the camera to Level when the scheme becomes Assisted is the Controls page's edit
-(`UI/Menu/ControlsFeature.cs`), never a load rule. What the player sees:
-[../controls.md](../controls.md), "Assisted controls and the level chase camera".
+The remake-only choice a seat makes beside its keymap, Original by default. Original flies the
+original's controls and chase camera; Assisted flies the assist law and the level chase camera
+together, since neither flies well without the other. An enum rather than a switch, so a later
+scheme has a place to go. It lives on `BindingProfile.cs` and saves in the keymap file as
+`controlScheme`; a file that still names an older `chaseCamera` field loads with it ignored. What
+the player sees: [../controls.md](../controls.md), "Assisted controls".
 
 ## src/Bindings/SensitivityScale.cs
 The Fly scheme's mouse sensitivity as one set of numbers: a multiplier from 0.25 to 4 with 1 as the

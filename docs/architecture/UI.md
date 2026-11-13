@@ -1665,8 +1665,8 @@ the pending steal, which names every loser but a full axis's pair partner and wa
 `ConfirmSteal`. `BeginStickCapture`/`OfferStick` serve the original's Stick column, replacing only
 the same stick model's binding. `UnbindSlot`, `ResetContext`/`ResetSeat` (player 1's stick rows
 through the injected `IStickRows`), `OpenProfilesFolder`, the injected save (player 1's through
-`Sticks/StickScreens.cs`) and `Accepted` are the rest; the seat's four profile choices are staged
-with the maps; a change to Assisted also stages the Level camera once. Model: [../org/input.md](../org/input.md).
+`Sticks/StickScreens.cs`) and `Accepted` are the rest; the seat's three profile choices are staged
+with the maps. Model: [../org/input.md](../org/input.md).
 
 ## src/UI/Menu/PlayerSetupFeature.cs
 Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are `PlayerSeat`s

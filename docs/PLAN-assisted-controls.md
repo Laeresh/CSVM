@@ -38,7 +38,7 @@ the AI and the original controls stay untouched.
 | 3 | What does stick up/down do? | **Climb or dive relative to the horizon.** The assist adds the elevator a bank needs, so pulling during a turn climbs rather than tightening it. |
 | 4 | Holding the stick back to vertical and beyond? | **A full loop while held; easing off rolls the plane upright** (a half loop ends as an Immelmann turn, a held dive as a split-S). |
 | 5 | What does the level camera show at the top of a loop? | **It follows over the top**, world upside down there, and rolls upright together with the plane. Not "sky always up". |
-| 6 | One bundled setting or two? | **Two options:** control scheme (Original / Assisted) and chase camera (Original / Level). Choosing Assisted switches the camera to Level once; the player may switch it back. |
+| 6 | One bundled setting or two? | **One option**, the control scheme (Original / Assisted); Assisted brings the level chase camera. Two options landed first (A1, A2) and were merged in B14: at the controls they did not work well apart. |
 | 7 | Which views does Level change? | **The chase view only.** Cockpit and nose bank with the plane; VR keeps its own setting. |
 | 8 | The separate yaw input (keys, bumpers, twist, pedals) under Assisted? | **Added straight onto the assist's rudder** for fine aim; the assist does not fight it. |
 | 9 | Which modes allow Assisted? | **Every mode, per player**, multiplayer and stunt races included. |
@@ -447,3 +447,12 @@ settles within 2.2 degrees of the release nose (checked at 4 degrees, 15 deg/s a
 path's lag at release over 4 degrees is the able-to-fail control). The turn, wings-level, loop and
 Immelmann checks read as before, and a unit test,
 `AReleasedPull_HoldsTheNoseWhereItWasLeft`, pins the capture on the default airframe.
+
+**Found at the controls.** "Can you merge both into one setting? They don't work good separate."
+The `ChaseCamera` option is gone: the control scheme alone picks the chase, Assisted flying the
+level frame (`FlightController` passes `ControlScheme == Assisted` to `Chase`). The CONTROLS page
+keeps its 69 px band (a shorter crop would cut the panel's rim) with the one `Controls` row centred
+in it. A saved `chaseCamera` field is never read and drops on the next save
+(`BindingStoreTests.AnOldChaseCameraFieldIsIgnored`). `flight-assisted-seat`'s
+`ChaseFollowsTheScheme` holds roll for 2 s: the Original seat's camera banks with the plane, the
+Assisted seat's right axis stays level within 0.01.

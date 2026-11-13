@@ -136,14 +136,13 @@ public sealed class MenuControlsSeats
             [InputContext.Menu] = input.Map,
             [InputContext.Camera] = saved.Map(InputContext.Camera),
         };
-        // The flying scheme, its sensitivity and the two assist choices ride with the flight rows,
-        // off the same read.
+        // The mouse scheme, its sensitivity and the control scheme ride with the flight rows, off
+        // the same read.
         return new BindingProfile(maps, input.Keyboard)
         {
             MouseFlying = saved.MouseFlying,
             MouseSensitivity = saved.MouseSensitivity,
             ControlScheme = saved.ControlScheme,
-            ChaseCamera = saved.ChaseCamera,
         };
     }
 }

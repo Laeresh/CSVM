@@ -8,7 +8,7 @@ namespace CSVM.Flight.Camera;
 public readonly record struct LevelChaseHold(Vector3 Right, Vector3 Target);
 
 /// <summary>
-/// The flat chase's level frame (<see cref="Bindings.ChaseCamera.Level"/>): the aircraft's forward
+/// The flat chase's level frame (<see cref="Bindings.ControlScheme.Assisted"/>): the aircraft's forward
 /// with its bank taken out, so a turn never tilts the horizon. Unlike <see cref="XrMount.NoRoll"/>
 /// the up is not kept on the sky's side: the frame follows the aircraft over the top of a loop.
 /// Its right axis rests on one of the two level rights. Once the bank passes 90 degrees plus

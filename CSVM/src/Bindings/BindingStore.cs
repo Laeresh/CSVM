@@ -34,7 +34,6 @@ public sealed class BindingStore
     private const string MouseFlyingField = "mouseFlying";
     private const string MouseSensitivityField = "mouseSensitivity";
     private const string ControlSchemeField = "controlScheme";
-    private const string ChaseCameraField = "chaseCamera";
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
     private const string XrToken = "xr";
@@ -92,9 +91,8 @@ public sealed class BindingStore
             w.WriteBoolean(MouseFlyingField, profile.MouseFlying);
             // The same rule: an older file names no sensitivity and reads the unscaled default.
             w.WriteNumber(MouseSensitivityField, profile.MouseSensitivity);
-            // The same rule again: an older file names neither and reads Original for both.
+            // The same rule again: an older file names no scheme and reads Original.
             w.WriteString(ControlSchemeField, Word(profile.ControlScheme));
-            w.WriteString(ChaseCameraField, Word(profile.ChaseCamera));
             w.WriteStartObject("contexts");
             foreach (var context in Enum.GetValues<InputContext>())
             {
@@ -160,8 +158,8 @@ public sealed class BindingStore
                 profile.MouseSensitivity = scale;
             }
 
+            // A field this build does not name, such as an older build's chaseCamera, is never read.
             profile.ControlScheme = ReadWord(root, ControlSchemeField, ControlScheme.Original);
-            profile.ChaseCamera = ReadWord(root, ChaseCameraField, ChaseCamera.Original);
 
             if (!root.TryGetProperty("contexts", out var contexts) || contexts.ValueKind != JsonValueKind.Object)
             {

@@ -11,7 +11,7 @@ namespace CSVM.UI.Menu.Original;
 /// <c>[@ControlsPrefs@]</c> section and the shared <see cref="ControlsFeature"/>. The seat chooser
 /// takes the Controller Type row and the flying-scheme chooser the Mouse panel's title line. The
 /// authored Mouse Sensitivity slider follows. A third panel, the plate grown by a band of its own art,
-/// holds the control scheme and chase camera choosers. The KEYS AND BUTTONS door
+/// holds the control scheme chooser. The KEYS AND BUTTONS door
 /// (<see cref="OriginalKeysPage"/>) stands under it. Its edits are staged in the feature, so its ACCEPT CHANGES writes the keymaps and its
 /// CANCEL CHANGES drops the whole visit.
 /// </summary>
@@ -31,13 +31,9 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
     /// sensitivity.</summary>
     public const string SensitivityKey = "CP_S_MOUSE";
 
-    /// <summary>The page's control-scheme chooser, Original or Assisted, on the title line of the
-    /// panel the plate grows for it. A remake-only chooser.</summary>
+    /// <summary>The page's control-scheme chooser, Original or Assisted, centred in the panel the
+    /// plate grows for it. A remake-only chooser.</summary>
     public const string SchemeKey = "CONTROLSCHEME";
-
-    /// <summary>The page's chase-camera chooser, Original or Level, on the grown panel's second line.
-    /// A remake-only chooser.</summary>
-    public const string CameraKey = "CHASECAMERA";
 
     /// <summary>The page's door onto the KEYS AND BUTTONS page.</summary>
     public const string KeysDoorKey = "CP_B_KEYS";
@@ -122,9 +118,8 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             rows.Add(_host.PlaqueRow(MouseKey, MouseWord(), 1, MouseSchemeLive, 0));
             rows.Add(_host.PlaqueRow(SensitivityKey, SensitivityWord(), 2, MouseSchemeLive, 0));
             rows.Add(_host.PlaqueRow(SchemeKey, SchemeWord(), 3, Seated, 0));
-            rows.Add(_host.PlaqueRow(CameraKey, CameraWord(), 4, Seated, 0));
-            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 5, true, 0));
-            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, 6);
+            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 4, true, 0));
+            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, 5);
             return;
         }
 
@@ -150,9 +145,6 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
         var schemeBox = SchemeBox(screen);
         rows.Add(new OriginalRow(SchemeKey, SchemeWord(), OriginalRowKind.Dropdown,
             schemeBox.X, schemeBox.Y, schemeBox.Width, schemeBox.Height, Seated, 0, arrow));
-        var cameraBox = CameraBox(screen);
-        rows.Add(new OriginalRow(CameraKey, CameraWord(), OriginalRowKind.Dropdown,
-            cameraBox.X, cameraBox.Y, cameraBox.Width, cameraBox.Height, Seated, 0, arrow));
         _chrome.AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0, PlateBandHeight);
         _chrome.AddPlaques(screen, rows, AcceptKey, CancelKey, PlateBandHeight);
     }
@@ -177,7 +169,6 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             MouseKey => StepMouseScheme(),
             SensitivityKey => StepSensitivity(direction),
             SchemeKey => StepControlScheme(),
-            CameraKey => StepChaseCamera(),
             _ => false,
         };
     }
@@ -196,9 +187,6 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
                 break;
             case SchemeKey:
                 StepControlScheme();
-                break;
-            case CameraKey:
-                StepChaseCamera();
                 break;
             case KeysDoorKey:
                 _keys.Open();
@@ -283,17 +271,15 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
                 mouseDescription.Int("Width", (int)DescWidth), OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
         }
 
-        // The grown panel's two choosers carry a title each, left of the chooser on its own line.
+        // The grown panel's chooser carries its title on its own line, left of the box.
         float assistTitleX = screen.Widget("CP_T_JoystickTitle")?.Int("X", (int)TitleX) ?? TitleX;
-        foreach (var (word, box) in new[] { ("Controls", SchemeBox(screen)), ("Camera", CameraBox(screen)) })
-        {
-            lines.Add(new BoardLine(word, assistTitleX, box.Y, Math.Max(1f, box.X - assistTitleX),
-                OriginalOptionsChrome.TitleFont, BoardInk.Row));
-        }
+        var scheme = SchemeBox(screen);
+        lines.Add(new BoardLine("Controls", assistTitleX, scheme.Y, Math.Max(1f, scheme.X - assistTitleX),
+            OriginalOptionsChrome.TitleFont, BoardInk.Row));
 
         var joystickDesc = screen.Widget("CP_T_JoystickDesc");
         lines.Add(new BoardLine(
-            "Assisted turns and climbs where the stick points. Level keeps the chase camera level.",
+            "Assisted turns and climbs where the stick points, and keeps the chase camera level.",
             joystickDesc?.Int("X", (int)DescX) ?? DescX,
             (joystickDesc?.Int("Y", (int)JoystickDescY) ?? JoystickDescY) + AssistDy,
             joystickDesc?.Int("Width", (int)DescWidth) ?? DescWidth, OriginalOptionsChrome.DescriptionFont, BoardInk.Row));
@@ -330,19 +316,15 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
             drop?.Int("ItemHeight", (int)ItemHeight) ?? ItemHeight);
     }
 
-    // The two assist choosers stand in the right half of the seat box's column, like the Mouse
-    // panel's. Their lines are Controller Type's title and box lines, two bands down.
+    // The scheme chooser stands in the right half of the seat box's column, like the Mouse panel's.
+    // Its line is midway between Controller Type's title and box lines, two bands down. The one row
+    // then sits centred in a panel cut for two.
     private static (float X, float Y, float Width, float Height) SchemeBox(MenuLayoutScreen screen)
     {
         var column = PlayerBox(screen);
         float titleY = screen.Widget("CP_T_JoystickTitle")?.Int("Y", (int)JoystickTitleY) ?? JoystickTitleY;
-        return (column.X + (column.Width / 2f), titleY + AssistDy, column.Width / 2f, column.Height);
-    }
-
-    private static (float X, float Y, float Width, float Height) CameraBox(MenuLayoutScreen screen)
-    {
-        var column = PlayerBox(screen);
-        return (column.X + (column.Width / 2f), column.Y + AssistDy, column.Width / 2f, column.Height);
+        float y = MathF.Round((titleY + column.Y) / 2f);
+        return (column.X + (column.Width / 2f), y + AssistDy, column.Width / 2f, column.Height);
     }
 
     // The scheme chooser, on the Mouse Sensitivity title's own line, since the authored slider keeps
@@ -387,9 +369,6 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
 
     private string SchemeWord() => !Seated ? string.Empty
         : _controls!.ControlScheme == ControlScheme.Assisted ? "Assisted" : "Original";
-
-    private string CameraWord() => !Seated ? string.Empty
-        : _controls!.ChaseCamera == ChaseCamera.Level ? "Level" : "Original";
 
     private string PlayerWord() => _controls is { } controls && controls.Players.Count > 0
         ? "Player " + controls.Player.ToString(CultureInfo.InvariantCulture)
@@ -440,8 +419,7 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
         return true;
     }
 
-    // Each assist chooser has two values, so a step either way is the other one, staged like the
-    // scheme row above. The feature moves the camera to Level when the scheme becomes Assisted.
+    // The control scheme has two values too, staged like the mouse scheme above.
     private bool StepControlScheme()
     {
         if (_controls is not { } controls || !Seated)
@@ -451,18 +429,6 @@ public sealed class OriginalControlsPage : IOriginalOptionsPage
 
         controls.ControlScheme = controls.ControlScheme == ControlScheme.Assisted ? ControlScheme.Original : ControlScheme.Assisted;
         _host.FocusKey(SchemeKey);
-        return true;
-    }
-
-    private bool StepChaseCamera()
-    {
-        if (_controls is not { } controls || !Seated)
-        {
-            return false;
-        }
-
-        controls.ChaseCamera = controls.ChaseCamera == ChaseCamera.Level ? ChaseCamera.Original : ChaseCamera.Level;
-        _host.FocusKey(CameraKey);
         return true;
     }
 

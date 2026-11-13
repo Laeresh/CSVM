@@ -1534,8 +1534,8 @@ public class OriginalOptionsTests
 
         var board = Compose(host);
         var arrows = board.Pictures.Where(p => p.Art.Name == seat.Art!.Name).ToArray();
-        // The seat, mouse-scheme and two assist choosers, every arrow in one column.
-        Assert.Equal(4, arrows.Length);
+        // The seat, mouse-scheme and control-scheme choosers, every arrow in one column.
+        Assert.Equal(3, arrows.Length);
         Assert.All(arrows, a => Assert.Equal(arrows[0].X, a.X));
 
         var title = board.Lines.Single(l => l.Text == "Mouse");
@@ -1595,35 +1595,33 @@ public class OriginalOptionsTests
         Assert.Equal(new[] { 1 }, written);
     }
 
-    /// <summary>The grown panel's two choosers read Original on a fresh seat. A press on Controls
-    /// stages Assisted and moves Camera to Level, a press on Camera puts it back, and ACCEPT CHANGES
-    /// writes both. The plate is drawn as head, two bands and tail, its door and plaques a band lower.</summary>
+    /// <summary>The grown panel's one chooser reads Original on a fresh seat, centred between the
+    /// panel's two authored lines. A press stages Assisted and ACCEPT CHANGES writes it. The plate is
+    /// drawn as head, two bands and tail, its door and plaques a band lower.</summary>
     [Fact]
-    public void TheAssistPanelStagesTheSchemeAndCameraOnAGrownPlate()
+    public void TheAssistPanelStagesTheSchemeOnAGrownPlate()
     {
         var controls = Controls(out _, out var written);
         var host = Host(controls: controls);
         host.Module.Controls.Open();
         Assert.Equal("Original", Row(host, OriginalControlsPage.SchemeKey).Label);
-        Assert.Equal("Original", Row(host, OriginalControlsPage.CameraKey).Label);
         var seat = Row(host, OriginalControlsPage.PlayerKey);
         var scheme = Row(host, OriginalControlsPage.SchemeKey);
         Assert.Equal(seat.X + seat.Width, scheme.X + scheme.Width);
+        float seatTitle = Compose(host).Lines.Single(l => l.Text == "Player").Y;
+        Assert.Equal(MathF.Round((seatTitle + seat.Y) / 2f) + 138f, scheme.Y);
+        Assert.Equal(scheme.Y, Compose(host).Lines.Single(l => l.Text == "Controls").Y);
         Assert.Equal(420f + 69f, Row(host, OriginalControlsPage.KeysDoorKey).Y);
         Assert.Equal(4, Compose(host).Backdrop.Count(p => p.Art.Name == "PP_CpBack.png"));
 
         Click(host, OriginalControlsPage.SchemeKey);
         Assert.Equal("Assisted", Row(host, OriginalControlsPage.SchemeKey).Label);
-        Assert.Equal("Level", Row(host, OriginalControlsPage.CameraKey).Label);
-        Click(host, OriginalControlsPage.CameraKey);
-        Assert.Equal("Original", Row(host, OriginalControlsPage.CameraKey).Label);
         Assert.Empty(written);
 
         Click(host, OriginalControlsPage.AcceptKey);
 
         Assert.Equal(new[] { 1 }, written);
         Assert.Equal(ControlScheme.Assisted, controls.ControlScheme);
-        Assert.Equal(ChaseCamera.Original, controls.ChaseCamera);
     }
 
     [Fact]
@@ -1801,7 +1799,7 @@ public class OriginalOptionsTests
             {
                 OriginalControlsPage.PlayerKey, OriginalControlsPage.MouseKey,
                 OriginalControlsPage.SensitivityKey,
-                OriginalControlsPage.SchemeKey, OriginalControlsPage.CameraKey,
+                OriginalControlsPage.SchemeKey,
                 OriginalControlsPage.KeysDoorKey, OriginalControlsPage.AcceptKey,
                 OriginalControlsPage.CancelKey,
             },
@@ -1816,7 +1814,7 @@ public class OriginalOptionsTests
              (float)(slot.Height - mouse.Int("Bottom") - mouse.Int("Top"))),
             Rect(Row(host, OriginalControlsPage.SensitivityKey)));
 
-        RowsAreClearOfEachOther(host, rows, "CONTROLS", 8);
+        RowsAreClearOfEachOther(host, rows, "CONTROLS", 7);
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a

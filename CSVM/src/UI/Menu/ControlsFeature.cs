@@ -168,8 +168,7 @@ public sealed class ControlsFeature : IMenuFeature
     }
 
     /// <summary>The seat being edited's control scheme, staged like the mouse scheme. A pad-only seat
-    /// takes it too. ⚠ A change to Assisted also stages <see cref="ChaseCamera"/> Level, once, at that
-    /// change: a camera put back to Original afterwards stays there.</summary>
+    /// takes it too. The scheme also picks the seat's chase camera.</summary>
     public ControlScheme ControlScheme
     {
         get => _seats[_player].ControlScheme;
@@ -179,22 +178,6 @@ public sealed class ControlsFeature : IMenuFeature
             if (seat.ControlScheme == value)
                 return;
             seat.ControlScheme = value;
-            if (value == ControlScheme.Assisted)
-                seat.ChaseCamera = ChaseCamera.Level;
-            MarkDirty();
-        }
-    }
-
-    /// <summary>The seat being edited's chase camera, staged like the control scheme.</summary>
-    public ChaseCamera ChaseCamera
-    {
-        get => _seats[_player].ChaseCamera;
-        set
-        {
-            var seat = _seats[_player];
-            if (seat.ChaseCamera == value)
-                return;
-            seat.ChaseCamera = value;
             MarkDirty();
         }
     }
@@ -498,7 +481,6 @@ public sealed class ControlsFeature : IMenuFeature
             seat.Profile.MouseFlying = seat.MouseFlying;
             seat.Profile.MouseSensitivity = seat.MouseSensitivity;
             seat.Profile.ControlScheme = seat.ControlScheme;
-            seat.Profile.ChaseCamera = seat.ChaseCamera;
             _save?.Invoke(player, seat.Profile);
             Accepted?.Invoke(player, seat.Profile);
         }
@@ -664,8 +646,6 @@ public sealed class ControlsFeature : IMenuFeature
 
         public ControlScheme ControlScheme { get; set; }
 
-        public ChaseCamera ChaseCamera { get; set; }
-
         public DeviceId PadOf(InputContext context) => Devices.PadOf(context);
 
         /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
@@ -677,7 +657,6 @@ public sealed class ControlsFeature : IMenuFeature
             MouseFlying = Profile.MouseFlying && ReadsKeyboard;
             MouseSensitivity = Profile.MouseSensitivity;
             ControlScheme = Profile.ControlScheme;
-            ChaseCamera = Profile.ChaseCamera;
         }
     }
 }
