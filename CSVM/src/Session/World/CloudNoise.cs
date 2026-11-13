@@ -11,20 +11,24 @@ namespace CSVM.Session.World;
 /// </summary>
 internal static class CloudNoise
 {
+    private const int LatticeCells = 256;
+
     private static ImageTexture3D? _shape;
     private static ImageTexture3D? _detail;
-    private static ImageTexture3D? _low;
-    private static ImageTexture? _tops;
+    private static ImageTexture3D? _warpLattice;
+    private static ImageTexture? _topsLattice;
 
     /// <summary>Gets the 128³ shape texture.</summary>
     public static ImageTexture3D Shape => _shape ??= Build(128, ShapeTexel);
 
-    /// <summary>Gets the 64³ low texture: two Perlin warps and a Perlin height field.</summary>
-    public static ImageTexture3D Low => _low ??= Build(64, LowTexel);
+    /// <summary>Gets the warp lattice: <c>csky_pc_hash3</c>'s 256³ corner values for the coverage
+    /// warp's two seeds, in red and green. Read at a cell's corner plus the smoothed fraction, its
+    /// linear filter is <c>csky_pc_noise3</c> itself.</summary>
+    public static ImageTexture3D WarpLattice => _warpLattice ??= BuildLattice3D(1013904223u, 1664525u);
 
-    /// <summary>Gets the 512² tops texture: a Perlin height field over four cells, fine enough that
-    /// its linear filter leaves no terraces on the crowns.</summary>
-    public static ImageTexture Tops => _tops ??= BuildTops(512);
+    /// <summary>Gets the tops lattice: the y = 0 plane of the crowns' broad (red) and fine (green)
+    /// value noise, read the same way.</summary>
+    public static ImageTexture TopsLattice => _topsLattice ??= BuildLattice2D(1911520717u, 2246822507u);
 
     /// <summary>Gets the 32³ detail texture.</summary>
     public static ImageTexture3D Detail => _detail ??= Build(32, DetailTexel);
@@ -58,22 +62,57 @@ internal static class CloudNoise
         return texture;
     }
 
-    private static ImageTexture BuildTops(int n)
+    private static ImageTexture3D BuildLattice3D(uint seedR, uint seedG)
     {
+        int n = LatticeCells;
+        var slices = new Godot.Collections.Array<Image>();
+        var data = new byte[n * n * n * 2];
+        Parallel.For(0, n, z =>
+        {
+            for (int y = 0; y < n; y++)
+            {
+                for (int x = 0; x < n; x++)
+                {
+                    int i = (((z * n) + y) * n + x) * 2;
+                    data[i] = HashByte(x, y, z, seedR);
+                    data[i + 1] = HashByte(x, y, z, seedG);
+                }
+            }
+        });
+        int slice = n * n * 2;
+        for (int z = 0; z < n; z++)
+            slices.Add(Image.CreateFromData(n, n, false, Image.Format.Rg8, data.AsSpan(z * slice, slice).ToArray()));
+        var texture = new ImageTexture3D();
+        texture.Create(Image.Format.Rg8, n, n, n, false, slices);
+        return texture;
+    }
+
+    private static ImageTexture BuildLattice2D(uint seedR, uint seedG)
+    {
+        int n = LatticeCells;
         var data = new byte[n * n * 2];
-        Parallel.For(0, n, y =>
+        for (int z = 0; z < n; z++)
         {
             for (int x = 0; x < n; x++)
             {
-                // Sixteen bits, since a crown's height reads straight off it.
-                float v = Unit01(PerlinFbm((x + 0.5f) / n, (y + 0.5f) / n, 0.5f, 4, 1, 404u));
-                int q = Math.Clamp((int)MathF.Round(v * 65535f), 0, 65535);
-                int i = ((y * n) + x) * 2;
-                data[i] = (byte)(q >> 8);
-                data[i + 1] = (byte)(q & 255);
+                // Rows are z, columns x: the shader reads the plane at (x, z).
+                data[((z * n) + x) * 2] = HashByte(x, 0, z, seedR);
+                data[(((z * n) + x) * 2) + 1] = HashByte(x, 0, z, seedG);
             }
-        });
+        }
         return ImageTexture.CreateFromImage(Image.CreateFromData(n, n, false, Image.Format.Rg8, data));
+    }
+
+    // csky_pc_hash3's value at a lattice corner, to eight bits.
+    private static byte HashByte(int x, int y, int z, uint seed)
+    {
+        uint h = ((uint)x * 2376512323u) ^ ((uint)y * 3625334849u) ^ ((uint)z * 1911520717u) ^ seed;
+        h ^= h >> 16;
+        h *= 2146121005u;
+        h ^= h >> 15;
+        h *= 2221713035u;
+        h ^= h >> 16;
+        return (byte)Math.Round((h >> 8) / 16777216.0 * 255.0);
     }
 
     private static byte ToByte(float v) => (byte)Math.Clamp((int)MathF.Round(v * 255f), 0, 255);
@@ -86,11 +125,6 @@ internal static class CloudNoise
         float perlinWorley = worley + (perlin * (1f - worley));
         return (perlinWorley, WorleyFbm(x, y, z, 8), WorleyFbm(x, y, z, 16), WorleyFbm(x, y, z, 32));
     }
-
-    private static (float, float, float, float) LowTexel(float x, float y, float z) =>
-        (Unit01(PerlinFbm(x, y, z, 2, 1, 202u)), Unit01(PerlinFbm(x, y, z, 2, 1, 303u)), Unit01(PerlinFbm(x, y, z, 4, 3, 404u)), 1f);
-
-    private static float Unit01(float v) => Math.Clamp((v * 0.5f) + 0.5f, 0f, 1f);
 
     private static (float, float, float, float) DetailTexel(float x, float y, float z) =>
         (WorleyFbm(x, y, z, 2), WorleyFbm(x, y, z, 4), WorleyFbm(x, y, z, 8), 1f);
