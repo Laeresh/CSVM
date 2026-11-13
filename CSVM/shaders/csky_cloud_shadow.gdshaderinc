@@ -167,6 +167,63 @@ global uniform vec4 csky_pc_heads_shape;
 global uniform vec4 csky_pc_heads_layer;
 global uniform vec4 csky_pc_heads_density;
 
+// PROTOTYPE (clouds-look): the baked-noise look's density for the ground shadow and the veil. x is
+// the shape texture's tile in metres (0 keeps the procedural density), y the coverage cap, z the
+// bases' rag, w the density per metre (VolumetricClouds.PublishGround).
+global uniform vec4 csky_pc_pw;
+global uniform sampler3D csky_pc_shape_tex;
+global uniform sampler3D csky_pc_warp_lat;
+global uniform sampler2D csky_pc_tops_lat;
+
+// csky_pc_noise3 off a lattice texture of its corners (CloudNoise.WarpLattice): the filter between two
+// corners, weighted by the smoothed fraction, is the noise's own interpolation.
+vec2 csky_pc_lat3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    return texture(csky_pc_warp_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
+}
+
+vec2 csky_pc_lat2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = p - i;
+    return texture(csky_pc_tops_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
+}
+
+// csky_pc_cover_shaped off the lattices: the same coverage without hashing.
+float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape) {
+    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
+    vec3 w = p / (detail_m * 4.0);
+    vec2 warp = vec2(csky_pc_lat3(w).r, csky_pc_lat3(w + 17.0).g) - 0.5;
+    vec3 q = p + vec3(warp.x * shape.z * (0.4 + h) + shape.w * h, 0.0, warp.y * shape.z * (0.4 + h));
+    float broad = csky_pc_lat2(q.xz / (detail_m * 11.0)).r;
+    float fine = csky_pc_lat2(q.xz / (detail_m * 4.0)).g;
+    float r = h / mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
+    float rc = clamp(r, 0.0, 1.0);
+    float rise = shape.x * pow(rc, 2.5) - shape.x * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
+    float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
+    return smoothstep(lo - shape.y * 0.5, lo + shape.y * 0.5, csky_cloud_noise(q));
+}
+
+// The baked-noise heads' extinction per metre at `p` under coverage `c`, without the detail erosion.
+float csky_pc_density_pw(vec3 p, float bottom, float top, float c) {
+    if (c <= 0.0) {
+        return 0.0;
+    }
+    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
+    vec4 s = texture(csky_pc_shape_tex, (p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / csky_pc_pw.x);
+    float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
+    float base = clamp((s.r - (wfbm - 1.0)) / max(2.0 - wfbm, 1e-4), 0.0, 1.0);
+    float body = base * smoothstep(0.0, 0.04 + csky_pc_pw.z * (1.0 - s.g), h);
+    return clamp((body - (1.0 - c)) / max(c, 1e-4), 0.0, 1.0) * csky_pc_pw.w;
+}
+
+// The heads' optical depth over `len` metres at `p` in the baked-noise look.
+float csky_pc_heads_od_pw(vec3 p, float len) {
+    vec4 layer = csky_pc_heads_layer;
+    float c = clamp(csky_pc_cover_lat(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * csky_pc_heads_density.x, 0.0, 1.0) * csky_pc_pw.y;
+    return csky_pc_density_pw(p, layer.x, layer.y, c) * len;
+}
+
 // The heads' cover over `world`. Under the volumetric clouds it is the light the slab's own density takes
 // along the sun ray, four taps through the layer, so every head shades by its thickness.
 float csky_cloud_cover_lit(vec3 world) {
@@ -185,6 +242,10 @@ float csky_cloud_cover_lit(vec3 world) {
     float od = 0.0;
     for (int i = 0; i < 4; i++) {
         vec3 p = world + s * (t0 + dt * (float(i) + 0.5));
+        if (csky_pc_pw.x > 0.0) {
+            od += csky_pc_heads_od_pw(p, dt);
+            continue;
+        }
         float c = csky_pc_cover_shaped(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
         od += csky_pc_density(p, layer.x, layer.y, c, layer.z, k.y) * k.z * dt;
     }

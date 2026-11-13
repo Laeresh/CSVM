@@ -118,6 +118,11 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_veil", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        // PROTOTYPE (clouds-look): the baked-noise look's ground density; a zero tile keeps the procedural one.
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_pw", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_shape_tex", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_warp_lat", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_tops_lat", RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         _registered = true;
         Published = OffValue;
         _publishedEdge = CloudShadowPattern.Edge;

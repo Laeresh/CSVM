@@ -92,6 +92,11 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
     float od = 0.0;
     for (int i = 0; i < 12; i++) {
         vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
+        if (csky_pc_pw.x > 0.0) {
+            // Per metre already; the exp below scales by the density gain.
+            od += csky_pc_heads_od_pw(q, dt) / max(k.z, 1e-6);
+            continue;
+        }
         float c = csky_pc_cover_shaped(q, v.x, v.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
         od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * dt;
     }

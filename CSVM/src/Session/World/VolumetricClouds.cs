@@ -73,6 +73,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly SceneBuilder? _scene;
     private readonly List<(MeshInstance3D Node, Aabb World)> _placedSprites = new();
     private readonly List<MeshInstance3D> _hidden = new();
+    // The prototype's float uniforms as its preset and CSVM_CLOUD_SET left them (PROTOTYPE, clouds-look).
+    private readonly Dictionary<string, float> _protoValues = new();
     private readonly bool _hasDeck;
     private ShaderMaterial? _material;
     // The reduced march (MarchShader), its target, the target's render time and its size, zero while off.
@@ -851,12 +853,23 @@ internal sealed partial class VolumetricClouds : Node3D
             var parts = kv[1].Split(',');
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             if (parts.Length == 3)
+            {
                 material.SetShaderParameter(kv[0].Trim(), new Vector3(float.Parse(parts[0], inv), float.Parse(parts[1], inv), float.Parse(parts[2], inv)));
+            }
             else
+            {
                 material.SetShaderParameter(kv[0].Trim(), float.Parse(parts[0], inv));
+                _protoValues[kv[0].Trim()] = float.Parse(parts[0], inv);
+            }
         }
+        RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
         Log.Info("world", $"volumetric clouds: prototype look 1, set [{set}]");
     }
+
+    // A prototype uniform as the slab stands, else the shader's default.
+    private float Proto(string name, float fallback) => _protoValues.TryGetValue(name, out float v) ? v : fallback;
 
     private void Rebuild()
     {
@@ -1066,6 +1079,7 @@ internal sealed partial class VolumetricClouds : Node3D
             RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
             RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
             RenderingServer.GlobalShaderParameterSet("csky_pc_veil", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_pw", Vector4.Zero);
             return;
         }
         // The layer the effects drawn after the slab march their transmittance through (csky_pc_veil_at).
@@ -1087,12 +1101,18 @@ internal sealed partial class VolumetricClouds : Node3D
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground", PublishedGround);
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
-        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", HeadShape);
+        bool proto = PrototypeOn && _material != null;
+        var shape = HeadShape;
+        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", proto ? shape with { Y = Proto("head_soft", HeadSoft) } : shape);
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_layer", new Vector4(bottom, top, DetailM, CoverBias));
         // The slab's heads_gain and its erosion and density_gain defaults, so the ground marches its
         // density, and the ambient share the deck takes.
+        float headsGain = _hasDeck ? 1.15f : 1f;
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_density",
-            new Vector4(_hasDeck ? 1.15f : 1f, 0.55f, 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
+            new Vector4(proto ? Proto("heads_gain", headsGain) : headsGain, 0.55f, 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
+        RenderingServer.GlobalShaderParameterSet("csky_pc_pw", proto
+            ? new Vector4(Proto("shape_m", 3000f), Proto("cover_max", 1f), Proto("base_rag", 0f), Proto("pw_density", 0.04f))
+            : Vector4.Zero);
     }
 
     // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,
