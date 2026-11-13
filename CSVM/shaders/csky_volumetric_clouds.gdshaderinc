@@ -16,11 +16,9 @@ float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, fl
     if (cover <= 0.0 || p.y < bottom || p.y > deck_top) {
         return 0.0;
     }
-    float h = (p.y - bottom) / max(deck_top - bottom, 1.0);
-    float prof = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
     float n = csky_pc_fbm(p / (detail_m * 1.8));
     float body = clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
-    return body * prof;
+    return body * csky_pc_deck_profile(p.y, bottom, deck_top);
 }
 
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
@@ -106,7 +104,11 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
         float ddt = (d1 - deck.x) / 3.0;
         for (int i = 0; i < 3; i++) {
             vec3 q = eye + dir * (deck.x + ddt * (float(i) + 0.5));
-            od += csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z) * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
+            // The baked-noise look's deck without its detail erosion, in the heads' density units.
+            float deck_d = csky_pc_pw.x > 0.0
+                ? csky_pc_deck_body_pw(q, v.z, csky_pc_pw_deck.x) * csky_pc_deck_profile(q.y, v.x, v.x + v.w) * csky_pc_pw.w / max(k.z, 1e-6) * csky_pc_pw_deck.y
+                : csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z);
+            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
         }
     }
     return exp(-od * k.z);

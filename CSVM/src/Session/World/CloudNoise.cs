@@ -96,23 +96,26 @@ internal static class CloudNoise
     {
         var started = DateTime.UtcNow;
         int n = LatticeCells;
-        var slices = new Godot.Collections.Array<Image>();
-        var data = new byte[n * n * n * 2];
+        // Each slice hashes straight into its own buffer. It takes 70-100 ms once a process, about what
+        // reading a 32 MB cache back costs, so it has no cache.
+        var data = new byte[n][];
         Parallel.For(0, n, z =>
         {
+            var slice = new byte[n * n * 2];
             for (int y = 0; y < n; y++)
             {
                 for (int x = 0; x < n; x++)
                 {
-                    int i = (((z * n) + y) * n + x) * 2;
-                    data[i] = HashByte(x, y, z, seedR);
-                    data[i + 1] = HashByte(x, y, z, seedG);
+                    int i = ((y * n) + x) * 2;
+                    slice[i] = HashByte(x, y, z, seedR);
+                    slice[i + 1] = HashByte(x, y, z, seedG);
                 }
             }
+            data[z] = slice;
         });
-        int slice = n * n * 2;
-        for (int z = 0; z < n; z++)
-            slices.Add(Image.CreateFromData(n, n, false, Image.Format.Rg8, data.AsSpan(z * slice, slice).ToArray()));
+        var slices = new Godot.Collections.Array<Image>();
+        foreach (var slice in data)
+            slices.Add(Image.CreateFromData(n, n, false, Image.Format.Rg8, slice));
         var texture = new ImageTexture3D();
         texture.Create(Image.Format.Rg8, n, n, n, false, slices);
         CSVM.Utils.Log.Info("world", $"volumetric clouds: built the 256^3 warp lattice in {(DateTime.UtcNow - started).TotalMilliseconds:0} ms");

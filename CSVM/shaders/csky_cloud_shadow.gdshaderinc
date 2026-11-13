@@ -171,9 +171,10 @@ global uniform vec4 csky_pc_heads_density;
 // the shape texture's tile in metres (0 keeps the procedural density), y the coverage cap, z the
 // bases' rag, w the density per metre (VolumetricClouds.PublishGround).
 global uniform vec4 csky_pc_pw;
-global uniform sampler3D csky_pc_shape_tex;
-global uniform sampler3D csky_pc_warp_lat;
-global uniform sampler2D csky_pc_tops_lat;
+// The hints matter: the lattices and the noise tile, so they must repeat in a canvas shader too.
+global uniform sampler3D csky_pc_shape_tex : filter_linear, repeat_enable;
+global uniform sampler3D csky_pc_warp_lat : filter_linear, repeat_enable;
+global uniform sampler2D csky_pc_tops_lat : filter_linear, repeat_enable;
 
 // csky_pc_noise3 off a lattice texture of its corners (CloudNoise.WarpLattice): the filter between two
 // corners, weighted by the smoothed fraction, is the noise's own interpolation.
@@ -189,12 +190,14 @@ vec2 csky_pc_lat2(vec2 p) {
     return texture(csky_pc_tops_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
 }
 
-// csky_pc_cover_shaped off the lattices: the same coverage without hashing.
+// csky_pc_cover_shaped off the lattices: the same coverage without hashing. The slab and its ground
+// shadow both read it.
 float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape) {
     float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
     vec3 w = p / (detail_m * 4.0);
     vec2 warp = vec2(csky_pc_lat3(w).r, csky_pc_lat3(w + 17.0).g) - 0.5;
     vec3 q = p + vec3(warp.x * shape.z * (0.4 + h) + shape.w * h, 0.0, warp.y * shape.z * (0.4 + h));
+    // csky_pc_cloud_top's fine noise reads y = 5 m over a 720 m cell: the y = 0 plane is within 0.02 %.
     float broad = csky_pc_lat2(q.xz / (detail_m * 11.0)).r;
     float fine = csky_pc_lat2(q.xz / (detail_m * 4.0)).g;
     float r = h / mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
@@ -222,6 +225,23 @@ float csky_pc_heads_od_pw(vec3 p, float len) {
     vec4 layer = csky_pc_heads_layer;
     float c = clamp(csky_pc_cover_lat(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * csky_pc_heads_density.x, 0.0, 1.0) * csky_pc_pw.y;
     return csky_pc_density_pw(p, layer.x, layer.y, c) * len;
+}
+
+// PROTOTYPE (clouds-look): the baked-noise deck's shape tile in metres, and its density over the heads'.
+global uniform vec4 csky_pc_pw_deck;
+
+// The baked-noise deck's body at `p` over `cover` of the sky, before its profile and erosion: the
+// Perlin-Worley shape on a `tile_m` tile, so its underside lumps like stratocumulus.
+float csky_pc_deck_body_pw(vec3 p, float cover, float tile_m) {
+    vec4 s = texture(csky_pc_shape_tex,(p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / tile_m);
+    float n = s.r * 0.6 + (s.g * 0.625 + s.b * 0.25 + s.a * 0.125) * 0.4;
+    return clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
+}
+
+// The deck's sheet from `bottom` to `deck_top`: thin at the floor, gone by the top.
+float csky_pc_deck_profile(float y, float bottom, float deck_top) {
+    float h = (y - bottom) / max(deck_top - bottom, 1.0);
+    return smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
 }
 
 // The heads' cover over `world`. Under the volumetric clouds it is the light the slab's own density takes

@@ -543,39 +543,11 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         uniform float fast_cover = 0.0;
-        uniform sampler3D warp_lat : filter_linear, repeat_enable;
-        uniform sampler2D tops_lat : filter_linear, repeat_enable;
-
-        // csky_pc_noise3 off a lattice texture: the filter between two corners, weighted by the
-        // smoothed fraction, is the noise's own interpolation.
-        vec2 pc_lat3(vec3 p) {
-            vec3 i = floor(p);
-            vec3 f = p - i;
-            return texture(warp_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
-        }
-
-        vec2 pc_lat2(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = p - i;
-            return texture(tops_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
-        }
 
         // csky_pc_cover_shaped exactly, its warp and each cloud's own top read off the lattices
-        // (CloudNoise.WarpLattice, TopsLattice) instead of hashed.
+        // (CloudNoise.WarpLattice, TopsLattice) instead of hashed. The ground shadow reads the same.
         float pc_cover_fast(vec3 p) {
-            float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
-            vec3 w = p / (detail_m * 4.0);
-            vec2 warp = vec2(pc_lat3(w).r, pc_lat3(w + 17.0).g) - 0.5;
-            vec3 q = p + vec3(warp.x * warp_m * (0.4 + h) + shear_m * h, 0.0, warp.y * warp_m * (0.4 + h));
-            // csky_pc_cloud_top's fine noise reads y = 5 m over a 720 m cell: the y = 0 plane is within 0.02 %.
-            float broad = pc_lat2(q.xz / (detail_m * 11.0)).r;
-            float fine = pc_lat2(q.xz / (detail_m * 4.0)).g;
-            float top = mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
-            float r = h / top;
-            float rc = clamp(r, 0.0, 1.0);
-            float rise = taper * pow(rc, 2.5) - taper * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
-            float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
-            return smoothstep(lo - head_soft * 0.5, lo + head_soft * 0.5, csky_cloud_noise(q));
+            return csky_pc_cover_lat(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
         }
 
         // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
@@ -608,18 +580,13 @@ internal sealed partial class VolumetricClouds : Node3D
             if (deck_cover <= 0.0 || p.y < bottom || p.y > deck_top) {
                 return 0.0;
             }
-            float h = (p.y - bottom) / max(deck_depth_m, 1.0);
-            float prof = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 1.0, h));
-            vec3 q = p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y);
-            vec4 s = texture(shape_tex, q / (shape_m * deck_scale));
-            float n = s.r * 0.6 + (s.g * 0.625 + s.b * 0.25 + s.a * 0.125) * 0.4;
-            float body = clamp((n - (1.0 - deck_cover)) / max(deck_cover * 0.5, 0.05), 0.0, 1.0);
+            float body = csky_pc_deck_body_pw(p, deck_cover, shape_m * deck_scale);
             if (body > 0.0) {
-                vec3 dn = texture(detail_tex, q / detail_tile_m).rgb;
+                vec3 dn = texture(detail_tex, (p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / detail_tile_m).rgb;
                 float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
                 body = clamp(pc_remap(body, hf * deck_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
             }
-            return body * prof * (pw_density / max(density_gain, 1e-6)) * deck_k;
+            return body * csky_pc_deck_profile(p.y, bottom, deck_top) * (pw_density / max(density_gain, 1e-6)) * deck_k;
         }
 
         float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
@@ -934,8 +901,6 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("look", 1);
         material.SetShaderParameter("shape_tex", CloudNoise.Shape);
         material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-        material.SetShaderParameter("warp_lat", CloudNoise.WarpLattice);
-        material.SetShaderParameter("tops_lat", CloudNoise.TopsLattice);
         string set = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
         foreach (var pair in set.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -1273,6 +1238,8 @@ internal sealed partial class VolumetricClouds : Node3D
         RenderingServer.GlobalShaderParameterSet("csky_pc_pw", proto
             ? new Vector4(Proto("shape_m", 3000f), Proto("cover_max", 1f), Proto("base_rag", 0f), Proto("pw_density", 0.04f))
             : Vector4.Zero);
+        // The deck's shape tile and density gain (the shader's shape_m * deck_scale and deck_k), for the veil.
+        RenderingServer.GlobalShaderParameterSet("csky_pc_pw_deck", new Vector4(Proto("shape_m", 3000f) * Proto("deck_scale", 1.6f), Proto("deck_k", 0.6f), 0f, 0f));
     }
 
     // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,
