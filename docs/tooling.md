@@ -132,6 +132,23 @@ checked in, as the `[Trait("Tier", "Quick")]` classes and `SuiteCatalog.QuickTie
 `-Suite`/`-Filter` unions with the engine tier and a `-UnitFilter` replaces the unit tier. Quick
 prints a `not checked:` line per omitted surface, and never satisfies the landing gate.
 
+**A complete PASS writes a green stamp, and stamped content is not run twice.** The key is the git
+hash of `CSVM/`, `CSVM.Tests/` and `analysis/goldens/` as the working tree holds them, tracked or
+not, read through a throwaway copy of the index (`TreeStampCore.ps1`, `Get-TreeKey`); a commit of
+that content has the same key. The stamp is a file under `csvm-stamps/` in the common git
+directory, so every worktree reads it and none is committed; one older than 60 days is swept. Only
+the complete lane writes it (no selection, no skipped stage, units, engine and goldens each PASS or
+FLAKE, the key unchanged across the run), and the summary's `green stamp:` line says which of those
+held. The plain complete run on stamped content prints `already green` with the stamp's time, tree
+and stage lines and exits 0; any other argument runs, and `-Force` is the one that changes nothing
+else. `CheckPushGreen.ps1` is git's pre-push hook over the same key: a push to `refs/heads/main`
+whose commit carries no stamp exits 1 and names the commit, and `git push --no-verify` skips it
+(a landing over a waived red). `-Install` copies `scripts/hooks/pre-push` into the common git
+directory's `hooks/`, `-Commit <rev>` asks about one commit, and `-SelfTest` drives keys, stamps
+and the hook against a throwaway repository. The stamp says the content passed on this machine with
+its game data; it does not cover `scripts/`, so a change to the runner itself is checked with
+`-Force`.
+
 **The ci engine tier (`--run-tests=tier:ci`) is what CI requires, and a skip in it fails.** Its
 membership is checked in as `SuiteCatalog.CiTier`, one name per line and sorted. A suite earns its
 place by passing `RunCiSuites.ps1` (below): headless, with no extraction but the `--synthetic-data`
@@ -1099,11 +1116,26 @@ enough free.
   check reads it as is); `CSVM_MEM_MAX_WAIT_SEC` shortens the wait cap. With the `engine-shard`
   seed of 7 GB, `CSVM_MEM_AVAILABLE_GB=20` fits one shard at a time.
 
-### Gaming mode: test runs queue and throttle while you play
+### Gaming mode: batteries wait and small runs throttle while you play
 
-With several sessions testing at once the machine is unusable for a game. Gaming mode makes test
-runs from every worktree queue behind one machine-wide lock and run throttled on a few CPU threads,
-slower than budget, leaving the rest of the machine to the game.
+With several sessions testing at once the machine is unusable for a game. Gaming mode defers a run
+of the whole engine catalog or the goldens outright, and makes smaller test runs from every
+worktree queue behind one machine-wide lock and run throttled on a few CPU threads, slower than
+budget, leaving the rest of the machine to the game.
+
+- **The deferral.** A `RunTests.ps1` run that holds the whole engine catalog (no `-Suite`,
+  `-Filter` or `-Quick`) or the goldens ends `DEFERRED: gaming mode (on until hh:mm), ...`, exit 3,
+  before it builds, and at that stage when the mode came on mid-run (`Get-GamingDeferral`). Such a
+  run would hold the lock for a battery's length and its windowed launches share the GPU with the
+  game. Each deferred run is noted once per worktree and command in `%TEMP%\csvm-gaming.owed`;
+  `status` prints the list, and the first `status` or `off` that finds the mode off prints it and
+  clears it. `-Quick`, and a `-Suite`/`-Filter` run with `-SkipGoldens`, queue and throttle as
+  below. Of the tunables, `shards` still caps an explicit `-Shards` on a selection, and
+  `goldenWorkers` has nothing left to cap, since no golden stage starts while the mode is on.
+- **Off, every run still sits at below-normal priority.** `Sync-GamingStage` sets the run's job to
+  `BelowNormal` on every thread, and the format hook sets its own process the same, so a test run
+  yields the CPU to anything the user is doing and loses nothing on an idle machine. It does not
+  limit memory or the GPU.
 
 - **The switch** is the marker file `%TEMP%\csvm-gaming`, outside every worktree, written by
   `.\GamingMode.ps1 on` (4 hours; `-Hours N`, or `-Forever`) and deleted by `.\GamingMode.ps1 off`.
@@ -1131,7 +1163,8 @@ slower than budget, leaving the rest of the machine to the game.
   gaming-mode lock, held by <worktree> (pid N) since hh:mm`, registers a `csvm-gaming.wait-*` file
   for `status`, and polls every 1 to 3 s with jitter; there is no strict FIFO.
 - **Stage boundaries.** The marker is read before every stage. Switched on mid-run, the next heavy
-  stage queues for the lock and runs throttled; a stage in flight finishes at full speed. Switched
+  stage queues for the lock and runs throttled, or defers the run when it is the whole engine
+  catalog or the goldens; a stage in flight finishes at full speed. Switched
   off, the holder releases the lock and runs its remaining stages unthrottled, and a waiter stops
   waiting at its next poll.
 - **Throttling goes through the run's job object** (`Set-RunJobThrottle`, which sets
@@ -1150,6 +1183,10 @@ slower than budget, leaving the rest of the machine to the game.
   the run still passes or fails on its own stages.
 - **The summary line**: `gaming mode: ON (until hh:mm), waited m:ss, shards 2, workers 1, threads
   12-15`, or `gaming mode: off`.
+- **The format hook passes at once on a tree it already passed.** A clean pass writes a `format`
+  stamp keyed on `CSVM/`, `.editorconfig` and `Directory.Build.props` (`TreeStampCore.ps1`), and a
+  tree with that key, in any worktree, neither formats nor builds. The key is taken after the run,
+  since `dotnet format` writes, and only when the Rebuild exited 0.
 - **The format hook throttles but never waits.** `FormatBeforeTests.ps1` runs `dotnet format` and
   its Rebuild at once under the same priority, affinity and build arguments, without the lock: a
   wait would overrun the hook's timeout, and a timed-out hook does not block the command, so the

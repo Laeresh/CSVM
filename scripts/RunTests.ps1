@@ -82,12 +82,21 @@
     a second and the run ends "DEFERRED: rebuild, ...", exit 3: nothing after that point measured
     the built binary. A red summary points at docs/verification.md's known environmental reds.
 
-    Gaming mode (GamingMode.ps1 on|off|status): read at every stage boundary. While it is on, the
-    run takes a machine-wide lock before its next heavy stage (waiting runs print who holds it) and
-    holds it to the summary, and runs on the marker's shards, golden workers, dotnet -m, priority,
-    CPU threads and watchdog factor. Past its maxWaitSec the run ends "DEFERRED: gaming mode, ...",
-    exit 3. Budgets are not compared, -Perf and -Hitch report DEFERRED (gaming mode) without
-    changing the exit code, and the summary prints a "gaming mode:" line. See docs/tooling.md.
+    Green stamp: a PASS of the complete run (no selection, no skipped stage) writes a stamp keyed on
+    the content of CSVM/, CSVM.Tests/ and analysis/goldens/ as the working tree holds it, shared by
+    every worktree (TreeStampCore.ps1). The plain complete run on content that carries one prints
+    "already green" and exits 0 without running; any other argument runs, and -Force is the one
+    that changes nothing else. CheckPushGreen.ps1 asks for the stamp before a push to main.
+
+    Gaming mode (GamingMode.ps1 on|off|status): read at every stage boundary. While it is on, a run
+    that holds the whole engine catalog or the goldens ends "DEFERRED: gaming mode, ...", exit 3,
+    before it builds (or at that stage, when the mode came on mid-run), and "status" lists it as
+    owed. A smaller run takes a machine-wide lock before its next heavy stage (waiting runs print
+    who holds it), holds it to the summary, and runs on the marker's dotnet -m, priority, CPU
+    threads and watchdog factor; past its maxWaitSec it ends DEFERRED too. Budgets are not compared,
+    -Perf and -Hitch report DEFERRED (gaming mode) without changing the exit code, and the summary
+    prints a "gaming mode:" line. Off, the run's processes sit at below-normal priority, so they
+    yield the CPU to anything else on the machine. See docs/tooling.md.
 
     Wall-time budgets: each stage row prints the measured budget for the lane the run
     is in (the complete gate, or -Quick), from analysis\verification-budgets.json -- which is where
@@ -227,6 +236,9 @@
 .PARAMETER QuietTimeoutSec
     The longest -WaitQuiet waits, in seconds (default 1800, the memory ledger's own cap).
 
+.PARAMETER Force
+    Run the complete battery although this tree's content already carries a green stamp.
+
 .PARAMETER SelfTest
     Check the rebuild stop's trigger (Get-RebuildCause) against a scratch DLL and log, the stall
     watchdog, the shard plan, and the goldens' moved-shot verdict and frame diff, then exit
@@ -299,6 +311,7 @@ param(
     [switch]$WaitQuiet,
     [int]$QuietTimeoutSec = 1800,
     [switch]$RealData,
+    [switch]$Force,
     [switch]$SelfTest
 )
 
@@ -389,6 +402,43 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
 . (Join-Path $PSScriptRoot "MemoryLedgerCore.ps1")
 # Every goldens run and every golden move is appended to the goldens ledger.
 . (Join-Path $PSScriptRoot "GoldenLedgerCore.ps1")
+. (Join-Path $PSScriptRoot "TreeStampCore.ps1")
+
+# The complete lane: every stage over everything. Only its PASS writes the green stamp, keyed on the
+# content it judged (TreeStampCore.ps1), which CheckPushGreen.ps1 asks for before a push to main.
+$CompleteRun = -not ($EngineSelector -or $UnitFilter -or $SkipUnits -or $SkipEngine -or $SkipGoldens -or $RegenGoldens -or $SelfTest)
+$GreenKey = if ($CompleteRun) { Get-TreeKey -Root $RepoRoot -Paths $GreenKeyPaths } else { "" }
+$GreenWhat = "CSVM/, CSVM.Tests/ and analysis/goldens/"
+# The plain complete run on content that already passed it, in any worktree, returns at once. Any
+# other argument asks for a run of its own, and -Force is the one that asks for nothing else.
+$plainRun = @($PSBoundParameters.Keys | Where-Object { $_ -notin @("WaitQuiet", "QuietTimeoutSec") }).Count -eq 0
+$green = if ($CompleteRun -and $plainRun) { Get-TreeStamp -Root $RepoRoot -Kind "green" -Key $GreenKey } else { $null }
+if ($green) {
+    Write-Host ""
+    Write-Host "--- RunTests ------------------------------------------------------------"
+    Write-Host "  PASS  already green: this tree's $GreenWhat passed the complete" -ForegroundColor Green
+    Write-Host "        battery at $($green.time) in $($green.tree) ($($green.commit))" -ForegroundColor Green
+    foreach ($line in @($green.stages | Where-Object { $_ })) { Write-Host "        $line" -ForegroundColor DarkGray }
+    Write-Host "  result: PASS -- 0.0s total, exit 0; nothing ran, -Force runs the battery again" -ForegroundColor Green
+    Write-Host "-------------------------------------------------------------------------"
+    exit 0
+}
+
+# Gaming mode never starts the whole engine catalog or the goldens (Get-GamingDeferral). Decided
+# here, before anything is opened or built, so the caller hears at once and can go on with a
+# selection; GamingMode.ps1 status lists the run as owed.
+$RunLabel = if ($CompleteRun) { "the complete battery" } else {
+    "RunTests.ps1 " + (@($PSBoundParameters.GetEnumerator() | ForEach-Object { if ($_.Value -is [switch]) { "-$($_.Key)" } else { "-$($_.Key) $($_.Value)" } }) -join " ")
+}
+$gamingDeferral = if ($SelfTest) { $null } else {
+    Get-GamingDeferral -Settings (Get-GamingMode) -FullEngine (-not $SkipEngine -and -not $EngineSelector) -Goldens (-not $SkipGoldensNow)
+}
+if ($gamingDeferral) {
+    Add-GamingOwed -Worktree $RepoRoot -What $RunLabel
+    Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; $gamingDeferral" -ForegroundColor Yellow
+    exit $MemDeferredExitCode
+}
+
 # Before the desktop and the job exist, so a run that gives up leaves nothing open in this session.
 if ($WaitQuiet -and -not (Wait-QuietMachine -TimeoutSec $QuietTimeoutSec)) {
     Write-Host "  result: DEFERRED before the build, exit $MemDeferredExitCode; another CSVM Godot ran past -QuietTimeoutSec ${QuietTimeoutSec}s" -ForegroundColor Yellow
@@ -401,10 +451,22 @@ $HiddenDesktop = Open-HiddenDesktop
 $null = Open-RunJob
 
 # Gaming mode (GamingMode.ps1): read at every stage boundary. On, the run holds the machine-wide lock
-# from the first heavy stage to the summary and its job runs throttled; off, nothing changes.
+# from the first heavy stage to the summary and its job runs throttled; off, the job runs at
+# below-normal priority. -Heavy marks a stage gaming mode never starts: switched on mid-run, the run
+# is deferred there instead of queueing.
 $Gaming = New-GamingRun -Worktree $RepoRoot
 function Enter-GamingStage {
-    param([string]$Name, [switch]$NoWait)
+    param([string]$Name, [switch]$NoWait, [switch]$Heavy)
+    if ($Heavy -and -not $script:Deferred) {
+        $line = Get-GamingDeferral -Settings (Get-GamingMode) -FullEngine ($Name -eq "engine") -Goldens ($Name -eq "goldens")
+        if ($line) {
+            $script:Deferred = $line
+            $script:DeferredStage = $Name
+            Add-GamingOwed -Worktree $RepoRoot -What $RunLabel
+            Write-Host "  $line" -ForegroundColor Yellow
+            return
+        }
+    }
     Sync-GamingStage $Gaming -NoWait:$NoWait
     $script:GoldenTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $GoldenWatchdogSec
     $script:EngineStallTimeoutSec = Get-GamingTimeoutSec $Gaming.Settings $EngineStallSec
@@ -1371,7 +1433,7 @@ if ($SkipUnits) {
 
 # ---- engine ------------------------------------------------------------------------------
 
-if (-not $SkipEngine -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "engine" }
+if (-not $SkipEngine -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "engine" -Heavy:(-not $EngineSelector) }
 if ($SkipEngine) {
     Add-Stage -Name "engine" -Status "SKIP" -Seconds 0 -Detail "-SkipEngine"
     Add-Unchecked "the in-engine suites did not run (-SkipEngine)"
@@ -1635,7 +1697,7 @@ function Save-GoldenFailureEvidence {
     }
 }
 
-if (-not $SkipGoldensNow -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "goldens" }
+if (-not $SkipGoldensNow -and $buildOk -and -not $script:Deferred) { Enter-GamingStage "goldens" -Heavy }
 if ($SkipGoldensNow) {
     $why = if ($SkipGoldens) { "-SkipGoldens" } else { "-Quick" }
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail $why
@@ -2763,6 +2825,26 @@ if ($Gaming.Used) {
 }
 Write-Host "  $(Format-GamingSummary $Gaming)"
 Exit-GamingRun $Gaming
+# A complete PASS stamps the content it judged, unless a stage was skipped or the content moved
+# under the run.
+if ($CompleteRun -and $failedStages.Count -eq 0 -and -not $script:Deferred) {
+    $judged = @($Stages | Where-Object { $_.Name -in @("units", "engine", "goldens") })
+    $notRun = @($judged | Where-Object { $_.Status -notin @("PASS", "FLAKE") } | ForEach-Object { $_.Name })
+    if (-not $GreenKey) {
+        Write-Host "  green stamp: not written, git gave this tree no key" -ForegroundColor Yellow
+    } elseif ($notRun.Count -gt 0) {
+        Write-Host "  green stamp: not written, $($notRun -join ', ') did not run" -ForegroundColor Yellow
+    } elseif ((Get-TreeKey -Root $RepoRoot -Paths $GreenKeyPaths) -ne $GreenKey) {
+        Write-Host "  green stamp: not written, $GreenWhat changed during the run" -ForegroundColor Yellow
+    } else {
+        $head = [string](git -C $RepoRoot rev-parse --short HEAD)
+        Set-TreeStamp -Root $RepoRoot -Kind "green" -Key $GreenKey -Fields ([ordered]@{
+            time = (Get-Date).ToString("s"); tree = $RepoRoot; commit = $head
+            stages = @($judged | ForEach-Object { "$($_.Name): $($_.Detail)" })
+        })
+        Write-Host "  green stamp: written for $GreenWhat; a push to main and a repeat of this run pass on it"
+    }
+}
 $dataRootLine = "  data root: "
 if ($env:CSVM_DATA_ROOT) {
     $dataRootLine += "$env:CSVM_DATA_ROOT (CSVM_DATA_ROOT)"

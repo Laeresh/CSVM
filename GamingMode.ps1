@@ -1,11 +1,12 @@
-# Gaming mode's command line: while the user plays, test runs from every worktree queue behind one
-# machine-wide lock and run throttled on a few CPU threads. The code is GamingModeCore.ps1, which
-# the runners dot-source; see docs/tooling.md.
+# Gaming mode's command line: while the user plays, a run of the whole engine catalog or the goldens
+# is deferred at once, and smaller test runs from every worktree queue behind one machine-wide lock
+# and run throttled on a few CPU threads. The code is GamingModeCore.ps1, which the runners
+# dot-source; see docs/tooling.md.
 #
 #   .\GamingMode.ps1 on [-Hours N | -Forever]   switch it on (4 hours by default)
-#   .\GamingMode.ps1 off                        switch it off
-#   .\GamingMode.ps1 status                     time left, tunables, lock holder, waiters
-#   .\GamingMode.ps1 -SelfTest                  expiry, tunable parsing and the lock
+#   .\GamingMode.ps1 off                        switch it off, and list the runs deferred meanwhile
+#   .\GamingMode.ps1 status                     time left, tunables, lock holder, waiters, owed runs
+#   .\GamingMode.ps1 -SelfTest                  expiry, tunable parsing, the deferral and the lock
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md).
 
@@ -45,6 +46,12 @@ if ($Action -eq "status") {
     $holder = Read-HeldFile $GamingLock
     Write-Host ("  lock: {0}" -f $(if ($holder) { "held by $(Format-GamingHolder $holder)" } else { "free" }))
     foreach ($w in (Get-GamingWaiters)) { Write-Host "  waiting: $(Format-GamingHolder $w)" }
+    $owed = @(Get-GamingOwed)
+    foreach ($o in $owed) { Write-Host "  owed: $o" }
+    if ($owed.Count -gt 0 -and -not $s) {
+        Write-Host "  the owed runs above were deferred while gaming mode was on; run them now (this list is cleared)"
+        Remove-Item -LiteralPath $GamingOwed -Force -ErrorAction SilentlyContinue
+    }
     exit 0
 }
 if ($Action) { Write-Host "usage: .\GamingMode.ps1 on [-Hours N | -Forever] | off | status | -SelfTest"; exit 2 }
@@ -61,6 +68,7 @@ if ($SelfTest) {
     $env:CSVM_GAMING_MARKER = Join-Path $dir "csvm-gaming"
     $script:GamingMarker = $env:CSVM_GAMING_MARKER
     $script:GamingLock = "$GamingMarker.lock"
+    $script:GamingOwed = "$GamingMarker.owed"
     $children = @()
     try {
         # Expiry.
@@ -81,6 +89,18 @@ if ($SelfTest) {
         Assert-Gaming ($c.AffinityMask -eq [uint64]0xFFFF -and $c.ThreadsText -eq "0-15") "threads are clamped to the machine"
         Assert-Gaming (((Get-GamingDotnetArgs $d -Build) -join " ") -eq "-m:2 -nodeReuse:false -p:UseSharedCompilation=false" -and @(Get-GamingDotnetArgs $null).Count -eq 0) "dotnet takes its throttle arguments only while on"
         Assert-Gaming ((Get-GamingTimeoutSec $d 300) -eq 900 -and (Get-GamingTimeoutSec $null 300) -eq 300 -and (Get-GamingTimeoutSec $d 0) -eq 0) "the watchdog scales by its factor only while on, and none stays none"
+
+        # The deferral: the whole engine catalog and the goldens never start while it is on.
+        Assert-Gaming ($null -eq (Get-GamingDeferral -Settings $null -FullEngine $true -Goldens $true)) "off, nothing is deferred"
+        Assert-Gaming ($null -eq (Get-GamingDeferral -Settings $d -FullEngine $false -Goldens $false)) "on, a selection without goldens is not deferred"
+        Assert-Gaming ((Get-GamingDeferral -Settings $d -FullEngine $true -Goldens $false) -match '^DEFERRED: gaming mode \(on until 16:00\), the whole engine catalog does not run') "on, the whole engine catalog is deferred"
+        Assert-Gaming ((Get-GamingDeferral -Settings $d -FullEngine $true -Goldens $true) -match 'the whole engine catalog and the goldens do not run') "on, a complete run names both"
+        Add-GamingOwed -Worktree "wt-a" -What "the complete battery"
+        Add-GamingOwed -Worktree "wt-a" -What "the complete battery"
+        Add-GamingOwed -Worktree "wt-b" -What "RunTests.ps1 -SkipUnits"
+        $owed = @(Get-GamingOwed)
+        Assert-Gaming ($owed.Count -eq 2 -and $owed[0] -match '^wt-a: the complete battery, deferred \d\d:\d\d$' -and $owed[1] -like 'wt-b: RunTests.ps1 -SkipUnits, *') "a deferred run is listed once per worktree and command"
+
         $Hours = 99; $Action = "kept"
         . (Join-Path $PSScriptRoot "scripts\GamingModeCore.ps1")
         Assert-Gaming ($Hours -eq 99 -and $Action -eq "kept") "dot-sourcing the core binds nothing in the caller's scope"

@@ -1,0 +1,8 @@
+#!/bin/sh
+# git's pre-push hook: a push to main needs a green battery stamp on the pushed commit. The check
+# is scripts/CheckPushGreen.ps1, whose -Install copies this file into the common git directory.
+# "git push --no-verify" skips it. A tree without the script (an older branch) pushes unchecked.
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/scripts/CheckPushGreen.ps1" ] || exit 0
+if command -v pwsh >/dev/null 2>&1; then ps=pwsh; else ps=powershell; fi
+exec "$ps" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/CheckPushGreen.ps1"
