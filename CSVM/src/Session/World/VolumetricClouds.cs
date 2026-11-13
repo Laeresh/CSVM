@@ -41,7 +41,7 @@ internal sealed partial class VolumetricClouds : Node3D
 
     // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun; a
     // storm dims the sun, greys the ambient and lets fewer, taller heads stand.
-    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5";
+    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1";
     private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4";
     // An overcast deck under the heads: a lighter base, and the heads broken up over it.
     private const string DeckPreset = ClearPreset + ";amb_floor=0.45;cover_max=0.7;amb_gain=0.7";
@@ -301,7 +301,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float x = clamp(SCREEN_UV.x, edge, 1.0 - edge) * 0.5;
             // The march's start offset moves by the golden ratio every frame. TAA then averages the
             // pattern out, where a fixed one leaves a hatch wherever the steps are coarse.
-            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
+            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339) * dither_k;
             if (reduced && !march_shafts_only && !inside) {
                 trace = vec4(texture(march_texture, vec2(x, SCREEN_UV.y)).xyz, 0.0);
                 // In front of the layer the scene hides it, so the edge stays at this pixel's own depth.
@@ -344,7 +344,7 @@ internal sealed partial class VolumetricClouds : Node3D
             vec2 uv = vec2(fract(UV.x * 2.0), 1.0 - UV.y);
             vec3 dir = csky_pc_ray_dir(uv, view_inv_projection, view_camera);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
-            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339);
+            float dither = fract(csky_pc_dither(FRAGCOORD.xy) + floor(TIME * 60.0) * 0.6180339) * dither_k;
             if (UV.x < 0.5) {
                 COLOR = shafts_only ? vec4(0.0, 0.0, 1.0, 0.0) : vec4(pc_layer(eye, dir, span, 1e9, dither), 0.0);
             } else {
@@ -417,6 +417,10 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float deck_erode = 0.0;
         uniform float amb_occ = 0.0;
         uniform float amb_od_k = 0.25;
+        uniform float dither_k = 1.0;
+        uniform float clear_stride = 2.0;
+        uniform float cover_stride = 2.0;
+        uniform float span_cap_m = 1e9;
         uniform float ms_a = 0.5;
         uniform float ms_b = 0.6;
         uniform float ms_c = 0.5;
@@ -473,8 +477,9 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
         // erodes into billows. The detail noise then frays the base and pocks the crown.
-        float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
+        float pc_heads_pwc(vec3 p, float bottom, float top, bool detail, out float cov) {
             float c = clamp((fast_cover > 0.5 ? pc_cover_fast(p) : pc_cover_shaped(p)) * heads_gain, 0.0, 1.0) * cover_max;
+            cov = c;
             if (c <= 0.0) {
                 return 0.0;
             }
@@ -512,6 +517,11 @@ internal sealed partial class VolumetricClouds : Node3D
                 body = clamp(pc_remap(body, hf * deck_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
             }
             return body * prof * (pw_density / max(density_gain, 1e-6)) * deck_k;
+        }
+
+        float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
+            float cov;
+            return pc_heads_pwc(p, bottom, top, detail, cov);
         }
 
         // The cumulus heads at `p` over the pattern's coverage.
@@ -689,7 +699,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float top = layer_top;
             float len = t1 - t0;
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
-            float span_step = len / float(n);
+            float span_step = min(len / float(n), span_cap_m);
             float t = t0 + pc_step(t0, span_step) * dither;
             // The clear air before the first cloud, density alone, in double steps. The search is most
             // of a ray's cost; the bisection's fourth pass restores the surface's precision.
@@ -697,11 +707,12 @@ internal sealed partial class VolumetricClouds : Node3D
             int i = 0;
             while (i < step_budget && t < t1) {
                 vec3 sp = eye + dir * t;
-                if ((look == 1 ? max(pc_heads_pw(sp, bottom, top, false), pc_deck(sp, bottom)) : pc_density(sp, bottom, top)) > 0.001) {
+                float cov = 0.0;
+                if ((look == 1 ? max(pc_heads_pwc(sp, bottom, top, false, cov), pc_deck(sp, bottom)) : pc_density(sp, bottom, top)) > 0.001) {
                     break;
                 }
                 clear = t;
-                t += pc_step(t, span_step) * 2.0;
+                t += pc_step(t, span_step) * (cov > 0.0 ? cover_stride : clear_stride);
                 i++;
             }
             if (t >= t1) {
