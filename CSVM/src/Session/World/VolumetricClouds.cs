@@ -42,7 +42,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
     private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
-    // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not (#345).
+    // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not.
     private const int ShaftDivisor = 2;
 
     private static readonly StringName MarchOnParam = "march_on";
@@ -515,15 +515,18 @@ internal sealed partial class VolumetricClouds : Node3D
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
             float span_step = len / float(n);
             float t = t0 + pc_step(t0, span_step) * dither;
-            // The clear air before the first cloud, density alone.
+            // The clear air before the first cloud, density alone, in double steps. The search is most
+            // of a ray's cost; the bisection's fourth pass restores the surface's precision. Inside the
+            // deck it takes single steps: a thin cell is a sliver a double step crosses in rings.
             float clear = t0;
             int i = 0;
             while (i < step_budget && t < t1) {
-                if (pc_density(eye + dir * t, bottom, top) > 0.001) {
+                vec3 p = eye + dir * t;
+                if (pc_density(p, bottom, top) > 0.001) {
                     break;
                 }
                 clear = t;
-                t += pc_step(t, span_step);
+                t += pc_step(t, span_step) * (deck_cover > 0.0 && p.y < bottom + deck_depth_m ? 1.0 : 2.0);
                 i++;
             }
             if (t >= t1) {
@@ -533,7 +536,7 @@ internal sealed partial class VolumetricClouds : Node3D
             // it. The dither then no longer sets how deep the light is read. Outside the loop, so a
             // GPU wave bisects once.
             float hi = t;
-            for (int k = 0; k < 3; k++) {
+            for (int k = 0; k < 4; k++) {
                 float mid = (clear + hi) * 0.5;
                 if (pc_density(eye + dir * mid, bottom, top) > 0.001) {
                     hi = mid;
