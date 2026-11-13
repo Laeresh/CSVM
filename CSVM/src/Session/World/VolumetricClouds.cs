@@ -64,6 +64,9 @@ internal sealed partial class VolumetricClouds : Node3D
     private static readonly StringName ViewCameraParam = "view_camera";
     private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
 
+    // PROTOTYPE (clouds-look): CSVM_CLOUD_LOOK=1 starts the baked-noise look; Ctrl+Shift+V swaps it live.
+    private static bool _prototype = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") == "1";
+
     private readonly Node3D _worldRoot;
     private readonly WeatherRig _weather;
     private readonly FogVolumeClutter? _field;
@@ -86,6 +89,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private float _appliedShaft = -1f;
     private Node3D? _built;
     private bool _hiding;
+    // The layer's top before a storm raises it (PROTOTYPE, clouds-look).
+    private float? _baseTop;
 
     private VolumetricClouds(Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
         SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck)
@@ -113,7 +118,7 @@ internal sealed partial class VolumetricClouds : Node3D
     public static MeasuredRenderTime? MarchTime { get; private set; }
 
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
-    private static bool PrototypeOn => System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") == "1";
+    private static bool PrototypeOn => _prototype;
 
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
@@ -166,6 +171,17 @@ internal sealed partial class VolumetricClouds : Node3D
     }
 
     public override void _ExitTree() => Follow(false);
+
+    // PROTOTYPE (clouds-look): Ctrl+Shift+V rebuilds the slab in the other look, for A/B at the controls.
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (_built == null || @event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.V, CtrlPressed: true, ShiftPressed: true })
+            return;
+        _prototype = !_prototype;
+        Rebuild();
+        Log.Info("world", $"volumetric clouds: look {(_prototype ? "prototype" : "today")}");
+        GetViewport().SetInputAsHandled();
+    }
 
     public override void _Process(double delta)
     {
@@ -821,7 +837,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // ("name=v;name=a,b,c") overrides any float or vec3 uniform, for tuning without a rebuild.
     private void ApplyPrototype(ShaderMaterial material)
     {
-        if (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") != "1")
+        if (!PrototypeOn)
             return;
         material.SetShaderParameter("look", 1);
         material.SetShaderParameter("shape_tex", CloudNoise.Shape);
@@ -845,8 +861,9 @@ internal sealed partial class VolumetricClouds : Node3D
     private void Rebuild()
     {
         FreeBuilt();
-        if (PrototypeOn && Storm && _bottom is { } floor && _top is { } roof)
-            _top = Mathf.Max(roof, floor + StormDepthM);
+        _baseTop ??= _top;
+        if (_bottom is { } floor && _baseTop is { } roof)
+            _top = PrototypeOn && Storm ? Mathf.Max(roof, floor + StormDepthM) : roof;
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
         _built = root;
