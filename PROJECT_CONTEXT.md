@@ -115,7 +115,8 @@ One line each, **the game files, the launch scripts and the release scripts are 
 - `XrSimFeature.ps1`, dot-sourced by `RunTests.ps1`, `RunProbe.ps1` and `RunGame.ps1`: sets the `csvm_xr_sim` feature tag around a launch that asks for `--xr-sim`. Details: `docs/tooling.md`.
 - `JobObjectCore.ps1`, dot-sourced through `HiddenDesktop.ps1`: one kill-on-close job object per `RunTests.ps1`/`RunProbe.ps1` run, so a killed runner takes its children with it (`JobObject.ps1 -SelfTest`). Details: `docs/tooling.md`.
 - `MemoryLedger.ps1` over `MemoryLedgerCore.ps1`, the machine-wide memory ledger admitting every scripted Godot launch (`RunTests.ps1`, `RunProbe.ps1`, a scripted `RunGame.ps1`/`RunDev.ps1`), so concurrent sessions queue instead of exhausting RAM; `status` prints it, `-SelfTest` checks it, and `CheckGodotCommand.ps1` blocks a direct Godot launch from an agent shell. Details: `docs/tooling.md`.
-- `GamingMode.ps1 on|off|status`, the command line over `GamingModeCore.ps1` (which the runners dot-source), gaming mode: while the user plays, `RunTests.ps1` and `RunProbe.ps1` runs from every worktree queue behind one machine-wide lock and run throttled (priority, CPU threads, fewer shards), and the format hook throttles without waiting; `-SelfTest` checks it. Details: `docs/tooling.md`.
+- `GamingMode.ps1 on|off|status`, the command line over `GamingModeCore.ps1` (which the runners dot-source), gaming mode: while the user plays, a `RunTests.ps1` run of the whole engine catalog or the goldens is deferred at once and listed as owed, smaller `RunTests.ps1` and `RunProbe.ps1` runs from every worktree queue behind one machine-wide lock and run throttled (priority, CPU threads), and the format hook throttles without waiting; `-SelfTest` checks it. Details: `docs/tooling.md`.
+- `TreeStampCore.ps1`, dot-sourced by `RunTests.ps1`, `FormatBeforeTests.ps1` and `CheckPushGreen.ps1`: a key over chosen paths as a working tree or a commit holds them, and the stamps (in the common git directory, shared by every worktree) that record a complete battery PASS or a clean format gate on a key. `CheckPushGreen.ps1` is the pre-push check over the green stamp (`-Install` copies `scripts/hooks/pre-push` into the git directory, `-SelfTest` checks keys, stamps and the hook).
 - `GoldenLedger.ps1` over `GoldenLedgerCore.ps1`, the goldens ledger: every goldens run and every golden move (an Enhanced `FLAKE`, a move that stayed, a re-render with no hash or one a deferral stopped, a Faithful red) appended by any worktree's goldens stage to the main checkout's git-ignored `goldens-ledger.jsonl`, which outlives the run tree; bare prints it grouped by shot, `-SelfTest` checks it. Details: `docs/tooling.md`.
 - `CleanScratch.ps1`, sweeps `.scratch/` artifacts, finished `.claude/worktrees/` agent worktrees **and the unit suite's `%TEMP%\csvm-tests` scratch** (`-?` lists its switches). Spares backups, dirty worktrees and a temp root a live test run owns; leaves branches alone by default.
 - `CheckCommentCaps.ps1`, the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. The line caps cover the whole scope; the 25-word sentence cap and the six-sentence block cap cover only the comment blocks the working tree has changed against HEAD (every block of a file named on the command line), since the tree carries older debt and a block is fixed by whoever next edits it. Scans the worktree the script file itself lives in, not the caller's working directory, so it is correct from any worktree regardless of where it is invoked. A pre-commit hook runs it; run it yourself while editing.
@@ -152,9 +153,16 @@ One line each, **the game files, the launch scripts and the release scripts are 
   tier and quick engine tier, no goldens and no hitch, with every omitted surface printed as a
   `not checked:` line. A selector or filter matching nothing fails its stage rather than passing
   empty.
-- **Before landing any change under `CSVM/`, run the complete `.\scripts\RunTests.ps1`.** Targeted and quick
-  runs are partial by design and never satisfy that landing gate. `CSVM.Tests/`-only,
-  documentation, and tooling changes do not require the full run.
+- **A commit on a worktree branch needs its targeted surface and `-Quick` green; the complete
+  `.\scripts\RunTests.ps1` runs once per merge into main, on the merged tree.** Merge main into the
+  branch, run it there, then merge the branch into main. Targeted and quick runs are partial by
+  design and never satisfy that landing gate. `CSVM.Tests/`-only, documentation, and tooling
+  changes do not require the full run to land.
+- **A complete PASS writes a green stamp** keyed on the content of `CSVM/`, `CSVM.Tests/` and
+  `analysis/goldens/`, shared by every worktree. The plain complete run on stamped content prints
+  `already green` and exits 0 without running (`-Force` runs it), so main after a merge of a
+  stamped tree costs nothing. The pre-push hook (`CheckPushGreen.ps1`) refuses a push to main whose
+  tip carries no stamp; `-Commit <rev>` asks about one commit.
 - **A landing over a red battery carries a waiver in its own commit body**, one line per failing
   suite: `Waiver: <suite> (owned by #N): <why the landing does not wait for it>`. The
   owner is the open issue that tracks the failure, filed before the landing if nothing tracks it
@@ -169,8 +177,10 @@ One line each, **the game files, the launch scripts and the release scripts are 
   or the gaming-mode lock wait did (`docs/tooling.md`); re-run it, and never land on it.
 - **Start `RunTests.ps1` with `run_in_background` and wait until it exits**; a subagent waits with
   Monitor and never ends its turn while a run is live. Gaming mode (`GamingMode.ps1 status`) can
-  switch on at any time, queueing every run behind one machine-wide lock and throttling it, so a
-  run can pass the 10-minute foreground cap.
+  switch on at any time. A run that holds the whole engine catalog or the goldens then ends
+  `DEFERRED` at once: go on with `-Quick` and targeted runs, report the complete run as owed, and
+  run it once `status` reads off. A smaller run queues behind one machine-wide lock and runs
+  throttled, so it can pass the 10-minute foreground cap.
 - **To start on a quiet machine, pass `-WaitQuiet`**, which waits for every scripted CSVM Godot to
   end (never the user's own play) and names each one; write no wait loop of your own. A red that matches `docs/verification.md`'s
   known environmental reds is rerun alone with the command given there.

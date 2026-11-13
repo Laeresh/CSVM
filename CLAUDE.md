@@ -4,8 +4,9 @@ Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first, it has the project descri
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
-Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\scripts\RunTests.ps1` is the
-landing gate for any change under `CSVM/`.
+Follow PROJECT_CONTEXT.md's "Development verification loop": a branch commit lands on its targeted
+runs and `-Quick`, and the complete `.\scripts\RunTests.ps1` is the gate for a merge into main that
+changes `CSVM/`.
 
 ## Claude Code specifics
 
@@ -26,7 +27,8 @@ landing gate for any change under `CSVM/`.
   a command that runs `Godot_v4*.exe` directly is blocked, launch through `RunProbe.ps1`, which
   admits it against the memory ledger (`MemoryLedger.ps1 status`); (4) the format gate,
   [`FormatBeforeTests.ps1`](scripts/FormatBeforeTests.ps1): `dotnet format` and a `-t:Rebuild` that blocks
-  on StyleCop warnings, before an invocation of `RunTests.ps1`, `dotnet test` or `git commit`;
+  on StyleCop warnings, before an invocation of `RunTests.ps1`, `dotnet test` or `git commit`, and
+  nothing at all on a tree whose `CSVM/` content already passed it;
   (5) the content gate, [`CheckCommitContent.ps1`](scripts/CheckCommitContent.ps1), before a commit. After
   an Edit or Write,
   `CheckCommentCaps.ps1 -Hook` reports an over-cap comment in a `.cs` file and
