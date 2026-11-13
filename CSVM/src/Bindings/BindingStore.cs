@@ -33,6 +33,7 @@ public sealed class BindingStore
 
     private const string MouseFlyingField = "mouseFlying";
     private const string MouseSensitivityField = "mouseSensitivity";
+    private const string ControlSchemeField = "controlScheme";
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
     private const string XrToken = "xr";
@@ -90,6 +91,8 @@ public sealed class BindingStore
             w.WriteBoolean(MouseFlyingField, profile.MouseFlying);
             // The same rule: an older file names no sensitivity and reads the unscaled default.
             w.WriteNumber(MouseSensitivityField, profile.MouseSensitivity);
+            // The same rule again: an older file names no scheme and reads Original.
+            w.WriteString(ControlSchemeField, Word(profile.ControlScheme));
             w.WriteStartObject("contexts");
             foreach (var context in Enum.GetValues<InputContext>())
             {
@@ -154,6 +157,9 @@ public sealed class BindingStore
             {
                 profile.MouseSensitivity = scale;
             }
+
+            // A field this build does not name, such as an older build's chaseCamera, is never read.
+            profile.ControlScheme = ReadWord(root, ControlSchemeField, ControlScheme.Original);
 
             if (!root.TryGetProperty("contexts", out var contexts) || contexts.ValueKind != JsonValueKind.Object)
             {
@@ -618,6 +624,29 @@ public sealed class BindingStore
         }
 
         return false;
+    }
+
+    // A choice's saved word, its name in lower case.
+    private static string Word<T>(T value)
+        where T : struct, Enum => value.ToString().ToLowerInvariant();
+
+    // A choice read back by its word. A missing field, a number or an unknown word reads as the
+    // shipped choice. Like a bad row, it costs that field and nothing else.
+    private static T ReadWord<T>(JsonElement root, string name, T fallback)
+        where T : struct, Enum
+    {
+        if (root.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String)
+        {
+            foreach (var value in Enum.GetValues<T>())
+            {
+                if (Word(value) == field.GetString())
+                {
+                    return value;
+                }
+            }
+        }
+
+        return fallback;
     }
 
     private static bool TryParseContext(string text, out InputContext context) =>

@@ -167,6 +167,21 @@ public sealed class ControlsFeature : IMenuFeature
         }
     }
 
+    /// <summary>The seat being edited's control scheme, staged like the mouse scheme. A pad-only seat
+    /// takes it too. The scheme also picks the seat's chase camera.</summary>
+    public ControlScheme ControlScheme
+    {
+        get => _seats[_player].ControlScheme;
+        set
+        {
+            var seat = _seats[_player];
+            if (seat.ControlScheme == value)
+                return;
+            seat.ControlScheme = value;
+            MarkDirty();
+        }
+    }
+
     private ActionMap Map => _seats[_player].Working[_context];
 
     /// <summary>Registers one seat's live keymap. The profile is the one its polling sites read, not
@@ -465,6 +480,7 @@ public sealed class ControlsFeature : IMenuFeature
 
             seat.Profile.MouseFlying = seat.MouseFlying;
             seat.Profile.MouseSensitivity = seat.MouseSensitivity;
+            seat.Profile.ControlScheme = seat.ControlScheme;
             _save?.Invoke(player, seat.Profile);
             Accepted?.Invoke(player, seat.Profile);
         }
@@ -628,6 +644,8 @@ public sealed class ControlsFeature : IMenuFeature
 
         public float MouseSensitivity { get; set; }
 
+        public ControlScheme ControlScheme { get; set; }
+
         public DeviceId PadOf(InputContext context) => Devices.PadOf(context);
 
         /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
@@ -638,6 +656,7 @@ public sealed class ControlsFeature : IMenuFeature
 
             MouseFlying = Profile.MouseFlying && ReadsKeyboard;
             MouseSensitivity = Profile.MouseSensitivity;
+            ControlScheme = Profile.ControlScheme;
         }
     }
 }

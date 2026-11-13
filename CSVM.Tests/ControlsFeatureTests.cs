@@ -785,6 +785,54 @@ public class ControlsFeatureTests
         Assert.Equal(SensitivityScale.Max, feature.MouseSensitivity);
     }
 
+    /// <summary>A fresh seat flies the Original scheme. Choosing Assisted is staged, and nothing
+    /// reaches the seat until Accept.</summary>
+    [Fact]
+    public void AssistedIsStagedAndAcceptWritesIt()
+    {
+        var written = new List<ControlScheme>();
+        var feature = new ControlsFeature((_, profile) => written.Add(profile.ControlScheme));
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        feature.AddSeat(1, seat, OnePad(), readsKeyboard: false);
+        Assert.Equal(ControlScheme.Original, feature.ControlScheme);
+
+        feature.ControlScheme = ControlScheme.Assisted;
+        Assert.Equal(ControlScheme.Original, seat.ControlScheme);
+        Assert.True(feature.Dirty);
+
+        feature.Accept();
+
+        Assert.Equal(ControlScheme.Assisted, seat.ControlScheme);
+        Assert.Equal(new[] { ControlScheme.Assisted }, written);
+    }
+
+    /// <summary>Each seat holds its own scheme: one player's Assisted reaches no other seat, and
+    /// Cancel drops a staged change.</summary>
+    [Fact]
+    public void TheSchemeIsPerSeatAndCancelDropsIt()
+    {
+        var feature = new ControlsFeature();
+        var one = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var two = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        feature.AddSeat(1, one, OnePad(), true);
+        feature.AddSeat(2, two, OnePad(), false);
+
+        feature.Player = 2;
+        feature.ControlScheme = ControlScheme.Assisted;
+        feature.Player = 1;
+        Assert.Equal(ControlScheme.Original, feature.ControlScheme);
+        feature.ControlScheme = ControlScheme.Assisted;
+        feature.Cancel();
+        Assert.Equal(ControlScheme.Original, feature.ControlScheme);
+
+        feature.Player = 2;
+        feature.ControlScheme = ControlScheme.Assisted;
+        feature.Accept();
+
+        Assert.Equal(ControlScheme.Original, one.ControlScheme);
+        Assert.Equal(ControlScheme.Assisted, two.ControlScheme);
+    }
+
     /// <summary>A pad-only splitscreen seat has no mouse to give the stick, so the row cannot put it
     /// on one and a saved file cannot either.</summary>
     [Fact]
