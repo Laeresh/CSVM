@@ -1,11 +1,12 @@
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
 
 /// <summary>The Assisted control law's outputs at fixed states, on the default airframe so no
-/// install is needed. The flown behaviour (a held turn, a loop) is the <c>flight-assisted-law</c>
+/// install is needed, and a steep turn on two shipped ones. The flown behaviour (a held turn, a loop) is the <c>flight-assisted-law</c>
 /// suite's; these pin the deflections <c>docs/assisted-flight.md</c> describes.</summary>
 public class AssistedFlightTests
 {
@@ -132,6 +133,141 @@ public class AssistedFlightTests
         Assert.True(back < 3f, $"the nose falls back {back} degrees from {noseAt}");
         Assert.True(Mathf.Abs(PathDeg(plant) - noseAt) < 2f, $"the path settles at {PathDeg(plant)} against the nose's {noseAt} at release");
     }
+
+    /// <summary>Sideways stick turns the plane at every nose angle. A steep climb or dive is flown
+    /// from the start, where a law that stands its turn down near vertical leaves the stick dead.</summary>
+    [ExtractedDataTheory]
+    [InlineData("player_bhawk", -85f)]
+    [InlineData("player_bhawk", -70f)]
+    [InlineData("player_bhawk", 70f)]
+    [InlineData("player_bhawk", 85f)]
+    [InlineData("player_autogyro", -85f)]
+    [InlineData("player_autogyro", -70f)]
+    [InlineData("player_autogyro", 70f)]
+    [InlineData("player_autogyro", 85f)]
+    public void FullSidewaysStick_TurnsOnASteepClimbOrDive(string plane, float noseDeg)
+    {
+        var stats = PlaneStats.Load(TestZrdr.Root, plane);
+        var plant = new FlightModel(stats);
+        var attitude = Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(noseDeg)).Rotated(Vector3.Up, 0.7f);
+        plant.Reset(new Vector3(0f, 800f, 0f), attitude, stats.FdSpeed * 0.8f, 1f);
+        var state = default(AssistedState);
+        var stick = new FlightInput { Roll = 1f, Throttle = 1f };
+        float heading = HeadingDeg(plant), turned = 0f;
+        for (int i = 0; i < 180; i++)
+        {
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+            float now = HeadingDeg(plant);
+            turned += Mathf.Wrap(now - heading, -180f, 180f);
+            heading = now;
+        }
+
+        Assert.True(turned > 60f, $"[{plane}] nose at {noseDeg} degrees, full left stick turns {turned} degrees left in 3 s");
+    }
+
+    /// <summary>On its back with sideways stick held, the plane stays over and holds its height. It
+    /// turns toward the stick on the level chase's upside-down screen, which is the other way in
+    /// the world. Centring the stick is what rolls it upright.</summary>
+    [ExtractedDataTheory]
+    [InlineData("player_bhawk", 1f)]
+    [InlineData("player_bhawk", -1f)]
+    [InlineData("player_autogyro", 1f)]
+    [InlineData("player_autogyro", -1f)]
+    public void OnItsBack_AHeldSidewaysStickTurnsThatWayOnTheScreenAndStaysInverted(string plane, float side)
+    {
+        var stats = PlaneStats.Load(TestZrdr.Root, plane);
+        var plant = new FlightModel(stats);
+        var attitude = Basis.Identity.Rotated(Vector3.Back, Mathf.Pi).Rotated(Vector3.Up, 0.7f);
+        plant.Reset(new Vector3(0f, 1200f, 0f), attitude, stats.FdSpeed * 0.8f, 1f);
+        var state = default(AssistedState);
+        var stick = new FlightInput { Roll = side, Throttle = 1f };
+        float heading = HeadingDeg(plant), turned = 0f, highestUp = -1f, screenLeft = 0f;
+        LevelChaseHold? hold = null;
+        for (int i = 0; i < 240; i++)
+        {
+            var nose = -plant.Attitude.Z;
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+            float now = HeadingDeg(plant);
+            turned += Mathf.Wrap(now - heading, -180f, 180f);
+            heading = now;
+            highestUp = Mathf.Max(highestUp, plant.Attitude.Y.Y);
+
+            // The seat's own chase frame: how far the nose swung toward the screen's left, radians.
+            var view = LevelChase.Step(plant.Attitude, hold, Dt, out var next);
+            hold = next;
+            screenLeft -= (-plant.Attitude.Z - nose).Dot(view.X);
+        }
+
+        Assert.True(side * turned < -40f, $"[{plane}] stick {side} turns {turned} degrees in 4 s, world left positive");
+        Assert.True(side * screenLeft > 0.6f, $"[{plane}] stick {side} swings the nose {screenLeft} rad toward the screen's left");
+        Assert.True(highestUp < 0f, $"[{plane}] it stays on its back (up axis height at most {highestUp})");
+        Assert.True(Mathf.Abs(plant.Position.Y - 1200f) < 30f, $"[{plane}] it holds its height ({plant.Position.Y} m from 1200)");
+
+        stick.Roll = 0f;
+        for (int i = 0; i < 180; i++)
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+        Assert.True(plant.Attitude.Y.Y > 0.95f, $"[{plane}] centred, it is upright 3 s later (up axis height {plant.Attitude.Y.Y})");
+    }
+
+    /// <summary>A turn with the nose well off level drifts the bank toward knife edge. Held for 6 s
+    /// it stays short of it, so neither the law nor the level chase changes sides mid-turn.</summary>
+    [ExtractedDataTheory]
+    [InlineData("player_bhawk", 60f)]
+    [InlineData("player_bhawk", -60f)]
+    [InlineData("player_autogyro", 60f)]
+    [InlineData("player_autogyro", -60f)]
+    public void ASteepHeldTurn_StaysShortOfKnifeEdge(string plane, float noseDeg)
+    {
+        var stats = PlaneStats.Load(TestZrdr.Root, plane);
+        var plant = new FlightModel(stats);
+        var attitude = Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(noseDeg)).Rotated(Vector3.Up, 0.7f);
+        plant.Reset(new Vector3(0f, 800f, 0f), attitude, stats.FdSpeed * 0.8f, 1f);
+        var state = default(AssistedState);
+        var stick = new FlightInput { Roll = 1f, Throttle = 1f };
+        float steepest = 0f;
+        for (int i = 0; i < 360; i++)
+        {
+            plant.Step(AssistedFlight.Steer(stick, plant, ref state, Dt), Dt);
+            steepest = Mathf.Max(steepest, Mathf.Abs(Mathf.RadToDeg(Mathf.Atan2(plant.Attitude.X.Y, plant.Attitude.Y.Y))));
+            Assert.False(state.Inverted, $"[{plane}] nose at {noseDeg} degrees, the turn changed sides after {(i + 1) * Dt} s");
+        }
+
+        Assert.True(steepest < 90f, $"[{plane}] nose at {noseDeg} degrees, the bank reaches {steepest} degrees");
+    }
+
+    /// <summary>A hard upright turn sits near 90 degrees of bank. Tipped just past it, the plane
+    /// still counts as upright, so easing the stick rolls it back and not onto its back.</summary>
+    [Fact]
+    public void JustPastKnifeEdge_AnUprightTurnIsNotTakenForInverted()
+    {
+        var state = default(AssistedState);
+        AssistedFlight.Steer(new FlightInput { Roll = 1f }, Banked(80f), ref state, Dt);
+        var eased = AssistedFlight.Steer(new FlightInput { Roll = 0.3f }, Banked(100f), ref state, Dt);
+        Assert.False(state.Inverted);
+        Assert.True(eased.Roll < -0.5f, $"at 100 degrees of bank, part stick rolls back toward upright ({eased.Roll})");
+
+        // The control: the same bank and stick, arrived at from inverted, rolls further over.
+        var over = default(AssistedState);
+        AssistedFlight.Steer(new FlightInput { Roll = 1f }, Banked(175f), ref over, Dt);
+        Assert.True(AssistedFlight.Steer(new FlightInput { Roll = 0.3f }, Banked(100f), ref over, Dt).Roll > 0.5f);
+    }
+
+    [Fact]
+    public void TheTurnCap_KeepsAFloorWhileThePathSinksBelowTheHeldClimb()
+    {
+        // Level flight against a held climb of 30 degrees: a sink no turn rate can close.
+        var state = new AssistedState { HeldClimb = Mathf.DegToRad(30f), TurnCap = 0.5f, Primed = true };
+        var stick = new FlightInput { Roll = 1f };
+        var plant = Level();
+        for (int i = 0; i < 600; i++)
+            AssistedFlight.Steer(stick, plant, ref state, Dt);
+
+        Assert.True(state.TurnCap > 0.1f, $"the cap stops at {state.TurnCap} rad/s");
+        Assert.True(AssistedFlight.Steer(stick, plant, ref state, Dt).Roll > 0.5f, "and full stick still banks into the turn");
+    }
+
+    // Positive turning left, the plant's yaw sign.
+    private static float HeadingDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Atan2(-m.VelocityDir.X, -m.VelocityDir.Z));
 
     private static float NoseDeg(FlightModel m) => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-m.Attitude.Z.Y, -1f, 1f)));
 

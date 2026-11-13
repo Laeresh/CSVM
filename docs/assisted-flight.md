@@ -33,6 +33,10 @@ this page covers the law alone. The law is
 - **A centred stick holds the climb angle it was left at.**
 - **A held pull flies through vertical into a full loop.** Released while inverted, the plane rolls
   upright on its new heading, so half a loop ends as an Immelmann turn.
+- **On its back, a held stick keeps the plane inverted, and the stick is the screen's.** The level
+  chase camera follows the plane over the top and shows the world upside down there, so stick left
+  swings the nose to the left of that screen, which is a turn to the right in the world. The plane
+  holds its climb angle. Only a centred stick rolls it upright.
 - **The separate yaw input lands on the rudder after the loops**, for fine aim, and nothing in the
   law fights it.
 - **There is no stall or terrain protection.** The plane can stall and can fly into the ground.
@@ -144,7 +148,7 @@ climb rate over `PathLead`/`lift_accel_rate` seconds counts as closed, and the l
 between zero and the plain error. While the path still converges on the held angle the nose
 stays where it was left. Once the path slows inside the dead band the lean is the plain error,
 as in steady flight. Past `NearVerticalNoseY` the hold stands down, so a pull released with the
-nose within 26 degrees of vertical flies on until the nose comes back below that.
+nose within 10 degrees of vertical flies on until the nose comes back below that.
 
 **The hardest level turn is a loop, not a formula.** Lift constants are decoded only in part, so the
 full-stick turn rate `AssistedState.TurnCap` is found in flight: at full stick it rises at
@@ -152,12 +156,41 @@ full-stick turn rate `AssistedState.TurnCap` is found in flight: at full stick i
 (`CapLead`), cuts it through `CapGain`. It settles at full pull. Part stick scales from an estimate,
 `lift_accel_rate·2·sin(maxAOA/2)` (how fast the path can chase a nose the opposing-command limiter
 still lets lead it), until full stick has measured the real value. The estimate is a scale and never
-the full-stick answer.
+the full-stick answer. The cap never falls below `CapFloor` of the estimate: a plane that cannot
+hold its climb wings level sinks whatever the turn rate, and an unfloored cap would cut the turn to
+nothing and leave full stick dead until the nose came down.
 
-**A loop is measured from inverted.** Over the top of a held pull the bank is measured from
-inverted, so the loop flies on instead of rolling out halfway round. Released inverted, the bank
-target is upright and the plane rolls out on its new heading. With the nose within 26 degrees of
-vertical the bank has no meaning and the bank loop stands down.
+**Inverted flight is measured from inverted, in the screen's terms.** On its back with the stick
+off centre on either axis, the bank target is π plus the upright one and the world turn is the
+stick's reversed. A held pull therefore flies its loop on instead of rolling out halfway round. The
+level chase shows the world upside down on the plane's back
+([`org/cameraViews.md`](org/cameraViews.md)), so the reversed world turn is the one that swings the
+nose toward the stick on that screen. A stick read in world terms there turns the plane away from
+the stick as the player sees it. Centred, the bank target is upright and the plane rolls out on its
+heading. The turn and the climb hold mix through the measured bank on its back as they do upright; a
+held pull alone stays the plane's own, so the loop closes.
+
+**The law changes sides where the camera does.** `AssistedState.Inverted` changes only once the
+bank's cosine passes `InvertedEdge`, which is the sine of `LevelChase.FlipPastRad`: 110 degrees of
+bank onto its back and 70 off it, the bank at which the level chase flips its level. With a wider
+edge the screen is upside down while the stick is still read upright. A hard upright turn sits near
+90 degrees of bank, and without the hysteresis a degree of overshoot would hand it the inverted
+target. It reads the bank and not the up axis, because a loop pitching through vertical flips the
+bank at once while the up axis only creeps through zero.
+
+**A steep turn must not tip past knife edge.** With the nose off level a turn drifts the bank at
+tan(pitch) times the turn rate. A bank loop that only closes its error lets a climbing turn at 60
+degrees of nose run past 110 degrees of bank, where the law and the camera change sides and back
+several times in 6 s. Two terms stop it: the roll command leads the drift measured off the body
+rates, and the banked turn rate stops at the drift `RollLead` of the ailerons' steady roll rate can
+lead. The second matters on the Hoplite, whose ailerons are slower than its turn.
+
+**Sideways stick turns at every nose angle.** A yawed nose reads as bank by the tangent of the
+nose's angle, so the bank loop's roll rate is scaled by its cosine, which keeps the loop steady in a
+steep climb or dive. With the nose within 10 degrees of vertical the bank is too ill-defined to mix
+the turn through, and the turn goes to the rudder alone. The rudder tips the nose out of that band
+toward the stick, where the banked turn takes over. Without the cosine the steep dives spin (over
+1000 degrees in 8 s on the Bloodhawk).
 
 ## The autogyro
 
@@ -185,8 +218,11 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
 | `CapGain` | 0.05 (rad/s)/(m/s)/s | turn rate cut per m/s of sink at full stick |
 | `CapLead` | 1.5 s | how much of the sink's own rate the full-stick loop adds |
 | `CapRecover` | 0.2 rad/s² | how fast the turn cap rises at full stick, and returns to its estimate off it |
+| `CapFloor` | 0.5 | share of its estimate the turn cap keeps however far the path sinks |
+| `RollLead` | 0.7 | share of the ailerons' steady roll rate a banked turn may spend leading its bank drift |
 
-`NearVerticalNoseY` (0.9) is geometry rather than feel: past it bank is undefined.
+`NearVerticalNoseY` (0.985, 80 degrees) is geometry rather than feel: past it bank is too
+ill-defined to mix a turn through.
 
 ## The verification layers
 
@@ -194,8 +230,14 @@ Every constant below is a feel choice to settle at the controls, not a decoded v
   rudder alone inside the band, wings level on a centred stick from either side, full pull at full
   stick in a steep bank against half stick, the held climb angle, a pull at 60 degrees of bank putting
   climb on the rudder against a wings-level pull, the yaw input passing straight through, a held
-  pull over the top against a release, and a flown pull or push released with the path lagging,
-  which holds the nose's angle and settles the path on it.
+  pull over the top against a release, a flown pull or push released with the path lagging,
+  which holds the nose's angle and settles the path on it, and the turn cap's floor under a sink it
+  cannot close, and a bank just past knife edge reading as upright in a turn and as inverted when
+  come to from inverted. On the Bloodhawk and the Hoplite it flies full sideways stick from a nose
+  70 and 85 degrees up and down, which turns over 60 degrees in 3 s; from a nose 60 degrees up and
+  down for 6 s, where the bank stays under 90 degrees and the law never changes sides; and from
+  inverted, which stays on its back within 30 m of its height, swings the nose toward the stick in
+  the level chase's own frame, and is upright 3 s after centring.
 - The engine suite `flight-assisted-law` flies the law through a real seat's sim step
   (`FlightControllerBuild.InputSource`) on the Bloodhawk and the Hoplite, off the identity heading and
   high over an empty world (DIAG-19, INSTR-22). It checks that 12 s of full sideways stick loses

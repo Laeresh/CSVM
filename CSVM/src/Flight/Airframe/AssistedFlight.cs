@@ -21,6 +21,10 @@ public struct AssistedState
     /// <summary>The flight-path angle one step ago, for the climb rate.</summary>
     public float PreviousClimb;
 
+    /// <summary>Whether the plane counts as on its back. It changes only well past knife edge
+    /// either way, so a hard turn sitting at 90 degrees of bank never flips it.</summary>
+    public bool Inverted;
+
     /// <summary>False until the first step has read the plane.</summary>
     public bool Primed;
 }
@@ -74,8 +78,20 @@ public static class AssistedFlight
     /// Off full stick it returns to its estimate at the same rate.</summary>
     public const float CapRecover = 0.2f;
 
-    // Nose verticality past which bank means nothing, so the bank loop stands down.
-    private const float NearVerticalNoseY = 0.9f;
+    /// <summary>TUNE. The share of its estimate the turn cap keeps however far the path sinks. A
+    /// plane that cannot hold its climb wings level sinks whatever the turn, and still has to turn.</summary>
+    public const float CapFloor = 0.5f;
+
+    /// <summary>TUNE. The share of the ailerons' steady roll rate a banked turn may spend leading
+    /// its own bank drift. The rest stays for closing the bank's error.</summary>
+    public const float RollLead = 0.7f;
+
+    // Nose verticality past which bank is too ill-defined to mix a turn through or hold a climb on.
+    private const float NearVerticalNoseY = 0.985f;
+
+    // The bank's cosine past which the plane changes sides. It is the level chase's own flip, so
+    // the stick and the screen change sides together.
+    private static readonly float InvertedEdge = Mathf.Sin(Camera.LevelChase.FlipPastRad);
 
     /// <summary>One step's deflections from the pilot's summed stick. Its signs are the plant's own:
     /// Roll + turns left, Pitch + climbs, Yaw + noses left. Every field other than the three
@@ -89,7 +105,6 @@ public static class AssistedFlight
 
         float climb = Mathf.Asin(Mathf.Clamp(path.Y, -1f, 1f));
         float bank = Mathf.Atan2(att.X.Y, att.Y.Y); // + left wing low, ±π inverted
-        bool inverted = att.Y.Y < 0f;
         bool nearVertical = Mathf.Abs(att.Z.Y) > NearVerticalNoseY;
 
         // Steady body rate per full deflection: the plant damps torque exponentially, so a held
@@ -107,6 +122,12 @@ public static class AssistedFlight
             state = new AssistedState { HeldClimb = climb, TurnCap = estimate, PreviousClimb = climb, Primed = true };
         float climbRate = dt > 0f ? (climb - state.PreviousClimb) / dt : 0f;
         state.PreviousClimb = climb;
+        // Read off the bank, not the up axis. A loop pitching through vertical flips the bank at
+        // once, where the up axis only creeps through zero.
+        float cos = Mathf.Cos(bank), sin = Mathf.Sin(bank);
+        if (Mathf.Abs(cos) > InvertedEdge)
+            state.Inverted = cos < 0f;
+        bool inverted = state.Inverted;
         var rates = model.PhysicalBodyRates;
 
         float sx = Mathf.Clamp(stick.Roll, -1f, 1f);
@@ -115,18 +136,36 @@ public static class AssistedFlight
         float bankShare = travel > RudderBand ? (travel - RudderBand) / (1f - RudderBand) : 0f;
         float flatShare = Mathf.Min(travel / RudderBand, 1f) * (1f - bankShare);
         bool pulling = sy != 0f;
-        bool holding = !pulling && !inverted && !nearVertical;
+        bool holding = !pulling && !nearVertical;
+
+        // With the nose off level a turn drifts the bank at tan(pitch) times its rate. The banked
+        // turn stops at the drift the ailerons can lead.
+        float flat = Mathf.Sqrt(Mathf.Max(0f, 1f - (att.Z.Y * att.Z.Y)));
+        float led = RollLead * unitRoll * flat / Mathf.Max(Mathf.Abs(att.Z.Y), 1e-3f);
 
         // The turn asked for, in world terms: the flat rudder turn at the band's edge, blending into
         // the cap at full stick. The bank tilts as a real wing would carry that turn.
-        float bankTurn = bankShare * state.TurnCap;
+        float bankTurn = Mathf.Min(bankShare * state.TurnCap, led);
         float turn = Mathf.Sign(sx) * ((flatShare * FlatRudder * unitYaw) + bankTurn);
         float bankTarget = Mathf.Sign(sx) * Mathf.Atan(speed * bankTurn / stats.Gravity);
 
-        // Over the top of a loop the bank is measured from inverted, so a held pull flies on.
-        if (inverted && pulling)
+        // On its back with the stick held, the plane stays over and the stick is the screen's. The
+        // level chase shows the world upside down there, so stick left is a world turn to the right.
+        // Only a centred stick rolls it upright.
+        if (inverted && (pulling || sx != 0f))
+        {
+            turn = -turn;
             bankTarget = Wrap(Mathf.Pi + bankTarget);
-        float rollRate = nearVertical ? 0f : Mathf.Clamp(BankGain * Wrap(bankTarget - bank), -MaxRollRate, MaxRollRate);
+        }
+        // A yawed nose reads as bank by tan(pitch), so the bank loop fades with the nose's cosine.
+        float rollRate = flat * Mathf.Clamp(BankGain * Wrap(bankTarget - bank), -MaxRollRate, MaxRollRate);
+
+        // The roll leads the drift, or a steep climbing turn tips past knife edge and changes sides.
+        if (!nearVertical)
+        {
+            float drift = ((rates.X * sin) + (rates.Y * cos)) * -att.Z.Y / flat;
+            rollRate = Mathf.Clamp(rollRate - drift, -MaxRollRate, MaxRollRate);
+        }
         float roll = Deflect(rollRate + (RateGain * (rollRate - rates.Z)), unitRoll);
 
         // The climb asked for: a held stick's rate, or a centred stick's hold on the angle it was left at.
@@ -151,17 +190,22 @@ public static class AssistedFlight
             state.HeldClimb = noseClimb;
         }
 
-        // World turn and climb onto body pitch and yaw through the bank. Over the top, or with the
-        // nose near vertical, the pull is the plane's own and nothing turns.
+        // World turn and climb onto body pitch and yaw through the bank, which holds on its back
+        // too. Near vertical the rudder alone turns, so sideways stick is never dead. A pull held
+        // on its back is the plane's own, so a loop flies on, and the turn mixes in beside it.
         float pitchRate, yawRate;
-        if (inverted || nearVertical)
+        if (nearVertical)
         {
             pitchRate = climbAsk;
-            yawRate = 0f;
+            yawRate = inverted ? 0f : turn;
+        }
+        else if (inverted && pulling)
+        {
+            pitchRate = climbAsk + (turn * sin);
+            yawRate = turn * cos;
         }
         else
         {
-            float cos = Mathf.Cos(bank), sin = Mathf.Sin(bank);
             pitchRate = (climbAsk * cos) + (turn * sin);
             yawRate = (turn * cos) - (climbAsk * sin);
         }
@@ -174,14 +218,15 @@ public static class AssistedFlight
         // turn rate both ways. A surface saturating at part stick may only cut it.
         float excess = speed * (Mathf.Sin(climb) - Mathf.Sin(state.HeldClimb)); // m/s above the held climb
         excess += CapLead * speed * Mathf.Cos(climb) * climbRate;
+        float floor = CapFloor * estimate;
         if (holding && bankShare >= 1f)
         {
             float rise = saturated ? 0f : CapRecover;
-            state.TurnCap = Mathf.Clamp(state.TurnCap + (((CapGain * excess) + rise) * dt), 0f, ceiling);
+            state.TurnCap = Mathf.Clamp(state.TurnCap + (((CapGain * excess) + rise) * dt), floor, ceiling);
         }
         else if (holding && bankShare > 0f && saturated)
         {
-            state.TurnCap = Mathf.Clamp(state.TurnCap + (CapGain * Mathf.Min(excess, 0f) * dt), 0f, ceiling);
+            state.TurnCap = Mathf.Clamp(state.TurnCap + (CapGain * Mathf.Min(excess, 0f) * dt), floor, ceiling);
         }
         else
         {
