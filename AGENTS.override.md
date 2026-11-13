@@ -41,9 +41,11 @@ suite, or `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter
 "FullyQualifiedName~<test>"` for a unit. The hitch check is opt-in (`-Hitch`), so nothing has to be
 passed to keep it out. Use `.\scripts\RunTests.ps1 -Quick` for broad development
 confidence: it runs the checked-in quick unit and engine tiers and names every surface it did not
-check. Before landing code, run the complete `.\scripts\RunTests.ps1` (build → units → in-engine suites →
-golden hashes → one exit code) only when code under `CSVM/` changed. Quick and targeted runs never
-satisfy that landing gate. `CSVM.Tests/`-only, doc, and tooling changes (this file, `.pi/`,
-`.claude/`, `docs/`, scripts) do not need the full run. Each test stage prints its wall time against a
+check. A commit on a worktree branch lands on its targeted runs and `-Quick`. The complete
+`.\scripts\RunTests.ps1` (build → units → in-engine suites → golden hashes → one exit code) runs once
+per merge into main, on the merged tree, when code under `CSVM/` changed; its PASS writes the green
+stamp a push to main needs. Quick and targeted runs never satisfy that landing gate.
+`CSVM.Tests/`-only, doc, and tooling changes (this file, `.pi/`, `.claude/`, `docs/`, scripts) do
+not need the full run to land. Each test stage prints its wall time against a
 budget from `analysis/verification-budgets.json`; an `over budget` marker is awareness only and
 never changes the exit code.
