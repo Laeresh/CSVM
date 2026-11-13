@@ -78,6 +78,67 @@ public class BindingStoreTests
         Assert.False(loaded.MouseFlying);
     }
 
+    /// <summary>The control scheme rides in the seat's file as a word, Original on a fresh profile,
+    /// and comes back as saved.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheControlScheme()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile);
+        Assert.Contains("\"controlScheme\": \"original\"", json);
+
+        profile.ControlScheme = ControlScheme.Assisted;
+        json = BindingStore.Serialize(1, profile);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
+
+        Assert.Contains("\"controlScheme\": \"assisted\"", json);
+        Assert.Equal(ControlScheme.Assisted, loaded.ControlScheme);
+        AssertSameMaps(profile, loaded);
+    }
+
+    /// <summary>A file that still names a <c>chaseCamera</c> field loads whole with the field ignored.
+    /// The scheme alone decides the camera, and the next save drops the field.</summary>
+    [Theory]
+    [InlineData("original", "level")]
+    [InlineData("assisted", "original")]
+    public void AnOldChaseCameraFieldIsIgnored(string scheme, string camera)
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile).Replace(
+            "\"controlScheme\": \"original\",",
+            $"\"controlScheme\": \"{scheme}\", \"chaseCamera\": \"{camera}\",",
+            StringComparison.Ordinal);
+        Assert.Contains("chaseCamera", json, StringComparison.Ordinal);
+
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true, out string error);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(scheme == "assisted" ? ControlScheme.Assisted : ControlScheme.Original, loaded!.ControlScheme);
+        AssertSameMaps(profile, loaded);
+        Assert.DoesNotContain("chaseCamera", BindingStore.Serialize(1, loaded), StringComparison.Ordinal);
+    }
+
+    /// <summary>A file older than the field reads Original and keeps every row. So does a file
+    /// hand-edited to a word or a kind this build does not read.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("\"ASSISTED\"")]
+    [InlineData("\"auto\"")]
+    [InlineData("1")]
+    public void AnOlderOrHandEditedFileReadsTheOriginalScheme(string? field)
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile);
+        json = json.Replace("\"controlScheme\": \"original\",", field == null ? string.Empty : $"\"controlScheme\": {field},", StringComparison.Ordinal);
+        Assert.DoesNotContain("\"original\"", json, StringComparison.Ordinal);
+
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
+
+        Assert.Equal(ControlScheme.Original, loaded.ControlScheme);
+        AssertSameMaps(profile, loaded);
+    }
+
     /// <summary>The shipped sensitivity is written and read back as the unscaled multiplier, and a
     /// moved one comes back as moved.</summary>
     [Fact]

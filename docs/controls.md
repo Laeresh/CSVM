@@ -292,6 +292,37 @@ levels doubles `s` (`s = 2^((level - 50) / 25)`), so the ends land exactly on
 0.25 and 4 and every step reads the same in either direction. A step is 5
 levels, the slider's own key step, which multiplies `s` by about 1.15.
 
+## Assisted controls
+
+One remake-only choice, per seat and per player, stands on the launchscreen's
+CONTROLS page in a third panel under the Mouse panel: **Controls**, reading
+**Original** or **Assisted**. Original is the original's controls and the
+original's chase camera; Assisted is the assist below and the level chase camera
+below, always together. It reads Original on a new install, so the port flies
+as the original until a player opts in, and it applies under Original and
+Enhanced graphics alike. It is staged and saved like the mouse scheme above:
+ACCEPT CHANGES keeps it, CANCEL CHANGES puts it back, and it is written to that
+player's own keymap file (`bindings_p<n>.json`, field `controlScheme`). A
+pad-only splitscreen seat takes it too. A keymap file that still names a
+`chaseCamera` field loads normally; the field is ignored and the next save drops
+it.
+
+With Controls on Assisted, every device that flies the seat (keys, pad, flight
+stick and the mouse) steers through an assist: sideways stick turns the plane
+and stick back or forward climbs or dives against the horizon, while the assist
+works aileron, rudder and elevator ([assisted-flight.md](assisted-flight.md)).
+The autogyro takes the stick the same way, so sideways mouse travel banks and
+turns it rather than yawing it. A centred stick levels the wings and holds the
+climb, including while a network pause sheet takes the seat's flight input.
+
+With Controls on Assisted the chase view also follows the aircraft's heading and pitch but
+not its bank, so a turn never tilts the horizon. It follows the aircraft over the
+top of a loop, the world upside down there, and rolls upright as the aircraft
+rolls upright. The view stays level until the bank passes knife-edge by 20
+degrees, so a held knife-edge keeps it; past that it rolls half a turn to the
+other level, the way the aircraft is rolling. Cockpit, nose and the VR chase are
+unchanged.
+
 ## Any mode
 
 | Input | Pad | Does |

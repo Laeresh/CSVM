@@ -255,7 +255,7 @@ cameras through `Statics`, and the pilot's selected view mode (`PilotViewMode` d
 holds the state and the camera, `StepViewKeys` takes the selection controls' press edges, and `ResetToChase` is the player's own destroy callback). The chase
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound. The zoom's three resets apply only with `Utils/CameraZoomMemory.cs`'s option off, and `RememberZoom` seeds and saves the remembering pilot's zoom.
-The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
+The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares (on an Assisted seat those frames ease toward `LevelChase`'s bankless frame instead of the attitude, held per `Shot` in `_levelHold`); `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
 authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
@@ -1304,6 +1304,15 @@ axis and takes that travel's own 0.1, a port rule and not a decoded one. Pure an
 suite drives it with no window; `FlightController` sums what it returns into the keyboard and pad
 deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
+## src/Flight/Airframe/AssistedFlight.cs
+The Assisted control scheme's law, remake-only: the pilot's summed stick read as a world turn rate
+and climb rate, projected through the bank onto elevator and rudder, with aileron tracking a bank
+target. Inside `RudderBand` the turn is flat on rudder; a centred stick holds the climb angle on the
+nose; full sideways stick is the hardest turn that holds height, found by a vertical-speed loop on
+`AssistedState.TurnCap`; a held pull loops and a release inverted rolls upright. The separate yaw
+input lands on the rudder after the loops. It writes only a `FlightInput` and carries its state in
+the caller's `AssistedState`; `FlightController` is the one caller in flight. Engine-free. Design: [../assisted-flight.md](../assisted-flight.md).
+
 ## src/Flight/Airframe/AnalogAxes.cs
 The two analogue shares of a seat's flight command. `Pad` bends pitch and roll through `PadCurve`
 (0.15 deadzone, squared), the curve `FlightController.StickCurve` forwards to. `Stick` reads the
@@ -1493,8 +1502,9 @@ controller's pre-tree state from either flight adapter, which `Bind` consumes ex
 as `Pilot` does, so `FlightController` exposes a public field for none; `Bind` copies them before
 resolving the `IFlightInputSource`, beside the `IWorldQuery` seam. A seat whose pose arrives over the
 wire takes no stick arm at all: the buffer's presence IS the ownership, so no seat is half remote.
-The same partial holds `ApplyProfile`, the one method a seat takes a keymap, mouse scheme and
-sensitivity through, at build and on a Controls page accepted in flight.
+The same partial holds `ApplyProfile`, the one method a seat takes a keymap, mouse scheme,
+sensitivity, chase camera and control scheme through, at build and on a Controls page accepted in
+flight. `ControlScheme`'s setter hands the Assisted law a fresh state when the value changes.
 
 ## src/Flight/Airframe/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
@@ -1532,7 +1542,7 @@ weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`) and the AI's weapons tick `AiWeaponsDrive`. The seat's keymap and device readers are `SeatControls`; this node performs what each of those
-reports, and holds the state the engine can only hold as state. Every physics query runs through the
+reports, and holds the state the engine can only hold as state. A person's seat on the Assisted scheme passes the keyboard arm's summed stick, and a wholly held seat's centred one, through `AssistedFlight.Steer` at one seam (`Steered`), with the mouse read before the autogyro exchange; the law's `AssistedState` is reset on a respawn, a held step and a scheme switch ([../assisted-flight.md](../assisted-flight.md)). Every physics query runs through the
 one `IWorldQuery` bound in `Bind`, and contact detection is `AircraftContactSweep`'s: one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
@@ -1709,6 +1719,16 @@ chase, a fixed offset in the aircraft's frame (`XrChase.Rigid`) or that frame un
 and `Watch` the level heading a static camera holds, facing the aircraft's track. `Screened` is the
 origin under a cutscene on the theater screen: the camera's eye on a held level heading. `XrRig.cs`
 applies it; `CameraController.cs` writes the poses; the per-view choices are in [../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
+
+## src/Flight/Camera/LevelChase.cs
+The flat chase's level frame (an Assisted seat's, `ControlScheme.Assisted`), engine-free: `Step` turns an attitude and last
+frame's `LevelChaseHold` (the frame's right axis and the level right it rolls to) into a frame with
+the aircraft's forward and no bank. `CameraController.Chase` feeds that frame to its eased frames in
+place of the attitude, so the rig's easing, distance, zoom and swing are unchanged. The level right
+is carried from last frame's, never chosen toward the sky (that is `XrMount.NoRoll`), so a loop goes
+over the top upside down. It flips only once the wing passes knife-edge by `FlipPastRad`, and the
+frame rolls there through the wing at `RollRateRad`; within `XrMount.VerticalConeCos` of vertical it
+is carried by projection. The rule and the rejected ones: [../org/cameraViews.md](../org/cameraViews.md), "The level chase camera".
 
 ## src/Flight/Camera/XrRig.cs
 The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),

@@ -780,6 +780,37 @@ one cue that the original has no counterpart for, TUNE and living in
 the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads
 stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
+## The level chase camera (remake-only)
+
+A seat on the Assisted control scheme (`BindingProfile.ControlScheme`) flies the same rig, easing, speed
+distance, zoom and look-stick swing; only the attitude the two eased frames chase changes.
+`LevelChase.Step` replaces the aircraft's attitude with a frame that keeps its forward and takes a
+level right axis. ⚠ Do not de-bank after the ease: the frames would trail a banked attitude and the
+view would roll on every turn entry.
+
+The frame's right axis rests on one of the two level rights, ±(forward × up). Which one is carried
+from frame to frame, never chosen toward the sky:
+
+- **Outside 20° of vertical** the target is the level right nearer last frame's target. Through a
+  pitch loop the aircraft's wing stays on it, so the view pitches over the top with the aircraft and
+  shows the world upside down there.
+- **The target flips** to the other level only when the aircraft's wing is more than 110° from it
+  (`FlipPastRad`, 20° past knife-edge). A held knife-edge, or a steep turn wobbling about 85°, keeps
+  one level; the recovery roll from inverted after a loop crosses the margin and flips it.
+- **The frame rolls to the target at 240°/s** (`RollRateRad`), faster than a 180°/s aileron roll so
+  it never falls half a turn behind. The roll is measured through the wing (frame to wing, then
+  wing to target), so the half turn after a flip goes the way the aircraft is rolling.
+- **Within 20° of vertical** (`XrMount.VerticalConeCos`) the level is undefined. The right axis and
+  the target are carried by projection onto each new forward, and nothing flips, so a roll on the
+  vertical leaves the frame still. Carrying tilts the right axis when the nose passes beside
+  vertical (5.8° for a 3° miss), and the frame rolls back to level at the roll rate on leaving.
+
+Rejected: `XrMount.NoRoll`'s sky-side up turns the view half over in one frame past vertical, the
+"sky always up" view the plan's Decision 5 declined; the VR chase covers that flip with a cut. A roll
+that is a fixed function of bank cannot both keep a 60° turn level and pass knife-edge smoothly: a
+narrow transition band amplifies a wobbling bank near 90°, and a wide one tilts the horizon in an
+ordinary steep turn. The 20° margin and the 240°/s rate are TUNE, for the controls.
+
 ## Views under a headset (remake-only)
 
 A headset turns the view with the player's own head, so a stereo session (`--xr-mode on` or
