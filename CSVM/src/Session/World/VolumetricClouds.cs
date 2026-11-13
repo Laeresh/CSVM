@@ -40,12 +40,13 @@ internal sealed partial class VolumetricClouds : Node3D
     private const float SpriteBandMarginM = 1000f;
 
     // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun; a
-    // storm dims the sun, greys the ambient and lets fewer, taller heads stand.
+    // storm dims the sun, greys the ambient and lets fewer, taller heads stand, clear air between them.
+    // Its rays run long through that air, so they take coarser steps.
     private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1";
     private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4";
     // An overcast deck under the heads: a lighter base, and the heads broken up over it.
     private const string DeckPreset = ClearPreset + ";amb_floor=0.45;cover_max=0.7;amb_gain=0.7";
-    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.7;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.6;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3";
+    private const string StormPreset = Common + ";head_soft=1.0;heads_gain=0.45;cover_max=0.6;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.08;step_near_m=45";
     // A storm's heads tower this far over the layer floor.
     private const float StormDepthM = 2450f;
 
@@ -850,8 +851,13 @@ internal sealed partial class VolumetricClouds : Node3D
         foreach (var pair in set.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = pair.Split('=');
-            var parts = kv[1].Split(',');
             var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var parts = kv.Length == 2 ? kv[1].Split(',') : Array.Empty<string>();
+            if (parts.Length is not (1 or 3) || !Array.TrueForAll(parts, p => float.TryParse(p, System.Globalization.NumberStyles.Float, inv, out _)))
+            {
+                Log.Warn("world", $"volumetric clouds: CSVM_CLOUD_SET skips '{pair}'");
+                continue;
+            }
             if (parts.Length == 3)
             {
                 material.SetShaderParameter(kv[0].Trim(), new Vector3(float.Parse(parts[0], inv), float.Parse(parts[1], inv), float.Parse(parts[2], inv)));
