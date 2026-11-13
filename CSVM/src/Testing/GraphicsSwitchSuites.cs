@@ -498,7 +498,7 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-volumetric-clouds-gi",
         "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
         + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
-        + "keep the same node at the word's march divisor between resolutions, move a puffer's draw past the slab "
+        + "keep the same node at the word's march divisor between resolutions, take every placed zeppelin hull to leave a bubble round, move a puffer's draw past the slab "
         + "and back with its Enhanced text dimmed by the slab's transmittance, "
         + "swap the tracers and gun smoke to veiled twins at the puffers' priority and back to their own materials, "
         + "move the rain past them and back, give the cloud shadows the chapter's clouds layer and back, "
@@ -515,7 +515,7 @@ internal static class GraphicsSwitchSuites
         {
             ApplyOption(null, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
             ApplyOption(null, GlobalIlluminationSetting.Lookup, GlobalIlluminationSetting.Off);
-            var live = Open(ctx, enhanced: true, chapter: CloudsChapter);
+            var live = Open(ctx, enhanced: true, chapter: CloudsChapter, extra: "--zeppelins");
             try
             {
                 if (!live.Built || live.Session.Weather is not { } weather)
@@ -560,6 +560,10 @@ internal static class GraphicsSwitchSuites
                         // Between resolutions the same node stands and only re-marches.
                         ctx.Check(VolumetricClouds.MarchDivisor == divisor && (standing == null || node == standing),
                             $"at {word} the march divisor is {divisor} on {(standing == null ? "the clouds just built" : "the same clouds node")} (divisor {VolumetricClouds.MarchDivisor}, same node {node == standing})");
+                        // C1C's zeppelins fly in the band, so each needs a bubble of clear air.
+                        int zeppelins = live.Session.ZeppelinHulls?.LiveCount ?? 0;
+                        ctx.Check(zeppelins > 0 && node?.HullCount == zeppelins,
+                            $"at {word} the clouds take every one of {CloudsChapter}'s placed zeppelins to leave a bubble round ({node?.HullCount} of {zeppelins})");
                     }
 
                     puffer.Show(0);

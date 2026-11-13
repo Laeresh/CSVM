@@ -72,13 +72,32 @@ vec2 csky_pc_slab_span(vec3 eye, vec3 dir, float bottom, float top) {
     return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
 }
 
+// The bubbles of clear air the slab leaves round the zeppelins (VolumetricClouds.FollowHulls): each
+// one's centre and radius, a zero radius for an empty slot. Globals take no arrays, hence four.
+global uniform vec4 csky_pc_bubble0;
+global uniform vec4 csky_pc_bubble1;
+global uniform vec4 csky_pc_bubble2;
+global uniform vec4 csky_pc_bubble3;
+
+// The share of the field one bubble leaves at `p`: none deep inside, all past its edge.
+float csky_pc_bubble_keep(vec4 b, vec3 p) {
+    return b.w > 0.0 ? smoothstep(b.w * 0.7, b.w, distance(p, b.xyz)) : 1.0;
+}
+
+// The share of the cloud field every bubble leaves at `p`.
+float csky_pc_bubbles(vec3 p) {
+    return csky_pc_bubble_keep(csky_pc_bubble0, p) * csky_pc_bubble_keep(csky_pc_bubble1, p)
+        * csky_pc_bubble_keep(csky_pc_bubble2, p) * csky_pc_bubble_keep(csky_pc_bubble3, p);
+}
+
 // The slab's layer as the effects drawn after it read it (VolumetricClouds.PublishGround): its floor
 // and top, and the deck's cover and depth. All zero while no slab draws.
 global uniform vec4 csky_pc_veil;
 
 // The share of an effect at `p` the slab lets through toward `eye`: 1 with no slab, or no layer
 // between them. It marches the slab's density over the ground shadow's globals: the heads in twelve
-// steps, and the deck in three over its own depth, which the heads' steps would step over.
+// steps, and the deck in three over its own depth, which the heads' steps would step over. The
+// zeppelins' bubbles hold no cloud here either, so a hit on a hull in its bubble shows undimmed.
 float csky_pc_veil_at(vec3 eye, vec3 p) {
     vec4 v = csky_pc_veil;
     vec3 d = p - eye;
@@ -99,7 +118,7 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
     for (int i = 0; i < 12; i++) {
         vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
         float c = csky_pc_cover_shaped(q, v.x, v.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
-        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * dt;
+        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * csky_pc_bubbles(q) * dt;
     }
     vec2 deck = csky_pc_slab_span(eye, dir, v.x, v.x + v.w);
     float d1 = min(deck.y, len);
@@ -107,7 +126,8 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
         float ddt = (d1 - deck.x) / 3.0;
         for (int i = 0; i < 3; i++) {
             vec3 q = eye + dir * (deck.x + ddt * (float(i) + 0.5));
-            od += csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z) * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
+            od += csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z) * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w)
+                * csky_pc_bubbles(q) * ddt;
         }
     }
     return exp(-od * k.z);
