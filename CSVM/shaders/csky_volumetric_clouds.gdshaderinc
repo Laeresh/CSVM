@@ -16,9 +16,17 @@ float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, fl
     if (cover <= 0.0 || p.y < bottom || p.y > deck_top) {
         return 0.0;
     }
+    // Cells about a kilometre across thin the sheet, lift its base and lower its top, so the sun
+    // leaks through the thin ones, the underside reads lumpy rather than one even grey, and from
+    // above the thinnest open onto the ground.
+    float cells = csky_pc_noise3(vec3(p.x, 3.0, p.z) / (detail_m * 6.0), 1911520717u);
+    float thick = mix(0.15, 1.0, smoothstep(0.25, 0.75, cells));
+    float h = (p.y - bottom) / max(deck_top - bottom, 1.0);
+    float base = (1.0 - thick) * 0.45;
+    float prof = smoothstep(base, base + 0.12, h) * (1.0 - smoothstep(0.3 + 0.25 * thick, 0.5 + 0.5 * thick, h));
     float n = csky_pc_fbm(p / (detail_m * 1.8));
     float body = clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
-    return body * csky_pc_deck_profile(p.y, bottom, deck_top);
+    return body * prof * thick;
 }
 
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
@@ -64,13 +72,32 @@ vec2 csky_pc_slab_span(vec3 eye, vec3 dir, float bottom, float top) {
     return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
 }
 
+// The bubbles of clear air the slab leaves round the zeppelins (VolumetricClouds.FollowHulls): each
+// one's centre and radius, a zero radius for an empty slot. Globals take no arrays, hence four.
+global uniform vec4 csky_pc_bubble0;
+global uniform vec4 csky_pc_bubble1;
+global uniform vec4 csky_pc_bubble2;
+global uniform vec4 csky_pc_bubble3;
+
+// The share of the field one bubble leaves at `p`: none deep inside, all past its edge.
+float csky_pc_bubble_keep(vec4 b, vec3 p) {
+    return b.w > 0.0 ? smoothstep(b.w * 0.7, b.w, distance(p, b.xyz)) : 1.0;
+}
+
+// The share of the cloud field every bubble leaves at `p`.
+float csky_pc_bubbles(vec3 p) {
+    return csky_pc_bubble_keep(csky_pc_bubble0, p) * csky_pc_bubble_keep(csky_pc_bubble1, p)
+        * csky_pc_bubble_keep(csky_pc_bubble2, p) * csky_pc_bubble_keep(csky_pc_bubble3, p);
+}
+
 // The slab's layer as the effects drawn after it read it (VolumetricClouds.PublishGround): its floor
 // and top, and the deck's cover and depth. All zero while no slab draws.
 global uniform vec4 csky_pc_veil;
 
 // The share of an effect at `p` the slab lets through toward `eye`: 1 with no slab, or no layer
 // between them. It marches the slab's density over the ground shadow's globals: the heads in twelve
-// steps, and the deck in three over its own depth, which the heads' steps would step over.
+// steps, and the deck in three over its own depth, which the heads' steps would step over. The
+// zeppelins' bubbles hold no cloud here either, so a hit on a hull in its bubble shows undimmed.
 float csky_pc_veil_at(vec3 eye, vec3 p) {
     vec4 v = csky_pc_veil;
     vec3 d = p - eye;
@@ -92,11 +119,11 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
         vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
         if (csky_pc_pw.x > 0.0) {
             // Per metre already; the exp below scales by the density gain.
-            od += csky_pc_heads_od_pw(q, dt) / max(k.z, 1e-6);
+            od += csky_pc_heads_od_pw(q, dt) * csky_pc_bubbles(q) / max(k.z, 1e-6);
             continue;
         }
         float c = csky_pc_cover_shaped(q, v.x, v.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
-        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * dt;
+        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * csky_pc_bubbles(q) * dt;
     }
     vec2 deck = csky_pc_slab_span(eye, dir, v.x, v.x + v.w);
     float d1 = min(deck.y, len);
@@ -108,7 +135,7 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
             float deck_d = csky_pc_pw.x > 0.0
                 ? csky_pc_deck_body_pw(q, v.z, csky_pc_pw_deck.x) * csky_pc_deck_profile(q.y, v.x, v.x + v.w) * csky_pc_pw.w / max(k.z, 1e-6) * csky_pc_pw_deck.y
                 : csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z);
-            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
+            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * csky_pc_bubbles(q) * ddt;
         }
     }
     return exp(-od * k.z);

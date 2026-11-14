@@ -249,7 +249,8 @@ decode's write-ups, in one commit window.
   number is the failure §3's provenance flags exist to catch, and it is no better for having arrived
   during the fix instead of during the write-up.
 - Land it complete: the code change, whatever `docs/architecture` or `docs/formats` entry the change
-  requires, and `.\scripts\RunTests.ps1` green. That runner is the landing gate for anything under `CSVM/`.
+  requires, and its targeted suites and `.\scripts\RunTests.ps1 -Quick` green. The complete run is the
+  gate for the merge into main (PROJECT_CONTEXT.md, "Development verification loop").
 - The verification record goes in the commit message, not into the issue body and not into the
   docs.
 

@@ -2883,7 +2883,7 @@ public partial class GameSession : Node3D
             return;
         }
         _volumetricClouds = VolumetricClouds.Create(_plane, weather, _sky!.CloudField, _worldScene,
-            weather.FogVolumes, _unplacedWatch?.CloudDeck != null);
+            weather.FogVolumes, _unplacedWatch?.CloudDeck != null, _zeppelins);
         _plane.AddChild(_volumetricClouds);
     }
 

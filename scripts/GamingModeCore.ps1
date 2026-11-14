@@ -1,5 +1,5 @@
-# Gaming mode's code: the marker, its expiry and tunables, the machine-wide lock, and the throttle a
-# runner applies at each stage boundary. GamingMode.ps1 is the command line over it; see
+# Gaming mode's code: the marker, its expiry and tunables, the machine-wide lock, the throttle a
+# runner applies at each stage boundary, and the stages it defers outright with the list of them. GamingMode.ps1 is the command line over it; see
 # docs/tooling.md. Dot-sourced by MemoryLedgerCore.ps1 (so by RunTests.ps1 and RunProbe.ps1), by
 # FormatBeforeTests.ps1 and by GamingMode.ps1. It takes no parameters, so dot-sourcing binds nothing
 # in the caller's scope.
@@ -16,6 +16,7 @@
 # the fixed path.
 $GamingMarker = if ($env:CSVM_GAMING_MARKER) { $env:CSVM_GAMING_MARKER } else { Join-Path ([System.IO.Path]::GetTempPath()) "csvm-gaming" }
 $GamingLock = "$GamingMarker.lock"
+$GamingOwed = "$GamingMarker.owed"
 $GamingDefaultHours = 4
 $GamingDefaults = [ordered]@{
     shards = 2; goldenWorkers = 1; dotnetCpus = 2; priority = "BelowNormal"; threads = 4; watchdogFactor = 3; maxWaitSec = 1800
@@ -95,6 +96,46 @@ function Get-GamingTimeoutSec {
     return $Seconds
 }
 
+<#
+.SYNOPSIS
+The DEFERRED line for a run that holds a stage gaming mode never starts, or $null. The whole engine
+catalog and the goldens are not queued and throttled like a selection: they would hold the lock for
+a battery's length, and their windowed launches share the GPU with the game. Pure.
+#>
+function Get-GamingDeferral {
+    param($Settings, [bool]$FullEngine, [bool]$Goldens)
+    if (-not $Settings -or -not ($FullEngine -or $Goldens)) { return $null }
+    $what = @()
+    if ($FullEngine) { $what += "the whole engine catalog" }
+    if ($Goldens) { $what += "the goldens" }
+    $verb = if ($what.Count -gt 1) { "do" } else { "does" }
+    $until = if ($Settings.Until) { "on until $($Settings.Until.ToString('HH:mm'))" } else { "on until switched off" }
+    return "DEFERRED: gaming mode ($until), $($what -join ' and ') $verb not run beside a game; -Quick, or a -Suite/-Filter run with -SkipGoldens, still does"
+}
+
+# Notes a deferred run for GamingMode.ps1 status, once per worktree and command.
+function Add-GamingOwed {
+    param([string]$Worktree, [string]$What)
+    try {
+        $row = "$Worktree`t$What"
+        $rows = @(if (Test-Path -LiteralPath $GamingOwed) { [System.IO.File]::ReadAllLines($GamingOwed) })
+        if (@($rows | Where-Object { $_.StartsWith("$row`t") }).Count -eq 0) {
+            [System.IO.File]::AppendAllText($GamingOwed, "$row`t$((Get-Date).ToString('HH:mm'))`n")
+        }
+    } catch { }
+}
+
+# The deferred runs noted since the list was last cleared, as "<worktree>: <command>, deferred hh:mm".
+function Get-GamingOwed {
+    if (-not (Test-Path -LiteralPath $GamingOwed)) { return @() }
+    try {
+        return @([System.IO.File]::ReadAllLines($GamingOwed) | Where-Object { $_ } | ForEach-Object {
+            $f = $_ -split "`t"
+            "$($f[0]): $($f[1]), deferred $($f[2])"
+        })
+    } catch { return @() }
+}
+
 function Format-GamingHolder {
     param($Held)
     if (-not $Held) { return "another run" }
@@ -120,7 +161,8 @@ function New-GamingRun {
 
 <#
 .SYNOPSIS
-A stage boundary: reads the marker. Off, it releases the lock and lifts the throttle. On, it takes
+A stage boundary: reads the marker. Off, it releases the lock and leaves the run's job at below-normal
+priority on every thread. On, it takes
 the machine-wide lock (waiting for it unless -NoWait) and throttles the run's job. Past the marker's
 maxWaitSec it sets .Deferred; switched off while waiting, it proceeds unthrottled. The caller
 releases the lock with Exit-GamingRun in a finally block.
@@ -171,9 +213,11 @@ function Sync-GamingStage {
     if ($Run.Settings) { $Run.Used = $Run.Settings }
     $throttle = $Run.Settings -and -not $Run.Deferred
     # Set-RunJobThrottle is JobObjectCore.ps1's; a caller without a job has nothing to throttle.
-    if (($throttle -or $Run.Throttled) -and (Get-Command Set-RunJobThrottle -ErrorAction SilentlyContinue)) {
+    if (Get-Command Set-RunJobThrottle -ErrorAction SilentlyContinue) {
         if ($throttle) { Set-RunJobThrottle -PriorityClass $Run.Settings.PriorityClass -Affinity $Run.Settings.AffinityMask }
-        else { Set-RunJobThrottle -PriorityClass 0 -Affinity 0 }
+        # Off, a run still sits below normal priority on every thread: it yields the CPU to whatever
+        # the user is doing and loses nothing on an idle machine.
+        else { Set-RunJobThrottle -PriorityClass ([uint32]$GamingPriorities["BelowNormal"]) -Affinity 0 }
     }
     $Run.Throttled = [bool]$throttle
 }

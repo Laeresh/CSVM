@@ -183,6 +183,7 @@ rows).
 - `src/Flight/Airframe/FlightModel.cs`, the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/Airframe/StickRamp.cs`, the keyboard stick as an accumulator: a held key ramps the axis at 2.5/s, release or reversal drops it to centre in one frame.
 - `src/Flight/Airframe/MouseFlight.cs`, the mouse as a stick: a cursor offset over the pane per axis, each deadzoned and rescaled, plus the autogyro exchange; engine-free.
+- `src/Flight/Airframe/AssistedFlight.cs`, the Assisted scheme's law: stick as a turn and a climb against the horizon, flown by the surfaces into the plant; engine-free.
 - `src/Flight/Airframe/AnalogAxes.cs`, the pad share of the flight command through the pad curve and the flight-stick share linear, plus the lever read that releases on an unplugged stick.
 - `src/Flight/Airframe/PropAnimator.cs`, spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/Airframe/ExhaustSmoke.cs`, the original's code-built exhaust trail: near-black smoke whose strength charges from the commanded lever running ahead of the live one.
@@ -292,6 +293,7 @@ rows).
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/Camera/XrMount.cs`, where a headset's tracking origin sits per view: the seat in first person, the rigid chase, a static camera's held heading, heading only for any other camera.
+- `src/Flight/Camera/LevelChase.cs`, the flat chase's level frame: the aircraft's forward without bank, over the top of a loop, rolling to the other level past knife-edge at a capped rate.
 - `src/Flight/Camera/XrRig.cs`, the VR seat: the XR origin and tracked head, the pane they fly, the per-frame placement and the recenter.
 - `src/Flight/Camera/XrSimEyes.cs`, the `--xr-sim` stand-in's eyes: the pinned head, each eye's view transform and its symmetric projection.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
@@ -963,6 +965,7 @@ both sit on top of these types.
 - `src/Bindings/InputContext.cs`, which set of controls a seat is reading (flight, menu, camera), because one control means different things per mode.
 - `src/Bindings/DefaultBindings.cs`, the shipped keymap as data, one map per context, reproducing `docs/controls.md`, and the placeholder a pad default uses.
 - `src/Bindings/BindingProfile.cs`, one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
+- `src/Bindings/ControlScheme.cs`, a seat's two remake-only flying choices: the control scheme (Original or Assisted) and the chase camera (Original or Level).
 - `src/Bindings/ActiveDevice.cs`, which side of a seat's hardware produced its last real input, and which of an action's bindings a prompt on that side names.
 - `src/Bindings/BindingStore.cs`, the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
 - `src/Bindings/SnapLookRows.cs`, the original's eight snap-look direction rows, composed into one head direction, and the move of an old four-row keymap onto them.

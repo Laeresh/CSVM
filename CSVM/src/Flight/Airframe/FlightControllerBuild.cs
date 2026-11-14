@@ -121,6 +121,22 @@ public partial class FlightController
         set => _controls.Profile.MouseSensitivity = value;
     }
 
+    /// <summary>Whether this seat's stick flies through the Assisted law
+    /// (<see cref="AssistedFlight"/>) and its flat chase holds the level frame
+    /// (<see cref="Camera.LevelChase"/>). The seat's own profile's value, read through each frame like
+    /// <see cref="MouseFlying"/> and set through <see cref="ApplyProfile"/>. A change hands the law
+    /// a fresh state, so the new scheme primes from the plane as it flies now.</summary>
+    public Bindings.ControlScheme ControlScheme
+    {
+        get => _controls.Profile.ControlScheme;
+        set
+        {
+            if (value != _controls.Profile.ControlScheme)
+                _assisted = default;
+            _controls.Profile.ControlScheme = value;
+        }
+    }
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default. Under the launch gate no file is read at all
@@ -133,12 +149,11 @@ public partial class FlightController
         ApplyProfile(Bindings.LaunchBindings.Profile(LocalPlayer + 1, default, readsKeyboard: true));
     }
 
-    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme and mouse
-    /// sensitivity, the whole
-    /// of what a seat takes from its player's keymap, and recomposes the prompts that name them.
-    /// ⚠ The build's saved read and a Controls page accepted in flight both come through here, so
-    /// anything a seat takes from a profile goes in this one method: a value copied anywhere else is
-    /// one an accepted edit cannot reach until the seat is rebuilt.</summary>
+    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme, mouse
+    /// sensitivity and control scheme, and recomposes the prompts that name them. That is the whole of
+    /// what a seat takes from its player's keymap. ⚠ Copy a profile value in this one method only.
+    /// The build's saved read and a Controls page accepted in flight both come through here. An
+    /// accepted edit cannot reach a value copied elsewhere until the seat is rebuilt.</summary>
     public void ApplyProfile(Bindings.BindingProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -147,6 +162,7 @@ public partial class FlightController
         FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
         MouseFlying = profile.MouseFlying;
         MouseSensitivity = profile.MouseSensitivity;
+        ControlScheme = profile.ControlScheme;
         ComposeControlPrompts();
     }
 

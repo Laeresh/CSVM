@@ -1395,7 +1395,9 @@ places are the page's. The pin, the FSR clamp and the Enhanced gate are `Options
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over
 `Bindings/SensitivityScale.cs`'s levels, the flying-scheme chooser on the Mouse panel's title line (the right half of the seat chooser's column,
-stopping above the slider's press region) and the KEYS AND BUTTONS door, which opens `OriginalKeysPage.cs`. Its edits are staged in the feature, so
+stopping above the slider's press region), then a third panel holding the control-scheme and chase-camera choosers in the same column, and the KEYS AND
+BUTTONS door, which opens `OriginalKeysPage.cs`. The third panel is the plate grown by one band of its own art (`PlateBandY`, `PlateBandHeight`, the
+Mouse panel cut inside the dark gaps around it), which takes the door, its description and the plaques one band down. Its edits are staged in the feature, so
 ACCEPT CHANGES writes the keymaps and CANCEL CHANGES and Back drop the visit, a pending steal going first; both then leave through the form's `Leave`.
 
 ## src/UI/Menu/Original/OriginalKeysPage.cs
@@ -1663,8 +1665,8 @@ the pending steal, which names every loser but a full axis's pair partner and wa
 `ConfirmSteal`. `BeginStickCapture`/`OfferStick` serve the original's Stick column, replacing only
 the same stick model's binding. `UnbindSlot`, `ResetContext`/`ResetSeat` (player 1's stick rows
 through the injected `IStickRows`), `OpenProfilesFolder`, the injected save (player 1's through
-`Sticks/StickScreens.cs`) and `Accepted` are the rest; mouse settings are staged with the maps.
-Model: [../org/input.md](../org/input.md).
+`Sticks/StickScreens.cs`) and `Accepted` are the rest; the seat's three profile choices are staged
+with the maps. Model: [../org/input.md](../org/input.md).
 
 ## src/UI/Menu/PlayerSetupFeature.cs
 Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are `PlayerSeat`s

@@ -14,6 +14,10 @@
 # report a clean tree whenever nothing changed since the last build. That is exactly the commit
 # case, and it would make the check silent where it matters.
 #
+# A CLEAN PASS IS REMEMBERED. It writes a stamp keyed on the content of CSVM/, .editorconfig and
+# Directory.Build.props (TreeStampCore.ps1), and a tree carrying that key, in any worktree, passes
+# at once without formatting or building. Any edit to those inputs moves the key.
+#
 # THE TREE IS THE ONE THE COMMAND NAMES. dotnet format WRITES, so formatting the wrong tree is
 # worse than checking it. The runner's own path names a tree (an absolute RunTests.ps1 lives in
 # one), then a "git -C <tree>" or --work-tree, then a directory change ahead of the invocation
@@ -103,6 +107,8 @@ function Invoke-FormatAndBuild {
     # Its stdout would join the return value, and any line there (the SDK's first-run banner) blocks.
     $null = dotnet format $proj --verbosity quiet
     $buildOutput = dotnet build $proj --verbosity quiet --nologo -t:Rebuild @BuildArgs 2>&1
+    # Only a build that finished has heard from every analyzer, so only it may stamp the tree clean.
+    $script:GateBuildOk = ($LASTEXITCODE -eq 0)
     return @($buildOutput | Select-String -Pattern 'SA\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' } | ForEach-Object { $_.Line })
 }
 
@@ -326,15 +332,24 @@ if ($target.Unresolved) {
 }
 if (-not $root) { exit 0 }
 
+# A tree whose format inputs match a clean pass, taken in any worktree, has nothing left to check:
+# the verdict is a function of that content alone. This is what keeps a commit after a test run, or
+# a second run with no edit between, from formatting and rebuilding again.
+. (Join-Path $scriptRoot 'TreeStampCore.ps1')
+if (Get-TreeStamp -Root $root -Kind 'format' -Key (Get-TreeKey -Root $root -Paths $FormatKeyPaths)) { exit 0 }
+
 # Gaming mode throttles the gate but never waits or locks: a wait would overrun the hook's timeout,
 # and a timed-out hook does not block the command, so the gate would be skipped silently. The
 # priority and affinity set on this short-lived process are inherited by dotnet and its children.
+# Off, the gate still runs below normal priority, so it yields the CPU to whatever the user is doing.
 . (Join-Path $scriptRoot 'GamingModeCore.ps1')
 $gaming = Get-GamingMode
+$me = [System.Diagnostics.Process]::GetCurrentProcess()
 if ($gaming) {
-    $me = [System.Diagnostics.Process]::GetCurrentProcess()
     $me.PriorityClass = [System.Diagnostics.ProcessPriorityClass]$gaming.priority
     $me.ProcessorAffinity = [IntPtr][int64]$gaming.AffinityMask
+} elseif ($GamingOnWindows) {
+    $me.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal
 }
 $gateWatch = [System.Diagnostics.Stopwatch]::StartNew()
 $remaining = @(Invoke-FormatAndBuild -Root $root -BuildArgs @(Get-GamingDotnetArgs $gaming -Build))
@@ -343,7 +358,13 @@ $remaining = @(Invoke-FormatAndBuild -Root $root -BuildArgs @(Get-GamingDotnetAr
 if ($gaming -and $gateWatch.Elapsed.TotalSeconds -gt 240) {
     [Console]::Error.WriteLine(('format gate: took {0:0} s throttled in gaming mode; past the hook timeout (.claude/settings.json) the gate is skipped silently' -f $gateWatch.Elapsed.TotalSeconds))
 }
-if ($remaining.Count -eq 0) { exit 0 }
+if ($remaining.Count -eq 0) {
+    # Keyed after the run, because dotnet format writes.
+    if ($script:GateBuildOk) {
+        Set-TreeStamp -Root $root -Kind 'format' -Key (Get-TreeKey -Root $root -Paths $FormatKeyPaths) -Fields @{ time = (Get-Date).ToString('s'); tree = $root }
+    }
+    exit 0
+}
 foreach ($line in $remaining) { [Console]::Error.WriteLine($line) }
 [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.')
 exit 2
