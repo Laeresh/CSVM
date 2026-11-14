@@ -75,6 +75,9 @@ internal sealed partial class VolumetricClouds : Node3D
     // PROTOTYPE (#347): the temporal march's 2x2 order, diagonal first so two frames cover both diagonals.
     private static readonly Vector2I[] Phases = { new(0, 0), new(1, 1), new(1, 0), new(0, 1) };
 
+    // The cloud lab's live edits, applied again after every rebuild (PROTOTYPE, clouds-look).
+    private static readonly Dictionary<string, float> _labValues = new();
+
     // PROTOTYPE (#347): full marches at half size, resolved over four frames; CSVM_CLOUD_TEMPORAL=0 marches every pixel.
     private static bool _temporalOn = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_TEMPORAL") != "0";
 
@@ -92,6 +95,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly List<MeshInstance3D> _hidden = new();
     // The prototype's float uniforms as its preset and CSVM_CLOUD_SET left them (PROTOTYPE, clouds-look).
     private readonly Dictionary<string, float> _protoValues = new();
+    // The same values before the cloud lab's edits, and the layer's top before them.
+    private readonly Dictionary<string, float> _presetValues = new();
     private readonly bool _hasDeck;
     // The temporal resolve's two targets, each the other's history (PROTOTYPE, #347).
     private readonly ShaderMaterial?[] _resolve = new ShaderMaterial?[2];
@@ -119,6 +124,7 @@ internal sealed partial class VolumetricClouds : Node3D
     private bool _hiding;
     // The layer's top before a storm raises it (PROTOTYPE, clouds-look).
     private float? _baseTop;
+    private float? _presetTop;
 
     private VolumetricClouds(Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
         SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck)
@@ -148,6 +154,12 @@ internal sealed partial class VolumetricClouds : Node3D
     /// <summary>Gets one temporal resolve target's render time while the temporal march runs, else null.
     /// The two targets alternate, so one's latest time is a frame's resolve.</summary>
     public static MeasuredRenderTime? ResolveTime { get; private set; }
+
+    /// <summary>Gets a value indicating whether the prototype look draws (PROTOTYPE, clouds-look).</summary>
+    public static bool LookOn => _prototype;
+
+    /// <summary>Gets the cloud lab's live edits as a <c>CSVM_CLOUD_SET</c> string.</summary>
+    public static string LabSetText => string.Join(";", System.Linq.Enumerable.Select(_labValues, kv => Pair(kv.Key, kv.Value)));
 
     private static bool PrototypeOn => _prototype;
 
@@ -205,6 +217,45 @@ internal sealed partial class VolumetricClouds : Node3D
         return "ok";
     }
 
+    /// <summary>PROTOTYPE: the look option <paramref name="name"/> as the slab stands, or as its preset
+    /// left it with <paramref name="preset"/>. Null with no slab. <c>depth_m</c> is the layer's depth.</summary>
+    public static float? LookValue(string name, bool preset = false)
+    {
+        if (_live?._material is not { } material || _live._bottom is not { } floor)
+            return null;
+        if (name == "depth_m")
+            return (preset ? _live._presetTop : _live._top) - floor;
+        if (name == "temporal")
+            return preset || _temporalOn ? 1f : 0f;
+        return (preset ? _live._presetValues : _live._protoValues).TryGetValue(name, out float v)
+            ? v
+            : RenderingServer.ShaderGetParameterDefault(material.Shader.GetRid(), name).AsSingle();
+    }
+
+    /// <summary>PROTOTYPE: the cloud lab sets one look option live. The edit outlasts a rebuild.</summary>
+    public static void LabSet(string name, float value)
+    {
+        _labValues[name] = value;
+        ControlSet(Pair(name, value));
+    }
+
+    /// <summary>PROTOTYPE: drops the cloud lab's edits, so the slab stands as its preset builds it.</summary>
+    public static void LabClear()
+    {
+        _labValues.Clear();
+        if (_live?._built != null)
+            _live.Rebuild();
+    }
+
+    /// <summary>PROTOTYPE: rebuilds the slab in the other look, for A/B at the controls.</summary>
+    public static void ToggleLook()
+    {
+        _prototype = !_prototype;
+        if (_live?._built != null)
+            _live.Rebuild();
+        Log.Info("world", $"volumetric clouds: look {(_prototype ? "prototype" : "today")}");
+    }
+
     public override void _EnterTree()
     {
         _live = this;
@@ -215,14 +266,12 @@ internal sealed partial class VolumetricClouds : Node3D
 
     public override void _ExitTree() => Follow(false);
 
-    // PROTOTYPE (clouds-look): Ctrl+Shift+V rebuilds the slab in the other look, for A/B at the controls.
+    // PROTOTYPE (clouds-look): Ctrl+Shift+V swaps the look.
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_built == null || @event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.V, CtrlPressed: true, ShiftPressed: true })
             return;
-        _prototype = !_prototype;
-        Rebuild();
-        Log.Info("world", $"volumetric clouds: look {(_prototype ? "prototype" : "today")}");
+        ToggleLook();
         GetViewport().SetInputAsHandled();
     }
 
@@ -252,6 +301,9 @@ internal sealed partial class VolumetricClouds : Node3D
 
     // One full-screen quad, the cloud shadows' pattern as the layer's coverage. Where the reduced
     // march runs for this view, the quad reads its target and marches only the pixels it cannot serve.
+    private static string Pair(string name, float value) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name}={value:R}");
+
     private static string SlabShader() => """
         shader_type spatial;
         render_mode blend_premul_alpha, unshaded, depth_draw_never, shadows_disabled, fog_disabled, cull_disabled, depth_test_disabled;
@@ -1171,17 +1223,22 @@ internal sealed partial class VolumetricClouds : Node3D
     private void ApplyPrototype(ShaderMaterial material)
     {
         _protoValues.Clear();
-        if (!PrototypeOn)
-            return;
-        material.SetShaderParameter("look", 1);
-        material.SetShaderParameter("shape_tex", CloudNoise.Shape);
-        material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-        string set = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
-        ApplySet(set, material);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
-        Log.Info("world", $"volumetric clouds: prototype look 1, set [{set}]");
+        if (PrototypeOn)
+        {
+            material.SetShaderParameter("look", 1);
+            material.SetShaderParameter("shape_tex", CloudNoise.Shape);
+            material.SetShaderParameter("detail_tex", CloudNoise.Detail);
+            string set = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
+            ApplySet(set, material);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
+            RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
+            Log.Info("world", $"volumetric clouds: prototype look 1, set [{set}]");
+        }
+        _presetValues.Clear();
+        foreach (var kv in _protoValues)
+            _presetValues[kv.Key] = kv.Value;
+        ApplySet(LabSetText, material);
     }
 
     // Writes "name=v;name=a,b,c" onto `materials`, floats kept for Proto. The int uniforms take ints.
@@ -1214,6 +1271,13 @@ internal sealed partial class VolumetricClouds : Node3D
                 Rebuild();
                 return;
             }
+            if (name is "depth_m" or "layer_top" && _bottom is { } floor)
+            {
+                // The layer's top moves with the uniform, so the ground shadow, the veil and the fog follow.
+                first += name == "depth_m" ? floor : 0f;
+                name = "layer_top";
+                _top = first;
+            }
             Variant value = parts.Length == 3 ? (Variant)new Vector3(first, float.Parse(parts[1], inv), float.Parse(parts[2], inv))
                 : name is "steps" or "step_budget" or "shaft_steps" or "look" or "bisect_n" ? (Variant)(int)first : (Variant)first;
             foreach (var material in materials)
@@ -1236,6 +1300,7 @@ internal sealed partial class VolumetricClouds : Node3D
             bool set = float.TryParse(System.Environment.GetEnvironmentVariable("CSVM_CLOUD_STORM_DEPTH"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float depth);
             _top = !(PrototypeOn && Storm) ? roof : set ? floor + depth : Mathf.Max(roof, floor + StormDepthM);
         }
+        _presetTop = _top;
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
         _built = root;
