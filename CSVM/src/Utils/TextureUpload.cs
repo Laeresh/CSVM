@@ -33,6 +33,25 @@ public static class TextureUpload
         return ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>A cube texture <paramref name="size"/> texels a side, one of <paramref name="slices"/> per
+    /// depth. Every slice's Image is held here as a 2D upload's is.</summary>
+    public static ImageTexture3D Create3D(int size, Image.Format format, IEnumerable<byte[]> slices)
+    {
+        Release();
+        var images = new Godot.Collections.Array<Image>();
+        foreach (var pixels in slices)
+        {
+            var image = Image.CreateFromData(size, size, false, format, pixels);
+            Park(image, keep: false);
+            images.Add(image);
+        }
+        var texture = new ImageTexture3D();
+        texture.Create(format, size, size, size, false, images);
+        // The queued upload holds its own references, so the list's go now, on this thread.
+        ((Godot.Collections.Array)images).Dispose();
+        return texture;
+    }
+
     /// <summary>Replaces <paramref name="texture"/>'s pixels, which must keep its size and format.
     /// The bytes are copied here, so the caller may refill <paramref name="pixels"/> at once.
     /// </summary>

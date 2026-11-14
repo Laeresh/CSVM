@@ -179,8 +179,36 @@ global uniform sampler3D csky_pc_shape_tex : filter_linear, repeat_enable;
 global uniform sampler3D csky_pc_warp_lat : filter_linear, repeat_enable;
 global uniform sampler2D csky_pc_tops_lat : filter_linear, repeat_enable;
 
-// csky_pc_noise3 off a lattice texture of its corners (CloudNoise.WarpLattice): the filter between two
-// corners, weighted by the smoothed fraction, is the noise's own interpolation.
+// csky_pc_noise3 off a lattice texture of its corners (CloudNoise.WarpLattice, TopsLattice). A shader
+// that defines CSKY_PC_LAT_EXACT before this include fetches the corners and mixes them itself: the
+// sampler's filter weighs in 1/256 steps, which terraces a 720 m cell every few metres on a cloud's
+// face. The ground shadow keeps the one filtered read: its soft edge shows no terrace, and the exact
+// read costs it eight fetches a lookup.
+#ifdef CSKY_PC_LAT_EXACT
+vec2 csky_pc_lat3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    ivec3 a = ivec3(i) & ivec3(255);
+    ivec3 b = (a + ivec3(1)) & ivec3(255);
+    vec2 x00 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, a.y, a.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, a.y, a.z), 0).rg, u.x);
+    vec2 x10 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, b.y, a.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, b.y, a.z), 0).rg, u.x);
+    vec2 x01 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, a.y, b.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, a.y, b.z), 0).rg, u.x);
+    vec2 x11 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, b.y, b.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, b.y, b.z), 0).rg, u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+vec2 csky_pc_lat2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = p - i;
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    ivec2 a = ivec2(i) & ivec2(255);
+    ivec2 b = (a + ivec2(1)) & ivec2(255);
+    vec2 x0 = mix(texelFetch(csky_pc_tops_lat, ivec2(a.x, a.y), 0).rg, texelFetch(csky_pc_tops_lat, ivec2(b.x, a.y), 0).rg, u.x);
+    vec2 x1 = mix(texelFetch(csky_pc_tops_lat, ivec2(a.x, b.y), 0).rg, texelFetch(csky_pc_tops_lat, ivec2(b.x, b.y), 0).rg, u.x);
+    return mix(x0, x1, u.y);
+}
+#else
 vec2 csky_pc_lat3(vec3 p) {
     vec3 i = floor(p);
     vec3 f = p - i;
@@ -192,10 +220,12 @@ vec2 csky_pc_lat2(vec2 p) {
     vec2 f = p - i;
     return texture(csky_pc_tops_lat, (i + 0.5 + f * f * (3.0 - 2.0 * f)) / 256.0).rg;
 }
+#endif
 
 // csky_pc_cover_shaped off the lattices: the same coverage without hashing. The slab and its ground
-// shadow both read it.
-float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape) {
+// shadow both read it. `gap` is how far the pattern's noise stands under the coverage's lower edge,
+// positive in clear air, which the slab's march strides by.
+float csky_pc_cover_lat_gap(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape, out float gap) {
     float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
     vec3 w = p / (detail_m * 4.0);
     vec2 warp = vec2(csky_pc_lat3(w).r, csky_pc_lat3(w + 17.0).g) - 0.5;
@@ -207,7 +237,14 @@ float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float c
     float rc = clamp(r, 0.0, 1.0);
     float rise = shape.x * pow(rc, 2.5) - shape.x * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
     float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
-    return smoothstep(lo - shape.y * 0.5, lo + shape.y * 0.5, csky_cloud_noise(q));
+    float x = csky_cloud_noise(q);
+    gap = lo - shape.y * 0.5 - x;
+    return smoothstep(lo - shape.y * 0.5, lo + shape.y * 0.5, x);
+}
+
+float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape) {
+    float gap;
+    return csky_pc_cover_lat_gap(p, bottom, top, detail_m, cover_bias, shape, gap);
 }
 
 // The baked-noise heads' extinction per metre at `p` under coverage `c`, without the detail erosion.

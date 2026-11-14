@@ -61,12 +61,9 @@ internal static class CloudNoise
                 CSVM.Utils.Log.Warn("world", $"volumetric clouds: noise cache not written: {ex.Message}");
             }
         }
-        var slices = new Godot.Collections.Array<Image>();
         int slice = n * n * 4;
-        for (int z = 0; z < n; z++)
-            slices.Add(Image.CreateFromData(n, n, false, Image.Format.Rgba8, data.AsSpan(z * slice, slice).ToArray()));
-        var texture = new ImageTexture3D();
-        texture.Create(Image.Format.Rgba8, n, n, n, false, slices);
+        var texture = CSVM.Utils.TextureUpload.Create3D(n, Image.Format.Rgba8,
+            System.Linq.Enumerable.Select(System.Linq.Enumerable.Range(0, n), z => data.AsSpan(z * slice, slice).ToArray()));
         CSVM.Utils.Log.Info("world", $"volumetric clouds: {(cached ? "loaded" : "baked")} {n}^3 noise in {(DateTime.UtcNow - started).TotalMilliseconds:0} ms");
         return texture;
     }
@@ -113,11 +110,7 @@ internal static class CloudNoise
             }
             data[z] = slice;
         });
-        var slices = new Godot.Collections.Array<Image>();
-        foreach (var slice in data)
-            slices.Add(Image.CreateFromData(n, n, false, Image.Format.Rg8, slice));
-        var texture = new ImageTexture3D();
-        texture.Create(Image.Format.Rg8, n, n, n, false, slices);
+        var texture = CSVM.Utils.TextureUpload.Create3D(n, Image.Format.Rg8, data);
         CSVM.Utils.Log.Info("world", $"volumetric clouds: built the 256^3 warp lattice in {(DateTime.UtcNow - started).TotalMilliseconds:0} ms");
         return texture;
     }

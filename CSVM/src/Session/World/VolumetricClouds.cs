@@ -622,6 +622,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // The march both passes share: the includes, the layer's uniforms and the march's functions.
     // Its pc_trace returns what a pixel needs before the scene and the fog.
     private static string MarchCode() => Src("march.glsl", """
+        #define CSKY_PC_LAT_EXACT
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_volumetric_clouds.gdshaderinc"
         #include "res://shaders/csky_terrain_shadow.gdshaderinc"
@@ -750,55 +751,9 @@ internal sealed partial class VolumetricClouds : Node3D
 
         uniform float fast_cover = 0.0;
 
-        // csky_pc_cover_shaped exactly, its warp and each cloud's own top read off the lattices
-        // (CloudNoise.WarpLattice, TopsLattice) instead of hashed. The ground shadow reads the same.
-        float pc_cover_fast(vec3 p) {
-            return csky_pc_cover_lat(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
-        }
-
-
-        // csky_pc_lat3 and csky_pc_lat2 with the corners fetched and mixed here. The sampler's filter
-        // weighs in 1/256 steps, which terraces a 720 m cell every few metres.
-        vec2 pc_lat3(vec3 p) {
-            vec3 i = floor(p);
-            vec3 f = p - i;
-            vec3 u = f * f * (3.0 - 2.0 * f);
-            ivec3 a = ivec3(i) & ivec3(255);
-            ivec3 b = (a + ivec3(1)) & ivec3(255);
-            vec2 x00 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, a.y, a.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, a.y, a.z), 0).rg, u.x);
-            vec2 x10 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, b.y, a.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, b.y, a.z), 0).rg, u.x);
-            vec2 x01 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, a.y, b.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, a.y, b.z), 0).rg, u.x);
-            vec2 x11 = mix(texelFetch(csky_pc_warp_lat, ivec3(a.x, b.y, b.z), 0).rg, texelFetch(csky_pc_warp_lat, ivec3(b.x, b.y, b.z), 0).rg, u.x);
-            return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
-        }
-
-        vec2 pc_lat2(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = p - i;
-            vec2 u = f * f * (3.0 - 2.0 * f);
-            ivec2 a = ivec2(i) & ivec2(255);
-            ivec2 b = (a + ivec2(1)) & ivec2(255);
-            vec2 x0 = mix(texelFetch(csky_pc_tops_lat, ivec2(a.x, a.y), 0).rg, texelFetch(csky_pc_tops_lat, ivec2(b.x, a.y), 0).rg, u.x);
-            vec2 x1 = mix(texelFetch(csky_pc_tops_lat, ivec2(a.x, b.y), 0).rg, texelFetch(csky_pc_tops_lat, ivec2(b.x, b.y), 0).rg, u.x);
-            return mix(x0, x1, u.y);
-        }
-
-        // csky_pc_cover_lat, with `cgap`: how far the pattern's noise stands under the coverage's lower edge.
+        // csky_pc_cover_shaped off the lattices, read exactly here (CSKY_PC_LAT_EXACT), with the stride measure `cgap`.
         float pc_cover_gap(vec3 p, out float cgap) {
-            vec4 shape = vec4(taper, head_soft, warp_m, shear_m);
-            float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
-            vec3 w = p / (detail_m * 4.0);
-            vec2 warp = vec2(pc_lat3(w).r, pc_lat3(w + 17.0).g) - 0.5;
-            vec3 q = p + vec3(warp.x * shape.z * (0.4 + h) + shape.w * h, 0.0, warp.y * shape.z * (0.4 + h));
-            float broad = pc_lat2(q.xz / (detail_m * 11.0)).r;
-            float fine = pc_lat2(q.xz / (detail_m * 4.0)).g;
-            float r = h / mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
-            float rc = clamp(r, 0.0, 1.0);
-            float rise = shape.x * pow(rc, 2.5) - shape.x * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
-            float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
-            float x = csky_cloud_noise(q);
-            cgap = lo - shape.y * 0.5 - x;
-            return smoothstep(lo - shape.y * 0.5, lo + shape.y * 0.5, x);
+            return csky_pc_cover_lat_gap(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m), cgap);
         }
 
         // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
