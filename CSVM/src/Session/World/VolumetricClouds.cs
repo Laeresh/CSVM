@@ -1231,7 +1231,11 @@ internal sealed partial class VolumetricClouds : Node3D
         FreeBuilt();
         _baseTop ??= _top;
         if (_bottom is { } floor && _baseTop is { } roof)
-            _top = PrototypeOn && Storm ? Mathf.Max(roof, floor + StormDepthM) : roof;
+        {
+            // PROTOTYPE (clouds-look): CSVM_CLOUD_STORM_DEPTH sets a storm's depth in metres, for trying a lower layer.
+            bool set = float.TryParse(System.Environment.GetEnvironmentVariable("CSVM_CLOUD_STORM_DEPTH"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float depth);
+            _top = !(PrototypeOn && Storm) ? roof : set ? floor + depth : Mathf.Max(roof, floor + StormDepthM);
+        }
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
         _built = root;
