@@ -171,6 +171,9 @@ global uniform vec4 csky_pc_heads_density;
 // the shape texture's tile in metres (0 keeps the procedural density), y the coverage cap, z the
 // bases' rag, w the density per metre (VolumetricClouds.PublishGround).
 global uniform vec4 csky_pc_pw;
+// PROTOTYPE (clouds-look): the baked-noise deck's shape tile in metres, and its density over the heads'.
+// z and w are the heads' edge_cut and edge_k, so a shadow ends where its cloud does.
+global uniform vec4 csky_pc_pw_deck;
 // The hints matter: the lattices and the noise tile, so they must repeat in a canvas shader too.
 global uniform sampler3D csky_pc_shape_tex : filter_linear, repeat_enable;
 global uniform sampler3D csky_pc_warp_lat : filter_linear, repeat_enable;
@@ -217,7 +220,8 @@ float csky_pc_density_pw(vec3 p, float bottom, float top, float c) {
     float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
     float base = clamp((s.r - (wfbm - 1.0)) / max(2.0 - wfbm, 1e-4), 0.0, 1.0);
     float body = base * smoothstep(0.0, 0.04 + csky_pc_pw.z * (1.0 - s.g), h);
-    return clamp((body - (1.0 - c)) / max(c, 1e-4), 0.0, 1.0) * csky_pc_pw.w;
+    float d = clamp((body - (1.0 - c)) / max(c, 1e-4), 0.0, 1.0);
+    return clamp((d - csky_pc_pw_deck.z) * csky_pc_pw_deck.w, 0.0, 1.0) * csky_pc_pw.w;
 }
 
 // The heads' optical depth over `len` metres at `p` in the baked-noise look.
@@ -226,9 +230,6 @@ float csky_pc_heads_od_pw(vec3 p, float len) {
     float c = clamp(csky_pc_cover_lat(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * csky_pc_heads_density.x, 0.0, 1.0) * csky_pc_pw.y;
     return csky_pc_density_pw(p, layer.x, layer.y, c) * len;
 }
-
-// PROTOTYPE (clouds-look): the baked-noise deck's shape tile in metres, and its density over the heads'.
-global uniform vec4 csky_pc_pw_deck;
 
 // The baked-noise deck's body at `p` over `cover` of the sky, before its profile and erosion: the
 // Perlin-Worley shape on a `tile_m` tile, so its underside lumps like stratocumulus.
