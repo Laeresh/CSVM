@@ -35,6 +35,14 @@ public sealed class ControlChannel
     private long _stepTarget;
     private string? _shotPath;
 
+    // fly: the frames to draw, the camera's move and turn per frame, and where the frames land.
+    private string? _flyDir;
+    private int _flyFrames;
+    private int _flyIndex;
+    private Vector3 _flyMove;
+    private Vector3 _flyTurn;
+    private bool _flySim;
+
     public ControlChannel(int port)
     {
         _listener = new TcpListener(IPAddress.Loopback, port);
@@ -153,6 +161,30 @@ public sealed class ControlChannel
                 _shotPath = Path.GetFullPath(string.Join(' ', words[1..]));
                 _waiting = cmd;  // the next _Process reads the frame drawn after this one
                 return;
+            case "cloud":
+                cmd.Reply.TrySetResult(VolumetricClouds.ControlSet(string.Join(' ', words[1..])));
+                return;
+            case "taa":
+                viewport.UseTaa = words[1] == "on";
+                cmd.Reply.TrySetResult("ok");
+                return;
+            case "fly":
+            case "flysim":
+                _flySim = verb == "flysim";
+                if (_camera == null)
+                {
+                    cmd.Reply.TrySetResult("err place the camera first");
+                    return;
+                }
+
+                _flyFrames = int.Parse(words[1], CultureInfo.InvariantCulture);
+                _flyMove = Vec(words[2]);
+                _flyTurn = Vec(words[3]) * (Mathf.Pi / 180f);
+                _flyDir = Path.GetFullPath(string.Join(' ', words[4..]));
+                Directory.CreateDirectory(_flyDir);
+                _flyIndex = 0;
+                _waiting = cmd;
+                return;
             case "quit":
                 cmd.Reply.TrySetResult("ok");
                 tree.Quit();
@@ -166,6 +198,35 @@ public sealed class ControlChannel
     private void Finish(Viewport viewport, GameClock? clock)
     {
         var cmd = _waiting!;
+        if (_flyDir != null)
+        {
+            // The frame drawn since the last tick shows the pose that tick set.
+            if (_flyIndex > 0)
+            {
+                viewport.GetTexture().GetImage()?.SavePng(Path.Combine(_flyDir, $"f{_flyIndex - 1:000}.png"));
+            }
+
+            if (_flyIndex++ >= _flyFrames || _camera == null)
+            {
+                cmd.Reply.TrySetResult($"ok {_flyFrames} frames in {_flyDir}");
+                _flyDir = null;
+                _waiting = null;
+                return;
+            }
+
+            // One camera move per drawn frame, as a flight has; flysim steps the sim with it.
+            _camera.GlobalPosition += _flyMove;
+            _camera.RotateY(_flyTurn.X);
+            _camera.RotateObjectLocal(Vector3.Right, _flyTurn.Y);
+            _camera.RotateObjectLocal(Vector3.Back, _flyTurn.Z);
+            if (_flySim)
+            {
+                clock?.StepOnce();
+            }
+
+            return;
+        }
+
         if (_shotPath != null)
         {
             var img = viewport.GetTexture().GetImage();
