@@ -222,6 +222,48 @@ internal sealed partial class CloudLab : Node
         return _savePath;
     }
 
+    /// <summary>PROTOTYPE (clouds-look): writes the standing look options that differ from the preset into
+    /// the chapter's look block. Returns the path written, or null where nothing was saved.</summary>
+    public string? SaveLook()
+    {
+        if (_savePath == null || _clouds() is not { } clouds || !VolumetricClouds.LookOn || VolumetricClouds.LookValue("od_step") == null)
+        {
+            // An empty save would drop the chapter's block, so one with no prototype slab writes nothing.
+            _note = "look not saved: needs the source tree and the prototype look standing";
+            UpdateStatus();
+            return null;
+        }
+        var look = new Dictionary<string, float>();
+        foreach (var r in LookRows)
+        {
+            // The temporal switch is the session's march mode, so no chapter saves it.
+            if (r.Key != "temporal" && VolumetricClouds.LookValue(r.Key) is { } v
+                && VolumetricClouds.LookValue(r.Key, 2) is { } preset && !Mathf.IsEqualApprox(v, preset))
+            {
+                look[r.Key] = v;
+            }
+        }
+        try
+        {
+            CloudShadowChapters.SaveLook(_savePath, _chapter, look);
+            clouds.Reload(CloudShadowChapters.Parse(System.IO.File.ReadAllText(_savePath, System.Text.Encoding.UTF8)));
+        }
+        catch (Exception ex) when (ex is System.IO.InvalidDataException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            _note = $"look not saved: {ex.Message}";
+            Log.Warn("ui", $"cloud lab: {_note}");
+            UpdateStatus();
+            return null;
+        }
+        // The saved values now build the slab, so the live edits over them go.
+        VolumetricClouds.LabClear();
+        _note = $"saved {_chapter}'s look ({look.Count} option(s) off the preset) to {_savePath}";
+        Log.Info("ui", $"cloud lab: {_note}");
+        SyncRows();
+        UpdateStatus();
+        return _savePath;
+    }
+
     private static Label Small(string text, Color? colour = null)
     {
         var label = new Label { Text = text, Modulate = colour ?? new Color(1, 1, 1, 0.75f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -242,7 +284,7 @@ internal sealed partial class CloudLab : Node
         new CloudShadowPattern.Field(r.Key, $"{r.Label}  [{r.Key}]", r.Min, r.Max, r.Step, "0.####", _ => null, (t, _) => t),
         _ => VolumetricClouds.LookValue(r.Key) ?? 0f,
         (_, v) => VolumetricClouds.LabSet(r.Key, v),
-        () => VolumetricClouds.LookValue(r.Key, true) ?? 0f);
+        () => VolumetricClouds.LookValue(r.Key, 1) ?? 0f);
 
     private string LayerText() => _editsClouds
         ? "Editing the clouds layer (applies while Volumetric Clouds is on)"
@@ -376,7 +418,7 @@ internal sealed partial class CloudLab : Node
         var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         box.AddThemeConstantOverride("separation", 4);
         box.AddChild(new Label { Text = "CLOUD LOOK  volumetric clouds", Modulate = Amber });
-        box.AddChild(Small("Each edit applies at once and lasts this session. Saved is the preset's value. Copy puts the edits on the clipboard as a CSVM_CLOUD_SET string.", Dim));
+        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, Reset returns to the saved look. Copy puts the edits on the clipboard as a CSVM_CLOUD_SET string.", Dim));
 
         var buttons = new HBoxContainer();
         _look = new Button { Text = LookText(), FocusMode = Control.FocusModeEnum.None };
@@ -386,6 +428,9 @@ internal sealed partial class CloudLab : Node
             SyncRows();
         };
         buttons.AddChild(_look);
+        var save = new Button { Text = "Save", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
+        save.Pressed += () => SaveLook();
+        buttons.AddChild(save);
         var reset = new Button { Text = "Reset", FocusMode = Control.FocusModeEnum.None };
         reset.Pressed += () =>
         {

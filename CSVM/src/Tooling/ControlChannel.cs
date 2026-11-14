@@ -165,11 +165,11 @@ public sealed class ControlChannel
                 cmd.Reply.TrySetResult(VolumetricClouds.ControlSet(string.Join(' ', words[1..])));
                 return;
             case "cloudlab":
-                // PROTOTYPE (clouds-look): shows or hides the cloud lab, for a still of its panels.
+                // PROTOTYPE (clouds-look): shows or hides the cloud lab, or with "save" presses its look's Save.
                 // By name: Tooling stands under the labs' family.
                 var lab = tree.Root.FindChild("cloud_lab", true, false);
-                lab?.Call("Toggle");
-                cmd.Reply.TrySetResult(lab == null ? "err no cloud lab (--freecam builds it)" : "ok");
+                var done = lab?.Call(words.Length > 1 && words[1] == "save" ? "SaveLook" : "Toggle");
+                cmd.Reply.TrySetResult(lab == null ? "err no cloud lab (--freecam builds it)" : $"ok {done}");
                 return;
             case "taa":
                 viewport.UseTaa = words[1] == "on";

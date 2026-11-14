@@ -100,6 +100,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly Dictionary<string, float> _protoValues = new();
     // The same values before the cloud lab's edits, and the layer's top before them.
     private readonly Dictionary<string, float> _presetValues = new();
+    // The preset's own values, before the chapter's saved look, and the layer's top before it.
+    private readonly Dictionary<string, float> _defaultValues = new();
     private readonly ZeppelinRuntime? _zeppelins;
     // Each zeppelin's host and its bubble's radius about the host's origin.
     private readonly List<(Node3D Host, float Radius)> _hulls = new();
@@ -131,6 +133,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // The layer's top before a storm raises it (PROTOTYPE, clouds-look).
     private float? _baseTop;
     private float? _presetTop;
+    private float? _defaultTop;
 
     private VolumetricClouds(Node3D worldRoot, WeatherRig weather, FogVolumeClutter? field,
         SceneBuilder? scene, IReadOnlyList<FogVolumeBox> volumes, bool hasDeck, ZeppelinRuntime? zeppelins)
@@ -233,17 +236,18 @@ internal sealed partial class VolumetricClouds : Node3D
         return "ok";
     }
 
-    /// <summary>PROTOTYPE: the look option <paramref name="name"/> as the slab stands, or as its preset
-    /// left it with <paramref name="preset"/>. Null with no slab. <c>depth_m</c> is the layer's depth.</summary>
-    public static float? LookValue(string name, bool preset = false)
+    /// <summary>PROTOTYPE: the look option <paramref name="name"/> at <paramref name="stage"/>: 0 as the slab
+    /// stands, 1 as the chapter's saved look left it, 2 as the preset alone does. Null with no slab.
+    /// <c>depth_m</c> is the layer's depth.</summary>
+    public static float? LookValue(string name, int stage = 0)
     {
         if (_live?._material is not { } material || _live._bottom is not { } floor)
             return null;
         if (name == "depth_m")
-            return (preset ? _live._presetTop : _live._top) - floor;
+            return (stage == 0 ? _live._top : stage == 1 ? _live._presetTop : _live._defaultTop) - floor;
         if (name == "temporal")
-            return preset || _temporalOn ? 1f : 0f;
-        return (preset ? _live._presetValues : _live._protoValues).TryGetValue(name, out float v)
+            return stage != 0 || _temporalOn ? 1f : 0f;
+        return (stage == 0 ? _live._protoValues : stage == 1 ? _live._presetValues : _live._defaultValues).TryGetValue(name, out float v)
             ? v
             : RenderingServer.ShaderGetParameterDefault(material.Shader.GetRid(), name).AsSingle();
     }
@@ -255,7 +259,7 @@ internal sealed partial class VolumetricClouds : Node3D
         ControlSet(Pair(name, value));
     }
 
-    /// <summary>PROTOTYPE: drops the cloud lab's edits, so the slab stands as its preset builds it.</summary>
+    /// <summary>PROTOTYPE: drops the cloud lab's edits, so the slab stands as the chapter's saved look builds it.</summary>
     public static void LabClear()
     {
         _labValues.Clear();
@@ -1271,21 +1275,29 @@ internal sealed partial class VolumetricClouds : Node3D
     private void ApplyPrototype(ShaderMaterial material)
     {
         _protoValues.Clear();
+        _defaultValues.Clear();
         if (PrototypeOn)
         {
             material.SetShaderParameter("look", 1);
             material.SetShaderParameter("shape_tex", CloudNoise.Shape);
             material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-            string set = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
+            string preset = Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset;
+            ApplySet(preset, material);
+            foreach (var kv in _protoValues)
+                _defaultValues[kv.Key] = kv.Value;
+            // The chapter's saved look stands over the preset, and CSVM_CLOUD_SET over both.
+            string saved = CloudShadow.Live is { } shadow ? string.Join(";", System.Linq.Enumerable.Select(shadow.SavedLook, kv => Pair(kv.Key, kv.Value))) : string.Empty;
+            string set = saved + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
             ApplySet(set, material);
             RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
             RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
             RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
-            Log.Info("world", $"volumetric clouds: prototype look 1, set [{set}]");
+            Log.Info("world", $"volumetric clouds: prototype look 1, set [{preset};{set}]");
         }
         _presetValues.Clear();
         foreach (var kv in _protoValues)
             _presetValues[kv.Key] = kv.Value;
+        _presetTop = _top;
         ApplySet(LabSetText, material);
     }
 
@@ -1353,7 +1365,7 @@ internal sealed partial class VolumetricClouds : Node3D
             bool set = float.TryParse(System.Environment.GetEnvironmentVariable("CSVM_CLOUD_STORM_DEPTH"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float depth);
             _top = !(PrototypeOn && Storm) ? roof : set ? floor + depth : Mathf.Max(roof, floor + StormDepthM);
         }
-        _presetTop = _top;
+        _presetTop = _defaultTop = _top;
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
         _built = root;

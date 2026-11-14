@@ -26,6 +26,10 @@ public sealed class CloudShadowChapters
     /// <summary>The block inside an entry that applies while Volumetric Clouds stands on.</summary>
     public const string CloudsLayer = "clouds";
 
+    /// <summary>The block inside an entry holding the volumetric clouds' look options that differ from
+    /// their preset (PROTOTYPE, clouds-look). The names are the slab shader's, so none is checked here.</summary>
+    public const string LookBlock = "look";
+
     /// <summary>An entry's field names, in the order the lab writes them.</summary>
     public static readonly IReadOnlyList<string> Keys = CloudShadowPattern.Fields.Select(f => f.Key).ToArray();
 
@@ -38,6 +42,7 @@ public sealed class CloudShadowChapters
     private readonly Dictionary<string, CloudShadowPattern.Tune> _entries = new(StringComparer.OrdinalIgnoreCase);
     // Each entry with its clouds layer applied, for the chapters that carry one.
     private readonly Dictionary<string, CloudShadowPattern.Tune> _clouds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<string, float>> _looks = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings = new();
 
     /// <summary>What the file got wrong, one line each.</summary>
@@ -90,8 +95,33 @@ public sealed class CloudShadowChapters
                 else
                     chapters._warnings.Add($"{key}/{CloudsLayer} is not an object, ignored");
             }
+            if (Find(fields, LookBlock) is JsonObject look)
+            {
+                var options = chapters._looks[key] = new Dictionary<string, float>();
+                foreach (var (name, option) in look)
+                {
+                    if (option is JsonValue value && value.TryGetValue(out double number) && double.IsFinite(number))
+                        options[name] = (float)number;
+                    else
+                        chapters._warnings.Add($"{key}/{LookBlock}: '{name}' is not a number, ignored");
+                }
+            }
         }
         return chapters;
+    }
+
+    /// <summary>The file's text with <paramref name="chapter"/>'s <see cref="LookBlock"/> replaced by
+    /// <paramref name="look"/>, dropped when that is empty. Every other key keeps its place and value.
+    /// Throws as <see cref="WithEntry"/> does on a file that is not a JSON object.</summary>
+    public static string WithLook(string? existing, string chapter, IEnumerable<KeyValuePair<string, float>> look)
+    {
+        var root = Mech3.VegetationSidecar.ObjectToRewrite(existing, "cloud shadows");
+        string name = chapter.ToUpperInvariant();
+        var options = new JsonObject();
+        foreach (var (key, value) in look)
+            options[key] = JsonValue.Create(Math.Round((double)value, 4));
+        var entry = Replaced(Find(root, name) as JsonObject ?? new JsonObject(), LookBlock, options.Count > 0 ? options : null);
+        return Replaced(root, name, entry).ToJsonString(Written) + Environment.NewLine;
     }
 
     /// <summary>The file's text with <paramref name="chapter"/>'s entry replaced by every field of
@@ -141,6 +171,14 @@ public sealed class CloudShadowChapters
         File.WriteAllText(diskPath, WithEntry(existing, chapter, tune, clouds), new UTF8Encoding(false));
     }
 
+    /// <summary>Writes <paramref name="chapter"/>'s look block (<see cref="WithLook"/>) into the file at
+    /// <paramref name="diskPath"/>, creating it when absent.</summary>
+    public static void SaveLook(string diskPath, string chapter, IEnumerable<KeyValuePair<string, float>> look)
+    {
+        string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
+        File.WriteAllText(diskPath, WithLook(existing, chapter, look), new UTF8Encoding(false));
+    }
+
     /// <summary>The project's copy of the file while the game runs from the source tree. Null in an
     /// exported build, whose copy lives in the pck and cannot be written.</summary>
     public static string? SourceTreePath() =>
@@ -151,6 +189,10 @@ public sealed class CloudShadowChapters
     public CloudShadowPattern.Tune For(string chapter, bool clouds = false) =>
         clouds && _clouds.TryGetValue(chapter, out var layered) ? layered
         : _entries.TryGetValue(chapter, out var tune) ? tune : CloudShadowPattern.Tune.Default;
+
+    /// <summary>The chapter's saved look options (<see cref="LookBlock"/>), empty with none.</summary>
+    public IReadOnlyDictionary<string, float> Look(string chapter) =>
+        _looks.TryGetValue(chapter, out var look) ? look : new Dictionary<string, float>();
 
     // A value as the file writes it, so a layer holds only what a reader would see differ.
     private static double? Rounded(float? value) => value is { } v ? Math.Round((double)v, 3) : null;
@@ -188,8 +230,11 @@ public sealed class CloudShadowChapters
         var tune = start;
         foreach (var (key, node) in fields)
         {
-            if (key.StartsWith('_') || key.Equals(CloudsLayer, StringComparison.OrdinalIgnoreCase))
+            if (key.StartsWith('_') || key.Equals(CloudsLayer, StringComparison.OrdinalIgnoreCase)
+                || key.Equals(LookBlock, StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
             if (node is not JsonValue value || !value.TryGetValue(out double number) || !double.IsFinite(number))
             {
                 warnings.Add($"{chapter}: '{key}' is not a number, it takes the default");

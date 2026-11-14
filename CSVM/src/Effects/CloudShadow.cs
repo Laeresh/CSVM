@@ -104,6 +104,9 @@ internal sealed partial class CloudShadow : Node
     /// <summary>The chapter's saved tune in the standing layer.</summary>
     public CloudShadowPattern.Tune Saved => _chapters.For(_chapter, CloudsLayer);
 
+    /// <summary>The chapter's saved volumetric look options (PROTOTYPE, clouds-look), empty with none.</summary>
+    public IReadOnlyDictionary<string, float> SavedLook => _chapters.Look(_chapter);
+
     /// <summary>Whether the shadows draw now: Enhanced, the word on, a cloudy mission, a day zone.</summary>
     public bool Draws => GraphicsMode.Enhanced && CloudShadowSetting.Enabled && _cloudy && !_night;
 
