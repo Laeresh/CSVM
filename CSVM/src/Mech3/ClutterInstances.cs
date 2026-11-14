@@ -305,7 +305,7 @@ public sealed class ClutterInstances
             Name = _proto.Name + "_model",
             Mesh = _near.Mesh,
             Material = _near.Material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CastShadow = VegetationModels.Casting,
             NodeBias = default,
             Layers = VegetationModels.Layer,
         };

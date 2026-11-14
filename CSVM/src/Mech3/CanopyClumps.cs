@@ -797,6 +797,8 @@ public static class CanopyClumps
             var boxes = models.Select(m => m.Mesh.GetAabb()).ToList();
             float width = boxes.Max(b => b.Size.X);
             var materials = models.Select((m, i) => VegetationModels.Material(m, lit: false, fogged: true, boxes[i].Size.X, canopy: true)).ToList();
+            for (int i = 0; i < materials.Count; i++)
+                materials[i].SetShaderParameter(VegetationModels.SunLiftParam, boxes[i].End.Y - ModelRiseM);
             _crownMaterials.AddRange(materials);
             Crowns = crowns;
             Models = new Node3D { Name = "canopy_models" };
@@ -827,7 +829,7 @@ public static class CanopyClumps
                     Name = string.Create(CultureInfo.InvariantCulture, $"crowns_{cell.Key.Item1}_{cell.Key.Item2}_{cell.Key.Shape}"),
                     Multimesh = mm,
                     MaterialOverride = materials[cell.Key.Shape],
-                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    CastShadow = VegetationModels.Casting,
                     ExtraCullMargin = width,
                     Position = offset,
                     Layers = VegetationModels.Layer,
