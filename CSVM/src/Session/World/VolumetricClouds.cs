@@ -814,7 +814,8 @@ internal sealed partial class VolumetricClouds : Node3D
             float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
             float base = clamp(pc_remap(s.r, (wfbm - 1.0) * base_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
             float v = base * smoothstep(0.0, 0.04 + base_rag * (1.0 - s.g), h);
-            reach = max((1.0 - c) + edge_cut * c - v, 0.0) * search_gap_m;
+            // Held under the coverage's own share, so the stride does not jump where the coverage begins.
+            reach = min(max((1.0 - c) + edge_cut * c - v, 0.0) * search_gap_m, c * cover_gap_m);
             float d = clamp(pc_remap(v, 1.0 - c, 1.0, 0.0, 1.0), 0.0, 1.0);
             if (detail && d > 0.0) {
                 vec3 n = texture(detail_tex, q / detail_tile_m).rgb;
@@ -927,6 +928,10 @@ internal sealed partial class VolumetricClouds : Node3D
         float pc_density_gap(vec3 p, float bottom, float top, out float gap) {
             float cov = 0.0;
             float heads = pc_heads_pwg(p, bottom, top, true, cov, gap) * (pw_density / max(density_gain, 1e-6));
+            // The deck stands under its top, so a ray over it strides no further than its height over that top.
+            if (deck_cover > 0.0) {
+                gap = min(gap, max(p.y - bottom - deck_depth_m, 0.0));
+            }
             gap = max(gap, pc_bubble_core(p));
             return max(heads, pc_deck(p, bottom)) * csky_pc_bubbles(p);
         }
@@ -1114,14 +1119,18 @@ internal sealed partial class VolumetricClouds : Node3D
                     float d = pc_density_gap(p, bottom, top, gap);
                     float sigma = d * density_gain;
                     i++;
-                    // Clear air between clouds takes the search's stride, not the lit cap.
+                    // Clear air between clouds takes the search's stride, and beside a cloud the lit cap.
+                    // The cap there is the step inside thin cloud, so the step does not jump at a cloud's edge.
                     if (d <= 0.001 && search_gap_m > 0.0) {
-                        far_dt = clamp(gap, min(far_dt, max(cloud_min_m, t * search_pix_k)), pc_step(t, span_step));
+                        far_dt = max(far_dt, min(gap, pc_step(t, span_step)));
                     }
-                    // A long step that landed in dense cloud retreats half, so the skin is stepped finely.
+                    // A long step that landed in dense cloud retreats to the step its density allows, so the skin
+                    // is stepped finely. The retreat is nothing at the threshold. A fixed halving there put a jump
+                    // between neighbouring rays, which drew contour lines and rings round the eye.
                     if (sigma * prev_dt > od_step * retreat_k && prev_dt > near_dt * 1.01) {
-                        prev_dt *= 0.5;
-                        t -= prev_dt;
+                        float back = max(od_step * retreat_k / sigma, near_dt);
+                        t -= prev_dt - back;
+                        prev_dt = back;
                         grow = 1.0;
                         continue;
                     }
@@ -1522,10 +1531,19 @@ internal sealed partial class VolumetricClouds : Node3D
     private void CollectHulls()
     {
         _hulls.Clear();
-        if (_zeppelins == null)
-            return;
         var hosts = new List<Node3D>();
-        _zeppelins.CollectHosts(hosts);
+        _zeppelins?.CollectHosts(hosts);
+        if (_zeppelins == null)
+        {
+            // PROTOTYPE (clouds-look): a freecam world runs no zeppelins, so its parked hulls stand in.
+            // ponytail: found by a name ending in "zep". Pass the mission's zeppelin records if this stays.
+            foreach (var node in _worldRoot.FindChildren("*zep", "Node3D", true, false))
+            {
+                // A hull's own part of that name takes no second bubble.
+                if (!hosts.Exists(h => h.IsAncestorOf(node)))
+                    hosts.Add((Node3D)node);
+            }
+        }
         foreach (var host in hosts)
         {
             var box = SubtreeBounds.WorldAabb(host);
