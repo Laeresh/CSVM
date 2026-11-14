@@ -41,14 +41,19 @@ internal sealed partial class VolumetricClouds : Node3D
 
     // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun. A
     // storm dims the sun, greys the ambient and lets fewer, taller heads stand, clear air between them.
-    // Its steps grow slower with distance, since coarse ones stripe the tall faces seen edge-on.
-    // Its clouds are denser and finer, stepped finely inside, so a weak dither suffices and TAA has
-    // little noise to smear in flight.
-    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1";
-    private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4";
+    // Every look marches without dither. The search strides by the gap to the nearest surface.
+    // The lit steps start at the bisected surface, capped at 8 m plus 1 % of the distance.
+    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1;od_step=0.3;bisect_n=7;search_gap_m=400;retreat_k=1.2;dither_k=0;step_budget=1500;lit_max_m=8;lit_growth=0.01";
+    // Soft heads take a coarser search, a 10 m least step and larger optical-depth steps.
+    // A step cap of 16 m brings the pulsing back.
+    private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4;cloud_min_m=10;pix_k=0.005;search_pix_k=0.006;cover_gap_m=800;od_step=0.5;lit_growth=0.02";
     // An overcast deck under the heads: a lighter base, and the heads broken up over it.
     private const string DeckPreset = ClearPreset + ";amb_floor=0.45;cover_max=0.7;amb_gain=0.7";
-    private const string StormPreset = Common + ";head_soft=0.5;heads_gain=0.45;cover_max=0.95;pw_density=0.08;edge_cut=0.2;edge_k=5;shaft_steps=48;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.035;od_step=0.3;bisect_n=7;search_gap_m=400;retreat_k=1.2;dither_k=0;step_budget=1500;lit_max_m=8;lit_growth=0.01;cover_gap_m=200;light_every_a=0.03";
+    // The storm's clumps end in a surface, so its search stays fine: a coarser one cuts holes in the tops.
+    // Its dense clumps shade little with depth, so the sun march re-runs per 3 % of opacity.
+    // Soft heads ring under that. Its thin sharp beams need 48 shaft steps, where soft shadows need 16.
+    // Its steps grow slower with distance, since coarse ones stripe the tall faces seen edge-on.
+    private const string StormPreset = Common + ";head_soft=0.5;heads_gain=0.45;cover_max=0.95;pw_density=0.08;edge_cut=0.2;edge_k=5;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.035;cover_gap_m=200;light_every_a=0.03;shaft_steps=48";
     // A storm's heads tower this far over the layer floor.
     private const float StormDepthM = 2450f;
 
