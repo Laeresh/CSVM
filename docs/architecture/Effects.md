@@ -148,14 +148,14 @@ runs `TerrainShadowRaster` once per distinct zone sun (`WeatherRig.SunOrientatio
 moon card, else the authored `SUNLIGHT_ORIENTATION`), and uploads each as an RGH texture. `Publish` hands the live zone's texture, rect and penumbra pair to the `csky_terrain_shadow_*` globals; the zone apply
 (`WeatherRig.ApplyZone`) calls it again, a Shadow Quality apply reaches it through `ShadowQualitySetting.Revision`, and leaving
 the tree puts the defaults back. `SceneBuilder.TerrainShadowLight` writes the `light()` the world-lit, water, ocean and ground
-cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun` (the bake times `CloudShadow.cs`'s term); the Rich cards scale their sun
-side by it. The Enhanced aircraft arm carries it too, its share read per vertex at the world position (the cockpit pass's `light_origin`, the stereo interior's XR origin). `Strength` owns `csky_terrain_shadow_strength` (set by `WeatherRig.ShadowStrength`) and keeps its value, since the renderer reads no global back. `SunAt` reads the texture and applies that strength as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
+cover arms carry, Godot's own Lambert and Schlick-GGX with the sun scaled by `csky_terrain_sun` (the bake times `CloudShadow.cs`'s term); the Rich cards, models and clumps scale their sun
+side by it and darken to the ambient share under the bake (`csky_terrain_unlit`, read once per stamp). The Enhanced aircraft arm carries it too, its share read per vertex at the world position (the cockpit pass's `light_origin`, the stereo interior's XR origin). `Strength` owns `csky_terrain_shadow_strength` (set by `WeatherRig.ShadowStrength`) and keeps its value, since the renderer reads no global back. `SunAt` reads the texture and applies that strength as the shader does, for the suites. `--terrain-shadows=off` leaves the `light()` out.
 
 ## src/Effects/CloudShadow.cs
 The Enhanced cloud shadows' one owner, a node under the world root (`Launch/GameSession.cs`'s `BuildCloudShadow`). It writes
 the five `csky_cloud_shadow*` globals `csky_cloud_shadow.gdshaderinc` declares: the pattern and darkness, the edge band, the
 ambient share, the cloud lab's tint and the mission's cloud band. `csky_cloud_sun` multiplies into `csky_terrain_sun` and `csky_cloud_ao` into the
-lit arms' AO, so the ground, water and buildings darken; the unshaded vegetation takes `csky_cloud_unlit` on its albedo. An aircraft's sun takes `csky_cloud_sun_aloft`: the flat pattern and the deck fade to clear through the mission's cloud band
+lit arms' AO, so the ground, water and buildings darken; the unshaded vegetation takes `csky_cloud_unlit` on its albedo, through `csky_terrain_unlit`. An aircraft's sun takes `csky_cloud_sun_aloft`: the flat pattern and the deck fade to clear through the mission's cloud band
 (`csky_cloud_shadow_band`, zero with none), the volumetric heads keep their own march from the plane's height, and its ambient stays whole. It draws under Enhanced with `Utils/CloudShadowSetting.cs` on, in a mission with a
 cloud field, placed clouds or a deck, outside a night zone (`WeatherRig.ApplyZone` calls `FollowZone`); otherwise darkness
 0, which reads exactly 1. Read every frame, so no shader is rebuilt. Its tune and drift are the chapter's in the layer the Volumetric Clouds word names (`FollowLayer`, each frame and from `GameSession.FollowVolumetricClouds`), so a word change drops a live edit. `CeilingDriftOf` reads a scrolling dome's arrays.

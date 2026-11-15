@@ -43,6 +43,19 @@ float csky_terrain_sun(vec3 world) {
     return csky_terrain_baked_sun(world) * csky_cloud_sun(world);
 }
 
+// The gain on an unshaded surface's colour at a world position (the vegetation): csky_cloud_unlit less
+// the bake's share of the diffuse part the clouds let through. A stamp in a cliff's shade keeps the
+// ambient share, as the ground under it does. Lit ground skips the second cloud read.
+vec3 csky_terrain_unlit(vec3 world, vec2 sun_pair) {
+    vec3 gain = csky_cloud_unlit(world, sun_pair);
+    float shade = 1.0 - csky_terrain_baked_sun(world);
+    if (shade <= 0.0) {
+        return gain;
+    }
+    float diffuse = 0.5 * sun_pair.y;
+    return max(gain - shade * csky_cloud_sun(world) * diffuse / max(sun_pair.x + diffuse, 1e-3), vec3(0.0));
+}
+
 // Godot's own Lambert diffuse and Schlick-GGX specular (scene_forward_lights_inc.glsl), which a
 // light() replaces, with the light's share scaled by `sun`: the baked terrain shadow's share for the
 // directional light, 1 for any other. `f0` is the surface's 0.16 * SPECULAR * SPECULAR, which
