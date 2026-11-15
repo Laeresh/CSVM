@@ -188,7 +188,7 @@ A chapter whose sky is clear holds darkness and ambient 0, which draws no shadow
 An entry's sparse `clouds` block applies over it while Volumetric Clouds stands on (`For(chapter, clouds)`), so tuning under
 the clouds leaves the clouds-off look alone. `WithEntry` writes one chapter's entry, or only its `clouds` block as the
 fields that differ from the entry, for the cloud lab; it keeps every other key in place and refuses a file it cannot
-read. An entry's `look` block holds the volumetric clouds' look options that differ from their weather preset, by the slab shader's uniform names (`Look`, `WithLook`, `SaveLook`); `Session/World/VolumetricClouds.cs` applies it over the preset. `SourceTreePath` is null in an exported build. `CloudShadowChaptersTests`.
+read. An entry's `look` block holds the volumetric clouds' look options that differ from their weather preset, by the slab shader's uniform names (`Look`, `WithLook`, `SaveLook`); `Session/World/VolumetricClouds.cs` applies it over the preset. An entry's `bubbles` list names the world structures those clouds leave a bubble of clear air round (`Bubbles`). `SourceTreePath` is null in an exported build. `CloudShadowChaptersTests`.
 
 ## src/Effects/TerrainShadowRaster.cs
 The bake's compute, with no engine object touched: the ground triangles' plane heights at the texel centres (`Cell`, 4 m
