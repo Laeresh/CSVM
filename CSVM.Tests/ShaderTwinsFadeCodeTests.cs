@@ -19,4 +19,13 @@ public class ShaderTwinsFadeCodeTests
         Assert.EndsWith("    DIFFUSE_LIGHT += vec3(1.0);\n}\n", faded);
         Assert.EndsWith("    ALPHA = col.a" + SceneBuilder.OpacityTerm + ";\n}\n", ShaderTwins.FadeCode(Head + fragment)!);
     }
+
+    [Fact]
+    public void ABlendedSourcesVeilFollowsTheAlphaLine()
+    {
+        // The fade's ALPHA line overwrites the source's, so without the veil after it a fading effect shows through cloud.
+        string fragment = "void fragment() {\n    vec4 col = vec4(1.0);\n    ALPHA = col.a;\n" + SceneBuilder.SlabVeilLine + "\n}\n";
+        string faded = ShaderTwins.FadeCode(Head + SceneBuilder.SlabVeilDecl + "\n" + fragment)!;
+        Assert.EndsWith("    ALPHA = col.a" + SceneBuilder.OpacityTerm + ";\n" + SceneBuilder.SlabVeilLine + "\n}\n", faded);
+    }
 }

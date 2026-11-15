@@ -1253,6 +1253,8 @@ internal sealed partial class VolumetricClouds : Node3D
         // The puffers and weapon sprites draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
         // front of a cloud covers it, and one behind shows only through its gaps. The rain draws last.
         MultiMeshEmitterRenderer.DrawPriority = SlabPriority + 1;
+        // The world's blended surfaces join them, each fragment dimmed the same way.
+        SceneBuilder.OverSlabPriority = SlabPriority + 1;
         Precipitation.DrawPriority = Precipitation.OverSlabPriority;
         var quad = new MeshInstance3D
         {
@@ -1534,6 +1536,7 @@ internal sealed partial class VolumetricClouds : Node3D
         {
             RenderingServer.FramePreDraw -= FollowCamera;
             MultiMeshEmitterRenderer.DrawPriority = 0;
+            SceneBuilder.OverSlabPriority = 0;
             Precipitation.DrawPriority = 0;
         }
         _material = null;
