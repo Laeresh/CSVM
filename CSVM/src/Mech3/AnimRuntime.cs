@@ -216,6 +216,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public HashSet<string> RangeGatedCalls = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Remake-only animation names the bootstrap plays after the mission's own start list,
+    /// in the same pass. The session fills it before the bind (see <c>WorldSession</c>).</summary>
+    public List<string> ExtraStartAnims = new();
+
     /// <summary>Animation names whose <c>OBJECT_MOTION</c> events this runtime drops, so it never
     /// fights another writer over the same node transforms. Everything else in the definition runs
     /// normally.
@@ -2401,7 +2405,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // unplaced library content waits for proximity.
         var ran = new List<string>();
         var missing = new List<string>();
-        foreach (var animName in _program.StartAnims)
+        foreach (var animName in _program.StartAnims.Concat(ExtraStartAnims))
         {
             if (_program.ByAnimName(animName).Count == 0)
             {
