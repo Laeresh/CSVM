@@ -25,7 +25,7 @@
       fly N dx,dy,dz y,p,r <dir>   N drawn frames, the camera moving (m) and turning (deg) each
                                    one, every frame saved as <dir>\fNNN.png
       cloud name=v;name=a,b,c      set volumetric-cloud uniforms live; temporal=0|1 swaps the march,
-                                   bubbles=0|1 the zeppelins' bubbles, divisor=1|2|4 the resolution,
+                                   bubbles=0|1 the bubbles of clear air, divisor=1|2|4 the resolution,
                                    depth_m the layer's depth, rebuild=1 puts the saved look back
       cloudlab [save]              show or hide the cloud lab (--freecam), or press its look's Save
       taa on|off                   Godot's TAA on the main view

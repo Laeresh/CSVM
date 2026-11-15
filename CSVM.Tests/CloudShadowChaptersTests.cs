@@ -177,6 +177,23 @@ public class CloudShadowChaptersTests
     }
 
     [Fact]
+    public void A_chapters_bubbles_name_its_world_structures_and_outlast_every_save()
+    {
+        const string existing = """{ "C4": { "darkness": 0.5, "bubbles": ["bhf"] }, "C3": { "size": 700 } }""";
+        var file = CloudShadowChapters.Parse(existing);
+
+        Assert.Empty(file.Warnings);
+        Assert.Equal(new[] { "bhf" }, file.Bubbles("c4"));
+        Assert.Empty(file.Bubbles("C3"));
+        string saved = CloudShadowChapters.WithLook(CloudShadowChapters.WithEntry(existing, "C4", file.For("C4")), "C4",
+            new Dictionary<string, float> { ["pix_k"] = 0.004f });
+        Assert.Equal(new[] { "bhf" }, CloudShadowChapters.Parse(saved).Bubbles("C4"));
+        var bad = CloudShadowChapters.Parse("""{ "C4": { "bubbles": [7] } }""");
+        Assert.Single(bad.Warnings);
+        Assert.Empty(bad.Bubbles("C4"));
+    }
+
+    [Fact]
     public void Save_refuses_a_file_it_cannot_read()
     {
         Assert.Throws<System.IO.InvalidDataException>(() =>

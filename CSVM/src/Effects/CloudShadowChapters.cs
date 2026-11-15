@@ -30,6 +30,10 @@ public sealed class CloudShadowChapters
     /// their preset. The names are the slab shader's, so none is checked here.</summary>
     public const string LookBlock = "look";
 
+    /// <summary>The list inside an entry naming the chapter's world structures that take a bubble of
+    /// clear air in the volumetric clouds, as a zeppelin does.</summary>
+    public const string BubblesList = "bubbles";
+
     /// <summary>An entry's field names, in the order the lab writes them.</summary>
     public static readonly IReadOnlyList<string> Keys = CloudShadowPattern.Fields.Select(f => f.Key).ToArray();
 
@@ -43,6 +47,7 @@ public sealed class CloudShadowChapters
     // Each entry with its clouds layer applied, for the chapters that carry one.
     private readonly Dictionary<string, CloudShadowPattern.Tune> _clouds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, float>> _looks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string[]> _bubbles = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings = new();
 
     /// <summary>What the file got wrong, one line each.</summary>
@@ -105,6 +110,14 @@ public sealed class CloudShadowChapters
                     else
                         chapters._warnings.Add($"{key}/{LookBlock}: '{name}' is not a number, ignored");
                 }
+            }
+            if (Find(fields, BubblesList) is { } bubbles)
+            {
+                var names = (bubbles as JsonArray)?.Select(b => b is JsonValue v && v.TryGetValue(out string? name) ? name : null).ToArray();
+                if (names == null || names.Contains(null))
+                    chapters._warnings.Add($"{key}/{BubblesList} is not a list of node names, ignored");
+                else
+                    chapters._bubbles[key] = names!;
             }
         }
         return chapters;
@@ -194,6 +207,10 @@ public sealed class CloudShadowChapters
     public IReadOnlyDictionary<string, float> Look(string chapter) =>
         _looks.TryGetValue(chapter, out var look) ? look : new Dictionary<string, float>();
 
+    /// <summary>The chapter's world structures that take a bubble (<see cref="BubblesList"/>), empty with none.</summary>
+    public IReadOnlyList<string> Bubbles(string chapter) =>
+        _bubbles.TryGetValue(chapter, out var names) ? names : Array.Empty<string>();
+
     // A value as the file writes it, so a layer holds only what a reader would see differ.
     private static double? Rounded(float? value) => value is { } v ? Math.Round((double)v, 3) : null;
 
@@ -223,7 +240,7 @@ public sealed class CloudShadowChapters
         return rebuilt;
     }
 
-    // The fields in `fields` over `start`. The clouds layer is read on its own (Parse).
+    // The fields in `fields` over `start`. The clouds layer, the look and the bubbles are read on their own (Parse).
     private static CloudShadowPattern.Tune ReadEntry(string chapter, JsonObject fields, CloudShadowPattern.Tune start,
         List<string> warnings)
     {
@@ -231,7 +248,8 @@ public sealed class CloudShadowChapters
         foreach (var (key, node) in fields)
         {
             if (key.StartsWith('_') || key.Equals(CloudsLayer, StringComparison.OrdinalIgnoreCase)
-                || key.Equals(LookBlock, StringComparison.OrdinalIgnoreCase))
+                || key.Equals(LookBlock, StringComparison.OrdinalIgnoreCase)
+                || key.Equals(BubblesList, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

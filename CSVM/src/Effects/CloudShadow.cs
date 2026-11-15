@@ -16,7 +16,7 @@ namespace CSVM.Effects;
 /// </summary>
 internal sealed partial class CloudShadow : Node
 {
-    /// <summary>The volumetric clouds' zeppelin bubbles (csky_volumetric_clouds.gdshaderinc), one global
+    /// <summary>The volumetric clouds' bubbles (csky_volumetric_clouds.gdshaderinc), one global
     /// each, since a global takes no array.</summary>
     public static readonly StringName[] BubbleParams =
         { "csky_pc_bubble0", "csky_pc_bubble1", "csky_pc_bubble2", "csky_pc_bubble3" };
@@ -106,6 +106,9 @@ internal sealed partial class CloudShadow : Node
 
     /// <summary>The chapter's saved volumetric look options, empty with none.</summary>
     public IReadOnlyDictionary<string, float> SavedLook => _chapters.Look(_chapter);
+
+    /// <summary>The chapter's world structures the volumetric clouds leave a bubble round, empty with none.</summary>
+    public IReadOnlyList<string> SavedBubbles => _chapters.Bubbles(_chapter);
 
     /// <summary>Whether the shadows draw now: Enhanced, the word on, a cloudy mission, a day zone.</summary>
     public bool Draws => GraphicsMode.Enhanced && CloudShadowSetting.Enabled && _cloudy && !_night;
