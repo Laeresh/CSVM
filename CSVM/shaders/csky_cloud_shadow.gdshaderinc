@@ -113,8 +113,8 @@ vec3 csky_pc_along_sun(vec3 world, float y) {
 }
 
 // The slab's heads for the ground shadow (VolumetricClouds.PublishGround): the shape vec4 of
-// csky_pc_cover_lat_gap; the layer's floor and top, erosion cell and coverage bias; the heads' gain, a
-// free slot, the density gain, and the ambient share the deck takes (read by csky_cloud_ao).
+// csky_pc_cover_lat_gap; the layer's floor and top, erosion cell and coverage bias; the heads' gain, the
+// bases' erosion, the density gain, and the ambient share the deck takes (read by csky_cloud_ao).
 global uniform vec4 csky_pc_heads_shape;
 global uniform vec4 csky_pc_heads_layer;
 global uniform vec4 csky_pc_heads_density;
@@ -201,16 +201,33 @@ float csky_pc_cover_lat(vec3 p, float bottom, float top, float detail_m, float c
     return csky_pc_cover_lat_gap(p, bottom, top, detail_m, cover_bias, shape, gap);
 }
 
+// Where the baked noise is read for `p`: the layer drifts with the cloud shadows.
+vec3 csky_pc_drifted(vec3 p) {
+    return p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y);
+}
+
+// Three noise octaves summed, the first weighing most.
+float csky_pc_octaves(vec3 n) {
+    return n.x * 0.625 + n.y * 0.25 + n.z * 0.125;
+}
+
+// The baked-noise heads' body from the shape texel `s` at the layer's height share `h`, before the
+// coverage. The Worley octaves erode the Perlin-Worley base by `base_erode`, and `base_rag` frays the
+// bases. The slab and its ground shadow both read it, so a shadow keeps its cloud's outline.
+float csky_pc_heads_body(vec4 s, float h, float base_erode, float base_rag) {
+    float lo = (csky_pc_octaves(s.gba) - 1.0) * base_erode;
+    float base = clamp((s.r - lo) / max(1.0 - lo, 1e-4), 0.0, 1.0);
+    return base * smoothstep(0.0, 0.04 + base_rag * (1.0 - s.g), h);
+}
+
 // The baked-noise heads' extinction per metre at `p` under coverage `c`, without the detail erosion.
 float csky_pc_density_pw(vec3 p, float bottom, float top, float c) {
     if (c <= 0.0) {
         return 0.0;
     }
     float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
-    vec4 s = texture(csky_pc_shape_tex, (p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / csky_pc_pw.x);
-    float wfbm = s.g * 0.625 + s.b * 0.25 + s.a * 0.125;
-    float base = clamp((s.r - (wfbm - 1.0)) / max(2.0 - wfbm, 1e-4), 0.0, 1.0);
-    float body = base * smoothstep(0.0, 0.04 + csky_pc_pw.z * (1.0 - s.g), h);
+    vec4 s = texture(csky_pc_shape_tex, csky_pc_drifted(p) / csky_pc_pw.x);
+    float body = csky_pc_heads_body(s, h, csky_pc_heads_density.y, csky_pc_pw.z);
     float d = clamp((body - (1.0 - c)) / max(c, 1e-4), 0.0, 1.0);
     return clamp((d - csky_pc_pw_deck.z) * csky_pc_pw_deck.w, 0.0, 1.0) * csky_pc_pw.w;
 }
@@ -226,8 +243,8 @@ float csky_pc_heads_od_pw(vec3 p, float len, float keep) {
 // The baked-noise deck's body at `p` over `cover` of the sky, before its profile and erosion: the
 // Perlin-Worley shape on a `tile_m` tile, so its underside lumps like stratocumulus.
 float csky_pc_deck_body_pw(vec3 p, float cover, float tile_m) {
-    vec4 s = texture(csky_pc_shape_tex,(p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / tile_m);
-    float n = s.r * 0.6 + (s.g * 0.625 + s.b * 0.25 + s.a * 0.125) * 0.4;
+    vec4 s = texture(csky_pc_shape_tex, csky_pc_drifted(p) / tile_m);
+    float n = s.r * 0.6 + csky_pc_octaves(s.gba) * 0.4;
     return clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
 }
 
