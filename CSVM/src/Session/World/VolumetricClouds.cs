@@ -39,11 +39,11 @@ internal sealed partial class VolumetricClouds : Node3D
     // How far above the highest placed cloud an authored band may sit and still count as the layer.
     private const float SpriteBandMarginM = 1000f;
 
-    // PROTOTYPE (clouds-look): the tuned looks. A clear day lights the heads hard from the sun. A
-    // storm dims the sun, greys the ambient and lets fewer, taller heads stand, clear air between them.
+    // The look's presets, each a set of the march's uniforms. A clear day lights the heads hard from the sun.
+    // A storm dims the sun, greys the ambient and lets fewer, taller heads stand, clear air between them.
     // Every look marches without dither. The search strides by the gap to the nearest surface.
     // The lit steps start at the bisected surface, capped at 8 m plus 1 % of the distance.
-    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;fast_cover=1;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1;od_step=0.3;bisect_n=7;search_gap_m=400;retreat_k=1.2;dither_k=0;step_budget=1500;lit_max_m=8;lit_growth=0.01;search_pix_k=0.006;cover_gap_m=800";
+    private const string Common = "shape_m=1500;detail_tile_m=250;phase_g=0.45;powder_k=0.6;amb_occ=0.6;base_rag=0.08;deck_scale=0.6;deck_erode=0.5;cover_stride=1;od_step=0.3;bisect_n=7;search_gap_m=400;retreat_k=1.2;dither_k=0;step_budget=1500;lit_max_m=8;lit_growth=0.01;search_pix_k=0.006;cover_gap_m=800";
     // Soft heads take a 10 m least step and larger optical-depth steps.
     // A step cap of 16 m brings the pulsing back.
     private const string ClearPreset = Common + ";head_soft=0.5;amb_gain=0.6;amb_floor=0.3;light_k=1.5;sun_gain=2.4;cloud_min_m=10;pix_k=0.005;od_step=0.5;lit_growth=0.02";
@@ -75,20 +75,18 @@ internal sealed partial class VolumetricClouds : Node3D
     private static readonly StringName ViewCameraParam = "view_camera";
     private static readonly StringName ViewInvProjectionParam = "view_inv_projection";
 
-    // PROTOTYPE (#347): the temporal march's 2x2 order, diagonal first so two frames cover both diagonals.
+    // The temporal march's 2x2 order, diagonal first so two frames cover both diagonals.
     private static readonly Vector2I[] Phases = { new(0, 0), new(1, 1), new(1, 0), new(0, 1) };
 
-    // The cloud lab's live edits, applied again after every rebuild (PROTOTYPE, clouds-look).
+    // The cloud lab's live edits, applied again after every rebuild.
     private static readonly Dictionary<string, float> _labValues = new();
 
-    // PROTOTYPE (#347): full marches at half size, resolved over four frames; CSVM_CLOUD_TEMPORAL=0 marches every pixel.
-    private static bool _temporalOn = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_TEMPORAL") != "0";
+    // Full and half trace a quarter of their pixels a frame, resolved over four frames (StepTemporal).
+    // The control channel's temporal=0 marches every pixel, the reference its measurements score against.
+    private static bool _temporalOn = true;
 
-    // The slab in the tree, for the control channel's live uniform writes (PROTOTYPE).
+    // The slab in the tree, for the control channel's and the cloud lab's live uniform writes.
     private static VolumetricClouds? _live;
-
-    // PROTOTYPE (clouds-look): CSVM_CLOUD_LOOK=1 starts the baked-noise look; Ctrl+Shift+V swaps it live.
-    private static bool _prototype = System.Environment.GetEnvironmentVariable("CSVM_CLOUD_LOOK") == "1";
 
     private readonly Node3D _worldRoot;
     private readonly WeatherRig _weather;
@@ -96,8 +94,8 @@ internal sealed partial class VolumetricClouds : Node3D
     private readonly SceneBuilder? _scene;
     private readonly List<(MeshInstance3D Node, Aabb World)> _placedSprites = new();
     private readonly List<MeshInstance3D> _hidden = new();
-    // The prototype's float uniforms as its preset and CSVM_CLOUD_SET left them (PROTOTYPE, clouds-look).
-    private readonly Dictionary<string, float> _protoValues = new();
+    // The look's float uniforms as the slab stands: the preset, the chapter's saved look, then live edits.
+    private readonly Dictionary<string, float> _lookValues = new();
     // The same values before the cloud lab's edits, and the layer's top before them.
     private readonly Dictionary<string, float> _presetValues = new();
     // The preset's own values, before the chapter's saved look, and the layer's top before it.
@@ -106,7 +104,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // Each zeppelin's host and its bubble's radius about the host's origin.
     private readonly List<(Node3D Host, float Radius)> _hulls = new();
     private readonly bool _hasDeck;
-    // The temporal resolve's two targets, each the other's history (PROTOTYPE, #347).
+    // The temporal resolve's two targets, each the other's history.
     private readonly ShaderMaterial?[] _resolve = new ShaderMaterial?[2];
     private readonly SubViewport?[] _resolveViews = new SubViewport?[2];
     private ShaderMaterial? _material;
@@ -130,7 +128,7 @@ internal sealed partial class VolumetricClouds : Node3D
     private float _appliedShaft = -1f;
     private Node3D? _built;
     private bool _hiding;
-    // The layer's top before a storm raises it (PROTOTYPE, clouds-look).
+    // The layer's top before a storm raises it.
     private float? _baseTop;
     private float? _presetTop;
     private float? _defaultTop;
@@ -165,21 +163,16 @@ internal sealed partial class VolumetricClouds : Node3D
     /// The two targets alternate, so one's latest time is a frame's resolve.</summary>
     public static MeasuredRenderTime? ResolveTime { get; private set; }
 
-    /// <summary>Gets a value indicating whether the prototype look draws (PROTOTYPE, clouds-look).</summary>
-    public static bool LookOn => _prototype;
-
-    /// <summary>Gets the cloud lab's live edits as a <c>CSVM_CLOUD_SET</c> string.</summary>
+    /// <summary>Gets the cloud lab's live edits as the control channel's <c>cloud</c> verb takes them.</summary>
     public static string LabSetText => string.Join(";", System.Linq.Enumerable.Select(_labValues, kv => Pair(kv.Key, kv.Value)));
 
     /// <summary>Gets or sets a value indicating whether the zeppelins' bubbles of clear air stand.
-    /// The cloud lab's switch (PROTOTYPE, clouds-look).</summary>
+    /// The control channel's <c>bubbles</c> switch, for measuring the march without them.</summary>
     public static bool BubblesOn { get; set; } = true;
 
     /// <summary>Gets how many zeppelin hulls the clouds took to leave a bubble round. A hidden one is skipped
     /// each frame, and past the four bubble globals (<see cref="CloudShadow.BubbleParams"/>) the rest are.</summary>
     public int HullCount => _hulls.Count;
-
-    private static bool PrototypeOn => _prototype;
 
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
@@ -226,7 +219,7 @@ internal sealed partial class VolumetricClouds : Node3D
     public static float Thickened(float bottom, float top) =>
         bottom + Mathf.Max((top - bottom) * LayerDepthGain, LayerMinDepthM);
 
-    /// <summary>PROTOTYPE: the control channel's <c>cloud</c> verb. Writes <paramref name="set"/>
+    /// <summary>The control channel's <c>cloud</c> verb. Writes <paramref name="set"/>
     /// ("name=v;name=a,b,c") onto the live slab's materials; <c>temporal=0|1</c> swaps the march.</summary>
     public static string ControlSet(string set)
     {
@@ -236,7 +229,7 @@ internal sealed partial class VolumetricClouds : Node3D
         return "ok";
     }
 
-    /// <summary>PROTOTYPE: the look option <paramref name="name"/> at <paramref name="stage"/>: 0 as the slab
+    /// <summary>The look option <paramref name="name"/> at <paramref name="stage"/>: 0 as the slab
     /// stands, 1 as the chapter's saved look left it, 2 as the preset alone does. Null with no slab.
     /// <c>depth_m</c> is the layer's depth.</summary>
     public static float? LookValue(string name, int stage = 0)
@@ -245,35 +238,24 @@ internal sealed partial class VolumetricClouds : Node3D
             return null;
         if (name == "depth_m")
             return (stage == 0 ? _live._top : stage == 1 ? _live._presetTop : _live._defaultTop) - floor;
-        if (name == "temporal")
-            return stage != 0 || _temporalOn ? 1f : 0f;
-        return (stage == 0 ? _live._protoValues : stage == 1 ? _live._presetValues : _live._defaultValues).TryGetValue(name, out float v)
+        return (stage == 0 ? _live._lookValues : stage == 1 ? _live._presetValues : _live._defaultValues).TryGetValue(name, out float v)
             ? v
             : RenderingServer.ShaderGetParameterDefault(material.Shader.GetRid(), name).AsSingle();
     }
 
-    /// <summary>PROTOTYPE: the cloud lab sets one look option live. The edit outlasts a rebuild.</summary>
+    /// <summary>The cloud lab sets one look option live. The edit outlasts a rebuild.</summary>
     public static void LabSet(string name, float value)
     {
         _labValues[name] = value;
         ControlSet(Pair(name, value));
     }
 
-    /// <summary>PROTOTYPE: drops the cloud lab's edits, so the slab stands as the chapter's saved look builds it.</summary>
+    /// <summary>Drops the cloud lab's edits, so the slab stands as the chapter's saved look builds it.</summary>
     public static void LabClear()
     {
         _labValues.Clear();
         if (_live?._built != null)
             _live.Rebuild();
-    }
-
-    /// <summary>PROTOTYPE: rebuilds the slab in the other look, for A/B at the controls.</summary>
-    public static void ToggleLook()
-    {
-        _prototype = !_prototype;
-        if (_live?._built != null)
-            _live.Rebuild();
-        Log.Info("world", $"volumetric clouds: look {(_prototype ? "prototype" : "today")}");
     }
 
     public override void _EnterTree()
@@ -286,23 +268,6 @@ internal sealed partial class VolumetricClouds : Node3D
     }
 
     public override void _ExitTree() => Follow(false);
-
-    // PROTOTYPE (clouds-look): Ctrl+Shift+V swaps the look, Ctrl+Shift+B the zeppelins' bubbles.
-    public override void _UnhandledInput(InputEvent @event)
-    {
-        if (_built == null || @event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.V or Key.B, CtrlPressed: true, ShiftPressed: true } key)
-            return;
-        if (key.Keycode == Key.V)
-        {
-            ToggleLook();
-        }
-        else
-        {
-            BubblesOn = !BubblesOn;
-            Log.Info("world", $"volumetric clouds: zeppelin bubbles {(BubblesOn ? "on" : "off")}, {_hulls.Count} hull(s)");
-        }
-        GetViewport().SetInputAsHandled();
-    }
 
     public override void _Process(double delta)
     {
@@ -337,7 +302,7 @@ internal sealed partial class VolumetricClouds : Node3D
         shader_type spatial;
         render_mode blend_premul_alpha, unshaded, depth_draw_never, shadows_disabled, fog_disabled, cull_disabled, depth_test_disabled;
 
-        """ + MarchCode() + Src("slab_tail.glsl", """
+        """ + MarchCode() + """
 
         uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
         // The reduced march's target (MarchShader) and the camera it was traced from. A view drawn
@@ -386,7 +351,7 @@ internal sealed partial class VolumetricClouds : Node3D
         // Writes the pixel from its trace (pc_trace): the cloud lit and fogged, then the layer past
         // the cap. The shafts and the sky or fog behind follow.
         void pc_resolve(vec3 eye, vec3 dir, vec2 span, float scene, vec4 trace, inout vec3 albedo, inout float alpha) {
-            vec4 m = vec4(pc_colour(trace.xy, dir, eye), trace.z);
+            vec4 m = vec4(pc_colour(trace.xy, eye), trace.z);
             float t0 = 0.0;
             if (span.y >= 0.0) {
                 t0 = span.x;
@@ -471,7 +436,7 @@ internal sealed partial class VolumetricClouds : Node3D
             ALBEDO = albedo;
             ALPHA = alpha;
         }
-        """);
+        """;
 
     // The reduced march: a canvas over two targets side by side, each a half or a quarter of the view's
     // size. Each texel traces the main camera's ray with the scene ignored, and keeps the trace raw.
@@ -479,7 +444,7 @@ internal sealed partial class VolumetricClouds : Node3D
         shader_type canvas_item;
         render_mode blend_disabled, unshaded;
 
-        """ + MarchCode() + Src("march_tail.glsl", """
+        """ + MarchCode() + """
 
         // The main view's camera and inverse projection, written before each draw (FollowCamera).
         uniform mat4 view_camera;
@@ -516,12 +481,12 @@ internal sealed partial class VolumetricClouds : Node3D
                 COLOR = pc_shafts(eye, dir, span, 1e9, shaft_dither);
             }
         }
-        """);
+        """;
 
-    // PROTOTYPE (#347): the temporal march's resolve, a full-size canvas. The half-size march traced
+    // The temporal march's resolve, a full-size canvas. The half-size march traced
     // one pixel of each 2x2 block this frame, which it keeps. The other three reproject the previous
     // resolve to this frame, clamped to the fresh traces around them so a disocclusion cannot ghost.
-    private static string ResolveShader() => Src("resolve.glsl", """
+    private static string ResolveShader() => """
         shader_type canvas_item;
         render_mode blend_disabled, unshaded;
 
@@ -617,11 +582,11 @@ internal sealed partial class VolumetricClouds : Node3D
                 }
             }
         }
-        """);
+        """;
 
     // The march both passes share: the includes, the layer's uniforms and the march's functions.
     // Its pc_trace returns what a pixel needs before the scene and the fog.
-    private static string MarchCode() => Src("march.glsl", """
+    private static string MarchCode() => """
         #define CSKY_PC_LAT_EXACT
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_volumetric_clouds.gdshaderinc"
@@ -631,7 +596,6 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float layer_top = 1130.0;
         uniform float cover_bias = 0.15;
         uniform float detail_m = 180.0;
-        uniform float erosion = 0.55;
         uniform float density_gain = 0.025;
         uniform int steps = 40;
         // The step near the eye: this many metres plus this share of the distance (pc_step). The
@@ -645,18 +609,13 @@ internal sealed partial class VolumetricClouds : Node3D
         // 1 jitters the lit march's start past the surface. Only the per-pixel march averages that
         // jitter; a reduced texel flickers and the temporal resolve pulses.
         uniform float hit_dither = 0.0;
-        // The lit march's step inside a cloud, as a share of the step above.
-        uniform float cloud_step_k = 1.0;
         // Above 0 the lit march steps by optical depth from the surface, this much per step.
         // A step is no finer than cloud_min_m or pix_k of the distance, and no coarser than the clear-air step.
+        // At 0 the plain march runs: fixed steps, every sample lit. The control channel's reference.
         uniform float od_step = 0.0;
         uniform float cloud_min_m = 6.0;
         uniform float pix_k = 0.003;
         uniform int bisect_n = 4;
-        // 1 lets the search read the heads with their detail erosion, so the first hit is the eroded surface.
-        uniform float search_detail = 1.0;
-        // 1 holds the retreat to one a step. Repeated, it crept toward its own threshold and spent the budget.
-        uniform float retreat_once = 1.0;
         // The first sample's depth inside the eroded surface, as a share of the least step.
         uniform float first_k = 0.5;
         uniform float retreat_k = 2.0;
@@ -672,13 +631,10 @@ internal sealed partial class VolumetricClouds : Node3D
         // Outside every coverage, the stride in metres per unit the pattern stands under its edge.
         uniform float cover_gap_m = 1e6;
         uniform float search_pix_k = 0.003;
-        // The sun march is re-run only this far along the ray; its own first tap spans light_step_m.
-        uniform float light_every_m = 0.0;
         // The sun march re-runs once the samples since its last run hold this share of the pixel's opacity.
         uniform float light_every_a = 0.0;
         uniform int step_budget = 128;
         uniform vec3 sun_rgb = vec3(0.8, 0.77, 0.72);
-        uniform float ambient_gain = 0.5;
         uniform float far_m = 24000.0;
         // Where a cloud starts hazing into the fog colour on its way to far_m, whatever the zone fog.
         uniform float haze_near_m = 8000.0;
@@ -699,16 +655,15 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float shaft_scale = 1.0;
         uniform float shaft_far_m = 6000.0;
         uniform float shaft_height_m = 1500.0;
-        // The heads' shape (csky_pc_cover_shaped). `taper` rounds each cloud's crown toward its own
+        // The heads' shape (csky_pc_cover_lat_gap). `taper` rounds each cloud's crown toward its own
         // top. The sample point billows by `warp_m` and leans `shear_m` downwind at the top.
         uniform float taper = 0.3;
         uniform float head_soft = 0.16;
         uniform float warp_m = 320.0;
         uniform float shear_m = 260.0;
 
-        // PROTOTYPE (clouds-look): look 1 reads the baked Perlin-Worley noise (CloudNoise) and lights
-        // the body with a short-stepped sun march and multiple-scattering octaves.
-        uniform int look = 0;
+        // The body is the baked Perlin-Worley noise (CloudNoise) under that coverage, lit by a
+        // short-stepped sun march and multiple-scattering octaves.
         uniform sampler3D shape_tex : filter_linear, repeat_enable;
         uniform sampler3D detail_tex : filter_linear, repeat_enable;
         uniform float shape_m = 3000.0;
@@ -731,7 +686,6 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float frame_offset = 0.0;
         uniform float clear_stride = 2.0;
         uniform float cover_stride = 2.0;
-        uniform float span_cap_m = 1e9;
         uniform float ms_a = 0.5;
         uniform float ms_b = 0.6;
         uniform float ms_c = 0.5;
@@ -750,14 +704,8 @@ internal sealed partial class VolumetricClouds : Node3D
             return c + (x - a) / max(b - a, 1e-4) * (d - c);
         }
 
-        // The heads' coverage at `p`, the function the ground shadow reads too.
-        float pc_cover_shaped(vec3 p) {
-            return csky_pc_cover_shaped(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m));
-        }
-
-        uniform float fast_cover = 0.0;
-
-        // csky_pc_cover_shaped off the lattices, read exactly here (CSKY_PC_LAT_EXACT), with the stride measure `cgap`.
+        // The heads' coverage at `p`, which the ground shadow reads too, with the stride measure `cgap`.
+        // The lattices are read exactly here (CSKY_PC_LAT_EXACT).
         float pc_cover_gap(vec3 p, out float cgap) {
             return csky_pc_cover_lat_gap(p, layer_bottom, layer_top, detail_m, cover_bias, vec4(taper, head_soft, warp_m, shear_m), cgap);
         }
@@ -767,7 +715,7 @@ internal sealed partial class VolumetricClouds : Node3D
         // A march may stride the clear distance `reach` from `p` before a cloud can start.
         float pc_heads_pwg(vec3 p, float bottom, float top, bool detail, out float cov, out float reach) {
             float cgap = 1e3;
-            float c = clamp((fast_cover > 0.5 ? pc_cover_gap(p, cgap) : pc_cover_shaped(p)) * heads_gain, 0.0, 1.0) * cover_max;
+            float c = clamp(pc_cover_gap(p, cgap) * heads_gain, 0.0, 1.0) * cover_max;
             cov = c;
             if (c <= 0.0) {
                 reach = max(cgap, 0.0) * cover_gap_m;
@@ -796,7 +744,7 @@ internal sealed partial class VolumetricClouds : Node3D
             return pc_heads_pwg(p, bottom, top, detail, cov, reach);
         }
 
-        // The deck over the baked noise: csky_pc_deck_density's sheet, its body the Perlin-Worley
+        // The deck over the baked noise: a sheet over the layer floor, its body the Perlin-Worley
         // shape, so its underside lumps like stratocumulus.
         float pc_deck_pw(vec3 p, float bottom) {
             float deck_top = bottom + deck_depth_m;
@@ -819,11 +767,7 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // The cumulus heads at `p` over the pattern's coverage.
         float pc_heads(vec3 p, float bottom, float top) {
-            if (look == 1) {
-                return pc_heads_pw(p, bottom, top, true) * (pw_density / max(density_gain, 1e-6));
-            }
-            float c = pc_cover_shaped(p) * heads_gain;
-            return csky_pc_density(p, bottom, top, c, detail_m, erosion);
+            return pc_heads_pw(p, bottom, top, true) * (pw_density / max(density_gain, 1e-6));
         }
 
         // The sun's optical depth from `p`: six taps doubling from light_step_m. The first two read
@@ -867,11 +811,7 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // The deck at `p`, torn by the rifts.
         float pc_deck(vec3 p, float bottom) {
-            if (look == 1) {
-                return pc_deck_pw(p, bottom) * csky_pc_deck_gaps(p, deck_gaps, gap_m);
-            }
-            float deck = csky_pc_deck_density(p, bottom, bottom + deck_depth_m, deck_cover, detail_m);
-            return deck * csky_pc_deck_gaps(p, deck_gaps, gap_m);
+            return pc_deck_pw(p, bottom) * csky_pc_deck_gaps(p, deck_gaps, gap_m);
         }
 
         // How far `p` stands inside one bubble's clear core, in metres: the stride a march may take there.
@@ -920,41 +860,13 @@ internal sealed partial class VolumetricClouds : Node3D
             return od;
         }
 
-        // The sun's share reaching `p`: three taps up the sun ray through the heads, and the deck's span.
-        float pc_sun(vec3 p, float step_m, float bottom, float top) {
-            float od = pc_deck_od(p, bottom);
-            vec3 q = p;
-            for (int i = 0; i < 3; i++) {
-                q += csky_sun_dir * step_m;
-                od += pc_heads(q, bottom, top) * density_gain * step_m;
-            }
-            return csky_pc_beer_powder(od);
-        }
-
-        // The sky's and the sun's weights on the cloud body at `p`, under `sun_t` of the sun. Their
-        // colours are the same along a ray, so pc_colour applies them once per pixel.
-        vec2 pc_light(vec3 p, float sun_t) {
-            // The sky lights the crown and little reaches the base, so the underside reads darker.
-            float h = clamp((p.y - layer_bottom) / max(layer_top - layer_bottom, 1.0), 0.0, 1.0);
-            // The floor stands in for the multiple scattering a thick cloud's shaded side still gets.
-            // It is lower at the base, where a deck's underside and a cumulus base read dark.
-            return vec2(mix(0.5, 1.0, h), mix(mix(0.12, 0.25, h), 1.0, sun_t));
-        }
-
-        // The lit cloud body from the march's two weights, before fog: the sun through its own shadow
-        // plus the sky's ambient. The mission's SUNLIGHT dims it and the zone tune tints it.
-        vec3 pc_colour(vec2 w, vec3 dir, vec3 cam) {
-            if (look == 1) {
-                // The sun's phase is in w.y already (pc_sun_ms); the sky lights the rest bluish.
-                vec3 amb = mix(amb_top_rgb, csky_fog_color_at(cam), amb_fog_mix) * amb_gain;
-                vec3 sun1 = sun_rgb * max(csky_sun_light.y, 0.35) * sun_gain;
-                return (amb * w.x + sun1 * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
-            }
-            float cos_theta = dot(dir, csky_sun_dir);
-            float phase = mix(csky_pc_phase(cos_theta, 0.0), csky_pc_phase(cos_theta, 0.6), 0.5) * 4.0 * 3.14159265;
-            vec3 ambient = mix(csky_fog_color_at(cam), vec3(1.0), 0.35) * ambient_gain;
-            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * mix(0.6, 1.4, phase / (1.0 + phase));
-            return (ambient * w.x + sun * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
+        // The lit cloud body from the march's two weights, the sky's and the sun's, before fog. Their colours
+        // are the same along a ray, so they apply once per pixel. The sun's phase is in w.y already (pc_sun_ms).
+        // The mission's SUNLIGHT dims the body and the zone tune tints it.
+        vec3 pc_colour(vec2 w, vec3 cam) {
+            vec3 amb = mix(amb_top_rgb, csky_fog_color_at(cam), amb_fog_mix) * amb_gain;
+            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * sun_gain;
+            return (amb * w.x + sun * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
         }
 
         // The sun's share reaching a point under the layer. Along the sun ray: the deck's span, then
@@ -1008,7 +920,7 @@ internal sealed partial class VolumetricClouds : Node3D
             return min(span_step, min(step_near_m + t * step_growth, step_fine_m + t * step_fine_growth));
         }
 
-        // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_light) premultiplied and
+        // Marches `dir` from `t0` to `t1`, returning the light's weights (pc_colour) premultiplied and
         // the transmittance. `hit` is the first cloud's distance, else t1.
         vec3 pc_march_hit(vec3 eye, vec3 dir, float t0, float t1, float dither, out float hit) {
             hit = t1;
@@ -1016,11 +928,10 @@ internal sealed partial class VolumetricClouds : Node3D
             float top = layer_top;
             float len = t1 - t0;
             int n = max(int(float(steps) * clamp(len / max(top - bottom, 1.0) * 0.5, 0.5, 1.5)), 8);
-            float span_step = min(len / float(n), span_cap_m);
+            float span_step = len / float(n);
             float t = t0 + pc_step(t0, span_step) * dither;
-            // The clear air before the first cloud, density alone, in double steps. The search is most
-            // of a ray's cost; the bisection's fourth pass restores the surface's precision. Inside the
-            // deck it takes single steps: a thin cell is a sliver a double step crosses in rings.
+            // The search crosses the clear air before the first cloud on density alone, most of a ray's cost.
+            // It strides by the gap to the nearest surface, and the bisection after it finds that surface.
             float clear = t0;
             // The first sample inside the heads' un-eroded shape and the clear one before it, the first bracket.
             float shell = -1.0;
@@ -1033,7 +944,7 @@ internal sealed partial class VolumetricClouds : Node3D
                 float gap = 1.0;
                 // The heads are read with their detail erosion. Past the shape's first sample the search goes
                 // on to the eroded surface, so the lit march can take a sample there.
-                float dens = look == 1 ? max(pc_heads_pwg(sp, bottom, top, search_detail > 0.5, cov, gap), pc_deck(sp, bottom)) * csky_pc_bubbles(sp) : pc_density(sp, bottom, top);
+                float dens = max(pc_heads_pwg(sp, bottom, top, true, cov, gap), pc_deck(sp, bottom)) * csky_pc_bubbles(sp);
                 found = dens > 0.001;
                 if (shell < 0.0 && (found || (cov > 0.0 && gap <= 0.0))) {
                     shell = t;
@@ -1043,8 +954,7 @@ internal sealed partial class VolumetricClouds : Node3D
                     break;
                 }
                 clear = t;
-                float stride = look == 1 ? (cov > 0.0 ? cover_stride : clear_stride) : (deck_cover > 0.0 && sp.y < bottom + deck_depth_m ? 1.0 : 2.0);
-                float st = pc_step(t, span_step) * stride;
+                float st = pc_step(t, span_step) * (cov > 0.0 ? cover_stride : clear_stride);
                 if (search_gap_m > 0.0) {
                     st = clamp(max(gap, pc_bubble_core(sp)), min(max(cloud_min_m, t * search_pix_k), st), st);
                 }
@@ -1080,7 +990,6 @@ internal sealed partial class VolumetricClouds : Node3D
             t = min((first ? surf : shell) + pc_step(hi, span_step) * mix(0.5, dither, hit_dither), t1);
             vec2 w = vec2(0.0);
             float trans = 1.0;
-            float sun_step = max((top - bottom) * 0.3, 20.0);
             float cos_theta = dot(dir, csky_sun_dir);
             if (od_step > 0.0) {
                 float prev_dt = max(cloud_min_m, hit * pix_k);
@@ -1093,7 +1002,7 @@ internal sealed partial class VolumetricClouds : Node3D
                 bool pend = false;
                 float p_sigma = 0.0;
                 vec2 p_light = vec2(0.0);
-                float l_t = -1e9;
+                bool lit = false;
                 float l_ao = 1.0;
                 float l_acc = 0.0;
                 float l_sun = 0.0;
@@ -1113,7 +1022,7 @@ internal sealed partial class VolumetricClouds : Node3D
                     // A long step that landed in dense cloud retreats to the step its density allows, so the skin
                     // is stepped finely. The retreat is nothing at the threshold, so neighbouring rays do not jump.
                     // It runs once a step: repeated, it crept toward its threshold until the budget ran out.
-                    if (sigma * prev_dt > od_step * retreat_k && prev_dt > near_dt * 1.01 && (grow > 1.5 || retreat_once < 0.5)) {
+                    if (sigma * prev_dt > od_step * retreat_k && prev_dt > near_dt * 1.01 && grow > 1.5) {
                         float back = max(od_step * retreat_k / sigma, near_dt);
                         t -= prev_dt - back;
                         prev_dt = back;
@@ -1131,12 +1040,12 @@ internal sealed partial class VolumetricClouds : Node3D
                     if (pend) {
                         float a_est = trans * (1.0 - exp(-sigma * dt));
                         l_acc += a_est;
-                        if (l_t < -1e8 || (abs(t - l_t) >= light_every_m && l_acc >= light_every_a)) {
+                        if (!lit || l_acc >= light_every_a) {
                             l_acc = 0.0;
                             float od = pc_sun_od_pw(p, bottom, top) + pc_deck_od(p, bottom);
                             l_ao = mix(1.0, exp(-od * amb_od_k), amb_occ);
                             l_sun = pc_sun_ms(od, cos_theta);
-                            l_t = t;
+                            lit = true;
                         }
                         float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
                         float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
@@ -1156,25 +1065,18 @@ internal sealed partial class VolumetricClouds : Node3D
                 }
                 return vec3(w, trans);
             }
+            // The plain march (od_step 0): fixed steps, every sample lit.
             while (i < step_budget && trans > 0.01 && t < t1) {
                 float dt = pc_step(t, span_step);
                 vec3 p = eye + dir * t;
                 float d = pc_density(p, bottom, top);
                 if (d > 0.001) {
-                    // Finer inside the cloud, where the detail lives; clear air keeps the coarse step.
-                    dt *= cloud_step_k;
-                    float ext = d * density_gain * dt;
-                    float a = 1.0 - exp(-ext);
-                    if (look == 1) {
-                        float od = pc_sun_od_pw(p, bottom, top) + pc_deck_od(p, bottom);
-                        float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
-                        float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
-                        float amb = mix(amb_floor, 1.0, h) * mix(1.0, exp(-od * amb_od_k), amb_occ);
-                        w += trans * a * vec2(amb, pc_sun_ms(od, cos_theta) * powder);
-                    } else {
-                        float sun_t = pc_sun(p, sun_step, bottom, top);
-                        w += trans * a * pc_light(p, sun_t);
-                    }
+                    float a = 1.0 - exp(-d * density_gain * dt);
+                    float od = pc_sun_od_pw(p, bottom, top) + pc_deck_od(p, bottom);
+                    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
+                    float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
+                    float amb = mix(amb_floor, 1.0, h) * mix(1.0, exp(-od * amb_od_k), amb_occ);
+                    w += trans * a * vec2(amb, pc_sun_ms(od, cos_theta) * powder);
                     trans *= 1.0 - a;
                 }
                 t += dt;
@@ -1220,19 +1122,7 @@ internal sealed partial class VolumetricClouds : Node3D
         vec4 pc_trace(vec3 eye, vec3 dir, vec2 span, float scene, float dither, float shaft_dither) {
             return vec4(pc_layer(eye, dir, span, scene, dither), pc_shafts(eye, dir, span, scene, shaft_dither).w);
         }
-        """);
-
-    // PROTOTYPE: under CSVM_CLOUD_SHADER_DIR a shader part reads from a file there, written from
-    // the built-in text when absent. The control channel's rebuild=1 then reloads an edit.
-    private static string Src(string name, string builtin)
-    {
-        if (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SHADER_DIR") is not { Length: > 0 } dir)
-            return builtin;
-        string path = System.IO.Path.Combine(dir, name);
-        if (!System.IO.File.Exists(path))
-            System.IO.File.WriteAllText(path, builtin);
-        return System.IO.File.ReadAllText(path);
-    }
+        """;
 
     // The quad's or the reduced march's material over the layer from `bottom` to `top`.
     private ShaderMaterial MaterialOf(string code, float bottom, float top)
@@ -1251,42 +1141,36 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
         material.SetShaderParameter("gap_m", GapM);
         material.SetShaderParameter("shaft_gain", ShaftGain);
-        ApplyPrototype(material);
+        ApplyLook(material);
         return material;
     }
 
-    // PROTOTYPE (clouds-look): CSVM_CLOUD_LOOK=1 turns the baked-noise look on, and CSVM_CLOUD_SET
-    // ("name=v;name=a,b,c") overrides any float or vec3 uniform, for tuning without a rebuild.
-    private void ApplyPrototype(ShaderMaterial material)
+    // The look in three stages, each snapshot kept for the cloud lab. The weather's preset comes first,
+    // then the chapter's saved look (CloudShadowChapters.LookBlock), then the lab's live edits.
+    private void ApplyLook(ShaderMaterial material)
     {
-        _protoValues.Clear();
+        _lookValues.Clear();
+        material.SetShaderParameter("shape_tex", CloudNoise.Shape);
+        material.SetShaderParameter("detail_tex", CloudNoise.Detail);
+        string preset = Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset;
+        ApplySet(preset, material);
         _defaultValues.Clear();
-        if (PrototypeOn)
-        {
-            material.SetShaderParameter("look", 1);
-            material.SetShaderParameter("shape_tex", CloudNoise.Shape);
-            material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-            string preset = Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset;
-            ApplySet(preset, material);
-            foreach (var kv in _protoValues)
-                _defaultValues[kv.Key] = kv.Value;
-            // The chapter's saved look stands over the preset, and CSVM_CLOUD_SET over both.
-            string saved = CloudShadow.Live is { } shadow ? string.Join(";", System.Linq.Enumerable.Select(shadow.SavedLook, kv => Pair(kv.Key, kv.Value))) : string.Empty;
-            string set = saved + ";" + (System.Environment.GetEnvironmentVariable("CSVM_CLOUD_SET") ?? string.Empty);
-            ApplySet(set, material);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
-            Log.Info("world", $"volumetric clouds: prototype look 1, set [{preset};{set}]");
-        }
+        foreach (var kv in _lookValues)
+            _defaultValues[kv.Key] = kv.Value;
+        string saved = CloudShadow.Live is { } shadow ? string.Join(";", System.Linq.Enumerable.Select(shadow.SavedLook, kv => Pair(kv.Key, kv.Value))) : string.Empty;
+        ApplySet(saved, material);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
+        Log.Info("world", $"volumetric clouds: look {(Storm ? "storm" : _hasDeck ? "deck" : "clear")}, saved [{saved}]");
         _presetValues.Clear();
-        foreach (var kv in _protoValues)
+        foreach (var kv in _lookValues)
             _presetValues[kv.Key] = kv.Value;
         _presetTop = _top;
         ApplySet(LabSetText, material);
     }
 
-    // Writes "name=v;name=a,b,c" onto `materials`, floats kept for Proto. The int uniforms take ints.
+    // Writes "name=v;name=a,b,c" onto `materials`, floats kept for LookOr. The int uniforms take ints.
     private void ApplySet(string set, params ShaderMaterial?[] materials)
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
@@ -1329,27 +1213,23 @@ internal sealed partial class VolumetricClouds : Node3D
                 _top = first;
             }
             Variant value = parts.Length == 3 ? (Variant)new Vector3(first, float.Parse(parts[1], inv), float.Parse(parts[2], inv))
-                : name is "steps" or "step_budget" or "shaft_steps" or "look" or "bisect_n" ? (Variant)(int)first : (Variant)first;
+                : name is "steps" or "step_budget" or "shaft_steps" or "bisect_n" ? (Variant)(int)first : (Variant)first;
             foreach (var material in materials)
                 material?.SetShaderParameter(name, value);
             if (parts.Length == 1)
-                _protoValues[name] = first;
+                _lookValues[name] = first;
         }
     }
 
-    // A prototype uniform as the slab stands, else the shader's default.
-    private float Proto(string name, float fallback) => _protoValues.TryGetValue(name, out float v) ? v : fallback;
+    // A look uniform as the slab stands, else `fallback`, the shader's default.
+    private float LookOr(string name, float fallback) => _lookValues.TryGetValue(name, out float v) ? v : fallback;
 
     private void Rebuild()
     {
         FreeBuilt();
         _baseTop ??= _top;
         if (_bottom is { } floor && _baseTop is { } roof)
-        {
-            // PROTOTYPE (clouds-look): CSVM_CLOUD_STORM_DEPTH sets a storm's depth in metres, for trying a lower layer.
-            bool set = float.TryParse(System.Environment.GetEnvironmentVariable("CSVM_CLOUD_STORM_DEPTH"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float depth);
-            _top = !(PrototypeOn && Storm) ? roof : set ? floor + depth : Mathf.Max(roof, floor + StormDepthM);
-        }
+            _top = Storm ? Mathf.Max(roof, floor + StormDepthM) : roof;
         _presetTop = _defaultTop = _top;
         var root = new Node3D { Name = "volumetric_slab" };
         string detail = BuildSlab(root);
@@ -1420,9 +1300,9 @@ internal sealed partial class VolumetricClouds : Node3D
             _resolveViews[i]!.AddChild(rect);
             root.AddChild(_resolveViews[i]);
             _resolve[i]!.SetShaderParameter("fresh", _marchView.GetTexture());
-            _resolve[i]!.SetShaderParameter("accum", Proto("accum", 0.75f));
-            _resolve[i]!.SetShaderParameter("accum_spatial", Proto("accum_spatial", 0.9f));
-            _resolve[i]!.SetShaderParameter("clip_sigma", Proto("clip_sigma", 1.25f));
+            _resolve[i]!.SetShaderParameter("accum", LookOr("accum", 0.75f));
+            _resolve[i]!.SetShaderParameter("accum_spatial", LookOr("accum_spatial", 0.9f));
+            _resolve[i]!.SetShaderParameter("clip_sigma", LookOr("clip_sigma", 1.25f));
         }
         for (int i = 0; i < 2; i++)
             _resolve[i]!.SetShaderParameter("history", _resolveViews[1 - i]!.GetTexture());
@@ -1470,7 +1350,7 @@ internal sealed partial class VolumetricClouds : Node3D
             _material.SetShaderParameter(MarchShaftsOnlyParam, shaftsOnly);
             _material.SetShaderParameter("march_temporal", temporal);
             // The temporal resolve pulses brightness frame to frame under the jitter, so only the per-pixel march takes it.
-            float hitDither = Proto("hit_dither", MarchDivisor == 1 && !temporal ? 1f : 0f);
+            float hitDither = LookOr("hit_dither", MarchDivisor == 1 && !temporal ? 1f : 0f);
             _material.SetShaderParameter("hit_dither", hitDither);
             _march.SetShaderParameter("hit_dither", hitDither);
             _march.SetShaderParameter(ShaftsOnlyParam, shaftsOnly);
@@ -1502,7 +1382,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _material.SetShaderParameter(MarchLensParam, new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y)));
     }
 
-    // PROTOTYPE (#347): one temporal frame. The march traces this frame's pixel of each 2x2 block. The
+    // One temporal frame. The march traces this frame's pixel of each 2x2 block. The
     // resolve target due draws once over the other's history, and the quad reads it.
     private void StepTemporal(Projection viewProjection, Projection camera, Projection inverse, Vector2I grid)
     {
@@ -1532,8 +1412,8 @@ internal sealed partial class VolumetricClouds : Node3D
         _zeppelins?.CollectHosts(hosts);
         if (_zeppelins == null)
         {
-            // PROTOTYPE (clouds-look): a freecam world runs no zeppelins, so its parked hulls stand in.
-            // ponytail: found by a name ending in "zep". Pass the mission's zeppelin records if this stays.
+            // A freecam world runs no zeppelins, so its parked hulls stand in for the cloud lab.
+            // ponytail: found by a name ending in "zep". Pass the mission's zeppelin records if a hull is missed.
             foreach (var node in _worldRoot.FindChildren("*zep", "Node3D", true, false))
             {
                 // A hull's own part of that name takes no second bubble.
@@ -1705,21 +1585,17 @@ internal sealed partial class VolumetricClouds : Node3D
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground", PublishedGround);
         RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
-        bool proto = PrototypeOn && _material != null;
-        var shape = HeadShape;
-        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", proto ? shape with { Y = Proto("head_soft", HeadSoft) } : shape);
+        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", HeadShape with { Y = LookOr("head_soft", HeadSoft) });
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_layer", new Vector4(bottom, top, DetailM, CoverBias));
-        // The slab's heads_gain and its erosion and density_gain defaults, so the ground marches its
-        // density, and the ambient share the deck takes.
-        float headsGain = _hasDeck ? 1.15f : 1f;
+        // The slab's heads_gain and its density_gain default, so the ground marches its density, and the
+        // ambient share the deck takes. The y slot is free.
         RenderingServer.GlobalShaderParameterSet("csky_pc_heads_density",
-            new Vector4(proto ? Proto("heads_gain", headsGain) : headsGain, 0.55f, 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
-        RenderingServer.GlobalShaderParameterSet("csky_pc_pw", proto
-            ? new Vector4(Proto("shape_m", 3000f), Proto("cover_max", 1f), Proto("base_rag", 0f), Proto("pw_density", 0.04f))
-            : Vector4.Zero);
+            new Vector4(LookOr("heads_gain", _hasDeck ? 1.15f : 1f), 0f, 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
+        RenderingServer.GlobalShaderParameterSet("csky_pc_pw",
+            new Vector4(LookOr("shape_m", 3000f), LookOr("cover_max", 1f), LookOr("base_rag", 0f), LookOr("pw_density", 0.04f)));
         // The deck's shape tile and density gain (the shader's shape_m * deck_scale and deck_k), for the veil.
         // Then the heads' cut edge, for the ground shadow and the veil.
-        RenderingServer.GlobalShaderParameterSet("csky_pc_pw_deck", new Vector4(Proto("shape_m", 3000f) * Proto("deck_scale", 1.6f), Proto("deck_k", 0.6f), Proto("edge_cut", 0f), Proto("edge_k", 1f)));
+        RenderingServer.GlobalShaderParameterSet("csky_pc_pw_deck", new Vector4(LookOr("shape_m", 3000f) * LookOr("deck_scale", 1.6f), LookOr("deck_k", 0.6f), LookOr("edge_cut", 0f), LookOr("edge_k", 1f)));
     }
 
     // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,

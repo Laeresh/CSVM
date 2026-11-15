@@ -90,37 +90,6 @@ float csky_pc_noise3(vec3 p, uint seed) {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
-// Three octaves of value noise, in [0, 1). The erosion detail the slab carves its coverage with.
-float csky_pc_fbm(vec3 p) {
-    float n = 0.5 * csky_pc_noise3(p, 2654435769u);
-    n += 0.25 * csky_pc_noise3(p * 2.03, 2246822507u);
-    n += 0.125 * csky_pc_noise3(p * 4.11, 3266489917u);
-    return n / 0.875;
-}
-
-// The own top of the cloud standing over `p`, as a share of the layer. A low noise a few clouds
-// across, so neighbours tower to different heights, from 30 % of the layer to its top.
-float csky_pc_cloud_top(vec3 p, float detail_m) {
-    float broad = csky_pc_noise3(vec3(p.x, 0.0, p.z) / (detail_m * 11.0), 1911520717u);
-    float fine = csky_pc_noise3(vec3(p.x, 5.0, p.z) / (detail_m * 4.0), 2246822507u);
-    return mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
-}
-
-// Density at a world point of a layer whose horizontal coverage is `cover` (1 under a cloud's
-// core); the coverage already carries each cloud's height and dome. `detail_m` is the erosion cell
-// and `erosion` how deep the noise bites: lightly at the flat base, harder up the crown and hardest
-// where the cover thins at the sides, so the walls break into billows.
-float csky_pc_density(vec3 p, float bottom, float top, float cover, float detail_m, float erosion) {
-    if (cover <= 0.0) {
-        return 0.0;
-    }
-    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
-    float n = csky_pc_fbm(p / detail_m);
-    float bite = erosion * (mix(0.3, 1.2, h) + (1.0 - min(cover, 1.0)) * 1.2);
-    float d = min(cover, 1.0) * smoothstep(0.0, 0.05, h) - bite * (1.0 - n);
-    return clamp(d, 0.0, 1.0);
-}
-
 // Rifts torn in the deck: a broad noise opens `gaps` of the sheet in tears about `gap_m` across,
 // with soft edges. The share of the deck kept: 1 under the sheet or with no gaps, 0 in a rift.
 float csky_pc_deck_gaps(vec3 p, float gaps, float gap_m) {
@@ -143,35 +112,17 @@ vec3 csky_pc_along_sun(vec3 world, float y) {
     return world + s * ((y - world.y) / s.y);
 }
 
-// The slab's head coverage at `p`, which the slab and its ground shadow both read. Each cloud has
-// its own top (csky_pc_cloud_top). Up to it the noise threshold dips a little through the body, so
-// the cloud bulges, then climbs by shape.x toward the top, rounding it into a dome, over a band
-// shape.y wide; past the top nothing stands. The point billows by shape.z metres and leans shape.w
-// downwind at the layer's top.
-float csky_pc_cover_shaped(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape) {
-    float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
-    vec3 w = p / (detail_m * 4.0);
-    vec2 warp = vec2(csky_pc_noise3(w, 1013904223u), csky_pc_noise3(w + 17.0, 1664525u)) - 0.5;
-    vec3 q = p + vec3(warp.x * shape.z * (0.4 + h) + shape.w * h, 0.0, warp.y * shape.z * (0.4 + h));
-    float r = h / csky_pc_cloud_top(q, detail_m);
-    float rc = clamp(r, 0.0, 1.0);
-    float rise = shape.x * pow(rc, 2.5) - shape.x * 0.25 * sin(3.14159265 * rc) + smoothstep(0.85, 1.0, r) * 0.6;
-    float lo = mix(csky_cloud_shadow_edge.x, csky_cloud_shadow_edge.y, 0.5) - cover_bias * 0.25 + rise;
-    return smoothstep(lo - shape.y * 0.5, lo + shape.y * 0.5, csky_cloud_noise(q));
-}
-
-// The slab's heads for the ground shadow (VolumetricClouds.PublishGround): the shape vec4 as above; the
-// layer's floor and top, erosion cell and coverage bias; the heads' gain, erosion, density gain, and
-// the ambient share the deck takes (read by csky_cloud_ao).
+// The slab's heads for the ground shadow (VolumetricClouds.PublishGround): the shape vec4 of
+// csky_pc_cover_lat_gap; the layer's floor and top, erosion cell and coverage bias; the heads' gain, a
+// free slot, the density gain, and the ambient share the deck takes (read by csky_cloud_ao).
 global uniform vec4 csky_pc_heads_shape;
 global uniform vec4 csky_pc_heads_layer;
 global uniform vec4 csky_pc_heads_density;
 
-// PROTOTYPE (clouds-look): the baked-noise look's density for the ground shadow and the veil. x is
-// the shape texture's tile in metres (0 keeps the procedural density), y the coverage cap, z the
-// bases' rag, w the density per metre (VolumetricClouds.PublishGround).
+// The slab's baked-noise density for the ground shadow and the veil (VolumetricClouds.PublishGround).
+// x is the shape texture's tile in metres, y the coverage cap, z the bases' rag, w the density per metre.
 global uniform vec4 csky_pc_pw;
-// PROTOTYPE (clouds-look): the baked-noise deck's shape tile in metres, and its density over the heads'.
+// The baked-noise deck's shape tile in metres, and its density over the heads'.
 // z and w are the heads' edge_cut and edge_k, so a shadow ends where its cloud does.
 global uniform vec4 csky_pc_pw_deck;
 // The hints matter: the lattices and the noise tile, so they must repeat in a canvas shader too.
@@ -222,15 +173,18 @@ vec2 csky_pc_lat2(vec2 p) {
 }
 #endif
 
-// csky_pc_cover_shaped off the lattices: the same coverage without hashing. The slab and its ground
-// shadow both read it. `gap` is how far the pattern's noise stands under the coverage's lower edge,
-// positive in clear air, which the slab's march strides by.
+// The slab's head coverage at `p`, which the slab and its ground shadow both read. Each cloud has
+// its own top, a low noise a few clouds across, from 30 % of the layer to its top. Up to it the noise
+// threshold dips a little through the body, so the cloud bulges, then climbs by shape.x toward the
+// top, rounding it into a dome, over a band shape.y wide; past the top nothing stands. The point
+// billows by shape.z metres and leans shape.w downwind at the layer's top. `gap` is how far the
+// pattern's noise stands under the coverage's lower edge, positive in clear air, which the slab's
+// march strides by.
 float csky_pc_cover_lat_gap(vec3 p, float bottom, float top, float detail_m, float cover_bias, vec4 shape, out float gap) {
     float h = clamp((p.y - bottom) / max(top - bottom, 1.0), 0.0, 1.0);
     vec3 w = p / (detail_m * 4.0);
     vec2 warp = vec2(csky_pc_lat3(w).r, csky_pc_lat3(w + 17.0).g) - 0.5;
     vec3 q = p + vec3(warp.x * shape.z * (0.4 + h) + shape.w * h, 0.0, warp.y * shape.z * (0.4 + h));
-    // csky_pc_cloud_top's fine noise reads y = 5 m over a 720 m cell: the y = 0 plane is within 0.02 %.
     float broad = csky_pc_lat2(q.xz / (detail_m * 11.0)).r;
     float fine = csky_pc_lat2(q.xz / (detail_m * 4.0)).g;
     float r = h / mix(0.3, 1.0, smoothstep(0.25, 0.85, broad * 0.75 + fine * 0.25));
@@ -290,7 +244,6 @@ float csky_cloud_cover_lit(vec3 world) {
     }
     vec3 s = csky_pc_ground_sun.xyz;
     vec4 layer = csky_pc_heads_layer;
-    vec4 k = csky_pc_heads_density;
     if (s.y < 0.05) {
         return 0.0;
     }
@@ -299,13 +252,7 @@ float csky_cloud_cover_lit(vec3 world) {
     float dt = (t1 - t0) * 0.25;
     float od = 0.0;
     for (int i = 0; i < 4; i++) {
-        vec3 p = world + s * (t0 + dt * (float(i) + 0.5));
-        if (csky_pc_pw.x > 0.0) {
-            od += csky_pc_heads_od_pw(p, dt);
-            continue;
-        }
-        float c = csky_pc_cover_shaped(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
-        od += csky_pc_density(p, layer.x, layer.y, c, layer.z, k.y) * k.z * dt;
+        od += csky_pc_heads_od_pw(world + s * (t0 + dt * (float(i) + 0.5)), dt);
     }
     return 1.0 - exp(-od);
 }

@@ -26,7 +26,7 @@ internal sealed partial class CloudLab : Node
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
     private static readonly Color Dim = new(0.62f, 0.62f, 0.68f);
 
-    // PROTOTYPE (clouds-look): the look's options as sliders. Each is a uniform with its label, range and step.
+    // The volumetric look's options as sliders. Each is a slab uniform with its label, range and step.
     private static readonly (string Key, string Label, float Min, float Max, float Step)[] LookRows =
     {
         ("depth_m", "Layer depth (m)", 100f, 3000f, 5f),
@@ -60,7 +60,6 @@ internal sealed partial class CloudLab : Node
         ("amb_fog_mix", "Ambient: fog mix", 0f, 1f, 0.01f),
         ("cloud_fog", "Fog over the clouds", 0f, 1f, 0.01f),
         ("shaft_steps", "Shaft steps", 8f, 64f, 1f),
-        ("temporal", "March: temporal resolve (0 or 1)", 0f, 1f, 1f),
         ("cloud_min_m", "March: least step in cloud (m)", 2f, 40f, 1f),
         ("pix_k", "March: step per pixel", 0.001f, 0.02f, 0.0005f),
         ("od_step", "March: optical-depth step", 0f, 1f, 0.05f),
@@ -90,7 +89,6 @@ internal sealed partial class CloudLab : Node
     private CanvasLayer? _layer;
     private CheckButton? _tint;
     private Button? _volumetric;
-    private Button? _look;
     private Label? _layerLabel;
     private Label? _status;
     private bool _open;
@@ -222,22 +220,21 @@ internal sealed partial class CloudLab : Node
         return _savePath;
     }
 
-    /// <summary>PROTOTYPE (clouds-look): writes the standing look options that differ from the preset into
+    /// <summary>Writes the standing look options that differ from the preset into
     /// the chapter's look block. Returns the path written, or null where nothing was saved.</summary>
     public string? SaveLook()
     {
-        if (_savePath == null || _clouds() is not { } clouds || !VolumetricClouds.LookOn || VolumetricClouds.LookValue("od_step") == null)
+        if (_savePath == null || _clouds() is not { } clouds || VolumetricClouds.LookValue("od_step") == null)
         {
-            // An empty save would drop the chapter's block, so one with no prototype slab writes nothing.
-            _note = "look not saved: needs the source tree and the prototype look standing";
+            // An empty save would drop the chapter's block, so one with no slab standing writes nothing.
+            _note = "look not saved: needs the source tree and the volumetric clouds standing";
             UpdateStatus();
             return null;
         }
         var look = new Dictionary<string, float>();
         foreach (var r in LookRows)
         {
-            // The temporal switch is the session's march mode, so no chapter saves it.
-            if (r.Key != "temporal" && VolumetricClouds.LookValue(r.Key) is { } v
+            if (VolumetricClouds.LookValue(r.Key) is { } v
                 && VolumetricClouds.LookValue(r.Key, 2) is { } preset && !Mathf.IsEqualApprox(v, preset))
             {
                 look[r.Key] = v;
@@ -276,8 +273,6 @@ internal sealed partial class CloudLab : Node
 
     private static string ValueText(Row row, CloudShadow c) =>
         $"{row.Field.Show(row.Get(c))}   (saved {row.Field.Show(row.Saved())})";
-
-    private static string LookText() => $"Look: {(VolumetricClouds.LookOn ? "prototype" : "today's")} (Ctrl+Shift+V)";
 
     // A look slider reads and writes the slab itself, and its saved value is the preset's.
     private static Row LookRow((string Key, string Label, float Min, float Max, float Step) r) => new(
@@ -406,7 +401,7 @@ internal sealed partial class CloudLab : Node
         AddChild(_layer);
     }
 
-    // PROTOTYPE (clouds-look): the look's options in a second column, left of the shadows'.
+    // The volumetric look's options in a second column, left of the shadows'.
     private PanelContainer LookPanel()
     {
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
@@ -418,16 +413,9 @@ internal sealed partial class CloudLab : Node
         var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         box.AddThemeConstantOverride("separation", 4);
         box.AddChild(new Label { Text = "CLOUD LOOK  volumetric clouds", Modulate = Amber });
-        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, Reset returns to the saved look. Copy puts the edits on the clipboard as a CSVM_CLOUD_SET string.", Dim));
+        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, Reset returns to the saved look. Copy puts the edits on the clipboard as name=value pairs.", Dim));
 
         var buttons = new HBoxContainer();
-        _look = new Button { Text = LookText(), FocusMode = Control.FocusModeEnum.None };
-        _look.Pressed += () =>
-        {
-            VolumetricClouds.ToggleLook();
-            SyncRows();
-        };
-        buttons.AddChild(_look);
         var save = new Button { Text = "Save", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
         save.Pressed += () => SaveLook();
         buttons.AddChild(save);
@@ -488,8 +476,6 @@ internal sealed partial class CloudLab : Node
     {
         if (_volumetric != null)
             _volumetric.Text = VolumetricText();
-        if (_look != null)
-            _look.Text = LookText();
         if (_clouds() is not { } c)
             return;
         _syncing = true;

@@ -27,7 +27,7 @@ public sealed class CloudShadowChapters
     public const string CloudsLayer = "clouds";
 
     /// <summary>The block inside an entry holding the volumetric clouds' look options that differ from
-    /// their preset (PROTOTYPE, clouds-look). The names are the slab shader's, so none is checked here.</summary>
+    /// their preset. The names are the slab shader's, so none is checked here.</summary>
     public const string LookBlock = "look";
 
     /// <summary>An entry's field names, in the order the lab writes them.</summary>

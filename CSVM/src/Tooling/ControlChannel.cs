@@ -165,7 +165,7 @@ public sealed class ControlChannel
                 cmd.Reply.TrySetResult(VolumetricClouds.ControlSet(string.Join(' ', words[1..])));
                 return;
             case "cloudlab":
-                // PROTOTYPE (clouds-look): shows or hides the cloud lab, or with "save" presses its look's Save.
+                // Shows or hides the cloud lab, or with "save" presses its look's Save.
                 // By name: Tooling stands under the labs' family.
                 var lab = tree.Root.FindChild("cloud_lab", true, false);
                 var done = lab?.Call(words.Length > 1 && words[1] == "save" ? "SaveLook" : "Toggle");
