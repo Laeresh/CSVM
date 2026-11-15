@@ -1,8 +1,8 @@
 #ifndef CSKY_VOLUMETRIC_CLOUDS_INC
 #define CSKY_VOLUMETRIC_CLOUDS_INC
 
-// The volumetric cloud slab's helpers (Session/World/VolumetricClouds.cs): the deck's density, the
-// phase and transmittance terms, and the screen-ray helpers its full-screen march reads. The slab's
+// The volumetric cloud slab's helpers (Session/World/VolumetricClouds.cs): the phase term, the
+// screen-ray helpers its full-screen march reads, the zeppelins' bubbles and the veil. The slab's
 // shader includes it, and so do the effects drawn after the slab, for csky_pc_veil_at.
 
 #include "res://shaders/csky_cloud_shadow.gdshaderinc"
@@ -10,37 +10,10 @@
 // The noise, the rifts, the head coverage and the head density live in csky_cloud_shadow, whose
 // ground shadow marches the same field.
 
-// The stratus deck under the heads: a sheet from `bottom` to `deck_top` covering `cover` of the
-// sky, its holes where the broad noise falls under the uncovered share. Zero with no cover.
-float csky_pc_deck_density(vec3 p, float bottom, float deck_top, float cover, float detail_m) {
-    if (cover <= 0.0 || p.y < bottom || p.y > deck_top) {
-        return 0.0;
-    }
-    // Cells about a kilometre across thin the sheet, lift its base and lower its top, so the sun
-    // leaks through the thin ones, the underside reads lumpy rather than one even grey, and from
-    // above the thinnest open onto the ground.
-    float cells = csky_pc_noise3(vec3(p.x, 3.0, p.z) / (detail_m * 6.0), 1911520717u);
-    float thick = mix(0.15, 1.0, smoothstep(0.25, 0.75, cells));
-    float h = (p.y - bottom) / max(deck_top - bottom, 1.0);
-    float base = (1.0 - thick) * 0.45;
-    float prof = smoothstep(base, base + 0.12, h) * (1.0 - smoothstep(0.3 + 0.25 * thick, 0.5 + 0.5 * thick, h));
-    float n = csky_pc_fbm(p / (detail_m * 1.8));
-    float body = clamp((n - (1.0 - cover)) / max(cover * 0.5, 0.05), 0.0, 1.0);
-    return body * prof * thick;
-}
-
 // Henyey-Greenstein phase: forward scattering lights a cloud's rim when the sun stands behind it.
 float csky_pc_phase(float cos_theta, float g) {
     float g2 = g * g;
     return (1.0 - g2) / (4.0 * 3.14159265 * pow(1.0 + g2 - 2.0 * g * cos_theta, 1.5));
-}
-
-// Beer-Lambert transmittance with the powder term, which darkens a thick cloud's lit face less
-// than a thin one's and keeps the sun side from going flat white.
-float csky_pc_beer_powder(float optical_depth) {
-    float beer = exp(-optical_depth);
-    float powder = 1.0 - exp(-optical_depth * 2.0);
-    return beer * mix(1.0, powder, 0.5);
 }
 
 // Scene distance along the pixel's ray from the depth buffer, in metres: the far plane reads as
@@ -79,12 +52,12 @@ global uniform vec4 csky_pc_bubble1;
 global uniform vec4 csky_pc_bubble2;
 global uniform vec4 csky_pc_bubble3;
 
-// The share of the field one bubble leaves at `p`: none deep inside, all past its edge.
+// The share of the clouds' coverage one bubble leaves at `p`: none deep inside, all past its edge.
 float csky_pc_bubble_keep(vec4 b, vec3 p) {
     return b.w > 0.0 ? smoothstep(b.w * 0.7, b.w, distance(p, b.xyz)) : 1.0;
 }
 
-// The share of the cloud field every bubble leaves at `p`.
+// The share of the clouds' coverage every bubble leaves at `p`.
 float csky_pc_bubbles(vec3 p) {
     return csky_pc_bubble_keep(csky_pc_bubble0, p) * csky_pc_bubble_keep(csky_pc_bubble1, p)
         * csky_pc_bubble_keep(csky_pc_bubble2, p) * csky_pc_bubble_keep(csky_pc_bubble3, p);
@@ -111,14 +84,12 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
     if (t1 <= span.x) {
         return 1.0;
     }
-    vec4 layer = csky_pc_heads_layer;
-    vec4 k = csky_pc_heads_density;
+    // Both densities are per metre already, so the optical depth takes no density gain.
     float dt = (t1 - span.x) / 12.0;
     float od = 0.0;
     for (int i = 0; i < 12; i++) {
         vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
-        float c = csky_pc_cover_shaped(q, v.x, v.y, layer.z, layer.w, csky_pc_heads_shape) * k.x;
-        od += csky_pc_density(q, v.x, v.y, c, layer.z, k.y) * csky_pc_bubbles(q) * dt;
+        od += csky_pc_heads_od_pw(q, dt, csky_pc_bubbles(q));
     }
     vec2 deck = csky_pc_slab_span(eye, dir, v.x, v.x + v.w);
     float d1 = min(deck.y, len);
@@ -126,11 +97,12 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
         float ddt = (d1 - deck.x) / 3.0;
         for (int i = 0; i < 3; i++) {
             vec3 q = eye + dir * (deck.x + ddt * (float(i) + 0.5));
-            od += csky_pc_deck_density(q, v.x, v.x + v.w, v.z, layer.z) * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w)
-                * csky_pc_bubbles(q) * ddt;
+            // The deck without its detail erosion, the bubbles cut from its cover as the slab cuts them.
+            float deck_d = csky_pc_deck_body_pw(q, v.z * csky_pc_bubbles(q), csky_pc_pw_deck.x) * csky_pc_deck_profile(q.y, v.x, v.x + v.w) * csky_pc_pw.w * csky_pc_pw_deck.y;
+            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
         }
     }
-    return exp(-od * k.z);
+    return exp(-od);
 }
 
 // A per-pixel jitter in [0, 1) off the screen position alone. The slab adds its own per-frame

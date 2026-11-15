@@ -104,6 +104,9 @@ internal sealed partial class CloudShadow : Node
     /// <summary>The chapter's saved tune in the standing layer.</summary>
     public CloudShadowPattern.Tune Saved => _chapters.For(_chapter, CloudsLayer);
 
+    /// <summary>The chapter's saved volumetric look options, empty with none.</summary>
+    public IReadOnlyDictionary<string, float> SavedLook => _chapters.Look(_chapter);
+
     /// <summary>Whether the shadows draw now: Enhanced, the word on, a cloudy mission, a day zone.</summary>
     public bool Draws => GraphicsMode.Enhanced && CloudShadowSetting.Enabled && _cloudy && !_night;
 
@@ -123,6 +126,12 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         RenderingServer.GlobalShaderParameterAdd("csky_pc_veil", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        // The slab's baked-noise density for its ground shadow and veil, and the noise it reads.
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_pw", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_pw_deck", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_shape_tex", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_warp_lat", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd("csky_pc_tops_lat", RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         foreach (var bubble in BubbleParams)
             RenderingServer.GlobalShaderParameterAdd(bubble, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;

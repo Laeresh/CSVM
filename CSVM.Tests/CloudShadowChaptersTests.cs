@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 using CSVM.Effects;
@@ -152,6 +153,27 @@ public class CloudShadowChaptersTests
         Assert.Equal(existing.Replace(" ", ""), CloudShadowChapters.WithEntry(layered, "C1", file.For("C1"), clouds: true)
             .Replace(" ", "").Replace("\r", "").Replace("\n", ""));
         Assert.Equal(layered, CloudShadowChapters.WithEntry(layered, "C1", edit, clouds: true));
+    }
+
+    [Fact]
+    public void A_look_save_replaces_the_chapters_block_alone_and_an_empty_one_drops_it()
+    {
+        const string existing = """{ "_about": "prose", "C1": { "darkness": 0.5, "clouds": { "size": 700 } }, "C3": { "size": 700 } }""";
+        var look = new Dictionary<string, float> { ["depth_m"] = 1505f, ["pix_k"] = 0.0035f };
+
+        string text = CloudShadowChapters.WithLook(existing, "c1", look);
+        var file = CloudShadowChapters.Parse(text);
+
+        Assert.Empty(file.Warnings);
+        Assert.Equal(look, file.Look("c1"));
+        Assert.Empty(file.Look("C3"));
+        Assert.Equal(CloudShadowChapters.Parse(existing).For("C1", clouds: true), file.For("C1", clouds: true));
+        Assert.Equal(new[] { "darkness", "clouds", "look" }, Keys((JsonObject)JsonNode.Parse(text)!["C1"]!));
+        // A base save keeps the block, and an empty look save drops it again.
+        string based = CloudShadowChapters.WithEntry(text, "C1", file.For("C1"));
+        Assert.Equal(look, CloudShadowChapters.Parse(based).Look("C1"));
+        Assert.DoesNotContain("look", CloudShadowChapters.WithLook(text, "C1", new Dictionary<string, float>()));
+        Assert.Single(CloudShadowChapters.Parse("""{ "C1": { "look": { "pix_k": "fine" } } }""").Warnings);
     }
 
     [Fact]

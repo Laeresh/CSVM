@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Session.World;
 using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
@@ -24,6 +25,57 @@ internal sealed partial class CloudLab : Node
 
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
     private static readonly Color Dim = new(0.62f, 0.62f, 0.68f);
+
+    // The volumetric look's options as sliders. Each is a slab uniform with its label, range and step.
+    private static readonly (string Key, string Label, float Min, float Max, float Step)[] LookRows =
+    {
+        ("depth_m", "Layer depth (m)", 100f, 3000f, 5f),
+        ("shape_m", "Shape tile (m)", 500f, 6000f, 50f),
+        ("detail_tile_m", "Detail tile (m)", 50f, 1000f, 10f),
+        ("detail_erode", "Detail erosion", 0f, 1f, 0.01f),
+        ("base_erode", "Base erosion", 0f, 2f, 0.01f),
+        ("base_rag", "Ragged base", 0f, 0.5f, 0.01f),
+        ("head_soft", "Head softness", 0.05f, 1f, 0.01f),
+        ("heads_gain", "Heads gain", 0f, 2f, 0.01f),
+        ("cover_max", "Most cover", 0f, 1f, 0.01f),
+        ("pw_density", "Density", 0.005f, 0.2f, 0.005f),
+        ("edge_cut", "Edge cut", 0f, 0.9f, 0.01f),
+        ("edge_k", "Edge hardness", 1f, 10f, 0.1f),
+        ("deck_scale", "Deck: tile scale", 0.2f, 3f, 0.05f),
+        ("deck_k", "Deck: density", 0f, 2f, 0.05f),
+        ("deck_erode", "Deck: erosion", 0f, 1f, 0.01f),
+        ("sun_gain", "Light: sun gain", 0f, 5f, 0.05f),
+        ("light_k", "Light: self-shadow", 0f, 5f, 0.05f),
+        ("light_step_m", "Light: shadow step (m)", 5f, 100f, 1f),
+        ("phase_g", "Light: forward scatter", 0f, 0.95f, 0.01f),
+        ("phase_back", "Light: back scatter", 0f, 1f, 0.01f),
+        ("powder_k", "Light: powder", 0f, 2f, 0.05f),
+        ("ms_a", "Light: multi-scatter a", 0f, 1f, 0.01f),
+        ("ms_b", "Light: multi-scatter b", 0f, 1f, 0.01f),
+        ("ms_c", "Light: multi-scatter c", 0f, 1f, 0.01f),
+        ("amb_gain", "Ambient: gain", 0f, 3f, 0.05f),
+        ("amb_floor", "Ambient: floor", 0f, 1f, 0.01f),
+        ("amb_occ", "Ambient: occlusion", 0f, 1f, 0.01f),
+        ("amb_od_k", "Ambient: depth falloff", 0f, 1f, 0.01f),
+        ("amb_fog_mix", "Ambient: fog mix", 0f, 1f, 0.01f),
+        ("cloud_fog", "Fog over the clouds", 0f, 1f, 0.01f),
+        ("shaft_steps", "Shaft steps", 8f, 64f, 1f),
+        ("cloud_min_m", "March: least step in cloud (m)", 2f, 40f, 1f),
+        ("pix_k", "March: step per pixel", 0.001f, 0.02f, 0.0005f),
+        ("od_step", "March: optical-depth step", 0f, 1f, 0.05f),
+        ("lit_max_m", "March: largest lit step (m)", 2f, 64f, 1f),
+        ("lit_growth", "March: lit step growth", 0f, 0.1f, 0.005f),
+        ("step_growth", "March: step growth", 0f, 0.15f, 0.005f),
+        ("light_every_a", "March: re-light per opacity", 0f, 0.2f, 0.005f),
+        ("search_gap_m", "Search: gap (m)", 0f, 2000f, 50f),
+        ("search_pix_k", "Search: step per pixel", 0.001f, 0.02f, 0.0005f),
+        ("cover_gap_m", "Search: cover gap (m)", 100f, 3000f, 50f),
+        ("cover_stride", "Search: cover stride", 1f, 4f, 0.5f),
+        ("retreat_k", "Search: retreat", 0f, 3f, 0.1f),
+        ("bisect_n", "Search: bisections", 0f, 10f, 1f),
+        ("step_budget", "Step budget", 100f, 3000f, 50f),
+        ("dither_k", "Dither", 0f, 1f, 0.05f),
+    };
 
     private readonly Func<CloudShadow?> _clouds;
     private readonly string _chapter;
@@ -168,6 +220,47 @@ internal sealed partial class CloudLab : Node
         return _savePath;
     }
 
+    /// <summary>Writes the standing look options that differ from the preset into
+    /// the chapter's look block. Returns the path written, or null where nothing was saved.</summary>
+    public string? SaveLook()
+    {
+        if (_savePath == null || _clouds() is not { } clouds || VolumetricClouds.LookValue("od_step") == null)
+        {
+            // An empty save would drop the chapter's block, so one with no slab standing writes nothing.
+            _note = "look not saved: needs the source tree and the volumetric clouds standing";
+            UpdateStatus();
+            return null;
+        }
+        var look = new Dictionary<string, float>();
+        foreach (var r in LookRows)
+        {
+            if (VolumetricClouds.LookValue(r.Key) is { } v
+                && VolumetricClouds.LookValue(r.Key, 2) is { } preset && !Mathf.IsEqualApprox(v, preset))
+            {
+                look[r.Key] = v;
+            }
+        }
+        try
+        {
+            CloudShadowChapters.SaveLook(_savePath, _chapter, look);
+            clouds.Reload(CloudShadowChapters.Parse(System.IO.File.ReadAllText(_savePath, System.Text.Encoding.UTF8)));
+        }
+        catch (Exception ex) when (ex is System.IO.InvalidDataException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            _note = $"look not saved: {ex.Message}";
+            Log.Warn("ui", $"cloud lab: {_note}");
+            UpdateStatus();
+            return null;
+        }
+        // The saved values now build the slab, so the live edits over them go.
+        VolumetricClouds.LabClear();
+        _note = $"saved {_chapter}'s look ({look.Count} option(s) off the preset) to {_savePath}";
+        Log.Info("ui", $"cloud lab: {_note}");
+        SyncRows();
+        UpdateStatus();
+        return _savePath;
+    }
+
     private static Label Small(string text, Color? colour = null)
     {
         var label = new Label { Text = text, Modulate = colour ?? new Color(1, 1, 1, 0.75f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -181,13 +274,20 @@ internal sealed partial class CloudLab : Node
     private static string ValueText(Row row, CloudShadow c) =>
         $"{row.Field.Show(row.Get(c))}   (saved {row.Field.Show(row.Saved())})";
 
+    // A look slider reads and writes the slab itself, and its saved value is the preset's.
+    private static Row LookRow((string Key, string Label, float Min, float Max, float Step) r) => new(
+        new CloudShadowPattern.Field(r.Key, $"{r.Label}  [{r.Key}]", r.Min, r.Max, r.Step, "0.####", _ => null, (t, _) => t),
+        _ => VolumetricClouds.LookValue(r.Key) ?? 0f,
+        (_, v) => VolumetricClouds.LabSet(r.Key, v),
+        () => VolumetricClouds.LookValue(r.Key, 1) ?? 0f);
+
     private string LayerText() => _editsClouds
         ? "Editing the clouds layer (applies while Volumetric Clouds is on)"
         : "Editing the base tune (Volumetric Clouds off)";
 
     private string Describe() => _clouds() is { } c
         ? string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{c.Tune.Describe()} drift=({c.Drift.X:0.#},{c.Drift.Y:0.#})m/s tint={(c.Tint != Vector3.Zero ? "on" : "off")}")
+            $"{c.Tune.Describe()} drift=({c.Drift.X:0.#},{c.Drift.Y:0.#})m/s tint={(c.Tint != Vector3.Zero ? "on" : "off")} look=[{VolumetricClouds.LabSetText}]")
         : "no cloud shadows standing";
 
     // The saved heading, else the session's starting drift's, so a saved speed of 0 keeps a direction.
@@ -296,8 +396,47 @@ internal sealed partial class CloudLab : Node
         margin.AddChild(box);
         panel.AddChild(margin);
         root.AddChild(panel);
+        root.AddChild(LookPanel());
         _layer.AddChild(root);
         AddChild(_layer);
+    }
+
+    // The volumetric look's options in a second column, left of the shadows'.
+    private PanelContainer LookPanel()
+    {
+        var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
+        panel.SetAnchorsPreset(Control.LayoutPreset.RightWide);
+        panel.OffsetLeft = -792;
+        panel.OffsetRight = -400;
+        panel.OffsetTop = 40;
+        panel.OffsetBottom = -16;
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 4);
+        box.AddChild(new Label { Text = "CLOUD LOOK  volumetric clouds", Modulate = Amber });
+        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, Reset returns to the saved look. Copy puts the edits on the clipboard as name=value pairs.", Dim));
+
+        var buttons = new HBoxContainer();
+        var save = new Button { Text = "Save", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
+        save.Pressed += () => SaveLook();
+        buttons.AddChild(save);
+        var reset = new Button { Text = "Reset", FocusMode = Control.FocusModeEnum.None };
+        reset.Pressed += () =>
+        {
+            VolumetricClouds.LabClear();
+            SyncRows();
+        };
+        buttons.AddChild(reset);
+        var copy = new Button { Text = "Copy", FocusMode = Control.FocusModeEnum.None };
+        copy.Pressed += () => DisplayServer.ClipboardSet(VolumetricClouds.LabSetText);
+        buttons.AddChild(copy);
+        box.AddChild(buttons);
+
+        foreach (var row in LookRows)
+            AddRow(box, LookRow(row));
+        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        scroll.AddChild(box);
+        panel.AddChild(scroll);
+        return panel;
     }
 
     private void AddRow(VBoxContainer box, Row row)
