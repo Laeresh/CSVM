@@ -33,6 +33,9 @@ internal static class OceanMaskRaster
     /// tile, solid off the water or uncovered texel.</summary>
     public const float ShoreReach = 160f;
 
+    /// <summary>The metres at which the fetch plane (<see cref="Fetch"/>) saturates: 255 texels.</summary>
+    public const float FetchReach = 255f * Cell;
+
     /// <summary>The lowest corner at or above which a solid cannot touch the water: the top of a ramp
     /// and the hide's band over it. A bridge deck or a roof over the sea is no shore, and marks no texel.</summary>
     public const float SolidTop = OceanMask.RampTop + OceanMask.HideHeight;
@@ -190,6 +193,84 @@ internal static class OceanMaskRaster
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.DrawZone, lift, grid.Surf, inland, (t3 - t2) * tick,
             spray, (t4 - t3) * tick);
+    }
+
+    /// <summary>The fetch plane (RG8) over a baked RG8 <paramref name="mask"/> of <paramref name="w"/> x
+    /// <paramref name="h"/> texels, for swell running toward <paramref name="windDeg"/>. R is the upwind fetch, the
+    /// sea back along the wind to the first land texel. G is the seaward fetch of a texel within
+    /// <see cref="ShoreReach"/>, the sea along the shore distance's slope to the next land. Both count texels
+    /// (<see cref="Cell"/> metres each) and saturate at 255. Sea off the mask's edge is open sea. Land is a texel
+    /// with no coverage or no shore distance, so a solid on the water shelters as a coast does.</summary>
+    public static byte[] Fetch(byte[] mask, int w, int h, float windDeg)
+    {
+        var fetch = new byte[w * h * 2];
+        bool Land(int i) => mask[2 * i] == 0 || mask[(2 * i) + 1] == 0;
+        float rad = Mathf.DegToRad(windDeg), cx = Mathf.Cos(rad), cz = Mathf.Sin(rad);
+        // One sweep down the wind's major axis. Each texel reads the texel a whole step back on that axis,
+        // filtered between the two across it. The sweep has already written both.
+        bool alongX = Math.Abs(cx) >= Math.Abs(cz);
+        float major = alongX ? cx : cz, minor = alongX ? cz : cx;
+        int steps = alongX ? w : h, across = alongX ? h : w, dir = major > 0f ? 1 : -1;
+        float step = 1f / Math.Abs(major), slide = minor / Math.Abs(major);
+        var up = new float[w * h];
+        int At(int a, int b) => alongX ? (b * w) + a : (a * w) + b;
+        for (int n = 0; n < steps; n++)
+        {
+            int a = dir > 0 ? n : steps - 1 - n;
+            for (int b = 0; b < across; b++)
+            {
+                int i = At(a, b);
+                if (Land(i))
+                    continue;
+                float back;
+                if (a - dir < 0 || a - dir >= steps)
+                {
+                    back = 255f;
+                }
+                else
+                {
+                    float s = Math.Clamp(b - slide, 0f, across - 1);
+                    int lo = (int)s, hi = Math.Min(lo + 1, across - 1);
+                    back = Mathf.Lerp(up[At(a - dir, lo)], up[At(a - dir, hi)], s - lo);
+                }
+                up[i] = Math.Min(255f, back + step);
+                fetch[2 * i] = (byte)Math.Round(up[i]);
+            }
+        }
+        System.Threading.Tasks.Parallel.For(0, h, y =>
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w) + x;
+                byte g = mask[(2 * i) + 1];
+                if (Land(i))
+                    continue;
+                fetch[(2 * i) + 1] = g == 255 ? (byte)255 : Seaward(x, y);
+            }
+        });
+        return fetch;
+
+        int G(int x, int y) => mask[(2 * ((Math.Clamp(y, 0, h - 1) * w) + Math.Clamp(x, 0, w - 1))) + 1];
+
+        // Marches from the texel's centre along the shore distance's slope until land or the mask's edge.
+        byte Seaward(int x, int y)
+        {
+            float gx = G(x + 1, y) - G(x - 1, y), gz = G(x, y + 1) - G(x, y - 1);
+            float len = MathF.Sqrt((gx * gx) + (gz * gz));
+            if (len == 0f)
+                return 255;
+            gx /= len;
+            gz /= len;
+            for (int t = 1; t < 255; t++)
+            {
+                int px = (int)Math.Floor(x + 0.5f + (gx * t)), pz = (int)Math.Floor(y + 0.5f + (gz * t));
+                if (px < 0 || pz < 0 || px >= w || pz >= h)
+                    return 255;
+                if (Land((pz * w) + px))
+                    return (byte)t;
+            }
+            return 255;
+        }
     }
 
     /// <summary>The inland byte of a texel <paramref name="d"/> metres from the coastline: 128 on it,

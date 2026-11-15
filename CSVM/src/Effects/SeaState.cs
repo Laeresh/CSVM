@@ -62,6 +62,14 @@ public sealed record SeaState
             "steps by whole lines per csky_time wrap"),
         new("spray", "Cliff spray", Surf, 0f, 1f, 1f, s => s.Spray, (s, v) => s with { Spray = v },
             "1 throws spray up the cliffs behind the painted coasts as each line arrives, 0 none"),
+        new("shore_train", "Shore train height", ShoreTrainGroup,0f, 2f, 0.01f, s => s.ShoreTrain, (s, v) => s with { ShoreTrain = v },
+            "the swell's two longest waves running toward every coast; 0 writes none"),
+        new("shore_radius_m", "Crossfade radius (m)", ShoreTrainGroup,16f, OceanMaskRaster.ShoreReach, 1f, s => s.ShoreRadius, (s, v) => s with { ShoreRadius = v },
+            "the train is full inside half of it, the wind swell outside it"),
+        new("shore_fetch_m", "Train full at fetch (m)", ShoreTrainGroup,0f, OceanMaskRaster.FetchReach, 8f, s => s.ShoreFetch, (s, v) => s with { ShoreFetch = v },
+            "open water seaward of the coast; 0 is full on every coast"),
+        new("wind_fetch_m", "Wind swell full at fetch (m)", ShoreTrainGroup,0f, OceanMaskRaster.FetchReach, 8f, s => s.WindFetch, (s, v) => s with { WindFetch = v },
+            "open water upwind; 0 is full everywhere"),
     };
 
     // The lab's groups, in the order its panel shows them.
@@ -70,6 +78,7 @@ public sealed record SeaState
     private const string Foam = "Foam";
     private const string Coast = "Coast + colour";
     private const string Surf = "Surf";
+    private const string ShoreTrainGroup = "Shore train + fetch";
 
     /// <summary>TUNE. The swell's height, the shader's <c>wave_scale</c>, on the grid and in the normals.</summary>
     public float Height { get; init; } = 1f;
@@ -155,6 +164,28 @@ public sealed record SeaState
     /// <summary>Whether the surf throws spray up the cliffs (<see cref="CoastSpray"/>), 1 or 0. C3 sets 0:
     /// its cliffs stand 50 to 130 m behind the painted waterline, and its spray landed in the forest.</summary>
     public float Spray { get; init; } = 1f;
+
+    /// <summary>TUNE. The shore train's height over the swell's: its crests follow the shore distance and run
+    /// shoreward on every coast. At zero the shader writes no train.</summary>
+    public float ShoreTrain { get; init; }
+
+    /// <summary>TUNE. Metres from the shore over which the wind swell gives way to the shore train.</summary>
+    public float ShoreRadius { get; init; } = 150f;
+
+    /// <summary>TUNE. The seaward fetch in metres at which the shore train is full. Across a narrow inlet it
+    /// stays small. At zero it is full on every coast.</summary>
+    public float ShoreFetch { get; init; }
+
+    /// <summary>TUNE. The upwind fetch in metres at which the wind swell is full, so a lee goes calm. At zero
+    /// it is full everywhere. The fetch is baked for <see cref="WindDeg"/>.</summary>
+    public float WindFetch { get; init; }
+
+    /// <summary>Whether the swell is shared between the wind and the coasts: a shore train, or a wind swell
+    /// held to its fetch. Without either the shader writes none of it.</summary>
+    public bool SharesSwell => ShoreTrain > 0f || WindFetch > 0f;
+
+    /// <summary>Whether the shader reads the fetch plane.</summary>
+    public bool ReadsFetch => WindFetch > 0f || (ShoreTrain > 0f && ShoreFetch > 0f);
 
     /// <summary>Whether <see cref="Spray"/> is on.</summary>
     public bool Sprays => Spray >= 0.5f;
