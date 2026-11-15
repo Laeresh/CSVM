@@ -45,7 +45,7 @@ vec2 csky_pc_slab_span(vec3 eye, vec3 dir, float bottom, float top) {
     return far <= near ? vec2(-1.0, -1.0) : vec2(near, far);
 }
 
-// The bubbles of clear air the slab leaves round the zeppelins (VolumetricClouds.FollowHulls): each
+// The bubbles of clear air the slab leaves round the zeppelins and the chapter's named structures (VolumetricClouds.FollowHulls): each
 // one's centre and radius, a zero radius for an empty slot. Globals take no arrays, hence four.
 global uniform vec4 csky_pc_bubble0;
 global uniform vec4 csky_pc_bubble1;
