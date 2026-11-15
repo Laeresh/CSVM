@@ -206,7 +206,7 @@ public sealed class ClutterBuilder
     /// Red gains more than blue, so it reads as lit foliage rather than grey. The cards are near black,
     /// so a smaller gain moved only a few sRGB levels. The gain is full a sixth of the card's width off
     /// its axis. No base darkening: the ground already paints a dark blob under each original tree.
-    /// Unshaded, so the cloud shadow reaches it as a gain (v_cloud, from SunLine) and never through AO.</summary>
+    /// Unshaded, so the cloud and terrain shadows reach it as a gain (v_cloud, from SunLine), never through AO.</summary>
     public static string RichFragmentLines =>
         "    ALBEDO *= 1.0 + max(v_sun * clamp(v_side * 3.0, -1.0, 1.0), 0.0) * vec3(1.6, 1.5, 1.2);\n"
         + (Utils.ShadowQualitySetting.TerrainShadows ? "    ALBEDO *= v_cloud;\n" : "");
@@ -218,13 +218,9 @@ public sealed class ClutterBuilder
 
     /// <summary>How much the card's half facing the sun's bearing gains, before its side; the
     /// clumps and the models share it. Under a cliff's baked shadow the stamp's origin reads no
-    /// sun, so no gain. The cloud gain is read once per stamp, at its origin.</summary>
-    public static string SunLine =>
-        "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0)"
-        + (Utils.ShadowQualitySetting.TerrainShadows
-            ? " * csky_terrain_sun(MODEL_MATRIX[3].xyz);\n"
-                + "    v_cloud = csky_cloud_unlit(MODEL_MATRIX[3].xyz, csky_sun_light_at(CAMERA_POSITION_WORLD));\n"
-            : ";\n");
+    /// sun, so no gain, and its colour darkens to the ambient share. Both shadows' gain is read once
+    /// per stamp, at its origin, so a tree across a shadow's edge is all lit or all dark.</summary>
+    public static string SunLine => SunLineAt("MODEL_MATRIX[3].xyz");
 
     /// <summary>The Rich card's vertex lines. The mirror reads a negative X axis off the instance
     /// basis. A card has vertices only at its base and top, so the sway is a lean about the base
@@ -785,6 +781,15 @@ public sealed class ClutterBuilder
         if (_addedRoot != null)
             _addedRoot.Visible = VegetationQualitySetting.RichOn;
     }
+
+    // SunLine reading both shadows at the world position `at`.
+    // ⚠ Pass a point on the ground: one sunk under it reads the bake as shaded on lit ground.
+    internal static string SunLineAt(string at) =>
+        "    v_sun = dot(face[0].xz, normalize(csky_sun_dir.xz + vec2(1e-4, 0.0))) * clamp(csky_sun_light.y, 0.0, 1.0)"
+        + (Utils.ShadowQualitySetting.TerrainShadows
+            ? $" * csky_terrain_sun({at});\n"
+                + $"    v_cloud = csky_terrain_unlit({at}, csky_sun_light_at(CAMERA_POSITION_WORLD));\n"
+            : ";\n");
 
     // The basis a card's vertices are turned by, the rendering half of its decoration model's own
     // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").

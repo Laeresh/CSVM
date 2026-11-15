@@ -496,6 +496,10 @@ public sealed record SessionSpec
     /// (<see cref="Effects.TerrainShadow"/>), the A/B lever; on unless said otherwise. See <c>docs/cli.md</c>.</summary>
     public bool TerrainShadows { get; private set; } = true;
 
+    /// <summary><c>--vegetation-shadows=on|off</c>: whether the near vegetation models cast the sun's
+    /// shadow (<see cref="Mech3.VegetationModels.CastShadows"/>), a prototype; off unless said. See <c>docs/cli.md</c>.</summary>
+    public bool VegetationShadows { get; private set; }
+
     /// <summary><c>--dump-terrain-shadow=&lt;path&gt;</c>: where the terrain shadow bake writes its
     /// texels as a PNG; empty for none. See <c>docs/cli.md</c>.</summary>
     public string TerrainShadowPath { get; private set; } = "";
@@ -1795,6 +1799,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg.StartsWith("--coast-spray=")) { s.CoastSpray = arg["--coast-spray=".Length..]; }
             else if (arg is "--terrain-shadows=on" or "--terrain-shadows=off") { s.TerrainShadows = arg.EndsWith("on", StringComparison.Ordinal); }
+            else if (arg is "--vegetation-shadows=on" or "--vegetation-shadows=off") { s.VegetationShadows = arg.EndsWith("on", StringComparison.Ordinal); }
             else if (arg.StartsWith("--dump-terrain-shadow=")) { s.TerrainShadowPath = arg["--dump-terrain-shadow=".Length..]; }
             else if (arg.StartsWith("--terrain-shadow-cell=")) { s.TerrainShadowCell = float.TryParse(arg["--terrain-shadow-cell=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out float cell) ? Math.Clamp(cell, 2f, 64f) : s.TerrainShadowCell; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }

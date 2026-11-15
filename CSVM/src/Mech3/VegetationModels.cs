@@ -46,6 +46,10 @@ public static class VegetationModels
     /// a card with no model, which then draws at every distance.</summary>
     public const string BandParam = "vegetation_model_band";
 
+    /// <summary>The canopy material's parameter for how far, in model metres, the painted surface stands over
+    /// a crown's sunk origin. The crown reads the terrain and cloud shadows there.</summary>
+    public const string SunLiftParam = "sun_lift";
+
     /// <summary>The sample points per triangle edge <see cref="SurfaceMean"/> reads, 21 a triangle.</summary>
     public const int SurfaceSamples = 6;
 
@@ -59,13 +63,23 @@ public static class VegetationModels
     // The grade's bounds: a model whose colours are that far off the card is a bad file, not a grade.
     private const float MinGrade = 0.25f, MaxGrade = 4f;
 
-    // The sun on a canopy crown: the view's vertex term on the crown's normal over its value at a half-lit
-    // normal. Both read the view drawing it. The crowns keep their graded brightness and gain a lit and a
+    // The sun on a model: the view's vertex term on its normal over the term's value at a half-lit
+    // normal. Both read the view drawing it. A model keeps its graded brightness and gains a lit and a
     // shaded side.
-    private const string CrownLitLines = "    vec2 sun_pair = csky_sun_light_at(CAMERA_POSITION_WORLD);\n"
+    private const string SunLitLines = "    vec2 sun_pair = csky_sun_light_at(CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO *= csky_sun_vertex_light_at(v_normal, CAMERA_POSITION_WORLD) / max(sun_pair.x + 0.5 * sun_pair.y, 1e-3);\n";
 
     private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy), Shader> Shaders = new();
+
+    // ponytail: the map edge's model copies cast none, and no option or live switch reaches it.
+
+    /// <summary>Gets or sets whether the models cast the sun's shadow, <c>--vegetation-shadows=on</c>. A
+    /// prototype, off by default. The launcher sets it once from the spec, before the first model is built.</summary>
+    public static bool CastShadows { get; set; }
+
+    /// <summary>The cast setting a model cell takes under <see cref="CastShadows"/>.</summary>
+    public static GeometryInstance3D.ShadowCastingSetting Casting =>
+        CastShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off;
 
     /// <summary>The band both sides read under the standing <see cref="VegetationModelsSetting"/> word: near and
     /// far in metres, zero for Off.</summary>
@@ -133,7 +147,15 @@ public static class VegetationModels
     public static ShaderMaterial Material(Model model, bool lit, bool fogged, float cardWidth, bool canopy = false)
     {
         if (!Shaders.TryGetValue((lit, fogged, canopy), out var shader))
-            Shaders[(lit, fogged, canopy)] = shader = new Shader { Code = ShaderCode(lit, fogged, canopy) };
+        {
+            // A shadow pass draws from the light, so a casting model's vertex stage fades by the pane's own
+            // eye. The fragment stage has no such built-in, and its colour draws in no shadow pass.
+            string code = ShaderCode(lit, fogged, canopy);
+            int fragment = code.IndexOf("void fragment()", StringComparison.Ordinal);
+            if (CastShadows)
+                code = code[..fragment].Replace("CAMERA_POSITION_WORLD", "MAIN_CAM_INV_VIEW_MATRIX[3].xyz", StringComparison.Ordinal) + code[fragment..];
+            Shaders[(lit, fogged, canopy)] = shader = new Shader { Code = code };
+        }
         // A coverage cutout sorting with the blends paints over a truss in front of it (SceneBuilder.CutoutRenderPriority).
         var material = new ShaderMaterial { Shader = shader, RenderPriority = SceneBuilder.CutoutRenderPriority };
         material.SetShaderParameter("albedo_tex", model.Albedo);
@@ -271,7 +293,7 @@ public static class VegetationModels
     // the band the model keeps the dither cells the card or the crowns give up, so a stamp never draws both or neither. It turns by
     // a hash of its stamp's origin, mirrors as its card does, leans in the card's breeze and gains on its sun half.
     // ⚠ Never light a card's model with the scene's lights: the card is unlit, and a lit model shows at the band.
-    // A canopy crown alone takes the sun term about its mean (CrownLitLines); it hands over to painted crowns.
+    // Every model takes the sun term on its normals about its mean (SunLitLines), so the graded brightness holds.
     // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
     private static string ShaderCode(bool lit, bool fogged, bool canopy) => $$"""
         shader_type spatial;
@@ -280,7 +302,8 @@ public static class VegetationModels
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
         uniform vec3 grade = vec3(1.0);
         uniform vec2 {{BandParam}};
-        {{(canopy ? "varying vec3 v_normal;" : $"uniform vec2 {CanopyClumps.HandoverParam};\nuniform float {ReachParam} = 1.0;")}}
+        varying vec3 v_normal;
+        {{(canopy ? $"uniform float {SunLiftParam} = 0.0;" : $"uniform vec2 {CanopyClumps.HandoverParam};\nuniform float {ReachParam} = 1.0;")}}
 
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
@@ -311,9 +334,10 @@ public static class VegetationModels
             mat3 turn = mat3(vec3(cos(yaw), 0.0, -sin(yaw)), vec3(0.0, 1.0, 0.0), vec3(sin(yaw), 0.0, cos(yaw)));
             vec3 flip = vec3(MODEL_MATRIX[0].x < 0.0 ? -1.0 : 1.0, 1.0, 1.0);
             vec3 v = turn * (VERTEX * flip){{(canopy ? " * MODEL_MATRIX[1].y" : "")}};
-        {{(canopy ? "    v_normal = turn * (NORMAL * flip);\n" : "")}}{{ClutterBuilder.FaceBasisLines(false)}}
+            v_normal = turn * (NORMAL * flip);
+        {{ClutterBuilder.FaceBasisLines(false)}}
             v_side = dot(v.xz, face[0].xz) / half_width;
-        {{ClutterBuilder.SunLine}}{{ClutterBuilder.LeanLines}}    v += vec3(breeze.x, 0.0, breeze.y) * (lean * v.y);
+        {{(canopy ? ClutterBuilder.SunLineAt($"(origin + vec3(0.0, {SunLiftParam} * MODEL_MATRIX[1].y, 0.0))") : ClutterBuilder.SunLine)}}{{ClutterBuilder.LeanLines}}    v += vec3(breeze.x, 0.0, breeze.y) * (lean * v.y);
             VERTEX = (VIEW_MATRIX * vec4(origin + v * keep, 1.0)).xyz;
         }
 
@@ -323,7 +347,7 @@ public static class VegetationModels
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb * grade{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{(canopy ? CrownLitLines : "")}}{{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
+        {{SunLitLines}}{{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;
         {{SceneBuilder.CoverageLines}}

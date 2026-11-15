@@ -531,6 +531,8 @@ public class SessionSpecParserTests
         Assert.False(spec.TerrainShadows);
         Assert.Equal("shadow.png", spec.TerrainShadowPath);
         Assert.True(SessionSpec.Parse(new[] { "--fly", "--terrain-shadows=on" }).TerrainShadows);
+        Assert.False(spec.VegetationShadows);
+        Assert.True(SessionSpec.Parse(new[] { "--fly", "--vegetation-shadows=on" }).VegetationShadows);
         Assert.True(spec.Fly);
         Assert.Equal(4f, spec.TerrainShadowCell);
         Assert.Equal(8f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=8" }).TerrainShadowCell);

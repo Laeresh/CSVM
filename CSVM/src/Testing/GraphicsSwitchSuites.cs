@@ -1033,6 +1033,10 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(drawn.All(m => m.Layers == Mech3.VegetationModels.Layer)
                         && Mech3.ClutterBuilder.ModelShare.StartsWith($"({Mech3.SceneBuilder.FlatSeaEye} ? 1.0 : ", StringComparison.Ordinal),
                     $"every model cell draws on the models' layer alone, which no spyglass disc draws, and a disc's camera reads the card past the band, so it draws whole there");
+                ctx.Check(code.Contains("v_cloud = csky_terrain_unlit(", StringComparison.Ordinal) && card.Contains("v_cloud = csky_terrain_unlit(", StringComparison.Ordinal)
+                        && code.Contains("csky_sun_vertex_light_at(v_normal", StringComparison.Ordinal)
+                        && drawn.All(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off) && !code.Contains("MAIN_CAM_INV_VIEW_MATRIX", StringComparison.Ordinal),
+                    $"the card and the model darken under the baked terrain shadow, the model shades by its normals, and neither casts a shadow without --vegetation-shadows");
 
                 var export = withModel[0];
                 var stamps = export.Instances!;
