@@ -9,6 +9,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -852,6 +853,37 @@ internal static class CampaignSuites
 
         ctx.WriteArtifact("test-campaign-danger-zones.txt", report.ToString());
         ctx.Note($"{DangerZoneChapter}/{DangerZoneMission}'s SECONDARY completed through its own dzpathN gates");
+    }
+
+    /// <summary>#338: a mission opening on <c>generic_intro</c> starts the Pandora's hangar lamps under
+    /// Enhanced and leaves them off under Original. The data lights them only at the landing hookup.</summary>
+    [Suite("intro-hangar-lights",
+        "a generic_intro mission (C1/M05) starts pzep_interior_light at its bootstrap under Enhanced, "
+        + "so the opening's hangar shots have the lamps the landing hookup lights; under Original the "
+        + "start list is the data's own and the lamps stay off (#338)")]
+    internal static void IntroHangarLights(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        ctx.CutsceneRoots = true;
+        try
+        {
+            foreach (bool enhanced in new[] { true, false })
+            {
+                GraphicsMode.Set(enhanced);
+                ctx.WithWorld("C1", collision: false, "M05", world =>
+                {
+                    world.Runtime.Advance(0.1f);
+                    int lit = world.Runtime.LightSnapshot().Count(l => l.Active && l.Name.StartsWith("pzlite", System.StringComparison.Ordinal));
+                    ctx.Check(enhanced ? lit > 0 : lit == 0,
+                        $"{(enhanced ? "Enhanced" : "Original")}: {lit} hangar lamp(s) lit after the bootstrap");
+                });
+            }
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+            GraphicsMode.Set(wasEnhanced);
+        }
     }
 
     /// <summary>The cutscene host over the shipped intro definition: the codes the definition

@@ -16,6 +16,10 @@ namespace CSVM.Mech3;
 /// that. Decode: docs/architecture.md, this file's entry.</summary>
 public sealed class WorldSession
 {
+    /// <summary>The Pandora's hangar lamps: four point lights on the hull's interior markers, a
+    /// looping definition whose only caller in the data is the landing hookup.</summary>
+    public const string HangarLightsAnim = "pzep_interior_light";
+
     private WorldSession() { }
 
     /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
@@ -312,6 +316,12 @@ public sealed class WorldSession
         }
         string? introAnim = o.Cutscenes is { } names ? BootstrapCutsceneOf(animProgram, names) : null;
         bool intro = introAnim != null;
+        // Remake-only, Enhanced only (#338). The landing hookup alone lights the Pandora's hangar,
+        // so an opening shot there has only the sun, and the hull's shadow takes that.
+        if (intro && GraphicsMode.Enhanced && animProgram.ByAnimName(HangarLightsAnim).Count > 0)
+        {
+            animRuntime.ExtraStartAnims.Add(HangarLightsAnim);
+        }
         bool cutscenes = intro || s.Landings.Count > 0 || s.MissionCutsceneAnims.Count > 0;
         if (o.Cutscenes is { } rootNames && cutscenes)
         {
