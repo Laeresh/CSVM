@@ -215,10 +215,11 @@ float csky_pc_density_pw(vec3 p, float bottom, float top, float c) {
     return clamp((d - csky_pc_pw_deck.z) * csky_pc_pw_deck.w, 0.0, 1.0) * csky_pc_pw.w;
 }
 
-// The heads' optical depth over `len` metres at `p` in the baked-noise look.
-float csky_pc_heads_od_pw(vec3 p, float len) {
+// The heads' optical depth over `len` metres at `p`, under the share `keep` of their coverage (1 for
+// a shadow; the veil passes what the zeppelins' bubbles leave).
+float csky_pc_heads_od_pw(vec3 p, float len, float keep) {
     vec4 layer = csky_pc_heads_layer;
-    float c = clamp(csky_pc_cover_lat(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * csky_pc_heads_density.x, 0.0, 1.0) * csky_pc_pw.y;
+    float c = clamp(csky_pc_cover_lat(p, layer.x, layer.y, layer.z, layer.w, csky_pc_heads_shape) * csky_pc_heads_density.x, 0.0, 1.0) * csky_pc_pw.y * keep;
     return csky_pc_density_pw(p, layer.x, layer.y, c) * len;
 }
 
@@ -252,7 +253,7 @@ float csky_cloud_cover_lit(vec3 world) {
     float dt = (t1 - t0) * 0.25;
     float od = 0.0;
     for (int i = 0; i < 4; i++) {
-        od += csky_pc_heads_od_pw(world + s * (t0 + dt * (float(i) + 0.5)), dt);
+        od += csky_pc_heads_od_pw(world + s * (t0 + dt * (float(i) + 0.5)), dt, 1.0);
     }
     return 1.0 - exp(-od);
 }

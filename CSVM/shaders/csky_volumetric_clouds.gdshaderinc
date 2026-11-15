@@ -52,12 +52,12 @@ global uniform vec4 csky_pc_bubble1;
 global uniform vec4 csky_pc_bubble2;
 global uniform vec4 csky_pc_bubble3;
 
-// The share of the field one bubble leaves at `p`: none deep inside, all past its edge.
+// The share of the clouds' coverage one bubble leaves at `p`: none deep inside, all past its edge.
 float csky_pc_bubble_keep(vec4 b, vec3 p) {
     return b.w > 0.0 ? smoothstep(b.w * 0.7, b.w, distance(p, b.xyz)) : 1.0;
 }
 
-// The share of the cloud field every bubble leaves at `p`.
+// The share of the clouds' coverage every bubble leaves at `p`.
 float csky_pc_bubbles(vec3 p) {
     return csky_pc_bubble_keep(csky_pc_bubble0, p) * csky_pc_bubble_keep(csky_pc_bubble1, p)
         * csky_pc_bubble_keep(csky_pc_bubble2, p) * csky_pc_bubble_keep(csky_pc_bubble3, p);
@@ -89,7 +89,7 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
     float od = 0.0;
     for (int i = 0; i < 12; i++) {
         vec3 q = eye + dir * (span.x + dt * (float(i) + 0.5));
-        od += csky_pc_heads_od_pw(q, dt) * csky_pc_bubbles(q);
+        od += csky_pc_heads_od_pw(q, dt, csky_pc_bubbles(q));
     }
     vec2 deck = csky_pc_slab_span(eye, dir, v.x, v.x + v.w);
     float d1 = min(deck.y, len);
@@ -97,9 +97,9 @@ float csky_pc_veil_at(vec3 eye, vec3 p) {
         float ddt = (d1 - deck.x) / 3.0;
         for (int i = 0; i < 3; i++) {
             vec3 q = eye + dir * (deck.x + ddt * (float(i) + 0.5));
-            // The deck without its detail erosion.
-            float deck_d = csky_pc_deck_body_pw(q, v.z, csky_pc_pw_deck.x) * csky_pc_deck_profile(q.y, v.x, v.x + v.w) * csky_pc_pw.w * csky_pc_pw_deck.y;
-            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * csky_pc_bubbles(q) * ddt;
+            // The deck without its detail erosion, the bubbles cut from its cover as the slab cuts them.
+            float deck_d = csky_pc_deck_body_pw(q, v.z * csky_pc_bubbles(q), csky_pc_pw_deck.x) * csky_pc_deck_profile(q.y, v.x, v.x + v.w) * csky_pc_pw.w * csky_pc_pw_deck.y;
+            od += deck_d * csky_pc_deck_gaps(q, csky_pc_ground.z, csky_pc_ground.w) * ddt;
         }
     }
     return exp(-od);

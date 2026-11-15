@@ -713,9 +713,11 @@ internal sealed partial class VolumetricClouds : Node3D
         // The heads over the baked noise. The coverage thresholds the Perlin-Worley base, so an edge
         // erodes into billows. The detail noise then frays the base and pocks the crown.
         // A march may stride the clear distance `reach` from `p` before a cloud can start.
-        float pc_heads_pwg(vec3 p, float bottom, float top, bool detail, out float cov, out float reach) {
+        float pc_heads_pwg(vec3 p, float bottom, float top, bool detail, float keep, out float cov, out float reach) {
             float cgap = 1e3;
-            float c = clamp(pc_cover_gap(p, cgap) * heads_gain, 0.0, 1.0) * cover_max;
+            // The bubbles leave the share `keep` of the coverage, so a bubble's wall is a cloud's own face.
+            // Thinning the density instead left a deep haze, and the surfaces seen through it showed the steps as terraces.
+            float c = clamp(pc_cover_gap(p, cgap) * heads_gain, 0.0, 1.0) * cover_max * keep;
             cov = c;
             if (c <= 0.0) {
                 reach = max(cgap, 0.0) * cover_gap_m;
@@ -739,19 +741,14 @@ internal sealed partial class VolumetricClouds : Node3D
             return clamp((d - edge_cut) * edge_k, 0.0, 1.0);
         }
 
-        float pc_heads_pwc(vec3 p, float bottom, float top, bool detail, out float cov) {
-            float reach;
-            return pc_heads_pwg(p, bottom, top, detail, cov, reach);
-        }
-
         // The deck over the baked noise: a sheet over the layer floor, its body the Perlin-Worley
-        // shape, so its underside lumps like stratocumulus.
-        float pc_deck_pw(vec3 p, float bottom) {
+        // shape, so its underside lumps like stratocumulus. The bubbles leave the share `keep` of its cover.
+        float pc_deck_pw(vec3 p, float bottom, float keep) {
             float deck_top = bottom + deck_depth_m;
-            if (deck_cover <= 0.0 || p.y < bottom || p.y > deck_top) {
+            if (deck_cover * keep <= 0.0 || p.y < bottom || p.y > deck_top) {
                 return 0.0;
             }
-            float body = csky_pc_deck_body_pw(p, deck_cover, shape_m * deck_scale);
+            float body = csky_pc_deck_body_pw(p, deck_cover * keep, shape_m * deck_scale);
             if (body > 0.0) {
                 vec3 dn = texture(detail_tex, (p + vec3(csky_cloud_shadow.x, 0.0, csky_cloud_shadow.y)) / detail_tile_m).rgb;
                 float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
@@ -760,14 +757,18 @@ internal sealed partial class VolumetricClouds : Node3D
             return body * csky_pc_deck_profile(p.y, bottom, deck_top) * (pw_density / max(density_gain, 1e-6)) * deck_k;
         }
 
+        // The heads as the sun sees them, whole: the bubbles cut nothing from a shadow.
         float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
             float cov;
-            return pc_heads_pwc(p, bottom, top, detail, cov);
+            float reach;
+            return pc_heads_pwg(p, bottom, top, detail, 1.0, cov, reach);
         }
 
-        // The cumulus heads at `p` over the pattern's coverage.
-        float pc_heads(vec3 p, float bottom, float top) {
-            return pc_heads_pw(p, bottom, top, true) * (pw_density / max(density_gain, 1e-6));
+        // The cumulus heads at `p` over the pattern's coverage, in the deck's density units.
+        float pc_heads(vec3 p, float bottom, float top, float keep) {
+            float cov;
+            float reach;
+            return pc_heads_pwg(p, bottom, top, true, keep, cov, reach) * (pw_density / max(density_gain, 1e-6));
         }
 
         // The sun's optical depth from `p`: six taps doubling from light_step_m. The first two read
@@ -810,8 +811,8 @@ internal sealed partial class VolumetricClouds : Node3D
         }
 
         // The deck at `p`, torn by the rifts.
-        float pc_deck(vec3 p, float bottom) {
-            return pc_deck_pw(p, bottom) * csky_pc_deck_gaps(p, deck_gaps, gap_m);
+        float pc_deck(vec3 p, float bottom, float keep) {
+            return pc_deck_pw(p, bottom, keep) * csky_pc_deck_gaps(p, deck_gaps, gap_m);
         }
 
         // How far `p` stands inside one bubble's clear core, in metres: the stride a march may take there.
@@ -827,19 +828,21 @@ internal sealed partial class VolumetricClouds : Node3D
         // The whole field at `p` for the lit march, less the bubbles, with the stride `gap` in metres for clear air.
         float pc_density_gap(vec3 p, float bottom, float top, out float gap) {
             float cov = 0.0;
-            float heads = pc_heads_pwg(p, bottom, top, true, cov, gap) * (pw_density / max(density_gain, 1e-6));
+            float keep = csky_pc_bubbles(p);
+            float heads = pc_heads_pwg(p, bottom, top, true, keep, cov, gap) * (pw_density / max(density_gain, 1e-6));
             // The deck stands under its top, so a ray over it strides no further than its height over that top.
             if (deck_cover > 0.0) {
                 gap = min(gap, max(p.y - bottom - deck_depth_m, 0.0));
             }
             gap = max(gap, pc_bubble_core(p));
-            return max(heads, pc_deck(p, bottom)) * csky_pc_bubbles(p);
+            return max(heads, pc_deck(p, bottom, keep));
         }
 
         // The whole field at `p`: the heads over the deck, less the zeppelins' bubbles. Only an eye
         // inside a bubble sees its hull clear; from outside, the cloud round it still hides it.
         float pc_density(vec3 p, float bottom, float top) {
-            return max(pc_heads(p, bottom, top), pc_deck(p, bottom)) * csky_pc_bubbles(p);
+            float keep = csky_pc_bubbles(p);
+            return max(pc_heads(p, bottom, top, keep), pc_deck(p, bottom, keep));
         }
 
         // The deck's optical depth along the sun ray from `p`, two taps over the ray's span through
@@ -855,7 +858,7 @@ internal sealed partial class VolumetricClouds : Node3D
             float dt = (span.y - span.x) * 0.5;
             float od = 0.0;
             for (int i = 0; i < 2; i++) {
-                od += pc_deck(p + csky_sun_dir * (span.x + dt * (float(i) + 0.5)), bottom) * density_gain * dt;
+                od += pc_deck(p + csky_sun_dir * (span.x + dt * (float(i) + 0.5)), bottom, 1.0) * density_gain * dt;
             }
             return od;
         }
@@ -877,7 +880,7 @@ internal sealed partial class VolumetricClouds : Node3D
             if (heads.y > 0.0) {
                 float dt = min(heads.y - heads.x, (top - bottom) * 3.0) / 3.0;
                 for (int i = 0; i < 3; i++) {
-                    od += pc_heads(p + csky_sun_dir * (heads.x + dt * (float(i) + 0.5)), bottom, top) * density_gain * dt;
+                    od += pc_heads(p + csky_sun_dir * (heads.x + dt * (float(i) + 0.5)), bottom, top, 1.0) * density_gain * dt;
                 }
             }
             return exp(-od);
@@ -944,7 +947,8 @@ internal sealed partial class VolumetricClouds : Node3D
                 float gap = 1.0;
                 // The heads are read with their detail erosion. Past the shape's first sample the search goes
                 // on to the eroded surface, so the lit march can take a sample there.
-                float dens = max(pc_heads_pwg(sp, bottom, top, true, cov, gap), pc_deck(sp, bottom)) * csky_pc_bubbles(sp);
+                float keep = csky_pc_bubbles(sp);
+                float dens = max(pc_heads_pwg(sp, bottom, top, true, keep, cov, gap), pc_deck(sp, bottom, keep));
                 found = dens > 0.001;
                 if (shell < 0.0 && (found || (cov > 0.0 && gap <= 0.0))) {
                     shell = t;
