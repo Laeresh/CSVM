@@ -403,6 +403,13 @@ Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `o
 every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
 
+## src/Utils/SpeedWispsSetting.cs
+Whether Enhanced draws the authored speed cue wisps (`Flight/Hud/SpeedCue.cs`): `off` or `on`. It resolves as
+`CloudShadowSetting` does: `--speed-wisps=`, the saved `speedWisps` word, the `graphics.speedWisps` key, then `off`.
+It has no live-apply hook: the cue reads `Drawn` every step, which is always true under Original graphics, and clears
+its live wisps on the step the word turns them off. The VIDEO page shows it as the Speed Wisps dropdown under Global
+Illumination.
+
 ## src/Utils/ShadowDistanceSetting.cs
 How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
 (2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the

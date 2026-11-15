@@ -94,6 +94,10 @@ public sealed class CameraController
     private const float SpeedFovWidenMaxDeg = 6f;
     private const float SpeedFovCruiseFrac = 0.6f;
 
+    // The enhanced nitro kick, TUNE: this much wider while the boost burns, eased at this rate.
+    private const float NitroFovKickDeg = 3f;
+    private const float NitroFovRateDegPerSec = 10f;
+
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
     // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). The 60° is the
     // base every camera mode takes; the 80° is the single exception the cockpit interior view
@@ -179,6 +183,7 @@ public sealed class CameraController
     // has no attitude lag of its own. It rides the decoded catch-up, which already trails a roll.
     // A second lag in its place or on top would part the two presentations in every roll.
     private float _fovWidenDeg;
+    private float _nitroFovDeg; // the eased nitro share of _fovWidenDeg
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private CameraView _viewPrev = CameraView.Chase; // the view the last logged frame was drawn from
@@ -292,6 +297,10 @@ public sealed class CameraController
 
     /// <summary>The zoom axis's target, 0 at the near end to 1, for a suite to read the axis by.</summary>
     public float ZoomAxis => _zoomTarget;
+
+    /// <summary>This frame's enhanced widening in degrees, 0 on the faithful path. The cockpit
+    /// interior's own camera adds it, so the panel and the world behind it keep one angle.</summary>
+    public float FovWidenDeg => _fovWidenDeg;
 
     /// <summary>The zoom axis's shown value, which eases after <see cref="ZoomAxis"/>.</summary>
     public float ZoomShown => _zoomShown;
@@ -561,7 +570,7 @@ public sealed class CameraController
     /// code, the per-pilot camera already owns its own FOV value). Call alongside every <see
     /// cref="FirstPersonView"/> site; <see cref="RestoreExternalFov"/> is the undo for every other
     /// pose.</summary>
-    public void ApplyFirstPersonFov() => _camera.Fov = FirstPersonFovDeg(ViewMode);
+    public void ApplyFirstPersonFov() => _camera.Fov = FirstPersonFovDeg(ViewMode) + _fovWidenDeg;
 
     // Beside its one caller for the same SA1204 reason as FirstPersonPose above.
 #pragma warning disable SA1204
@@ -594,12 +603,19 @@ public sealed class CameraController
             (speedFraction - SpeedFovCruiseFrac) / (1f - SpeedFovCruiseFrac), 0f, 1f);
 #pragma warning restore SA1204
 
-    /// <summary>Advance the enhanced presentation's chase cue one frame: the widening
-    /// <see cref="RestoreExternalFov"/> adds to the external FOV. The pose is the decoded one in
-    /// both presentations. Off Enhanced, a live switch away included, it holds the widening at 0.
+    /// <summary>Advance the enhanced presentation's camera cue one frame: the widening
+    /// <see cref="RestoreExternalFov"/> and <see cref="ApplyFirstPersonFov"/> add to their FOV,
+    /// the speed law plus an eased kick while <paramref name="boosting"/>. The pose is the decoded
+    /// one in both presentations. Off Enhanced, a live switch away included, it holds the widening at 0.
     /// That keeps the faithful pose and FOV bit-identical. A headset sets its own field of view.</summary>
-    public void StepEnhancedCues(float speedFraction) =>
-        _fovWidenDeg = GraphicsMode.Enhanced && _headset == null ? SpeedFovWiden(speedFraction) : 0f;
+    public void StepEnhancedCues(float speedFraction, bool boosting = false, float dt = 0f)
+    {
+        bool on = GraphicsMode.Enhanced && _headset == null;
+        _nitroFovDeg = on
+            ? Mathf.MoveToward(_nitroFovDeg, boosting ? NitroFovKickDeg : 0f, NitroFovRateDegPerSec * dt)
+            : 0f;
+        _fovWidenDeg = on ? SpeedFovWiden(speedFraction) + _nitroFovDeg : 0f;
+    }
 
     /// <summary>The death camera: a spot chosen once from the <c>death_*</c> fields on the frame
     /// the pilot's aircraft is destroyed, held for the whole fall while the view re-aims at the

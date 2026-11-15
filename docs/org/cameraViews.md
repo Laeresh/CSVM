@@ -766,15 +766,20 @@ The distance law, its transient, the chase rig, its two eased frames, the FOV co
 head-look rates are the decoded ones under `--graphics=enhanced` too, so a roll trails by the same
 `pos_catch_up`/`look_catch_up` ease in both presentations. The faithful path writes the same camera
 pose and the same FOV to the bit whether or not the cue is stepped. The enhanced presentation adds
-one cue that the original has no counterpart for, TUNE and living in
-`CameraController.StepEnhancedCues`:
+cues that the original has no counterpart for, each TUNE. The two FOV cues live in
+`CameraController.StepEnhancedCues` and are off in a headset, which sets its own field of view:
 
-- **The external FOV widens with speed.** `RestoreExternalFov` adds up to 6° to the external
-  angle, zero at and below 0.6 of the airframe's rated max speed (`fd_speed`, `PlaneStats`),
-  rising linearly to the full 6° at rated max and held there in a dive past it. The first-person
-  views take their own decoded FOV as before, and the crash, death and flyby cuts take the
-  built-in angle through `ApplyDecodedExternalFov`, because a cut holds a framing rather than
-  riding the aeroplane.
+- **The FOV widens with speed.** `RestoreExternalFov` and `ApplyFirstPersonFov` add up to 6° to
+  their angle, zero at and below 0.6 of the airframe's rated max speed (`fd_speed`, `PlaneStats`),
+  rising linearly to the full 6° at rated max and held there in a dive past it. The cockpit
+  interior's own camera (`CockpitOverlay`) adds the same widening, so the panel and the world
+  behind it keep one angle. The crash, death and flyby cuts take the built-in angle through
+  `ApplyDecodedExternalFov`, because a cut holds a framing rather than riding the aeroplane.
+- **The nitro kick.** While the boost burns the same widening takes 3° more, eased in and out at
+  10°/s.
+- **The buffet.** `PlaneShake.SetSpeedRatio` opens the `high_speed` block's drive early for a human
+  pilot: from 0.75 of rated max speed it ramps to the rattle of a 3 % overspeed at the authored
+  gate, and the authored excess adds on above it. It is off in a headset.
 
 ⚠ Enhanced has no attitude lag of its own. The decoded ease already trails a roll (about 4.1° on
 the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads

@@ -162,7 +162,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
-        _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode);
+        _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode) + camera.FovWidenDeg;
         // The world's point lights sit at world positions; the panel sits at the eye's offset.
         foreach (var material in _materials)
             material.SetShaderParameter(LightOriginParam, camera.EyePosition);

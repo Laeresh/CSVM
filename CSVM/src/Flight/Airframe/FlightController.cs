@@ -2421,7 +2421,8 @@ public partial class FlightController : Node3D
             PlayAiShake(EffectCatalogue.AiShakeAnim);
         if (Shake != null)
         {
-            Shake.SetSpeedRatio(IsHumanPiloted ? speedRatio : 0f);
+            Shake.SetSpeedRatio(IsHumanPiloted ? speedRatio : 0f,
+                buffet: GraphicsMode.Enhanced && _cam?.Headset == null);
             Shake.Advance(dt);
             if (ShakePivot != null)
                 ShakePivot.Rotation = Shake.Rotation;
@@ -2599,7 +2600,7 @@ public partial class FlightController : Node3D
             // The enhanced presentation's FOV widening, stepped whichever view draws this frame.
             // Rated max speed is the airframe's own fd_speed, the scale every authored speed
             // figure is quoted on.
-            _cam.StepEnhancedCues(_model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
+            _cam.StepEnhancedCues(_model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed), _model.Boosting, simDt);
             // Default to the external FOV global; the FirstPerson arm below overrides it, so a
             // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();

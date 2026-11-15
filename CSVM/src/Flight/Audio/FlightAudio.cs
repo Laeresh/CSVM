@@ -116,6 +116,10 @@ public partial class FlightAudio : Node
     /// with it.</summary>
     internal float EngineGain => _engineGain;
 
+    /// <summary>The wind gain the last <see cref="Update"/> opened the rattle loop to, 0 under
+    /// Original Sound.</summary>
+    internal float WindGain { get; private set; }
+
     /// <summary>The pitch scale the last <see cref="Update"/> wrote to the engine slot.</summary>
     internal float EnginePitch => _engine?.PitchScale ?? 1f;
 
@@ -178,7 +182,6 @@ public partial class FlightAudio : Node
         if (stats.WhineSound is { } whineName)
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
-
         // The engine-stop one-shot (non-looped, no VOLUME field, so base gain 1.0; see
         // OnEngineStop). ⚠ No snd_propstart player: the original plays that cue nowhere, and a
         // spawn's engine is already running (docs/org/ordnanceTypes.md).
@@ -322,7 +325,13 @@ public partial class FlightAudio : Node
         // After both slots are written, as the original steps it. An Out slot does not step.
         if (live)
             VoiceDuck?.Step(dt, _stats.VoiceoverVolumeLimiter, engineCurve, whineCurve);
-        UpdateLoop(_rattle, EngineAudioCurves.Rattle(_stats, speedFrac) * _rattleVol * MixGain, 1f);
+        // Enhanced Sound opens the rattle loop early as the wind, ducked under a voice line. One
+        // player: the shipped wind recording (nujetwind.wav) is the rattle's own WAV, byte for byte.
+        var wind = SoundModeSetting.EnhancedOn
+            ? EnhancedSoundTuning.Current.Wind(speedFrac, drive.TurnRate) : (Pitch: 1f, Volume: 0f);
+        WindGain = wind.Volume * duck;
+        float rattle = Mathf.Max(EngineAudioCurves.Rattle(_stats, speedFrac), WindGain);
+        UpdateLoop(_rattle, rattle * _rattleVol * MixGain, wind.Pitch);
     }
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:

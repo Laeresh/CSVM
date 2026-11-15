@@ -83,6 +83,14 @@ public sealed class SpeedCue
     public void Update(float dt, Vector3 playerPosition, Basis playerBasis,
         float cameraAltitude, float cameraAgl, float viewportAspect = AuthoredAspect)
     {
+        // Checked per step, not at Build, so the Speed Wisps row and a live graphics switch take
+        // the wisps out and back.
+        if (!SpeedWispsSetting.Drawn)
+        {
+            if (_active != Selection.None)
+                Reset();
+            return;
+        }
         _selectionTimer -= dt;
         if (_selectionTimer <= 0f)
         {

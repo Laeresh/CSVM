@@ -221,6 +221,23 @@ public class PlaneShakeTests
     }
 
     [Fact]
+    public void TheEnhancedBuffetOpensBelowTheGateAndStaysFainterThanADive()
+    {
+        var still = NewShake();
+        still.SetSpeedRatio(PlaneShake.BuffetGate, buffet: true);
+        Assert.Equal(0f, MaxTurnOver(still, seconds: 1f));
+
+        var fast = NewShake();
+        fast.SetSpeedRatio(0.95f, buffet: true);
+        float buffet = MaxTurnOver(fast, seconds: 1f);
+        Assert.True(buffet > 0f, "a fast cruise buffets under Enhanced");
+
+        var dive = NewShake();
+        dive.SetSpeedRatio(1.2f);
+        Assert.True(buffet < MaxTurnOver(dive, seconds: 1f), "and stays under the authored dive rattle");
+    }
+
+    [Fact]
     public void TheDiveRattleKicksTheDecodedVelocityTripleOncePerTick()
     {
         // The excess over the gate, (ratio − 1)/70, kicks block 4 (frequency 15, sawtooth). The

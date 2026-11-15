@@ -90,6 +90,22 @@ public class EnhancedSoundTests
     }
 
     [Fact]
+    public void TheWindIsSilentAtLowSpeedAndRisesWithSpeedAndWithATurn()
+    {
+        var tuning = Shipped();
+        Assert.Equal(0f, tuning.Wind(EnhancedSoundTuning.WindSlowSpeed, 0f).Volume);
+        Assert.Equal(0f, tuning.Wind(0f, 0f).Volume);
+        var cruise = tuning.Wind(0.76f, 0f);
+        var dive = tuning.Wind(EnhancedSoundTuning.WindFastSpeed, 0f);
+        Assert.True(cruise.Volume > 0f && cruise.Volume < dive.Volume, $"gain {cruise.Volume}..{dive.Volume} rises with speed");
+        Assert.True(cruise.Pitch < dive.Pitch, $"pitch {cruise.Pitch}..{dive.Pitch} rises with speed");
+        Assert.Equal(tuning.WindGainFast, dive.Volume);
+        Assert.Equal(dive, tuning.Wind(2f, 0f));
+        Assert.True(tuning.Wind(0.76f, 1f).Volume > cruise.Volume, "a hard turn adds wind");
+        Assert.Equal(0f, EnhancedSoundTuning.Neutral.Wind(1.2f, 1f).Volume);
+    }
+
+    [Fact]
     public void TheShippedFileNamesEveryAmountAndMakesEachHitLouder()
     {
         var tuning = Shipped();
@@ -186,7 +202,7 @@ public class EnhancedSoundTests
     [Fact]
     public void EveryFieldRoundsItsBoundsBackInsideTheRangeTheParseReads()
     {
-        Assert.Equal(9, EnhancedSoundTuning.Fields.Count);
+        Assert.Equal(13, EnhancedSoundTuning.Fields.Count);
         foreach (var field in EnhancedSoundTuning.Fields)
         {
             foreach (float bound in new[] { field.Min, field.Max })
