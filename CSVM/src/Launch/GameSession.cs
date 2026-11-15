@@ -1030,10 +1030,10 @@ public partial class GameSession : Node3D
             // A line still open when the session ends leaves no field for the keyboard to type into.
             ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
             // A lab's toggle lasts the flight: the resolved words stand again for the next session.
-            // The clouds' own exit cleared the night flag, and this static backs it up.
             VolumetricCloudsSetting.Lookup.Retake();
             GlobalIlluminationSetting.Lookup.Retake();
-            WeatherRig.NightOff = false;
+            // The zone applies' process-wide state, so the next session or lab starts from the defaults.
+            WeatherRig.ResetProcessState();
         }
     }
 

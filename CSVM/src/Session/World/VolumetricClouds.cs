@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
@@ -11,7 +12,7 @@ namespace CSVM.Session.World;
 /// Volumetric clouds in place of the cloud deck, the fogvol field and the placed cloud sprites,
 /// under Enhanced alone (<see cref="VolumetricCloudsSetting"/>). The slab is one full-screen raymarch through
 /// the mission's cloud band, over the cloud shadows' own pattern. It marches at a fraction of the view's
-/// resolution (<see cref="MarchDivisor"/>). It draws cumulus heads over an
+/// resolution (<see cref="VolumetricCloudsSetting.MarchDivisor"/>). It draws cumulus heads over an
 /// overcast deck torn by rifts, with light shafts under them. It reads the depth buffer so terrain
 /// and aircraft occlude it, publishes its ground shadow to the terrain, and the faithful path
 /// builds none. It lives beside <see cref="WeatherRig"/>, whose zone, night and deck it holds.
@@ -57,9 +58,6 @@ internal sealed partial class VolumetricClouds : Node3D
     private const string StormPreset = BasePreset + ";head_soft=0.5;heads_gain=0.45;cover_max=0.95;pw_density=0.08;edge_cut=0.2;edge_k=5;sun_gain=0.5;light_k=2.5;ms_b=0.75;amb_floor=0.7;amb_fog_mix=0.2;amb_top_rgb=0.42,0.45,0.5;amb_gain=1.3;step_growth=0.035;light_every_a=0.03;shaft_steps=48";
     // A storm's heads tower this far over the layer floor.
     private const float StormDepthM = 2450f;
-
-    // The slab's draw order: past the flare's four quads, then the puffers over it, then the rain.
-    private const int SlabPriority = Precipitation.OverSlabPriority - 2;
 
     // The shafts' target divisor at full resolution: the haze is soft, the cloud edges are not.
     private const int ShaftDivisor = 2;
@@ -168,10 +166,6 @@ internal sealed partial class VolumetricClouds : Node3D
     /// reads it here, since reading a global back is an engine error outside the editor.</summary>
     public static Vector4 PublishedGround { get; private set; }
 
-    /// <summary>Gets the march's resolution divisor, the Volumetric Clouds word's, read each frame so a
-    /// live move re-marches. At 1 the quad marches the layer per pixel, the shafts at half size. At 2
-    /// or 4 a half- or quarter-size target marches both.</summary>
-    public static int MarchDivisor => VolumetricCloudsSetting.MarchDivisor;
 
     /// <summary>Gets the reduced march's render time while it runs, else null. Its target is a viewport
     /// of its own, which <c>gpu_ms</c> leaves out (verification PERF-39).</summary>
@@ -192,6 +186,10 @@ internal sealed partial class VolumetricClouds : Node3D
     /// each frame, and past the four bubble globals (<see cref="CloudShadow.BubbleParams"/>) the rest are.</summary>
     public int HullCount => _hulls.Count;
 
+    /// <summary>Gets the march and resolve shaders' float uniform defaults, read from the shader text so no
+    /// C# copy drifts from it.</summary>
+    internal static IReadOnlyDictionary<string, float> UniformDefaults { get; } = ParseDefaults(MarchCode() + ResolveShader());
+
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
@@ -205,6 +203,9 @@ internal sealed partial class VolumetricClouds : Node3D
     private float CoverBias => _hasDeck ? -0.3f : 0.15f;
 
     private bool Storm => _weather.Mission?.Precip != null;
+
+    // The heads' gain under the look: a deck chapter's stand fuller over the overcast.
+    private float BaseHeadsGain => _hasDeck ? 1.15f : 1f;
 
     /// <summary>The clouds over <paramref name="worldRoot"/>'s world. They hide the deck through
     /// <paramref name="weather"/>, the cloud <paramref name="field"/> and the sprites <paramref name="scene"/>
@@ -312,6 +313,15 @@ internal sealed partial class VolumetricClouds : Node3D
 
     private static string Pair(string name, float value) =>
         string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name}={value:R}");
+
+    // Every `uniform float name = value;` in `code`, hints and all.
+    private static Dictionary<string, float> ParseDefaults(string code)
+    {
+        var defaults = new Dictionary<string, float>();
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(code, @"uniform float (\w+)\s*(?::[^=;]*)?=\s*(-?[0-9.]+)\s*;"))
+            defaults[m.Groups[1].Value] = float.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+        return defaults;
+    }
 
     // One full-screen quad, the cloud shadows' pattern as the layer's coverage. Where the reduced
     // march runs for this view, the quad reads its target and marches only the pixels it cannot serve.
@@ -1167,7 +1177,7 @@ internal sealed partial class VolumetricClouds : Node3D
         material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
         material.SetShaderParameter("cover_bias", CoverBias);
         material.SetShaderParameter("taper", Tune.HeadTaper);
-        material.SetShaderParameter("heads_gain", _hasDeck ? 1.15f : 1f);
+        material.SetShaderParameter("heads_gain", BaseHeadsGain);
         // A deck tears open in rifts and the sun falls through them in shafts. The shafts are strong
         // where the mission authors rain and faint in a dry haze.
         material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
@@ -1191,9 +1201,9 @@ internal sealed partial class VolumetricClouds : Node3D
             _presetValues[kv.Key] = kv.Value;
         string saved = CloudShadow.Live is { } shadow ? string.Join(";", System.Linq.Enumerable.Select(shadow.SavedLook, kv => Pair(kv.Key, kv.Value))) : string.Empty;
         ApplySet(saved, material);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_shape_tex", CloudNoise.Shape);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_warp_lat", CloudNoise.WarpLattice);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_tops_lat", CloudNoise.TopsLattice);
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.ShapeTexParam, CloudNoise.Shape);
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.WarpLatticeParam, CloudNoise.WarpLattice);
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TopsLatticeParam, CloudNoise.TopsLattice);
         Log.Info("world", $"volumetric clouds: look {(Storm ? "storm" : _hasDeck ? "deck" : "clear")}, saved [{saved}]");
         _savedValues.Clear();
         foreach (var kv in _lookValues)
@@ -1256,6 +1266,9 @@ internal sealed partial class VolumetricClouds : Node3D
     // A look uniform as the slab stands, else `fallback`, what the slab takes with the look silent on it.
     private float LookOr(string name, float fallback) => _lookValues.TryGetValue(name, out float v) ? v : fallback;
 
+    // A look uniform as the slab stands, else the shader's default.
+    private float LookOr(string name) => LookOr(name, UniformDefaults[name]);
+
     // A look uniform every preset sets (BasePreset), as the slab stands.
     private float Look(string name) => _lookValues[name];
 
@@ -1280,13 +1293,13 @@ internal sealed partial class VolumetricClouds : Node3D
             return "nothing drawn";
         _material = MaterialOf(SlabShader(), bottom, top);
         // Over the world's transparents and the flare, under the rain in front of the layer and the stereo HUD tiers.
-        _material.RenderPriority = SlabPriority;
+        _material.RenderPriority = HeadLockedQuads.CloudSlabPriority;
         // The puffers and weapon sprites draw after it, each dimmed by the slab's transmittance to it (csky_pc_veil_at). One in
         // front of a cloud covers it, and one behind shows only through its gaps. The rain draws last.
-        MultiMeshEmitterRenderer.DrawPriority = SlabPriority + 1;
+        MultiMeshEmitterRenderer.DrawPriority = HeadLockedQuads.OverSlabPriority;
         // The world's blended surfaces join them, each fragment dimmed the same way.
-        SceneBuilder.OverSlabPriority = SlabPriority + 1;
-        Precipitation.DrawPriority = Precipitation.OverSlabPriority;
+        SceneBuilder.OverSlabPriority = HeadLockedQuads.OverSlabPriority;
+        Precipitation.DrawPriority = HeadLockedQuads.RainOverSlabPriority;
         var quad = new MeshInstance3D
         {
             Name = "slab",
@@ -1362,9 +1375,10 @@ internal sealed partial class VolumetricClouds : Node3D
         FollowHulls();
         var viewport = GetViewport();
         var camera = viewport.GetCamera3D();
-        bool temporal = MarchDivisor <= 2 && _temporalOn;
-        bool shaftsOnly = MarchDivisor == 1 && !temporal;
-        int divisor = shaftsOnly ? ShaftDivisor : temporal ? MarchDivisor * 2 : MarchDivisor;
+        int resolution = VolumetricCloudsSetting.MarchDivisor;
+        bool temporal = resolution <= 2 && _temporalOn;
+        bool shaftsOnly = resolution == 1 && !temporal;
+        int divisor = shaftsOnly ? ShaftDivisor : temporal ? resolution * 2 : resolution;
         bool on = camera != null && !viewport.UseXR && (!shaftsOnly || ShaftGain > 0f);
         temporal &= on;
         var full = (Vector2I)viewport.GetVisibleRect().Size;
@@ -1390,7 +1404,7 @@ internal sealed partial class VolumetricClouds : Node3D
             _material.SetShaderParameter(MarchShaftsOnlyParam, shaftsOnly);
             _material.SetShaderParameter("march_temporal", temporal);
             // The temporal resolve pulses brightness frame to frame under the jitter, so only the per-pixel march takes it.
-            float hitDither = LookOr("hit_dither", MarchDivisor == 1 && !temporal ? 1f : 0f);
+            float hitDither = LookOr("hit_dither", resolution == 1 && !temporal ? 1f : 0f);
             _material.SetShaderParameter("hit_dither", hitDither);
             _march.SetShaderParameter("hit_dither", hitDither);
             _march.SetShaderParameter(ShaftsOnlyParam, shaftsOnly);
@@ -1402,7 +1416,7 @@ internal sealed partial class VolumetricClouds : Node3D
             _march.SetShaderParameter("dither_phase", new Vector2(-1f, -1f));
             MarchTime = on ? _marchTime : null;
             ResolveTime = temporal ? _resolveTime : null;
-            string what = !on ? "full resolution" : temporal ? $"1/{MarchDivisor} resolution, temporal over a 1/{divisor} march, {size.X / 2}x{size.Y}" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
+            string what = !on ? "full resolution" : temporal ? $"1/{resolution} resolution, temporal over a 1/{divisor} march, {size.X / 2}x{size.Y}" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
             Log.Info("world", $"volumetric clouds: march at {what}");
         }
         // One golden-ratio step of the dither per drawn frame, whatever the frame rate.
@@ -1612,45 +1626,45 @@ internal sealed partial class VolumetricClouds : Node3D
         if (!on || _bottom is not { } bottom || _top is not { } top)
         {
             PublishedGround = Vector4.Zero;
-            RenderingServer.GlobalShaderParameterSet("csky_pc_ground", Vector4.Zero);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun", new Vector4(0f, 1f, 0f, 0f));
-            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_veil", Vector4.Zero);
-            RenderingServer.GlobalShaderParameterSet("csky_pc_pw", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundParam, Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundSunParam, new Vector4(0f, 1f, 0f, 0f));
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.FogParam, Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.VeilParam, Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.PwParam, Vector4.Zero);
             foreach (var bubble in CloudShadow.BubbleParams)
                 RenderingServer.GlobalShaderParameterSet(bubble, Vector4.Zero);
             return;
         }
         // The layer the effects drawn after the slab march their transmittance through (csky_pc_veil_at).
-        RenderingServer.GlobalShaderParameterSet("csky_pc_veil", new Vector4(bottom, top, _hasDeck ? DeckCover : 0f, DeckDepthM));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.VeilParam, new Vector4(bottom, top, _hasDeck ? DeckCover : 0f, DeckDepthM));
         // The fog splits at the layer: the held lower zone below it, the upper zone's range above it.
         if (_weather.Mission is { } mission && !_fitted)
         {
             var upper = WeatherRig.FogRangeFor(mission.Zone(mission.ZoneForState(2)));
-            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", new Vector4(bottom, upper.X, upper.Y, 0f));
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.FogParam, new Vector4(bottom, upper.X, upper.Y, 0f));
         }
         else
         {
-            RenderingServer.GlobalShaderParameterSet("csky_pc_fog", Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.FogParam, Vector4.Zero);
         }
         var sun = _weather.SunDirection;
         var tune = Tune;
         float deckY = bottom + DeckDepthM * 0.4f;
         PublishedGround = new Vector4(deckY, _hasDeck ? tune.DeckSunTaken : 0f, DeckGaps, GapM);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_ground", PublishedGround);
-        RenderingServer.GlobalShaderParameterSet("csky_pc_ground_sun",
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundParam, PublishedGround);
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundSunParam,
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
-        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_shape", HeadShape with { Y = LookOr("head_soft", HeadSoft) });
-        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_layer", new Vector4(bottom, top, DetailM, CoverBias));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.HeadsShapeParam, HeadShape with { Y = LookOr("head_soft") });
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.HeadsLayerParam, new Vector4(bottom, top, DetailM, CoverBias));
         // The slab's heads_gain and its density_gain default, so the ground marches its density, and the
         // ambient share the deck takes. In y, the bases' erosion (csky_pc_heads_body).
-        RenderingServer.GlobalShaderParameterSet("csky_pc_heads_density",
-            new Vector4(LookOr("heads_gain", _hasDeck ? 1.15f : 1f), Look("base_erode"), 0.025f, _hasDeck ? tune.DeckAmbientTaken : 0f));
-        RenderingServer.GlobalShaderParameterSet("csky_pc_pw",
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.HeadsDensityParam,
+            new Vector4(LookOr("heads_gain", BaseHeadsGain), Look("base_erode"), UniformDefaults["density_gain"], _hasDeck ? tune.DeckAmbientTaken : 0f));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.PwParam,
             new Vector4(Look("shape_m"), Look("cover_max"), Look("base_rag"), Look("pw_density")));
         // The deck's shape tile and density gain (the shader's shape_m * deck_scale and deck_k), for the veil.
         // Then the heads' cut edge, for the ground shadow and the veil.
-        RenderingServer.GlobalShaderParameterSet("csky_pc_pw_deck", new Vector4(Look("shape_m") * Look("deck_scale"), Look("deck_k"), Look("edge_cut"), Look("edge_k")));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.PwDeckParam, new Vector4(Look("shape_m") * Look("deck_scale"), Look("deck_k"), Look("edge_cut"), Look("edge_k")));
     }
 
     // A band authored far above every placed cloud is the original's "no band" altitude (C1B, C3,
