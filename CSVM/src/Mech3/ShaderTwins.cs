@@ -93,6 +93,7 @@ internal static class ShaderTwins
     public static ShaderMaterial Copy(ShaderMaterial source)
     {
         var copy = (ShaderMaterial)source.Duplicate();
+        SceneBuilder.FollowSlabAs(source, copy);
         if (Tracked.TryGetValue(source, out var follow))
             Tracked[copy] = follow;
         return copy;
@@ -108,6 +109,7 @@ internal static class ShaderTwins
         if (source.Shader is not { } shader || FadeCode(shader.Code) is not { } code)
             return null;
         var copy = (ShaderMaterial)source.Duplicate();
+        SceneBuilder.FollowSlabAs(source, copy);
         if (Tracked.TryGetValue(source, out var follow) && !follow.Fade)
             return Follow(copy, follow.Twins, fade: true, follow.World);
         copy.Shader = Pooled(code, FadeFamily);
@@ -298,7 +300,9 @@ internal static class ShaderTwins
         int close = light < 0 ? code.LastIndexOf('}') : code.LastIndexOf('}', light);
         if (close < 0)
             return null;
-        return code[..close] + $"    ALPHA = col.a{SceneBuilder.OpacityTerm};\n" + code[close..];
+        // A blended source's veil multiplies the ALPHA written last, so it follows this line too.
+        string veil = code.Contains("uniform bool over_slab", StringComparison.Ordinal) ? SceneBuilder.SlabVeilLine + "\n" : string.Empty;
+        return code[..close] + $"    ALPHA = col.a{SceneBuilder.OpacityTerm};\n" + veil + code[close..];
     }
 
     // Gives each other-mode shader that only keys lacking this mode hold the first such key's text

@@ -269,6 +269,16 @@ public sealed class SceneBuilder
     internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
         + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
 
+    /// <summary>Enhanced only: the declarations a blended surface takes to draw after the volumetric slab.
+    /// <c>over_slab</c> is set while the material holds <see cref="OverSlabPriority"/>.</summary>
+    internal const string SlabVeilDecl = "uniform bool over_slab = false;\n"
+        + "#include \"res://shaders/csky_volumetric_clouds.gdshaderinc\"";
+
+    /// <summary>The fragment half of <see cref="SlabVeilDecl"/>, after ALPHA is written. The surface dims by
+    /// the cloud between this fragment and the eye, so a cloud in front still hides it.</summary>
+    internal const string SlabVeilLine = "    if (over_slab) { ALPHA *= csky_pc_veil_at(CAMERA_POSITION_WORLD, "
+        + "(INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz); }";
+
     /// <summary>The global uniform holding the left eye of the frame being drawn. It is the eye's
     /// offset from the XR origin in world axes, written by <c>Launch/XrEyeFeed.cs</c>.</summary>
     internal const string XrEyeLeftGlobal = "csky_xr_eye_left";
@@ -530,6 +540,10 @@ void fragment() {
     private static readonly Dictionary<int, ModeShader> BiasShaders = new(); // keyed by feature bits
     private static readonly Dictionary<int, ModeShader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
     private static readonly Dictionary<int, ModeShader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
+    // Every builder's blended materials by instance id, so OverSlabPriority reaches a plane or an effect
+    // built by another builder. An id whose material is gone is dropped on the next change.
+    private static readonly HashSet<ulong> Blended = new();
+    private static int _overSlabPriority;
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -770,6 +784,26 @@ void fragment() {
     /// it a property: a field runs this type's engine statics, which the unit-test host cannot build.</summary>
     internal static string FlatSeaEye => string.Create(System.Globalization.CultureInfo.InvariantCulture,
         $"((CAMERA_VISIBLE_LAYERS & {UI.Boards.SplitScreen.FlatSeaLayer | UI.Boards.SplitScreen.SunLayer}u) == {UI.Boards.SplitScreen.FlatSeaLayer}u)");
+
+    /// <summary>Gets or sets the render priority a blended surface otherwise at 0 draws at. It is 0, or past
+    /// the volumetric slab while one draws (<c>Session.World.VolumetricClouds</c>). The slab reads opaque depth
+    /// alone, so drawn later it paints its cloud over a blended surface in front of it. A cutout writes
+    /// its depth ahead of the slab and stays.</summary>
+    internal static int OverSlabPriority
+    {
+        get => _overSlabPriority;
+        set
+        {
+            int was = _overSlabPriority;
+            _overSlabPriority = value;
+            lock (Blended)
+            {
+                Blended.RemoveWhere(id => GodotObject.InstanceFromId(id) is not Material);
+                foreach (ulong id in Blended)
+                    FollowSlab((Material)GodotObject.InstanceFromId(id)!, was);
+            }
+        }
+    }
 
     /// <summary>Whether a struck collider's node accepts a crater, the original's
     /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
@@ -2328,6 +2362,7 @@ void light() {{
         {
             layered = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
             layered.RenderPriority = GroundLayerRenderPriority;
+            FollowSlab(layered, 0);
             _groundLayerCache[key] = layered;
         }
         return layered;
@@ -2480,6 +2515,7 @@ void light() {{
     // billboard shaders, so a census reaching only the bias path would call them opaque.
     private void NoteAlpha(Material mat, bool blend, bool scissor)
     {
+        bool wasBlend = AlphaOf(mat) == TransparencyClass.BlendSurface;
         _materialAlpha[mat] = blend ? TransparencyClass.BlendSurface
             : scissor ? TransparencyClass.ScissorSurface : TransparencyClass.None;
         // A sky sprite's live mode switch turns a cutout into a blend, which takes the default back.
@@ -2487,7 +2523,43 @@ void light() {{
             mat.RenderPriority = CutoutRenderPriority;
         else if (mat.RenderPriority == CutoutRenderPriority)
             mat.RenderPriority = 0;
+        // The cockpit pass draws in its own viewport, which holds no slab, so its panel keeps its order.
+        if (NoAlphaCoverage)
+            return;
+        if (blend && !wasBlend)
+        {
+            lock (Blended)
+                Blended.Add(mat.GetInstanceId());
+        }
+        if (blend || wasBlend)
+            FollowSlab(mat, 0);
     }
+
+    // Moves a blended material from priority `was` to the slab's, and veils it only while it draws there.
+    // The ground layer, a cutout and the stereo interior hold another priority and keep it.
+#pragma warning disable SA1204
+    private static void FollowSlab(Material mat, int was)
+    {
+        if (mat is not ShaderMaterial shaded)
+            return;
+        if (mat.RenderPriority == was)
+            mat.RenderPriority = _overSlabPriority;
+        shaded.SetShaderParameter("over_slab", _overSlabPriority != 0 && mat.RenderPriority == _overSlabPriority);
+    }
+
+#pragma warning disable SA1202
+    /// <summary>Has <paramref name="copy"/>, a duplicate of <paramref name="source"/> holding its priority,
+    /// follow the slab as its source does. A fading effect wears such a copy.</summary>
+    internal static void FollowSlabAs(Material source, Material copy)
+    {
+        lock (Blended)
+        {
+            if (Blended.Contains(source.GetInstanceId()))
+                Blended.Add(copy.GetInstanceId());
+        }
+    }
+#pragma warning restore SA1202
+#pragma warning restore SA1204
 
     // A ShaderMaterial that pulls the geometry toward the eye (or pushes it away, negative
     // priority) by a fraction of its view distance.
@@ -2508,7 +2580,10 @@ void light() {{
         if (XrPreciseInterior)
             _interiorPlaced.Add(mat.GetInstanceId());
         if (XrPreciseInterior && (blend || XrUnderInterior))
+        {
             mat.RenderPriority = XrInteriorBlendPriority;
+            FollowSlab(mat, 0);
+        }
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
             bias += NoClutterLayerBias;
@@ -2663,6 +2738,10 @@ void light() {{
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
         sb.AppendLine(AtmosphereInclude);
+        // The stereo interior's frame is the XR origin's, not the world's, and it never draws at the slab's priority.
+        bool slabVeil = blend && GraphicsMode.Enhanced && !xrInterior;
+        if (slabVeil)
+            sb.AppendLine(SlabVeilDecl);
         // The clutter variant only: the authored far fade off the MultiMesh custom data. A discard
         // in the fragment stage is what keeps this out of every world shader.
         // Enhanced only: a night zone darkens the clutter toward its fog over the extended reach.
@@ -2966,6 +3045,8 @@ void fragment() {{");
             sb.AppendLine("        ALPHA = smoothstep(-coast_reach, 0.0, csky_ocean_inland_at(v_ocean_pos.xz));");
             sb.AppendLine("    }");
         }
+        if (slabVeil)
+            sb.AppendLine(SlabVeilLine);
         if (scissor)
             sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)
@@ -3067,6 +3148,8 @@ void fragment() {{");
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(FacadeInclude);
+        if (blend && GraphicsMode.Enhanced)
+            sb.AppendLine(SlabVeilDecl);
         if (pooled)
             sb.AppendLine(CloudPuffs.Include);
         // A pooled cloud sprite takes its rendered puff, turn, mirror and size off its own position.
@@ -3106,6 +3189,8 @@ void fragment() {{
             sb.AppendLine(TintLine);
             sb.AppendLine(SpriteAlphaLine(blend && glow));
         }
+        if (blend && GraphicsMode.Enhanced)
+            sb.AppendLine(SlabVeilLine);
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (scissor && GraphicsMode.Enhanced)
@@ -3174,6 +3259,8 @@ void fragment() {{
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude);
+        if (blend && GraphicsMode.Enhanced)
+            sb.AppendLine(SlabVeilDecl);
         // Fixed axis + the plane the camera direction is measured in: Y keeps world-up fixed and
         // spins in XZ (Clutter's tree technique); X keeps local-right fixed and spins in YZ, for a
         // horizontal pipe's flame or a muzzle flash facing the camera around its barrel axis.
@@ -3209,6 +3296,8 @@ void fragment() {{
             sb.AppendLine(TintLine);
             sb.AppendLine(SpriteAlphaLine(blend && glow));
         }
+        if (blend && GraphicsMode.Enhanced)
+            sb.AppendLine(SlabVeilLine);
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (scissor && GraphicsMode.Enhanced)

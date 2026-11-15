@@ -583,6 +583,10 @@ internal static class GraphicsSwitchSuites
                     ctx.Check(on ? veiled && tracer.RenderPriority == wantPriority && smoke.RenderPriority == wantPriority
                             : tracer is StandardMaterial3D { RenderPriority: 0 } && smoke is StandardMaterial3D { RenderPriority: 0 },
                         $"at {word} the tracers and gun smoke draw {(on ? $"veiled twins at priority {wantPriority}, with the puffers" : "their own StandardMaterial3D at 0")} ({tracer.GetType().Name} {tracer.RenderPriority}, {smoke.GetType().Name} {smoke.RenderPriority})");
+                    // The slab reads opaque depth alone, so a blended surface drawn before it is painted over against the sky.
+                    var (blended, lifted, atZero, strayVeil) = BlendedCensus(live, wantPriority);
+                    ctx.Check(blended > 0 && strayVeil == 0 && (on ? lifted > 0 && atZero == 0 : lifted == 0 && atZero > 0),
+                        $"at {word} the world's blended surfaces draw {(on ? $"veiled at priority {wantPriority}, with the puffers" : "unveiled at 0")}, and one at another priority is never veiled ({blended} blended: {lifted} veiled at {wantPriority}, {atZero} at 0, {strayVeil} veiled elsewhere)");
                     standing = node;
                     if (weather.Mission is { HasCloudBand: true } band)
                     {
@@ -3346,6 +3350,35 @@ internal static class GraphicsSwitchSuites
         weather.Tick(rig.Session.Rigs);
         pane.Camera.Position = was;
         return (before, under, pane.CameraWeatherState, pane.Camera.CullMask & ZoneGate.LayerBand);
+    }
+
+    // A census of the session's blended world materials, the ones carrying the slab's veil. It counts those
+    // drawn veiled at `slab`, those unveiled at 0, and those veiled at any other priority.
+    private static (int Blended, int Lifted, int AtZero, int StrayVeil) BlendedCensus(Rig rig, int slab)
+    {
+        var seen = new HashSet<Material>();
+        int lifted = 0, atZero = 0, stray = 0;
+        Walk(rig.Session, node =>
+        {
+            // The cockpit pass draws in its own viewport, which holds no slab, and its materials stay put.
+            if (node is not MeshInstance3D { Mesh: { } mesh } instance
+                || instance.GetPath().ToString().Contains("/cockpit_pass/", StringComparison.Ordinal))
+                return;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if (instance.GetActiveMaterial(s) is not ShaderMaterial { Shader: { } shader } material
+                    || !shader.Code.Contains("over_slab", StringComparison.Ordinal) || !seen.Add(material))
+                    continue;
+                bool veiled = material.GetShaderParameter("over_slab").AsBool();
+                if (material.RenderPriority == 0 && !veiled)
+                    atZero++;
+                else if (slab != 0 && material.RenderPriority == slab && veiled)
+                    lifted++;
+                else if (veiled)
+                    stray++;
+            }
+        });
+        return (seen.Count, lifted, atZero, stray);
     }
 
     private static VolumetricClouds? CloudsNode(Rig rig)
