@@ -80,10 +80,31 @@ public sealed class OceanShaderTests
     [InlineData("look_from", 20f)]
     [InlineData("look_full", 90f)]
     [InlineData("tint_b", 1.2f)]
+    [InlineData("shore_train", 1f)]
+    [InlineData("wind_fetch_m", 800f)]
     public void AShaderFieldChangesTheText(string key, float value)
     {
         var sea = SeaState.Find(key)!.With(SeaState.Default, value);
         Assert.NotEqual(OceanShader.Code(SeaState.Default, 0, false), OceanShader.Code(sea, 0, false));
+    }
+
+    /// <summary>The shore train's radius and fetch reach the text only with a train. The fetch plane
+    /// is declared only when a fetch reads it. The train adds no csky_time rate of its own: it runs
+    /// at the swell's, which are whole per wrap.</summary>
+    [Fact]
+    public void TheShoreTrainRunsAtTheSwellsOwnRates()
+    {
+        var off = SeaState.Default with { ShoreRadius = 90f, ShoreFetch = 600f };
+        Assert.Equal(OceanShader.Code(SeaState.Default, 0, false), OceanShader.Code(off, 0, false));
+        Assert.DoesNotContain("fetch_tex", OceanShader.Code(SeaState.Default, 0, false));
+
+        var train = SeaState.Default with { ShoreTrain = 1f };
+        string text = OceanShader.Code(train, 0, true);
+        Assert.DoesNotContain("fetch_tex", text);
+        Assert.NotEqual(text, OceanShader.Code(train with { ShoreRadius = 90f }, 0, true));
+        Assert.Contains("fetch_tex", OceanShader.Code(train with { ShoreFetch = 600f }, 0, true));
+        Assert.Contains("fetch_tex", OceanShader.Code(SeaState.Default with { WindFetch = 600f }, 0, true));
+        Assert.Equal(TimeRates(OceanShader.Code(SeaState.Default, 0, true)), TimeRates(text));
     }
 
     /// <summary>The sea's colour is the texture's mean at every distance, shore and fog included, times the
@@ -306,6 +327,11 @@ public sealed class OceanShaderTests
             Assert.Contains("csky_time", text);
         }
     }
+
+    // Every distinct factor csky_time is multiplied by in the text.
+    private static string[] TimeRates(string text) =>
+        Regex.Matches(text, @"(\S+) \* csky_time|csky_time \* (\S+)")
+            .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value).Distinct().Order().ToArray();
 
     private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
 

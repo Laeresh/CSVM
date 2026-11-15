@@ -204,8 +204,10 @@ public sealed partial class Ocean : Node3D
                 err = mask.SurfImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".surf.png"));
             if (err == Error.Ok)
                 err = mask.InlandImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".inland.png"));
+            if (err == Error.Ok && mask.FetchImage is { } fetch)
+                err = fetch.SavePng(System.IO.Path.ChangeExtension(maskPng, ".fetch.png"));
             if (err == Error.Ok)
-                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png, .surf.png and .inland.png)");
+                Log.Info("world", $"ocean: mask written to {maskPng} (with .tint.png, .surf.png, .inland.png{(mask.FetchImage != null ? " and .fetch.png" : "")})");
             else
                 Log.Error("world", $"--dump-ocean-mask: could not write {maskPng} ({err})");
         }
@@ -345,6 +347,8 @@ public sealed partial class Ocean : Node3D
     // The sea's uniforms. At the defaults they equal the values the shader text declares.
     private void SetSeaUniforms()
     {
+        if (Sea.ReadsFetch)
+            _material.SetShaderParameter("fetch_tex", _mask.FetchTexture(Sea.WindDeg));
         _material.SetShaderParameter("wave_scale", Sea.Height);
         _material.SetShaderParameter("foam_strength", Sea.FoamStrength);
         _material.SetShaderParameter("rough_near", Sea.RoughNear);

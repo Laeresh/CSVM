@@ -23,6 +23,7 @@ public sealed class SeaStateTests
         Assert.Equal((24f, 160f, 12f, 64f), (d.SwellFrom, d.SwellFull, d.LookFrom, d.LookFull));
         Assert.Equal((0.2f, 0.3f), (d.RoughNear, d.RoughFar));
         Assert.Equal((0f, 0f, 12f, 1.5f), (d.SurfWash, d.SurfLines, d.SurfSpacing, d.SurfSpeed));
+        Assert.Equal((0f, 150f, 0f, 0f), (d.ShoreTrain, d.ShoreRadius, d.ShoreFetch, d.WindFetch));
         Assert.False(d.Tinted);
         Assert.Equal(d, d.Clamped());
         Assert.Equal("defaults", d.Describe());
@@ -34,7 +35,7 @@ public sealed class SeaStateTests
     {
         Assert.Equal(SeaState.Fields.Count, SeaState.Fields.Select(f => f.Key).Distinct().Count());
         Assert.All(SeaState.Fields, f => Assert.InRange(f.Default, f.Min, f.Max));
-        Assert.Equal(new[] { "Swell", "Bending + detail", "Foam", "Coast + colour", "Surf" },
+        Assert.Equal(new[] { "Swell", "Bending + detail", "Foam", "Coast + colour", "Surf", "Shore train + fetch" },
             SeaState.Fields.Select(f => f.Group).Distinct());
     }
 

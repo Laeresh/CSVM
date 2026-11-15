@@ -55,6 +55,10 @@ internal sealed class OceanMask
     private static ImageTexture? _anyZone;
     private static ImageTexture? _allSea;
 
+    // The fetch plane's texture and the wind it was baked for.
+    private ImageTexture? _fetch;
+    private float _fetchWind;
+
     private OceanMask()
     {
     }
@@ -92,6 +96,10 @@ internal sealed class OceanMask
 
     /// <summary>The inland texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
     public Image InlandImage { get; private set; } = null!;
+
+    /// <summary>The fetch plane (<see cref="OceanMaskRaster.Fetch"/>) last baked, null until a sea reads one.
+    /// Kept for <c>--dump-ocean-mask</c>.</summary>
+    public Image? FetchImage { get; private set; }
 
     /// <summary>Where the breakers throw spray at the cliffs and bare solids (<see cref="CoastSpray"/>).</summary>
     public OceanMaskRaster.SpraySite[] Spray { get; private set; } = Array.Empty<OceanMaskRaster.SpraySite>();
@@ -236,6 +244,22 @@ internal sealed class OceanMask
         RenderingServer.GlobalShaderParameterSet(ZoneParam, ZoneTexture ?? _anyZone);
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
         RenderingServer.GlobalShaderParameterSet(InlandParam, InlandTexture);
+    }
+
+    /// <summary>The fetch plane for swell running toward <paramref name="windDeg"/>, baked on the first ask.
+    /// It is baked again when the wind changes, as the ocean lab can turn it.</summary>
+    public ImageTexture FetchTexture(float windDeg)
+    {
+        if (_fetch == null || _fetchWind != windDeg)
+        {
+            long t0 = Stopwatch.GetTimestamp();
+            var bytes = OceanMaskRaster.Fetch(Image.GetData(), Width, Height, windDeg);
+            FetchImage = Image.CreateFromData(Width, Height, false, Image.Format.Rg8, bytes);
+            _fetch = TextureUpload.Create(FetchImage, callerKeeps: true);
+            _fetchWind = windDeg;
+            Log.Info("world", $"ocean: fetch baked for wind {windDeg:0} deg in {Stopwatch.GetElapsedTime(t0).TotalMilliseconds:0} ms");
+        }
+        return _fetch;
     }
 
     /// <summary>The signed metres from the coastline at a world X/Z, landward positive, filtered as
