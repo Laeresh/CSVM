@@ -101,6 +101,11 @@
       "size": 810,
       "coverage": 0.7,
       "deck_sun": 0.53
+    },
+    "look": {
+      "depth_m": 920,
+      "detail_erode": 0.5,
+      "base_erode": 0.75
     }
   }
 }

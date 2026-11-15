@@ -653,6 +653,12 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float cloud_min_m = 6.0;
         uniform float pix_k = 0.003;
         uniform int bisect_n = 4;
+        // 1 lets the search read the heads with their detail erosion, so the first hit is the eroded surface.
+        uniform float search_detail = 1.0;
+        // 1 holds the retreat to one a step. Repeated, it crept toward its own threshold and spent the budget.
+        uniform float retreat_once = 1.0;
+        // The first sample's depth inside the eroded surface, as a share of the least step.
+        uniform float first_k = 0.5;
         uniform float retreat_k = 2.0;
         uniform float lit_max_m = 1e9;
         // The heads' edge: density under edge_cut is cut away and the rest steepened by edge_k.
@@ -661,7 +667,7 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float edge_k = 1.0;
         uniform float lit_growth = 0.0;
         // Above 0 the clear-air search inside a coverage steps this many metres per unit of gap
-        // (pc_heads_gap). It shortens toward a surface, so it cannot step over a thin cloud.
+        // (pc_heads_pwg). It shortens toward a surface, so it cannot step over a thin cloud.
         uniform float search_gap_m = 0.0;
         // Outside every coverage, the stride in metres per unit the pattern stands under its edge.
         uniform float cover_gap_m = 1e6;
@@ -804,11 +810,6 @@ internal sealed partial class VolumetricClouds : Node3D
                 body = clamp(pc_remap(body, hf * deck_erode, 1.0, 0.0, 1.0), 0.0, 1.0);
             }
             return body * csky_pc_deck_profile(p.y, bottom, deck_top) * (pw_density / max(density_gain, 1e-6)) * deck_k;
-        }
-
-        // The search's read of the heads, no detail, with the stride `gap` in metres (pc_heads_pwg).
-        float pc_heads_gap(vec3 p, float bottom, float top, out float cov, out float gap) {
-            return pc_heads_pwg(p, bottom, top, false, cov, gap);
         }
 
         float pc_heads_pw(vec3 p, float bottom, float top, bool detail) {
@@ -1021,12 +1022,24 @@ internal sealed partial class VolumetricClouds : Node3D
             // of a ray's cost; the bisection's fourth pass restores the surface's precision. Inside the
             // deck it takes single steps: a thin cell is a sliver a double step crosses in rings.
             float clear = t0;
+            // The first sample inside the heads' un-eroded shape and the clear one before it, the first bracket.
+            float shell = -1.0;
+            float shell_clear = t0;
+            bool found = false;
             int i = 0;
             while (i < step_budget && t < t1) {
                 vec3 sp = eye + dir * t;
                 float cov = 0.0;
                 float gap = 1.0;
-                if ((look == 1 ? max(pc_heads_gap(sp, bottom, top, cov, gap), pc_deck(sp, bottom)) * csky_pc_bubbles(sp) : pc_density(sp, bottom, top)) > 0.001) {
+                // The heads are read with their detail erosion. Past the shape's first sample the search goes
+                // on to the eroded surface, so the lit march can take a sample there.
+                float dens = look == 1 ? max(pc_heads_pwg(sp, bottom, top, search_detail > 0.5, cov, gap), pc_deck(sp, bottom)) * csky_pc_bubbles(sp) : pc_density(sp, bottom, top);
+                found = dens > 0.001;
+                if (shell < 0.0 && (found || (cov > 0.0 && gap <= 0.0))) {
+                    shell = t;
+                    shell_clear = clear;
+                }
+                if (found) {
                     break;
                 }
                 clear = t;
@@ -1038,29 +1051,43 @@ internal sealed partial class VolumetricClouds : Node3D
                 t += st;
                 i++;
             }
-            if (t >= t1) {
+            if (shell < 0.0) {
                 return vec3(0.0, 0.0, 1.0);
             }
-            // Its surface, bisected since the last clear sample, and the first sample half a step past
-            // it, or a dithered share of one under hit_dither. Outside the loop, so a GPU wave bisects once.
-            float hi = t;
+            // Two surfaces, bisected outside the loop so a GPU wave bisects once. The first is any cloud in
+            // the first bracket, which a long stride may have crossed. The second is the eroded surface.
+            float lo = shell_clear;
+            float hi = shell;
+            float hi2 = t;
             for (int k = 0; k < bisect_n; k++) {
-                float mid = (clear + hi) * 0.5;
+                float mid = (lo + hi) * 0.5;
                 if (pc_density(eye + dir * mid, bottom, top) > 0.001) {
                     hi = mid;
                 } else {
-                    clear = mid;
+                    lo = mid;
+                }
+                float mid2 = (clear + hi2) * 0.5;
+                if (pc_density(eye + dir * mid2, bottom, top) > 0.001) {
+                    hi2 = mid2;
+                } else {
+                    clear = mid2;
                 }
             }
-            hit = (clear + hi) * 0.5;
-            t = min(hit + pc_step(hi, span_step) * mix(0.5, dither, hit_dither), t1);
+            bool first = hi < shell || (found && t <= shell);
+            float surf = (lo + hi) * 0.5;
+            float surf2 = (clear + hi2) * 0.5;
+            hit = first ? surf : (found ? surf2 : shell);
+            t = min((first ? surf : shell) + pc_step(hi, span_step) * mix(0.5, dither, hit_dither), t1);
             vec2 w = vec2(0.0);
             float trans = 1.0;
             float sun_step = max((top - bottom) * 0.3, 20.0);
             float cos_theta = dot(dir, csky_sun_dir);
             if (od_step > 0.0) {
-                t = hit;
-                float prev_dt = max(cloud_min_m, t * pix_k);
+                float prev_dt = max(cloud_min_m, hit * pix_k);
+                // Every ray takes a sample at `entry`, a share of a step inside the eroded surface. Arriving there
+                // at a depth its earlier steps set, only some rays took the skin's light, which drew arcs round the eye.
+                float entry = found ? surf2 + prev_dt * first_k : t1;
+                t = first ? surf + prev_dt * first_k : shell;
                 float grow = 2.0;
                 // The last sample waits for the next one to confirm its step, so a retreat shortens it uncounted.
                 bool pend = false;
@@ -1084,9 +1111,9 @@ internal sealed partial class VolumetricClouds : Node3D
                         far_dt = max(far_dt, min(gap, pc_step(t, span_step)));
                     }
                     // A long step that landed in dense cloud retreats to the step its density allows, so the skin
-                    // is stepped finely. The retreat is nothing at the threshold. A fixed halving there put a jump
-                    // between neighbouring rays, which drew contour lines and rings round the eye.
-                    if (sigma * prev_dt > od_step * retreat_k && prev_dt > near_dt * 1.01) {
+                    // is stepped finely. The retreat is nothing at the threshold, so neighbouring rays do not jump.
+                    // It runs once a step: repeated, it crept toward its threshold until the budget ran out.
+                    if (sigma * prev_dt > od_step * retreat_k && prev_dt > near_dt * 1.01 && (grow > 1.5 || retreat_once < 0.5)) {
                         float back = max(od_step * retreat_k / sigma, near_dt);
                         t -= prev_dt - back;
                         prev_dt = back;
@@ -1115,6 +1142,9 @@ internal sealed partial class VolumetricClouds : Node3D
                         float powder = mix(1.0, 1.0 - exp(-d * density_gain * 60.0), powder_k);
                         p_sigma = sigma;
                         p_light = vec2(mix(amb_floor, 1.0, h) * l_ao, l_sun * powder);
+                    }
+                    if (t < entry && t + dt > entry) {
+                        dt = entry - t;
                     }
                     t += dt;
                     prev_dt = dt;
