@@ -288,15 +288,15 @@
     {
       "name": "c2-beach-enhanced",
       "frame": 120,
-      "hash": "fd0e271a501856b891b349cdf3fe2f47",
-      "exercises": "Enhanced wave ocean at C2's beach1 strip: the waves running to the painted waterline, the strip's alpha fading over them, the surf lace and the swash film on the wet sand; frame-sensitive 19.51 %.",
+      "hash": "a38ba7024adb1a1ef28e2807ffa4b989",
+      "exercises": "Enhanced wave ocean at C2's beach1 strip: the shore train's waves running to the painted waterline, the strip's alpha fading over them, the surf lace and the swash film on the wet sand; frame-sensitive 19.51 %.",
       "args": ["--freecam", "--chapter=C2", "--pos=-3591,150,-2455", "--lookat=-3662,0,-2587", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     },
     {
       "name": "c3-coast-enhanced",
       "frame": 120,
-      "hash": "d4a4f2ea63e3ec851950a04e21893f83",
-      "exercises": "Enhanced wave ocean at a C3 shore strip and cliff tile from 52 m: the cliff tile's 25 m alpha blend by distance from the waterline, the procedural surf and the swash fading past the line; frame-sensitive 24.26 %.",
+      "hash": "0570c62000f30793d9bd9bf242ad9b49",
+      "exercises": "Enhanced wave ocean at a C3 shore strip and cliff tile from 52 m: the shore train, the cliff tile's 25 m alpha blend by distance from the waterline, the procedural surf and the swash fading past the line; frame-sensitive 24.26 %.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4652,52,-3426", "--direction=0.38,-0.7,-0.93", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
   ]
