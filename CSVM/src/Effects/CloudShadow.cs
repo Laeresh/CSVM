@@ -21,6 +21,21 @@ internal sealed partial class CloudShadow : Node
     public static readonly StringName[] BubbleParams =
         { "csky_pc_bubble0", "csky_pc_bubble1", "csky_pc_bubble2", "csky_pc_bubble3" };
 
+    // The volumetric clouds' globals, written by VolumetricClouds.PublishGround. RegisterGlobals declares
+    // them, except FogParam, which the launcher declares beside the distance fog.
+    public static readonly StringName GroundParam = "csky_pc_ground";
+    public static readonly StringName GroundSunParam = "csky_pc_ground_sun";
+    public static readonly StringName HeadsShapeParam = "csky_pc_heads_shape";
+    public static readonly StringName HeadsLayerParam = "csky_pc_heads_layer";
+    public static readonly StringName HeadsDensityParam = "csky_pc_heads_density";
+    public static readonly StringName VeilParam = "csky_pc_veil";
+    public static readonly StringName PwParam = "csky_pc_pw";
+    public static readonly StringName PwDeckParam = "csky_pc_pw_deck";
+    public static readonly StringName ShapeTexParam = "csky_pc_shape_tex";
+    public static readonly StringName WarpLatticeParam = "csky_pc_warp_lat";
+    public static readonly StringName TopsLatticeParam = "csky_pc_tops_lat";
+    public static readonly StringName FogParam = "csky_pc_fog";
+
     // The globals the include declares: offset X/Z, one over the cell, darkness; the edge band; the
     // lab's tint; and the ambient share.
     private static readonly StringName Param = "csky_cloud_shadow";
@@ -123,18 +138,18 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd(AmbientParam, RenderingServer.GlobalShaderParameterType.Float, 0f);
         RenderingServer.GlobalShaderParameterAdd(BandParam, RenderingServer.GlobalShaderParameterType.Vec2, Vector2.Zero);
         // The volumetric clouds' ground shadow (VolumetricClouds.PublishGround); a zero deck share leaves it off.
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_ground", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_ground_sun", RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 1f, 0f, 0f));
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_shape", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_layer", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_heads_density", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_veil", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(GroundParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(GroundSunParam, RenderingServer.GlobalShaderParameterType.Vec4, new Vector4(0f, 1f, 0f, 0f));
+        RenderingServer.GlobalShaderParameterAdd(HeadsShapeParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(HeadsLayerParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(HeadsDensityParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(VeilParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         // The slab's baked-noise density for its ground shadow and veil, and the noise it reads.
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_pw", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_pw_deck", RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_shape_tex", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_warp_lat", RenderingServer.GlobalShaderParameterType.Sampler3D, default);
-        RenderingServer.GlobalShaderParameterAdd("csky_pc_tops_lat", RenderingServer.GlobalShaderParameterType.Sampler2D, default);
+        RenderingServer.GlobalShaderParameterAdd(PwParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(PwDeckParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(ShapeTexParam, RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd(WarpLatticeParam, RenderingServer.GlobalShaderParameterType.Sampler3D, default);
+        RenderingServer.GlobalShaderParameterAdd(TopsLatticeParam, RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         foreach (var bubble in BubbleParams)
             RenderingServer.GlobalShaderParameterAdd(bubble, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;

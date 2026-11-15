@@ -15,8 +15,19 @@ public sealed partial class HeadLockedQuads : Node3D
 {
     /// <summary>The 3D draw order of the world flare, its four elements on this and the next three.
     /// It draws after the world's transparents, as the flat sprites do, and under every quad below.
-    /// The cloud slab, the puffers and weapon sprites over it and the rain alone draw between it and the quads (<c>Effects.Precipitation.OverSlabPriority</c>).</summary>
+    /// The cloud slab, what draws over it and the rain alone draw between it and the quads.</summary>
     public const int WorldFlarePriority = 100;
+
+    /// <summary>The volumetric cloud slab (<c>Session.World.VolumetricClouds</c>), past the flare's four elements.
+    /// It reads opaque depth alone, so whatever draws in front of a cloud draws after it.</summary>
+    public const int CloudSlabPriority = WorldFlarePriority + 4;
+
+    /// <summary>What draws over the slab, dimmed by its transmittance (<c>csky_pc_veil_at</c>): the puffers,
+    /// the weapon sprites and the world's blended surfaces.</summary>
+    public const int OverSlabPriority = CloudSlabPriority + 1;
+
+    /// <summary>The rain and snow while the slab stands, last of the world's transparents and under the stereo whiteout.</summary>
+    public const int RainOverSlabPriority = CloudSlabPriority + 2;
 
     /// <summary>The flight markers' world cards (<c>Flight.Hud.XrMarkers</c>). They draw over the
     /// flash, as the flat HUD is over the world overlay, and under the nearer HUD panel.</summary>

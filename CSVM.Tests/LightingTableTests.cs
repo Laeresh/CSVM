@@ -100,7 +100,7 @@ public sealed class LightingTableTests
             """;
         var chapter = ZoneLighting.Default with { Exposure = 1.25f };
         var mission = new Dictionary<string, float> { ["exposure"] = 1.25f, ["sun_r"] = 0.9f };
-        string text = LightingTable.WithZone(existing, "C5", "M02", "zone1", chapter, mission);
+        string text = LightingTable.WithZone(existing, new("C5", "M02", "zone1"), chapter, mission);
         var root = (JsonObject)JsonNode.Parse(text)!;
         Assert.Equal(new[] { "_about", "C1", "C5" }, Keys(root));
         var c5 = (JsonObject)root["C5"]!;
@@ -116,23 +116,23 @@ public sealed class LightingTableTests
         Assert.True(read.Night("C5", "M02"));
 
         // An untuned zone drops its blocks, and a mission left with nothing drops out.
-        string cleared = LightingTable.WithZone(text, "C5", "M02", "zone1", ZoneLighting.Default, new Dictionary<string, float>());
+        string cleared = LightingTable.WithZone(text, new("C5", "M02", "zone1"), ZoneLighting.Default, new Dictionary<string, float>());
         Assert.Equal(new[] { "M02" }, Keys((JsonObject)JsonNode.Parse(cleared)!["C5"]!));
-        string gone = LightingTable.WithZone(existing, "C1", "IA1", "zone2", ZoneLighting.Default, new Dictionary<string, float>());
+        string gone = LightingTable.WithZone(existing, new("C1", "IA1", "zone2"), ZoneLighting.Default, new Dictionary<string, float>());
         Assert.Equal(new[] { "_about", "C5" }, Keys((JsonObject)JsonNode.Parse(gone)!));
-        Assert.Throws<InvalidDataException>(() => LightingTable.WithZone("[]", "C1", null, "zone1", chapter, mission));
+        Assert.Throws<InvalidDataException>(() => LightingTable.WithZone("[]", new("C1", null, "zone1"), chapter, mission));
     }
 
     [Fact]
     public void ASaveWritesOrClearsTheNightFlag()
     {
         var none = new Dictionary<string, float>();
-        string on = LightingTable.WithZone("{}", "C1", "M01", "zone1", ZoneLighting.Default, none, night: true);
+        string on = LightingTable.WithZone("{}", new("C1", "M01", "zone1"), ZoneLighting.Default, none, night: true);
         Assert.True(LightingTable.Parse(on).Night("C1", "M01"));
         Assert.Equal(new[] { "night" }, Keys((JsonObject)JsonNode.Parse(on)!["C1"]!["M01"]!));
         // Null keeps the file's flag; false drops it, and the mission with it once nothing is left.
-        Assert.True(LightingTable.Parse(LightingTable.WithZone(on, "C1", "M01", "zone1", ZoneLighting.Default, none)).Night("C1", "M01"));
-        string off = LightingTable.WithZone(on, "C1", "M01", "zone1", ZoneLighting.Default, none, night: false);
+        Assert.True(LightingTable.Parse(LightingTable.WithZone(on, new("C1", "M01", "zone1"), ZoneLighting.Default, none)).Night("C1", "M01"));
+        string off = LightingTable.WithZone(on, new("C1", "M01", "zone1"), ZoneLighting.Default, none, night: false);
         Assert.False(LightingTable.Parse(off).Night("C1", "M01"));
         Assert.Empty(Keys((JsonObject)JsonNode.Parse(off)!));
     }
@@ -187,7 +187,7 @@ public sealed class LightingTableTests
         var under = ZoneLighting.Default with { Exposure = 1.2f };
         var chapter = under with { SunEnergy = 0.5f, GodRays = 2f };
         var mission = new Dictionary<string, float> { ["sun_energy"] = 0.6f, ["god_rays"] = 2f };
-        string text = LightingTable.WithZone(existing, "C1", "M01", "zone1", chapter, mission, layer: LightingTable.CloudsLayer, under: under);
+        string text = LightingTable.WithZone(existing, new("C1", "M01", "zone1", LightingTable.CloudsLayer), chapter, mission, under: under);
         var root = (JsonObject)JsonNode.Parse(text)!;
         Assert.Equal(new[] { "_about", "C1", "C5" }, Keys(root));
         var c1 = (JsonObject)root["C1"]!;
@@ -204,19 +204,19 @@ public sealed class LightingTableTests
             read.For("C1", "M01", "zone1", LightingTable.Layers).GodRays, read.For("C1", "M01", "zone1", LightingTable.Layers).SdfgiEnergy));
 
         // A base save keeps both layers in their order after the fields.
-        string based = LightingTable.WithZone(text, "C1", null, "zone1", ZoneLighting.Default with { White = 7f }, new Dictionary<string, float>());
+        string based = LightingTable.WithZone(text, new("C1", null, "zone1"), ZoneLighting.Default with { White = 7f }, new Dictionary<string, float>());
         Assert.Equal(new[] { "white", "gi", "clouds" }, Keys((JsonObject)JsonNode.Parse(based)!["C1"]!["ZONE1"]!));
         Assert.Equal(0.8f, LightingTable.Parse(based).For("C1", "IA1", "zone1", LightingTable.Layers).SdfgiEnergy);
 
         // A layer saved equal to what it sits over drops out, and a mission left empty with it.
-        string cleared = LightingTable.WithZone(text, "C1", "M01", "zone1", under, new Dictionary<string, float>(), layer: LightingTable.CloudsLayer, under: under);
+        string cleared = LightingTable.WithZone(text, new("C1", "M01", "zone1", LightingTable.CloudsLayer), under, new Dictionary<string, float>(), under: under);
         var c1Cleared = (JsonObject)JsonNode.Parse(cleared)!["C1"]!;
         Assert.Equal(new[] { "ZONE1", "ZONE2" }, Keys(c1Cleared));
         Assert.Equal(new[] { "exposure", "gi" }, Keys((JsonObject)c1Cleared["ZONE1"]!));
 
         // The gi layer saves the GI fields beside sdfgi_energy and reads them back.
         var giTune = under with { SdfgiEnergy = 0.8f, AmbientFloor = 0.5f, SelfLitEmission = 3f };
-        string giSaved = LightingTable.WithZone(existing, "C1", null, "zone1", giTune, new Dictionary<string, float>(), layer: LightingTable.GiLayer, under: under);
+        string giSaved = LightingTable.WithZone(existing, new("C1", null, "zone1", LightingTable.GiLayer), giTune, new Dictionary<string, float>(), under: under);
         Assert.Equal(new[] { "ambient_floor", "sdfgi_energy", "self_lit_emission" },
             Keys((JsonObject)JsonNode.Parse(giSaved)!["C1"]!["ZONE1"]!["gi"]!).OrderBy(k => k, StringComparer.Ordinal));
         Assert.Equal(giTune, LightingTable.Parse(giSaved).For("C1", "IA1", "zone1", new[] { LightingTable.GiLayer }));
@@ -230,14 +230,14 @@ public sealed class LightingTableTests
         var mission = new Dictionary<string, float> { ["god_rays"] = 3f, ["sdfgi_energy"] = 0.9f };
 
         // The gi layer keeps its own fields and refuses god rays, chapter and mission alike.
-        var gi = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", "M01", "zone1", edit, mission, layer: LightingTable.GiLayer))!;
+        var gi = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", new("C1", "M01", "zone1", LightingTable.GiLayer), edit, mission))!;
         Assert.Equal(new[] { "exposure", "ambient_floor", "sdfgi_energy" }, Keys((JsonObject)gi["C1"]!["ZONE1"]!["gi"]!));
         Assert.Equal(new[] { "sdfgi_energy" }, Keys((JsonObject)gi["C1"]!["M01"]!["ZONE1"]!["gi"]!));
         // The clouds layer takes god rays alone of the four.
-        var clouds = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", null, "zone1", edit, none, layer: LightingTable.CloudsLayer))!;
+        var clouds = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", new("C1", null, "zone1", LightingTable.CloudsLayer), edit, none))!;
         Assert.Equal(new[] { "exposure", "god_rays" }, Keys((JsonObject)clouds["C1"]!["ZONE1"]!["clouds"]!));
         // The base takes none of them.
-        var based = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", "C1", null, "zone1", edit, none))!;
+        var based = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", new("C1", null, "zone1"), edit, none))!;
         Assert.Equal(new[] { "exposure" }, Keys((JsonObject)based["C1"]!["ZONE1"]!));
 
         Assert.Equal(new[] { "god_rays", "ambient_floor", "self_lit_emission", "sdfgi_energy" },

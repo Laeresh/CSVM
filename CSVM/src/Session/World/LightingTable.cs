@@ -140,16 +140,16 @@ public sealed class LightingTable
         return table;
     }
 
-    /// <summary>The file's text with one zone's chapter and mission blocks, or their <paramref name="layer"/>,
-    /// written. The chapter block holds <paramref name="chapterLighting"/>'s differences from <paramref name="under"/>
+    /// <summary>The file's text with the chapter and mission blocks <paramref name="at"/> names written. The chapter
+    /// block holds <paramref name="chapterLighting"/>'s differences from <paramref name="under"/>
     /// (the defaults when null), the mission block the <paramref name="missionFields"/> that differ from it.
     /// A field of another layer (<see cref="Belongs"/>) is never written. An empty block is dropped, and so is a
     /// mission left with no zone and no night flag. A non-null <paramref name="night"/> sets the mission's flag
     /// (false removes it). Throws <see cref="InvalidDataException"/> when <paramref name="existing"/> is not a JSON object.</summary>
-    public static string WithZone(string? existing, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null,
-        string? layer = null, ZoneLighting? under = null)
+    public static string WithZone(string? existing, ZoneBlock at, ZoneLighting chapterLighting,
+        IReadOnlyDictionary<string, float> missionFields, bool? night = null, ZoneLighting? under = null)
     {
+        var (chapter, mission, zone, layer) = at;
         JsonObject root;
         if (string.IsNullOrWhiteSpace(existing))
         {
@@ -194,13 +194,11 @@ public sealed class LightingTable
 
     /// <summary>Writes one zone's blocks into the file at <paramref name="diskPath"/>
     /// (<see cref="WithZone"/>), creating it when absent.</summary>
-    public static void Save(string diskPath, string chapter, string? mission, string zone,
-        ZoneLighting chapterLighting, IReadOnlyDictionary<string, float> missionFields, bool? night = null,
-        string? layer = null, ZoneLighting? under = null)
+    public static void Save(string diskPath, ZoneBlock at, ZoneLighting chapterLighting,
+        IReadOnlyDictionary<string, float> missionFields, bool? night = null, ZoneLighting? under = null)
     {
         string? existing = File.Exists(diskPath) ? File.ReadAllText(diskPath, Encoding.UTF8) : null;
-        File.WriteAllText(diskPath, WithZone(existing, chapter, mission, zone, chapterLighting, missionFields, night, layer, under),
-            new UTF8Encoding(false));
+        File.WriteAllText(diskPath, WithZone(existing, at, chapterLighting, missionFields, night, under), new UTF8Encoding(false));
     }
 
     /// <summary>The project's copy of the file on disk while the game runs from the source tree. Null in
@@ -364,6 +362,10 @@ public sealed class LightingTable
             }
         }
     }
+
+    /// <summary>Where a write lands: a chapter's zone, and that zone in <paramref name="Mission"/> when one is
+    /// named, in the base block or in <paramref name="Layer"/>'s.</summary>
+    public readonly record struct ZoneBlock(string Chapter, string? Mission, string Zone, string? Layer = null);
 
     private sealed class Entry
     {

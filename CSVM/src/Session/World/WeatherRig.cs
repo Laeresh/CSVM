@@ -434,6 +434,15 @@ public sealed class WeatherRig
     /// <summary>Whether the mission lights as a moonlit mission: the file's night flag, or the lab's switch since.</summary>
     public bool Moonlit { get; private set; }
 
+    /// <summary>Puts the process-wide state a session's zone applies leave behind back to its defaults:
+    /// <see cref="NightOff"/>, the terrain shadow's strength and GI's energy and sky light. The session's exit calls it.</summary>
+    public static void ResetProcessState()
+    {
+        NightOff = false;
+        Effects.TerrainShadow.Strength = 1f;
+        Effects.GlobalIllumination.Reset();
+    }
+
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
     /// top at or above it. Pure, so two cameras either side get independently correct answers.
