@@ -101,8 +101,8 @@ internal sealed partial class VolumetricClouds : Node3D
     // The preset's own values, before the chapter's saved look, and the layer's top before it.
     private readonly Dictionary<string, float> _defaultValues = new();
     private readonly ZeppelinRuntime? _zeppelins;
-    // Each zeppelin's host and its bubble's radius about the host's origin.
-    private readonly List<(Node3D Host, float Radius)> _hulls = new();
+    // Each bubble's host, a zeppelin or a named world structure, its centre in the host's frame and its radius.
+    private readonly List<(Node3D Host, Vector3 Centre, float Radius)> _hulls = new();
     private readonly bool _hasDeck;
     // The temporal resolve's two targets, each the other's history.
     private readonly ShaderMaterial?[] _resolve = new ShaderMaterial?[2];
@@ -166,11 +166,11 @@ internal sealed partial class VolumetricClouds : Node3D
     /// <summary>Gets the cloud lab's live edits as the control channel's <c>cloud</c> verb takes them.</summary>
     public static string LabSetText => string.Join(";", System.Linq.Enumerable.Select(_labValues, kv => Pair(kv.Key, kv.Value)));
 
-    /// <summary>Gets or sets a value indicating whether the zeppelins' bubbles of clear air stand.
+    /// <summary>Gets or sets a value indicating whether the bubbles of clear air stand.
     /// The control channel's <c>bubbles</c> switch, for measuring the march without them.</summary>
     public static bool BubblesOn { get; set; } = true;
 
-    /// <summary>Gets how many zeppelin hulls the clouds took to leave a bubble round. A hidden one is skipped
+    /// <summary>Gets how many hosts the clouds took to leave a bubble round. A hidden one is skipped
     /// each frame, and past the four bubble globals (<see cref="CloudShadow.BubbleParams"/>) the rest are.</summary>
     public int HullCount => _hulls.Count;
 
@@ -1240,7 +1240,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _built = root;
         AddChild(root);
         string layer = _bottom is { } b && _top is { } t ? $"layer {b:0}-{t:0} m" : "no cloud band";
-        Log.Info("world", $"volumetric clouds: {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}, zeppelin bubbles={_hulls.Count}");
+        Log.Info("world", $"volumetric clouds: {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}, bubbles={_hulls.Count}");
     }
 
     private string BuildSlab(Node3D root)
@@ -1409,11 +1409,23 @@ internal sealed partial class VolumetricClouds : Node3D
         _historyOk = true;
     }
 
-    // Each zeppelin's host and its bubble: the radius about its origin holding the whole hull, whichever way
-    // it turns, plus the margin.
+    // The world structures the chapter's cloud entry names, first, so a zeppelin past the four slots loses its
+    // bubble before one does. Then each zeppelin's host and its bubble: the radius about its origin holding
+    // the whole hull, whichever way it turns, plus the margin.
     private void CollectHulls()
     {
         _hulls.Clear();
+        foreach (string name in CloudShadow.Live?.SavedBubbles ?? Array.Empty<string>())
+        {
+            if (_worldRoot.FindChild(name, true, false) is not Node3D structure)
+                continue;
+            // World geometry's node stands at the world origin, so its bubble is centred on its bounds.
+            var bounds = SubtreeBounds.WorldAabb(structure);
+            float radius = bounds.Size.Length() * 0.5f + BubbleMarginM;
+            _hulls.Add((structure, structure.GlobalTransform.AffineInverse() * bounds.GetCenter(), radius));
+            var at = bounds.GetCenter();
+            Log.Info("world", $"volumetric clouds: bubble round {name} at ({at.X:0},{at.Y:0},{at.Z:0}), radius {radius:0} m");
+        }
         var hosts = new List<Node3D>();
         _zeppelins?.CollectHosts(hosts);
         if (_zeppelins == null)
@@ -1430,10 +1442,10 @@ internal sealed partial class VolumetricClouds : Node3D
         foreach (var host in hosts)
         {
             var box = SubtreeBounds.WorldAabb(host);
-            _hulls.Add((host, box.GetCenter().DistanceTo(host.GlobalPosition) + box.Size.Length() * 0.5f + BubbleMarginM));
+            _hulls.Add((host, Vector3.Zero, box.GetCenter().DistanceTo(host.GlobalPosition) + box.Size.Length() * 0.5f + BubbleMarginM));
         }
         if (_hulls.Count > CloudShadow.BubbleParams.Length)
-            Log.Warn("world", $"volumetric clouds: {_hulls.Count} zeppelins, bubbles round the first {CloudShadow.BubbleParams.Length} standing alone");
+            Log.Warn("world", $"volumetric clouds: {_hulls.Count} bubble hosts, bubbles round the first {CloudShadow.BubbleParams.Length} standing alone");
     }
 
     // Publishes where each standing hull's bubble is now, for both marches and the effects' veil. An
@@ -1443,11 +1455,11 @@ internal sealed partial class VolumetricClouds : Node3D
         if (_hulls.Count == 0)
             return;
         int n = 0;
-        foreach (var (host, radius) in _hulls)
+        foreach (var (host, centre, radius) in _hulls)
         {
             if (BubblesOn && n < CloudShadow.BubbleParams.Length && GodotObject.IsInstanceValid(host) && host.IsVisibleInTree())
             {
-                var at = host.GlobalPosition;
+                var at = host.GlobalTransform * centre;
                 RenderingServer.GlobalShaderParameterSet(CloudShadow.BubbleParams[n++], new Vector4(at.X, at.Y, at.Z, radius));
             }
         }
