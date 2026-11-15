@@ -836,6 +836,72 @@ public class OceanMaskRasterTests
         Assert.Equal(0, r.Mask[(2 * At(316f)) + 1]);
     }
 
+    // A land wall across a strip of sea. Downwind of it the upwind fetch counts the texels back to
+    // the wall. Upwind of it the sea runs off the mask's edge, which is open sea, and saturates.
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(180f)]
+    public void TheUpwindFetchCountsTheSeaBackToTheLand(float windDeg)
+    {
+        const int w = 40, h = 5, wall = 10;
+        var mask = FetchMask(w, h, x => x == wall);
+        var fetch = OceanMaskRaster.Fetch(mask, w, h, windDeg);
+        int Up(int x) => fetch[2 * ((2 * w) + x)];
+        Assert.Equal(0, Up(wall));
+        bool east = windDeg == 0f;
+        for (int k = 0; k < 20; k++)
+        {
+            int downwind = east ? wall + 1 + k : wall - 1 - k;
+            if (downwind is >= 0 and < w)
+                Assert.Equal(k + 1, Up(downwind));
+        }
+        Assert.Equal(255, Up(east ? 0 : w - 1));
+        Assert.Equal(255, Up(east ? wall - 1 : wall + 1));
+    }
+
+    // A channel 30 texels wide between two walls. A texel by one wall looks across to the other; a
+    // coast facing open sea past the shore distance's reach saturates.
+    [Fact]
+    public void TheSeawardFetchLooksAcrossToTheOppositeShore()
+    {
+        const int w = 36, h = 5;
+        var channel = OceanMaskRaster.Fetch(FetchMask(w, h, x => x < 3 || x >= 33), w, h, 0f);
+        int Sea(byte[] f, int x) => f[(2 * ((2 * w) + x)) + 1];
+        Assert.Equal(30, Sea(channel, 3));
+        Assert.Equal(26, Sea(channel, 7));
+        Assert.Equal(30, Sea(channel, 32));
+        Assert.Equal(0, Sea(channel, 1));
+        const int wide = 80;
+        var open = OceanMaskRaster.Fetch(FetchMask(wide, h, x => x < 3), wide, h, 0f);
+        Assert.Equal(255, Sea(open, 3));
+    }
+
+    // An RG8 mask over w x h texels: land where `land` holds, sea elsewhere. G is the shore distance to
+    // the nearest land column, encoded as the bake encodes it.
+    private static byte[] FetchMask(int w, int h, Func<int, bool> land)
+    {
+        var mask = new byte[w * h * 2];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w) + x;
+                if (land(x))
+                    continue;
+                int near = int.MaxValue;
+                for (int lx = 0; lx < w; lx++)
+                {
+                    if (land(lx))
+                        near = Math.Min(near, Math.Abs(lx - x));
+                }
+                float d = (near - 0.5f) * Cell;
+                mask[2 * i] = 255;
+                mask[(2 * i) + 1] = d >= OceanMaskRaster.ShoreReach ? (byte)255 : (byte)Math.Round(d / OceanMaskRaster.ShoreReach * 255f);
+            }
+        }
+        return mask;
+    }
+
     // C1B-like: a sheet of 512 m base quads with baked colours, scattered edge water and surf ring
     // pieces. The solids run from slivers to large faces, some reaching past the sheet.
     private static List<Tri> Scene(Random rng)

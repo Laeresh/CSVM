@@ -234,6 +234,9 @@ public static class OceanShader
     // too fine for the footprint fades to it, so a far shore keeps its band without shimmer.
     private const float SurfLineMean = 0.23f;
 
+    // TUNE. The swell's longest waves the shore train runs. Their rates are the swell's own.
+    private const int ShoreWaves = 2;
+
     // The churn's whole periods of cells per csky_time wrap.
     private static readonly double SurfChurnPerWrap = Math.Max(1.0, Math.Round(SurfChurnRate * ShaderTime.RolloverSecs));
 
@@ -559,6 +562,77 @@ void fragment() {
         sb.AppendLine($"const vec4 {name}_FINE[{waves.Length}] = vec4[{waves.Length}]({string.Join(", ", fine)});");
     }
 
+    // The swell loops' height, the wind swell's share of it when the sea shares the swell.
+    private static string SwellAmp(SeaState sea) => sea.SharesSwell ? "amp * share.y" : "amp";
+
+    private static string ShareSetup(SeaState sea, string indent) => !sea.SharesSwell ? "" : $@"
+{indent}vec2 shoreward;
+{indent}float shore_d;
+{indent}vec2 share = shore_share(p, shoreward, shore_d);";
+
+    // shore_share: the train's height and the wind swell's share at p, the shoreward direction and the
+    // shore distance in metres. The slope comes from two more mask taps a texel on.
+    private static string ShareFunction(SeaState sea)
+    {
+        if (!sea.SharesSwell)
+            return "";
+        string reach = Literal(OceanMaskRaster.ShoreReach), cell = Literal(OceanMaskRaster.Cell);
+        // The wind swell gives way to the train by distance alone, full inside half the radius. The train
+        // also fades where the slope drops: past the mask's reach, and on the medial axis between two
+        // coasts. That leaves the crease where two trains meet calm.
+        string near = sea.ShoreTrain > 0f
+            ? $"1.0 - smoothstep({Literal(sea.ShoreRadius * 0.5f)}, {Literal(sea.ShoreRadius)}, d)"
+            : "0.0";
+        string train = sea.ShoreTrain > 0f ? "near * smoothstep(0.5, 0.9, slope)" : "0.0";
+        string fetch = sea.ReadsFetch
+            ? $"\n    vec2 fetch = textureLod(fetch_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg * {Literal(OceanMaskRaster.FetchReach)};"
+            : "";
+        string windFetch = sea.WindFetch > 0f ? $" * smoothstep(0.0, {Literal(sea.WindFetch)}, fetch.r)" : "";
+        string shoreFetch = sea.ShoreTrain > 0f && sea.ShoreFetch > 0f ? $" * smoothstep(0.0, {Literal(sea.ShoreFetch)}, fetch.g)" : "";
+        return $@"
+
+// The shore train's height and the wind swell's share at p, with the shoreward direction and the shore distance.
+vec2 shore_share(vec2 p, out vec2 shoreward, out float d) {{
+    float g = ocean_mask(p).g;
+    vec2 grad = vec2(ocean_mask(p + vec2({cell}, 0.0)).g - g, ocean_mask(p + vec2(0.0, {cell})).g - g) * {Literal(OceanMaskRaster.ShoreReach / OceanMaskRaster.Cell)};
+    float slope = length(grad);
+    shoreward = -grad / max(slope, 1e-4);
+    d = g * {reach};
+    float near = {near};
+    float train = {train};{fetch}
+    return vec2(train * {Literal(sea.ShoreTrain)}{shoreFetch}, (1.0 - near){windFetch});
+}}";
+    }
+
+    // The shore train, after the wind swell's loop: the swell's longest waves, their crests on the shore
+    // distance's iso-lines running shoreward. The vertex stage displaces, the fragment shades and bunches.
+    private static string TrainLoop(SeaState sea, bool vertex)
+    {
+        if (sea.ShoreTrain <= 0f)
+            return "";
+        string head = $@"
+        for (int i = 0; i < {ShoreWaves}; i++) {{
+            vec4 w = SWELL_DKA[i];
+            vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
+            vec2 kv = sea_wavevector(vec4(shoreward, w.zw), SWELL_MOD[i], dwarp);
+            float th = sm.y - w.z * shore_d - SWELL_QW[i].y * csky_time;";
+        string body = vertex ? @"
+            float g = amp * share.x * clamp(6.2831853 / length(kv) / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
+            disp.xz += shoreward * (SWELL_QW[i].x * w.w * g * cos(th));
+            disp.y += w.w * g * sin(th);
+        }" : $@"
+            float f = amp * share.x * smoothstep({Literal(FootprintFadeFrom)}, {Literal(FootprintFadeFull)}, 6.2831853 / length(kv) / footprint) * sm.x;
+            float s = sin(th);
+            n.xz -= kv * (w.w * f * cos(th));
+            n.y -= SWELL_QW[i].x * w.z * w.w * f * s;
+            float qs = SWELL_QW[i].x * w.w * f * s;
+            bx += shoreward * (kv.x * qs);
+            bz += shoreward * (kv.y * qs);
+        }}";
+        // The fragment's loop sits one level shallower than the vertex stage's.
+        return vertex ? head + body : (head + body).Replace("\n    ", "\n", StringComparison.Ordinal);
+    }
+
     // The view-space scale that draws the ocean at priority level, in the bias shader's own step
     // (SceneBuilder.DepthBiasPerLevel), spelled as a shader literal.
     private static string DepthScale(int level) =>
@@ -591,6 +665,8 @@ void fragment() {
         sb.AppendLine("uniform sampler2D tint_tex : source_color, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D lift_tex : hint_default_black, filter_linear, repeat_disable;");
         sb.AppendLine("uniform sampler2D surf_tex : hint_default_black, filter_linear, repeat_disable;");
+        if (sea.ReadsFetch)
+            sb.AppendLine("uniform sampler2D fetch_tex : hint_default_white, filter_linear, repeat_disable;");
         sb.AppendLine("uniform float rough_near = 0.2;");
         sb.AppendLine("uniform float rough_far = 0.3;");
         sb.AppendLine("uniform float wave_scale = 1.0;");
@@ -627,7 +703,7 @@ float shore_swell(float g) {
 
 float shore_look(float g) {
     return smoothstep(" + Literal(sea.LookFrom / OceanMaskRaster.ShoreReach) + @", " + Literal(sea.LookFull / OceanMaskRaster.ShoreReach) + @", g);
-}
+}" + ShareFunction(sea) + @"
 
 // Two smooth value-noise channels in [-1, 1].
 vec2 sea_noise(vec2 p) {
@@ -925,14 +1001,14 @@ void vertex() {
         mat2 dwarp;
         vec4 warp = sea_warp(p, dwarp);
         vec4 fine = sea_fine(p);
-        float keep = 0.0;
+        float keep = 0.0;" + ShareSetup(sea, "        ") + @"
         for (int i = 0; i < SWELL_DKA.length(); i++) {
             vec4 w = SWELL_DKA[i];
             float len = 6.2831853 / length(sea_wavevector(w, SWELL_MOD[i], dwarp));
             vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
             // Full height at eight grid steps per local wavelength, none at four. A wave the grid
             // cannot carry would crawl as the grid follows the eye.
-            float g = amp * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
+            float g = " + SwellAmp(sea) + @" * clamp(len / spacing * 0.25 - 1.0, 0.0, 1.0) * sm.x;
             // The shadow's read point follows the surface at sixteen grid steps per longest wavelength.
             // It sits at sea level by eight, one ring before that wave's own fade begins.
             if (i == 0) {
@@ -941,7 +1017,7 @@ void vertex() {
             float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
             disp.xz += w.xy * (SWELL_QW[i].x * w.w * g * cos(th));
             disp.y += w.w * g * sin(th);
-        }
+        }" + TrainLoop(sea, vertex: true) + @"
         v_param = p;
         // Over a harbour ramp the sea rises with the sheet it replaces, up to the quay it meets.
         float lift = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
@@ -985,7 +1061,7 @@ void fragment() {
     vec2 group = sea_group(p);
     mat2 dwarp;
     vec4 warp = sea_warp(p, dwarp);
-    vec4 fine = sea_fine(p);
+    vec4 fine = sea_fine(p);" + ShareSetup(sea, "    ") + @"
     // The tables run longest first (EmitWaves checks), and no local length passes WarpStretchMax
     // times the wave's own. Once that bound fades out, every later wave fades too.
     for (int i = 0; i < SWELL_DKA.length(); i++) {
@@ -997,7 +1073,7 @@ void fragment() {
         vec2 kv = sea_wavevector(w, SWELL_MOD[i], dwarp);
         float fade = smoothstep(" + Literal(FootprintFadeFrom) + @", " + Literal(FootprintFadeFull) + @", 6.2831853 / length(kv) / footprint);
         vec2 sm = sea_mod(SWELL_MOD[i], SWELL_FINE[i], group, warp.xy, fine);
-        float f = amp * fade * sm.x;
+        float f = " + SwellAmp(sea) + @" * fade * sm.x;
         float th = w.z * dot(w.xy, p) - SWELL_QW[i].y * csky_time + sm.y;
         float ka = w.z * w.w * f;
         float s = sin(th);
@@ -1006,7 +1082,7 @@ void fragment() {
         float qs = SWELL_QW[i].x * w.w * f * s;
         bx += w.xy * (kv.x * qs);
         bz += w.xy * (kv.y * qs);
-    }
+    }" + TrainLoop(sea, vertex: false) + @"
     // The detail layers run longest first (EmitDetail checks), so the first faded layer ends the sum.
     // A layer's height is DetailSlope times its cell times the noise, the same slope at every cell
     // size. The sea-state grouping varies it by region.

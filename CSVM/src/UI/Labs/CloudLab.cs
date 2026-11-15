@@ -235,7 +235,7 @@ internal sealed partial class CloudLab : Node
         foreach (var r in LookRows)
         {
             if (VolumetricClouds.LookValue(r.Key) is { } v
-                && VolumetricClouds.LookValue(r.Key, 2) is { } preset && !Mathf.IsEqualApprox(v, preset))
+                && VolumetricClouds.LookValue(r.Key, VolumetricClouds.LookStage.Preset) is { } preset && !Mathf.IsEqualApprox(v, preset))
             {
                 look[r.Key] = v;
             }
@@ -279,7 +279,7 @@ internal sealed partial class CloudLab : Node
         new CloudShadowPattern.Field(r.Key, $"{r.Label}  [{r.Key}]", r.Min, r.Max, r.Step, "0.####", _ => null, (t, _) => t),
         _ => VolumetricClouds.LookValue(r.Key) ?? 0f,
         (_, v) => VolumetricClouds.LabSet(r.Key, v),
-        () => VolumetricClouds.LookValue(r.Key, 1) ?? 0f);
+        () => VolumetricClouds.LookValue(r.Key, VolumetricClouds.LookStage.Saved) ?? 0f);
 
     private string LayerText() => _editsClouds
         ? "Editing the clouds layer (applies while Volumetric Clouds is on)"
