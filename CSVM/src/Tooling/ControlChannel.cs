@@ -172,7 +172,7 @@ public sealed class ControlChannel
                 cmd.Reply.TrySetResult(lab == null ? "err no cloud lab (--freecam builds it)" : $"ok {done}");
                 return;
             case "taa":
-                viewport.UseTaa = words[1] == "on";
+                viewport.UseTaa = words.Length > 1 && words[1] == "on";
                 cmd.Reply.TrySetResult("ok");
                 return;
             case "fly":

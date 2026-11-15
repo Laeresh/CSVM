@@ -93,8 +93,8 @@ internal static class CloudNoise
     {
         var started = DateTime.UtcNow;
         int n = LatticeCells;
-        // Each slice hashes straight into its own buffer. It takes 70-100 ms once a process, about what
-        // reading a 32 MB cache back costs, so it has no cache.
+        // Each slice hashes straight into its own buffer. Building it costs about what reading its
+        // cache back would, so it has no cache.
         var data = new byte[n][];
         Parallel.For(0, n, z =>
         {
