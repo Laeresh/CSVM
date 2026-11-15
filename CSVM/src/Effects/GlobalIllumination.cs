@@ -29,6 +29,13 @@ internal static class GlobalIllumination
     /// <see cref="ZoneLighting.AmbientFloor"/> fill and self-lit glow as emission globals (<c>WeatherRig</c>).</summary>
     public static bool SkyLightLive { get; private set; }
 
+    /// <summary>Puts <see cref="Energy"/> and <see cref="SkyLightLive"/> back to a fresh process's values.</summary>
+    public static void Reset()
+    {
+        Energy = ZoneLighting.Default.SdfgiEnergy;
+        SkyLightLive = false;
+    }
+
     /// <summary>Writes GI onto <paramref name="env"/>: on under Enhanced while the option stands on, a
     /// fresh Environment's values otherwise. The faithful path and the option off read what they
     /// always did.</summary>

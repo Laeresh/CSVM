@@ -15,12 +15,6 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed partial class Precipitation : Node3D
 {
-    /// <summary>The field's draw order while a volumetric cloud slab stands, after the slab and the puffers
-    /// drawn over it. The slab reads opaque depth alone, so drawn later it paints the cloud over rain in
-    /// front of it. All sit past the world flare (<see cref="UI.Boards.HeadLockedQuads.WorldFlarePriority"/>
-    /// and its three rings) and under the stereo whiteout at 109.</summary>
-    internal const int OverSlabPriority = UI.Boards.HeadLockedQuads.WorldFlarePriority + 6;
-
     // --- TUNE: the feel, pending the user's A/B against the original ---
     private const float RainBoxHalf = 30f;   // camera-centred wrap-box half-extent (m), rain …
     private const float SnowBoxHalf = 30f;   // … and snow
@@ -122,7 +116,7 @@ public sealed partial class Precipitation : Node3D
     private int _priority;
 
     /// <summary>Gets or sets the field's draw order: 0, depth-sorted with the world's transparents, or
-    /// <see cref="OverSlabPriority"/> while the volumetric clouds stand. A field takes a change on its next frame.</summary>
+    /// <see cref="UI.Boards.HeadLockedQuads.RainOverSlabPriority"/> while the volumetric clouds stand. A field takes a change on its next frame.</summary>
     internal static int DrawPriority { get; set; }
 
     /// <summary>Builds the field for a mission's precipitation, or null if there is none.

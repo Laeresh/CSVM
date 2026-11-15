@@ -460,7 +460,7 @@ public sealed partial class LightingLab : Node
             mission[key] = ZoneLighting.Find(key)!.Get(edit);
         try
         {
-            LightingTable.Save(SavePath, _chapter, _mission, zone, chapter, mission, _weather.Moonlit, Layer, Under(zone));
+            LightingTable.Save(SavePath, new(_chapter, _mission, zone, Layer), chapter, mission, _weather.Moonlit, Under(zone));
             var table = LightingTable.Parse(File.ReadAllText(SavePath, Encoding.UTF8));
             _weather.ReloadLighting(table);
             _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone, Layer).Keys, StringComparer.OrdinalIgnoreCase);

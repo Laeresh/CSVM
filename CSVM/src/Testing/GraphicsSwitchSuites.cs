@@ -558,8 +558,8 @@ internal static class GraphicsSwitchSuites
                     if (on)
                     {
                         // Between resolutions the same node stands and only re-marches.
-                        ctx.Check(VolumetricClouds.MarchDivisor == divisor && (standing == null || node == standing),
-                            $"at {word} the march divisor is {divisor} on {(standing == null ? "the clouds just built" : "the same clouds node")} (divisor {VolumetricClouds.MarchDivisor}, same node {node == standing})");
+                        ctx.Check(VolumetricCloudsSetting.MarchDivisor == divisor && (standing == null || node == standing),
+                            $"at {word} the march divisor is {divisor} on {(standing == null ? "the clouds just built" : "the same clouds node")} (divisor {VolumetricCloudsSetting.MarchDivisor}, same node {node == standing})");
                         // C1C's zeppelins fly in the band, so each needs a bubble of clear air.
                         int zeppelins = live.Session.ZeppelinHulls?.LiveCount ?? 0;
                         ctx.Check(zeppelins > 0 && node?.HullCount == zeppelins,
@@ -567,10 +567,10 @@ internal static class GraphicsSwitchSuites
                     }
 
                     puffer.Show(0);
-                    int wantPriority = on ? Precipitation.OverSlabPriority - 1 : 0;
+                    int wantPriority = on ? UI.Boards.HeadLockedQuads.OverSlabPriority : 0;
                     ctx.Check(pufferMaterial.RenderPriority == wantPriority,
                         $"at {word} a puffer draws at priority {wantPriority}, {(on ? "after the slab and before the rain" : "among the world's transparents")} ({pufferMaterial.RenderPriority})");
-                    int wantRain = on ? Precipitation.OverSlabPriority : 0;
+                    int wantRain = on ? UI.Boards.HeadLockedQuads.RainOverSlabPriority : 0;
                     ctx.Check(Precipitation.DrawPriority == wantRain,
                         $"at {word} the rain draws at priority {wantRain}, {(on ? "after the puffers over the slab" : "among the world's transparents")} ({Precipitation.DrawPriority})");
                     ctx.Check(CloudShadow.Live is { } shadows && shadows.CloudsLayer == on && shadows.Tune == shadows.Saved,
@@ -620,7 +620,13 @@ internal static class GraphicsSwitchSuites
                 live.Close();
             }
 
-            ctx.Check(!WeatherRig.NightOff, $"the closed session leaves the night flag off");
+            ctx.Check(!WeatherRig.NightOff && TerrainShadow.Strength == 1f && !GlobalIllumination.SkyLightLive
+                    && GlobalIllumination.Energy == ZoneLighting.Default.SdfgiEnergy,
+                $"the closed session leaves the night flag off and the shadow and GI state at their defaults (strength {TerrainShadow.Strength:0.##}, sky light {GlobalIllumination.SkyLightLive}, energy {GlobalIllumination.Energy:0.##})");
+            float density = VolumetricClouds.UniformDefaults.GetValueOrDefault("density_gain", -1f);
+            float accum = VolumetricClouds.UniformDefaults.GetValueOrDefault("accum", -1f);
+            ctx.Check(density == 0.025f && accum == 0.75f,
+                $"the slab's uniform defaults read from its shader text ({VolumetricClouds.UniformDefaults.Count} floats, density_gain {density}, accum {accum})");
         }
         finally
         {
