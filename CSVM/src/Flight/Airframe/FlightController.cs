@@ -2541,10 +2541,10 @@ public partial class FlightController : Node3D
         float simDt = clock?.FrameDt ?? (float)delta;
         if (!orbiting)
         {
-            // Draw the plane between its last two sim poses (see the _simPrev/_simCurr fields).
-            // Skipped while crashed: the sim pair is stale and the wreck owns the visuals.
+            // Draw the plane between its last two sim poses, a wreck still falling included. Skipped
+            // once the crash rig owns the hull: the sim pair is stale from there.
             // ⚠ The fraction is the session-wide one, never the engine's raw reading.
-            if ((clock == null || !clock.ParentDriven) && !Crashed)
+            if ((clock == null || !clock.ParentDriven) && (!Crashed || WreckFalling))
             {
                 _renderPose = _simPrev.InterpolateWith(_simCurr, RenderPoses.Fraction);
                 GlobalTransform = _renderPose;
@@ -3464,7 +3464,7 @@ public partial class FlightController : Node3D
             // the ten AI airframes and at once on `player`. ⚠ Wire all three seams before Play, or
             // the untimed player def raises them into nothing (docs/org/vehicleDamage.md).
             CrashRuntime!.WreckVelocity = () => _model.VelocityDir * _model.Speed;
-            CrashRuntime.StopWreckFlying = () => _lifecycle.StopWreckFall();
+            CrashRuntime.StopWreckFlying = StopWreckFlying;
             // Code 15's other half: the stages the hull was wearing end with it. Both AI stage anims
             // are LOOP -1 with NO authored exit, so nothing else can reach them and a survivor emits
             // forever at the node the wreck left behind.
@@ -3492,6 +3492,15 @@ public partial class FlightController : Node3D
             $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(death.WreckFalling ? "falling (flight model)" : "handed over on the kill frame")} lands={(DestroyDefFliesWreck ? "anim (bounce sequence)" : "ground-impact def")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
         if (death.Downed)
             Downed?.Invoke(PlayerIndex, death.Killer);
+    }
+
+    // The destroy def takes the hull over, and no frame draws it after this. The node goes back
+    // on its simulation pose, which is where the anim carries the wreck on from.
+    private void StopWreckFlying()
+    {
+        _lifecycle.StopWreckFall();
+        _renderPose = _simCurr;
+        GlobalTransform = _simCurr;
     }
 
     // Everything an aircraft stops doing the moment it is out of the fight, whether it died in the

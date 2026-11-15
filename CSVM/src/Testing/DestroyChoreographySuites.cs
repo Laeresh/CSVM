@@ -11,6 +11,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.Tooling;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -899,6 +900,7 @@ internal static class DestroyChoreographySuites
                 // air 16.73x thinner, so the fall arm would measure the wrong regime's drag.
                 const float FallFrom = 1500f;
                 WreckFallsBeforeItIsHandedOver(ctx, spawner, FallFrom);
+                WreckIsDrawnBetweenItsSteps(ctx, spawner, FallFrom);
                 // Both airframes, because the reported split was between them: the immortal stage is
                 // pfsmoketrail at `prop1`, which every airframe carries, and the Bloodhawk's missing
                 // lft_elev/rt_elev belong to random_remote_damage, which ends on its own timeline.
@@ -2700,6 +2702,77 @@ internal static class DestroyChoreographySuites
         }
         finally
         {
+            ai?.Free();
+        }
+    }
+
+    // A falling wreck is still stepped by the flight model. A realtime frame draws it as it drew
+    // the living aircraft, between its last two simulation poses. Drawn on the raw pose it moves
+    // in steps against a smooth camera.
+    // ⚠ Keep the living control. The host's fraction is not chosen here, and the control fails
+    // with it if the frame ever sits on a whole step.
+    private static void WreckIsDrawnBetweenItsSteps(TestContext ctx, FlightRoster spawner,
+        float fallFrom)
+    {
+        const float Dt = 1f / 60f;
+        var savedClock = GameClock.Current;
+        FlightController? ai = null;
+        try
+        {
+            var spawn = new Vector3(3000f, fallFrom, 0f);
+            ai = spawner.SpawnAi(new AiSpawn("player_fury", spawn, spawn + Vector3.Forward,
+                AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward)));
+            if (ai.CrashRuntime is not { } rig || ai.Damage is not { } damage)
+            {
+                ctx.Check(false, $"the drawn-fall rig spawned with a crash runtime and a damage ledger");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            GameClock.Current = new GameClock { Mode = GameClock.RunMode.Realtime };
+            float f = RenderPoses.Fraction;
+            ctx.Check(f < 1f,
+                $"the host's frame sits inside a simulation step, so a drawn pose can differ from a simulation pose fraction={f:0.000}");
+
+            for (int i = 0; i < 60; i++)
+                ai.SimStep(Dt);
+            var livePrev = ai.WorldPosition;
+            ai.SimStep(Dt);
+            var liveCurr = ai.WorldPosition;
+            ai._Process(Dt);
+            float liveOff = ai.GlobalPosition.DistanceTo(livePrev.Lerp(liveCurr, f));
+            ctx.Check(liveOff < 0.01f,
+                $"CONTROL: the living aircraft is drawn at the frame's fraction of its {livePrev.DistanceTo(liveCurr):0.00} m step, {liveOff:0.000} m off it");
+
+            float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
+            ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+            ai.SimStep(Dt);
+            var prev = ai.WorldPosition;
+            ai.SimStep(Dt);
+            var curr = ai.WorldPosition;
+            ctx.Check(ai.WreckFalling && prev.DistanceTo(curr) > 0.5f,
+                $"the wreck is falling under the flight model, {prev.DistanceTo(curr):0.00} m a step falling={ai.WreckFalling}");
+            ai._Process(Dt);
+            float off = ai.GlobalPosition.DistanceTo(prev.Lerp(curr, f));
+            ctx.Check(off < 0.01f,
+                $"the falling wreck is drawn at the frame's fraction of its step too, {off:0.000} m off it ({ai.GlobalPosition.DistanceTo(curr):0.00} m short of the raw simulation pose)");
+
+            // The anim carries the wreck on from the node's pose at the handover. That pose is the
+            // simulation's, whichever of the frame and the def's Callback 15 runs first.
+            for (float t = 0f; t < 8f && ai.WreckFalling; t += Dt)
+            {
+                ai.SimStep(Dt);
+                ai._Process(Dt);
+                rig.Advance(Dt);
+            }
+            float left = ai.GlobalPosition.DistanceTo(ai.WorldPosition);
+            ctx.Check(!ai.WreckFalling && left < 0.01f,
+                $"Callback 15 hands the anim a hull on its simulation pose, not on a drawn one: {left:0.000} m off falling={ai.WreckFalling}");
+        }
+        finally
+        {
+            GameClock.Current = savedClock;
+            RenderPoses.Clear();
             ai?.Free();
         }
     }
