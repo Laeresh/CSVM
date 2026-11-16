@@ -549,7 +549,9 @@ public sealed class ClutterBuilder
         _stamps = _vegetation != null ? new List<RichStamp>() : null;
         PlaceOnWorld(templates, worldName);
         _stats.Report();
+        LoadProgress.Tick();
         BakeRich();
+        LoadProgress.Tick();
 
         var root = new Node3D { Name = "clutter" };
         ModelRoot = _modelChapter != null ? new Node3D { Name = "vegetation_models" } : null;
@@ -569,6 +571,7 @@ public sealed class ClutterBuilder
         {
             if (kind.Instances.Count == 0)
                 continue;
+            LoadProgress.Tick();
             var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
             if (mmi == null)
                 continue;

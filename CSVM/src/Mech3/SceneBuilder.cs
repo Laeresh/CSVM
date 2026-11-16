@@ -1455,6 +1455,7 @@ void light() {{
         if (collidable && collisionSkip != null && collisionSkip(node))
             collidable = false;
 
+        LoadProgress.Tick();
         var n3d = new Node3D { Name = Sanitize(node.Name) };
         NodeMade?.Invoke(n3d);
         try

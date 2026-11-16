@@ -63,6 +63,7 @@ public sealed class StartupProfile
     public static void Record(string phase, long mark)
     {
         Current?.Add(phase, MsSince(mark));
+        LoadProgress.Tick();
     }
 
     /// <summary>Adds an already-measured span to a phase.</summary>
