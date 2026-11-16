@@ -38,7 +38,7 @@ public static class VegetationScatter
         entry.SetFor(texture) is { Models.Count: > 0, Density: > 0f } set ? set : null;
 
     /// <summary>The set the Thicken brush plants on <paramref name="texture"/>: the entry's <see cref="VegetationEntry.Brush"/>
-    /// set where no pick names the texture, null otherwise. It never makes the ground canopy, since that follows picks.</summary>
+    /// set where no pick names the texture, null otherwise. A canopy set paints crowns there too (<see cref="CanopyMask.FromPainted"/>).</summary>
     public static VegetationSet? Brushed(VegetationEntry entry, string texture) =>
         entry.Brush.Length > 0 && entry.SetFor(texture) == null
             && entry.Sets.FirstOrDefault(s => string.Equals(s.Name, entry.Brush, StringComparison.OrdinalIgnoreCase)) is { Models.Count: > 0, Density: > 0f } set

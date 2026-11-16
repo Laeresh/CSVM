@@ -2221,6 +2221,8 @@ internal static class GraphicsSwitchSuites
                 Vector3[] Standing() => AddedOf(kinds).SelectMany(k => k.Rich).Where(xf => xf.Basis.Determinant() != 0f).Select(xf => xf.Origin).ToArray();
                 var before = Standing().Select(o => (Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z))).ToHashSet();
                 const float BrushRadius = 60f;
+                int CrownsNear() => c3.Session.Vegetation?.CanopyClumpField?.Crowns.Count(c => Flat(c.At, spot) < BrushRadius) ?? -1;
+                int crownsBefore = CrownsNear();
                 var painted = mask.Clone();
                 painted.Stroke(spot.X, spot.Z, BrushRadius, 1f, Mech3.VegetationBrush.Thicken);
                 c3.Session.Vegetation?.Apply(painted);
@@ -2228,12 +2230,15 @@ internal static class GraphicsSwitchSuites
                 var planted = Standing().Where(o => !before.Contains((Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z)))).ToList();
                 int onSand = planted.Count(o => OnTriangles(sand, o));
                 int far = planted.Count(o => Flat(o, spot) > BrushRadius + (2f * texel));
-                ctx.Note($"brush stroke at ({spot.X:0}, {spot.Z:0}): {planted.Count} new palms, {onSand} on the sand");
+                int crownsAfter = CrownsNear();
+                ctx.Note($"brush stroke at ({spot.X:0}, {spot.Z:0}): {planted.Count} new palms, {onSand} on the sand; crown models within it {crownsBefore} -> {crownsAfter}");
                 ctx.Check(shipped.Brush == "palms" && onSand > 0 && far == 0,
                     $"a Thicken stroke on unpicked beach plants the brush set there: {planted.Count} new palms, {onSand} on the sand, {far} outside the stroke");
+                ctx.Check(crownsAfter > crownsBefore, $"and, the set being canopy, crown models there ({crownsBefore} -> {crownsAfter})");
                 c3.Session.Vegetation?.Apply(mask);
                 Step(c3);
-                ctx.Check(SameAdded(AddedOf(kinds), opening), $"and the neutral mask takes the brushed palms away again");
+                ctx.Check(SameAdded(AddedOf(kinds), opening) && CrownsNear() == crownsBefore,
+                    $"and the neutral mask takes the brushed palms and crowns away again ({CrownsNear()} crowns)");
 
                 c3.Session.Vegetation?.Apply(new Mech3.VegetationEntry
                 {
