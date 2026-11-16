@@ -245,15 +245,5 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 ## Current status / next step
 
-**Fixed shape, five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense**,  If this section is longer after your edit than before it, the edit was wrong.
-
-**Where the project is.** Milestones 1 through 6 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
-
-**Active plans:** none.
-
 Use the targeted/quick development loop above, then verify landed code with the complete
-**`.\scripts\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
-
-The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
-
-Everything else unscheduled, known issues, deferred items, fidelity questions, the TUNE list (the `type:tuning` label), is in the open `backlog` issues; close each as it lands.
+**`.\scripts\RunTests.ps1`**;

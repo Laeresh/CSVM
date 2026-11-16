@@ -74,6 +74,7 @@
       "frame": 30,
       "hash": "3383621e52ae09458da509275edfe4b5",
       "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
+      "release": true,
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
@@ -81,6 +82,7 @@
       "frame": 120,
       "hash": "b2379c95b28354c64e22b600089b618e",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD, including the heading tape's uncapped ends, hem and rim fade; frame-sensitive 12.21 %, and renders with extracted/ absent.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
@@ -116,6 +118,7 @@
       "frame": 360,
       "hash": "c7cd1726be3442c78d878b683b325ad6",
       "exercises": "the two-ray column ground-contact tier, blind to each piece's own colliders: a killed hangar's flung debris resting on terrain, their landings' spark puffers on the mission wind as the visible signal, over C1 ground and cutouts under one world light.",
+      "release": true,
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
