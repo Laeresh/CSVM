@@ -1011,6 +1011,7 @@ internal static class MenuOriginalSuites
             OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey, OriginalVideoPage.VegetationQualityKey,
             OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey, OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.ShadowDistanceKey,
             OriginalVideoPage.PostProcessingKey, OriginalVideoPage.VolumetricCloudsKey, OriginalVideoPage.GlobalIlluminationKey,
+            OriginalVideoPage.SpeedWispsKey,
         };
         if (System.OperatingSystem.IsWindows())
         {
@@ -1025,7 +1026,7 @@ internal static class MenuOriginalSuites
             walk.Add(shell.FocusedKey);
         }
 
-        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 10,
+        ctx.Check(walk.SequenceEqual(expected) && shell.Options.Video.Top == 11,
             $"Down walks the shadow row, scrolls View Distance, both Vegetation rows, Ground Cover, Cloud Shadows, Shadow Distance, Post-processing, Volumetric Clouds, Global Illumination and then VR Mode into the window, crosses both checkboxes, then out to ACCEPT and CANCEL ({string.Join(" -> ", walk)}, top {shell.Options.Video.Top})");
         WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);

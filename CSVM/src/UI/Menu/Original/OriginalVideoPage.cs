@@ -73,6 +73,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's global illumination dropdown, under Volumetric Clouds in the scrolled window.</summary>
     public const string GlobalIlluminationKey = "GLOBALILLUMINATION";
 
+    /// <summary>The page's speed wisps dropdown, under Global Illumination in the scrolled window.</summary>
+    public const string SpeedWispsKey = "SPEEDWISPS";
+
     /// <summary>The page's water-quality checkbox, on the authored Clutter Detail line.</summary>
     public const string WaterQualityKey = "WATERQUALITY";
 
@@ -171,6 +174,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(PostProcessingKey, CSVM.Utils.PostProcessingSetting.Lookup, "Post-processing"),
         Word(VolumetricCloudsKey, CSVM.Utils.VolumetricCloudsSetting.Lookup, "Volumetric Clouds"),
         Word(GlobalIlluminationKey, CSVM.Utils.GlobalIlluminationSetting.Lookup, "Global Illumination"),
+        Word(SpeedWispsKey, CSVM.Utils.SpeedWispsSetting.Lookup, "Speed Wisps"),
         new(VrModeKey, "VR Mode", null,
             _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Dropdown, _ => OffOnWords,
             c => c.VrMode == true ? 1 : 0,

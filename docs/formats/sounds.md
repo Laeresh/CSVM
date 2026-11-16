@@ -339,7 +339,7 @@ velocity, and airspeed reaches the engine slot nowhere.
 
 A remake-only remix of the original's own sounds, chosen on the AUDIO page apart from the graphics
 mode (`Utils/SoundModeSetting.cs`). Original Sound plays everything above as decoded. Enhanced
-Sound changes three things, in every view, by the amounts in `CSVM/data/enhanced_sound.json`
+Sound changes four things, in every view, by the amounts in `CSVM/data/enhanced_sound.json`
 (`Flight/Audio/EnhancedSoundTuning.cs`); every amount is a TUNE, owed a listen at the controls.
 The sound lab (`--sound-lab`, Shift+F9 in flight, `docs/controls.md`) moves each one live and
 saves the file. A [sound pack](#sound-packs) may override them.
@@ -353,6 +353,15 @@ saves the file. A [sound pack](#sound-packs) may override them.
 | `hitConfirmSound` | the `SOUND_GROUPS` entry the hit confirm draws | `bullet_hit_sg` | any group name |
 | `hitConfirmGain`, `hitConfirmPitch` | the hit confirm's gain over the member's `VOLUME`, and its pitch scale | 1, 1 | 0 to 4, 0.181 to 2.503 |
 | `hitConfirmInterval` | the least sim time between two hit confirms on one pilot's mix | 0.1 s | 0 to 2 s |
+| `windGainSlow`, `windGainFast` | the wind's gain at 0.3 and at 1.2 of rated max speed (`fd_speed`) | 0, 0 | 0 to 4 |
+| `windPitchSlow`, `windPitchFast` | the wind's pitch at those two speeds | 1, 1 | 0.181 to 2.503 |
+
+The wind is the own rattle loop (`rattle`, `snd_planeshake`) opened early: between the two speeds
+its gain rises with the square of the span and its pitch linearly, and one rad/s of turn adds 0.26
+of the span. The loop plays at the larger of that gain and the decoded gate's, so past rated max
+speed it stands at full level as under Original Sound. A voice line ducks the wind with the
+engines. ⚠ It is one player on purpose: the shipped `nujetwind.wav` (`snd_jetwind1`, named by
+nothing) is `plane_shake.wav` byte for byte, so a second loop would play the same recording twice.
 
 The engine fields replace only the curve's two outputs. The turn-rate and climb terms still add to
 the parameter, the clamp still holds it to 1.5, and the boost still pins it, so the decoded

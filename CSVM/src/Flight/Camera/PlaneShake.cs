@@ -29,6 +29,12 @@ public sealed class PlaneShake
     /// original's own velocity kick, so dial this and never the authored <c>magnitude</c>.</summary>
     public const float NitroWobbleKickScale = 1f;
 
+    /// <summary>The speed ratio the enhanced buffet opens at, TUNE. Below it the airframe is still.</summary>
+    public const float BuffetGate = 0.75f;
+
+    /// <summary>The buffet at full strength, as the overspeed excess whose rattle it equals, TUNE.</summary>
+    public const float BuffetFullExcess = 0.03f;
+
     // ⚠ Do not give block 5 a def; these three constants ARE its law (docs/org/shakes.md).
     // The data authors no `turbulence` source, so the camera constructor's law stands.
     private static readonly ShakeSource ContactLaw =
@@ -172,12 +178,20 @@ public sealed class PlaneShake
     /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
     /// not the whole ratio: zero at rated max, a gentle ramp with overspeed. What it feeds is the
     /// next <see cref="Advance"/>'s velocity kick into block 4.</summary>
-    public void SetSpeedRatio(float speedRatio)
+    public void SetSpeedRatio(float speedRatio, bool buffet = false)
     {
-        _speedDrive = _speed?.Src is { MinSpeed: { } gate, MagnitudeQuotient: > 0f } src
-                      && speedRatio > gate
-            ? (speedRatio - gate) / src.MagnitudeQuotient!.Value
-            : 0f;
+        if (_speed?.Src is not { MinSpeed: { } gate, MagnitudeQuotient: > 0f } src)
+        {
+            _speedDrive = 0f;
+            return;
+        }
+        float excess = MathF.Max(0f, speedRatio - gate);
+        // The enhanced buffet opens the drive early, ramped in from BuffetGate to the authored gate.
+        if (buffet && gate > BuffetGate)
+        {
+            excess += BuffetFullExcess * Math.Clamp((speedRatio - BuffetGate) / (gate - BuffetGate), 0f, 1f);
+        }
+        _speedDrive = excess / src.MagnitudeQuotient!.Value;
     }
 
     /// <summary>Brings every block to rest and drops the overspeed drive. A respawned airframe

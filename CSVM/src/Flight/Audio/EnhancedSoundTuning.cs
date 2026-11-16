@@ -27,6 +27,12 @@ public sealed record EnhancedSoundTuning
     /// gains. The hit confirm draws the ricochet group at its own pitch.</summary>
     public static readonly EnhancedSoundTuning Neutral = new();
 
+    // TUNE: the fractions of rated max speed (fd_speed) the wind's two points sit at. One rad/s
+    // of turn adds TurnRateIntoWind of that span, the engine curve's own turn term.
+    internal const float WindSlowSpeed = 0.3f;
+    internal const float WindFastSpeed = 1.2f;
+    internal const float TurnRateIntoWind = 0.26f;
+
     // The sane range of a field. A value outside one is a typo, not a mix. The pitch bounds are the
     // mixer's own (EngineAudioCurves.MinPitch/MaxPitch), and four times a gain is +12 dB.
     internal const float MinPitch = 4000f / 22050f;
@@ -56,6 +62,10 @@ public sealed record EnhancedSoundTuning
         new("hitConfirmGain", "Hit confirm gain", 0f, MaxGain, t => t.HitConfirmGain, (t, v) => t with { HitConfirmGain = v }),
         new("hitConfirmPitch", "Hit confirm pitch", MinPitch, MaxPitch, t => t.HitConfirmPitch, (t, v) => t with { HitConfirmPitch = v }),
         new("hitConfirmInterval", "Hit confirm interval (s)", 0f, MaxInterval, t => t.HitConfirmInterval, (t, v) => t with { HitConfirmInterval = v }),
+        new("windGainSlow", "Wind gain at low speed", 0f, MaxGain, t => t.WindGainSlow, (t, v) => t with { WindGainSlow = v }),
+        new("windGainFast", "Wind gain in a dive", 0f, MaxGain, t => t.WindGainFast, (t, v) => t with { WindGainFast = v }),
+        new("windPitchSlow", "Wind pitch at low speed", MinPitch, MaxPitch, t => t.WindPitchSlow, (t, v) => t with { WindPitchSlow = v }),
+        new("windPitchFast", "Wind pitch in a dive", MinPitch, MaxPitch, t => t.WindPitchFast, (t, v) => t with { WindPitchFast = v }),
     };
 
     /// <summary>The committed file's location, read through Godot's file access since an exported
@@ -103,6 +113,30 @@ public sealed record EnhancedSoundTuning
     /// <summary>The least time between two hit confirms, in sim seconds, so a burst landing
     /// together sounds once.</summary>
     public float HitConfirmInterval { get; init; } = 0.1f;
+
+    /// <summary>The wind loop's gain at <see cref="WindSlowSpeed"/> of rated max speed. Original
+    /// Sound has no wind, so both gains are 0 there.</summary>
+    public float WindGainSlow { get; init; }
+
+    /// <summary>The wind loop's gain at <see cref="WindFastSpeed"/> of rated max speed.</summary>
+    public float WindGainFast { get; init; }
+
+    /// <summary>The wind loop's pitch at <see cref="WindSlowSpeed"/> of rated max speed.</summary>
+    public float WindPitchSlow { get; init; } = 1f;
+
+    /// <summary>The wind loop's pitch at <see cref="WindFastSpeed"/> of rated max speed.</summary>
+    public float WindPitchFast { get; init; } = 1f;
+
+    /// <summary>The wind loop's pitch and gain at <paramref name="speedFrac"/> of rated max speed,
+    /// in a turn of <paramref name="turnRate"/> rad/s. The gain rises with the square of the span,
+    /// as dynamic pressure does, so a cruise stays quiet and a dive opens up.</summary>
+    public (float Pitch, float Volume) Wind(float speedFrac, float turnRate)
+    {
+        float t = Math.Clamp(
+            ((speedFrac - WindSlowSpeed) / (WindFastSpeed - WindSlowSpeed)) + (TurnRateIntoWind * MathF.Abs(turnRate)), 0f, 1f);
+        return (WindPitchSlow + ((WindPitchFast - WindPitchSlow) * t),
+            WindGainSlow + ((WindGainFast - WindGainSlow) * t * t));
+    }
 
     /// <summary>The engine slot's pitch curve under Enhanced Sound: the decoded
     /// <paramref name="decoded"/> curve's throttle points, this tuning's two pitches.</summary>
@@ -270,9 +304,10 @@ public sealed record EnhancedSoundTuning
     public string Describe() => string.Format(
         CultureInfo.InvariantCulture,
         "engine pitch {0:0.###}..{1:0.###} gain {2:0.###}..{3:0.###}, hit gains bullet x{4:0.###} canopy x{5:0.###}, "
-        + "hit confirm {6} x{7:0.###} pitch {8:0.###} every {9:0.###} s",
+        + "hit confirm {6} x{7:0.###} pitch {8:0.###} every {9:0.###} s, wind gain {10:0.###}..{11:0.###} pitch {12:0.###}..{13:0.###}",
         EnginePitchIdle, EnginePitchFull, EngineGainIdle, EngineGainFull, BulletHitGain, CanopyHitGain,
-        HitConfirmSound, HitConfirmGain, HitConfirmPitch, HitConfirmInterval);
+        HitConfirmSound, HitConfirmGain, HitConfirmPitch, HitConfirmInterval,
+        WindGainSlow, WindGainFast, WindPitchSlow, WindPitchFast);
 
     private static EnhancedSoundTuning Read(string origin, Func<byte[]> bytes, EnhancedSoundTuning baseline)
     {
