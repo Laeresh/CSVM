@@ -70,6 +70,11 @@ public static class LevelChase
         return new Basis(right, right.Cross(forward), -forward);
     }
 
+    /// <summary>The level frame <see cref="Step"/> would start from for <paramref name="attitude"/>,
+    /// with no roll toward the target. It is the frame the chase head's angles turn the rig about,
+    /// so a padlock bearing is taken in it.</summary>
+    public static Basis Frame(Basis attitude, LevelChaseHold? held) => Step(attitude, held, 0f, out _);
+
     // The unit part of v at right angles to the forward, or null when v lies along it.
     private static Vector3? Carry(Vector3 v, Vector3 forward)
     {

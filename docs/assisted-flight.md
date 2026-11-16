@@ -3,7 +3,7 @@
 How the Assisted control scheme turns a stick into control-surface deflections, what in the decoded
 plant forces each part of that design, and which numbers are tuning rather than decode. The scheme
 is remake-only and the original game has nothing like it. The same scheme also puts the seat's chase
-view on the level chase camera ([`org/cameraViews.md`](org/cameraViews.md), "The level chase camera");
+and cockpit views in the level frame ([`org/cameraViews.md`](org/cameraViews.md), "The level chase camera");
 this page covers the law alone. The law is
 `CSVM/src/Flight/Airframe/AssistedFlight.cs`, routed from [`architecture.md`](architecture.md) into
 [`architecture/Flight.md`](architecture/Flight.md); the plant it flies is decoded in

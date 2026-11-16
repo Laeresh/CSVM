@@ -816,6 +816,23 @@ that is a fixed function of bank cannot both keep a 60° turn level and pass kni
 narrow transition band amplifies a wobbling bank near 90°, and a wide one tilts the horizon in an
 ordinary steep turn. The 20° margin and the 240°/s rate are TUNE, for the controls.
 
+**The head turns in the level frame.** The flat Cockpit and Nose views of an Assisted seat take the
+same frame: the eye stays on the `cockpit_camera` marker in the aircraft's axes, and the view
+(`FirstPersonPose`) turns in the level frame, so the interior rolls around a level horizon. The
+cockpit pass (`CockpitOverlay.Sync`) aims its camera through the same frame, or the panel and the
+world part by the bank. One hold serves the chase and the cockpit, so a view switch carries it.
+`CameraController.HeadFrame` names the frame the head's angles turn in, and every aim the head is
+given has to be taken in it:
+
+- **Padlock.** `FlightController.PadlockOffset` takes the target's offset in `HeadFrame`. Taken in
+  the aircraft's axes, the bearing misses the target by the bank (28° to 42° at 60° to 80° of bank).
+- **Autohead.** `HeadLook.AutoheadTarget` leads the nose in the aircraft's axes, where a banked
+  turn's lead reads up through the canopy. `CameraController.ToHeadFrame` turns it into the level
+  frame through `HeadLook.Reframe`, where the same direction lies along the horizon into the turn.
+
+The first-person elevation floor applies in the level frame, so a padlocked target below the level
+horizon holds the head at level. The VR views keep the aircraft's axes.
+
 ## Views under a headset (remake-only)
 
 A headset turns the view with the player's own head, so a stereo session (`--xr-mode on` or

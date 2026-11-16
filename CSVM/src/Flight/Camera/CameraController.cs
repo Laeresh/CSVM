@@ -176,7 +176,7 @@ public sealed class CameraController
     // Snap and Watch take the seat's last choice, so a respawn settles on the frame it flies.
     private LevelChaseHold? _levelHold;
     private int _levelShot = -1;
-    private bool _levelChase;
+    private bool _level;
 
     // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
     // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
@@ -534,13 +534,14 @@ public sealed class CameraController
     /// plane's <c>cockpit_camera</c> marker via <see cref="FirstPersonPose"/>. No smoothing and no
     /// camera-side shake. The original places this camera from the vehicle's own matrix, so the
     /// wobble turns the interior and never the view (docs/org/shakes.md, "Camera attachment").
-    /// The aim is <see cref="Head"/>'s current angles, so a head panned away from the
-    /// nose keeps its bearing while the aircraft manoeuvres under it.</summary>
-    public void FirstPersonView(in Transform3D renderPose)
+    /// The head's angles turn in <see cref="HeadFrame"/>: <paramref name="level"/> (flat only) keeps
+    /// the eye on the marker and the horizon level while the cockpit rolls around it.</summary>
+    public void FirstPersonView(in Transform3D renderPose, float dt, bool level)
     {
         bool looks = _headset == null;
-        var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset,
-            looks ? Head.Elevation : 0f, looks ? Head.Azimuth : 0f);
+        var position = renderPose.Origin + (renderPose.Basis * _cockpitCameraOffset);
+        var (_, basis) = FirstPersonPose(position, StepHeadFrame(renderPose.Basis, dt, level && looks),
+            Vector3.Zero, looks ? Head.Elevation : 0f, looks ? Head.Azimuth : 0f);
         _framesSeeded = false;
         _camera.Position = position;
         _camera.Basis = basis;
@@ -758,6 +759,16 @@ public sealed class CameraController
         }
     }
 
+    /// <summary>The frame the head's angles turn in, chase and cockpit alike: the level frame while
+    /// the last placed view took it, else <paramref name="attitude"/> itself. A padlock bearing
+    /// taken in any other frame misses the target by the bank.</summary>
+    public Basis HeadFrame(Basis attitude) => _level ? LevelChase.Frame(attitude, _levelHold) : attitude;
+
+    /// <summary>An aim taken in the plane's own frame, as autohead's is, turned into
+    /// <see cref="HeadFrame"/>. Unchanged while the head turns with the plane.</summary>
+    public (float Elevation, float Azimuth) ToHeadFrame(Basis attitude, (float Elevation, float Azimuth) aim) =>
+        _level ? HeadLook.Reframe(aim, attitude, HeadFrame(attitude)) : aim;
+
     /// <summary>Chase camera: the authored rig at the dynamic radius on two eased aircraft frames,
     /// the attitude's or, when <paramref name="level"/>, <see cref="LevelChase"/>'s. The offset's eases
     /// at <c>pos_catch_up</c>, the aim's at <c>look_catch_up</c>, both times <see cref="CatchUpScale"/>.
@@ -790,23 +801,13 @@ public sealed class CameraController
             return;
         }
 
-        _levelChase = level;
-        if (level)
+        // A new shot settles on the level frame, as Snap settles the rolled one.
+        if (level && _levelShot != Shot)
         {
-            // A new shot settles on the level frame, as Snap settles the rolled one.
-            if (_levelShot != Shot)
-            {
-                (_levelHold, _framesSeeded) = (null, false);
-            }
-
-            attitude = LevelChase.Step(attitude, _levelHold, dt, out var hold);
-            (_levelHold, _levelShot) = (hold, Shot);
-        }
-        else
-        {
-            (_levelHold, _levelShot) = (null, Shot);
+            _framesSeeded = false;
         }
 
+        attitude = StepHeadFrame(attitude, dt, level);
         var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
             _camParams.ThirdpPitchRad);
         // ⚠ Do not de-bank after this step: the eased frames would trail a banked attitude.
@@ -849,7 +850,7 @@ public sealed class CameraController
             // target's settled pose.
             _framesSeeded = false;
         }
-        Chase(dt, pose.Origin, pose.Basis, level: _levelChase);
+        Chase(dt, pose.Origin, pose.Basis, level: _level);
     }
 
     /// <summary>Place the camera at its settled pose immediately, spawn, respawn and the weapon
@@ -886,7 +887,7 @@ public sealed class CameraController
             // Snap is the settle-immediately path: without this arm a respawn into Cockpit/Nose
             // shows one chase-pose frame. Above the look-behind on purpose, in first person that
             // input is a head look-back, so a spawn never flashes the outside camera.
-            FirstPersonView(renderPose);
+            FirstPersonView(renderPose, 0f, _level);
             ApplyFirstPersonFov();
             return;
         }
@@ -896,7 +897,7 @@ public sealed class CameraController
             return;
         }
         // The head was just reset and the frames seeded, so a zero step is the settled pose.
-        Chase(0f, planePos, attitude, level: _levelChase);
+        Chase(0f, planePos, attitude, level: _level);
     }
 
     /// <summary>On entering the paused screenshot freeze, initialise the orbit angles
@@ -1037,6 +1038,22 @@ public sealed class CameraController
     // One frame of the two eased aircraft frames the external rig turns by, seeding both off the
     // live attitude when nothing has held them. They roll fully with the plane, so inverted flight
     // shows the world upside down. Both presentations take this one ease.
+    // The frame the head turns in this frame, stepped from the hold: the level frame when `level`,
+    // else the attitude. A new shot drops the hold, so it seeds on the level nearest the aircraft.
+    private Basis StepHeadFrame(Basis attitude, float dt, bool level)
+    {
+        _level = level;
+        if (!level)
+        {
+            (_levelHold, _levelShot) = (null, Shot);
+            return attitude;
+        }
+
+        var frame = LevelChase.Step(attitude, _levelShot == Shot ? _levelHold : null, dt, out var hold);
+        (_levelHold, _levelShot) = (hold, Shot);
+        return frame;
+    }
+
     private void StepFrames(float dt, Basis attitude, float scale)
     {
         if (!_framesSeeded)
