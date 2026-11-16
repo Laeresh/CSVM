@@ -145,16 +145,40 @@ public sealed class CanopyMaskTests
         Assert.Equal(1f, mask.Density[2]);
     }
 
-    /// <summary>C3's painted jungle is picked as canopy in the shipped file and its palm transitions are not.
-    /// The canopy set stays empty, so no card is stamped on the painted treetops.</summary>
+    /// <summary>The brush's own ground grows canopy only where a stroke thickened it, by the rise over neutral, and is
+    /// painted only there. A neutral brush leaves it bare, and picked canopy keeps its cover beside it.</summary>
+    [Fact]
+    public void TheBrushPaintsCanopyOnItsGroundOnlyWhereThickened()
+    {
+        var picked = Quad(0f, 0f, C, C, 0f);
+        var brushed = Quad(C, 0f, 3 * C, C, 5f);
+        var neutral = CanopyMask.FromPainted(picked, 0f, 0f, 3 * C, C, VegetationMask.Neutral(0f, 0f, 3 * C, C, side: 3), brushed);
+        Assert.Equal(new[] { 1f, 0f, 0f }, neutral.Density);
+        Assert.False(neutral.IsPainted(2.7f * C, 16f));
+
+        // Three texels span the cell's height, so the whole third column is thickened.
+        var brush = VegetationMask.Neutral(0f, 0f, 3 * C, C, side: 3);
+        foreach (float z in new[] { C / 6f, C / 2f, 5f * C / 6f })
+            brush.Stroke(2.5f * C, z, 1f, 1f, VegetationBrush.Thicken);
+        var mask = CanopyMask.FromPainted(picked, 0f, 0f, 3 * C, C, brush, brushed);
+        Assert.Equal(1f, mask.Density[0]);
+        Assert.True(mask.Density[2] > 0.5f && mask.Density[2] > mask.Density[1], $"{mask.Density[1]} {mask.Density[2]}");
+        Assert.True(mask.IsPainted(2.7f * C, 16f));
+        Assert.Equal(5f, mask.SurfaceAt(2.7f * C, 16f), 3);
+        Assert.False(mask.IsPainted(1.2f * C, 16f));
+    }
+
+    /// <summary>C3's painted jungle and its cliff transitions share one palm set flagged canopy, so one density stands
+    /// palms among every crown. The beach stays off the canopy.</summary>
     [Fact]
     public void TheShippedFilePicksC3sPaintedJungleAsCanopy()
     {
         var sidecar = VegetationSidecar.Parse(File.ReadAllText(Path.Combine(TestData.RepoRoot, "CSVM", "data", "vegetation.json")));
         var c3 = sidecar.For("C3");
-        Assert.All(new[] { "forest1.tif", "forest1-128.tif", "cliff1.tif" }, t => Assert.True(CanopyMask.IsCanopy(c3, t), t));
-        Assert.All(new[] { "cliff1_sandtrans.tif", "cliff1_toptrans.tif" }, t => Assert.False(CanopyMask.IsCanopy(c3, t), t));
-        Assert.Empty(c3.SetFor("forest1.tif")!.Models);
+        Assert.All(new[] { "forest1.tif", "forest1-128.tif", "cliff1.tif", "cliff1_toptrans.tif", "cliff1_sidetrans.tif" },
+            t => Assert.True(CanopyMask.IsCanopy(c3, t), t));
+        Assert.False(CanopyMask.IsCanopy(c3, "cliff1_sandtrans.tif"));
+        Assert.Same(c3.SetFor("cliff1_toptrans.tif"), VegetationScatter.Stamped(c3, "forest1.tif"));
         Assert.All(new[] { "C1", "C1B", "C2", "C4" }, c => Assert.DoesNotContain(sidecar.For(c).Picks, p => CanopyMask.IsCanopy(sidecar.For(c), p.Texture)));
     }
 

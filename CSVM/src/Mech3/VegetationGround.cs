@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -72,6 +73,14 @@ public static class VegetationGround
         }, n => WorldBuilder.NoCollisionNode(gamez, n));
         return corners.ToArray();
     }
+
+    /// <summary>The brush's own ground that a canopy brush set paints as forest: the triangles <see cref="VegetationScatter.Brushed"/>
+    /// gives a canopy set, where <paramref name="mask"/> holds a thickened texel. Empty with no mask.</summary>
+    public static Vector3[] BrushedCanopy(GameZ gamez, VegetationEntry entry, VegetationMask? mask, string worldName = "world1",
+        Func<GameZNode, bool>? switchedOff = null) =>
+        mask == null ? Array.Empty<Vector3>()
+            : Painted(gamez, t => VegetationScatter.Brushed(entry, t) is { Canopy: true }, worldName, switchedOff)
+                .Chunk(3).Where(t => mask.ThickenedIn(t.Min(p => p.X), t.Min(p => p.Z), t.Max(p => p.X), t.Max(p => p.Z))).SelectMany(t => t).ToArray();
 
     /// <summary>Every world triangle textured with a ground texture <paramref name="picked"/> accepts, three
     /// corners each in world space, whatever its <c>no_clutter</c> flag: painted canopy shows on either layer.

@@ -21,8 +21,8 @@ public sealed class CanopyMask
     /// across) per cell, the spacing C1's <c>terpat02</c> stamps its firs at.</summary>
     public const float FullCrownShare = 0.075f;
 
-    /// <summary>The vegetation set a texture pick names to mark its ground as painted canopy. The set stays
-    /// empty, so a pick to it stamps no card on the painted treetops.</summary>
+    /// <summary>The vegetation set a texture pick names to mark its ground as painted forest, as a
+    /// <see cref="VegetationSet.Canopy"/> set does. Its members, if any, stamp among the crowns.</summary>
     public const string CanopySet = "canopy";
 
     // Samples along each cell side for the painted bake, 8 m apart.
@@ -39,6 +39,10 @@ public sealed class CanopyMask
     // across a cliff stands a crown in the air, as at C3's Tiki Tunnel (#264).
     private readonly Dictionary<int, List<int>> _bins = new();
     private IReadOnlyList<Vector3> _painted = Array.Empty<Vector3>();
+
+    // Brushed triangles follow the picked ones in _painted from this corner on, painted only where _brush rises.
+    private int _brushedFrom = int.MaxValue;
+    private VegetationMask? _brush;
 
     private CanopyMask(float left, float top, float right, float bottom)
     {
@@ -115,34 +119,60 @@ public sealed class CanopyMask
 
     /// <summary>Bakes from ground triangles painted as canopy, three world corners each. A cell's density is the
     /// share of its sample points under one, less where <paramref name="brush"/> thins it. Ground and top
-    /// are the mean height of the highest triangle over each covered point.</summary>
+    /// are the mean height of the highest triangle over each covered point. A point under <paramref name="brushed"/>
+    /// alone, the brush's ground, counts by the brush's rise over neutral there (<see cref="BrushRise"/>), none at neutral.</summary>
     public static CanopyMask FromPainted(IReadOnlyList<Vector3> triangles, float left, float top, float right, float bottom,
-        VegetationMask? brush = null)
+        VegetationMask? brush = null, IReadOnlyList<Vector3>? brushed = null)
     {
         var mask = new CanopyMask(left, top, right, bottom);
         int sw = mask.Width * PaintSamples, sh = mask.Height * PaintSamples;
         const float step = CellM / PaintSamples;
         var heights = new float[sw * sh];
         Array.Fill(heights, float.NaN);
-        mask._painted = triangles;
-        for (int t = 0; t + 2 < triangles.Count; t += 3)
+        float[]? brushHeights = null;
+        if (brush != null && brushed is { Count: > 0 })
         {
-            Fill(triangles[t], triangles[t + 1], triangles[t + 2], mask.MinX, mask.MinZ, step, sw, sh, heights);
-            mask.Bin(t);
+            mask._brush = brush;
+            mask._brushedFrom = triangles.Count;
+            mask._painted = triangles.Concat(brushed).ToArray();
+            brushHeights = new float[sw * sh];
+            Array.Fill(brushHeights, float.NaN);
+            for (int t = 0; t + 2 < brushed.Count; t += 3)
+                Fill(brushed[t], brushed[t + 1], brushed[t + 2], mask.MinX, mask.MinZ, step, sw, sh, brushHeights);
         }
+        else
+        {
+            mask._painted = triangles;
+        }
+        for (int t = 0; t + 2 < triangles.Count; t += 3)
+            Fill(triangles[t], triangles[t + 1], triangles[t + 2], mask.MinX, mask.MinZ, step, sw, sh, heights);
+        for (int t = 0; t + 2 < mask._painted.Count; t += 3)
+            mask.Bin(t);
 
         for (int j = 0; j < mask.Height; j++)
         {
             for (int i = 0; i < mask.Width; i++)
             {
-                int covered = 0;
-                float sum = 0f;
+                int covered = 0, picked = 0;
+                float sum = 0f, brushedWeight = 0f;
                 var samples = new float[PaintSamples * PaintSamples];
                 for (int sj = 0; sj < PaintSamples; sj++)
                 {
                     for (int si = 0; si < PaintSamples; si++)
                     {
-                        float y = samples[(sj * PaintSamples) + si] = heights[(((j * PaintSamples) + sj) * sw) + (i * PaintSamples) + si];
+                        int at = (((j * PaintSamples) + sj) * sw) + (i * PaintSamples) + si;
+                        float y = heights[at];
+                        if (!float.IsNaN(y))
+                        {
+                            picked++;
+                        }
+                        else if (brushHeights != null && !float.IsNaN(brushHeights[at])
+                            && BrushRise(brush!, mask.MinX + (((i * PaintSamples) + si + 0.5f) * step), mask.MinZ + (((j * PaintSamples) + sj + 0.5f) * step)) is > 0f and var rise)
+                        {
+                            y = brushHeights[at];
+                            brushedWeight += rise;
+                        }
+                        samples[(sj * PaintSamples) + si] = y;
                         if (float.IsNaN(y))
                             continue;
                         covered++;
@@ -155,7 +185,7 @@ public sealed class CanopyMask
                 int c = (j * mask.Width) + i;
                 mask._samples[c] = samples;
                 float thin = brush == null ? 1f : Math.Min(1f, brush.At(mask.MinX + ((i + 0.5f) * CellM), mask.MinZ + ((j + 0.5f) * CellM)));
-                mask._density[c] = thin * covered / (PaintSamples * PaintSamples);
+                mask._density[c] = (thin * picked / (PaintSamples * PaintSamples)) + (brushedWeight / (PaintSamples * PaintSamples));
                 mask._ground[c] = mask._top[c] = sum / covered;
             }
         }
@@ -163,9 +193,14 @@ public sealed class CanopyMask
         return mask;
     }
 
-    /// <summary>Whether <paramref name="texture"/> is picked as painted canopy in <paramref name="entry"/>.</summary>
+    /// <summary>Whether <paramref name="texture"/> is picked as painted canopy in <paramref name="entry"/>: to
+    /// <see cref="CanopySet"/>, or to a set flagged <see cref="VegetationSet.Canopy"/>.</summary>
     public static bool IsCanopy(VegetationEntry entry, string texture) =>
-        string.Equals(entry.SetFor(texture)?.Name, CanopySet, StringComparison.OrdinalIgnoreCase);
+        entry.SetFor(texture) is { } set && (set.Canopy || string.Equals(set.Name, CanopySet, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>How much forest the brush paints on its own ground at a world X/Z: the mask's rise over neutral.
+    /// It is 0 at neutral and nearly 1 at the densest paint, as <see cref="VegetationScatter.BrushKeeps"/> keeps.</summary>
+    public static float BrushRise(VegetationMask brush, float x, float z) => Math.Clamp(brush.At(x, z) - 1f, 0f, 1f);
 
     /// <summary>The cell holding a world X/Z, -1 off the area.</summary>
     public int CellAt(float x, float z)
@@ -221,9 +256,10 @@ public sealed class CanopyMask
         if (!_bins.TryGetValue(CellAt(x, z), out var list))
             return null;
         float? best = null;
+        bool brushed = _brush != null && BrushRise(_brush, x, z) > 0f;
         foreach (int t in list)
         {
-            if (VegetationGround.HeightIn(_painted[t], _painted[t + 1], _painted[t + 2], new Vector3(x, 0f, z)) is { } y && (best == null || y > best))
+            if ((t < _brushedFrom || brushed) && VegetationGround.HeightIn(_painted[t], _painted[t + 1], _painted[t + 2], new Vector3(x, 0f, z)) is { } y && (best == null || y > best))
                 best = y;
         }
 
