@@ -2,7 +2,9 @@
 # see docs/tooling.md.
 #
 #   .\scripts\MemoryLedger.ps1 status      live reservations, waiters, the learned estimate per kind
-#   .\scripts\MemoryLedger.ps1 -SelfTest   the admission rule, handle-held liveness, the empty-ledger
+#   .\scripts\MemoryLedger.ps1 watch       status redrawn every 2 s, plus each scripted Godot's age and
+#                                  arguments (Ctrl+C to quit)
+#   .\scripts\MemoryLedger.ps1 -SelfTest  the admission rule, handle-held liveness, the empty-ledger
 #                                  progress rule, the estimate update and the quiet census
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md).
@@ -14,6 +16,27 @@ param([string]$Action = "", [switch]$SelfTest)
 if ($Action -eq "status") {
     Format-MemLedger | ForEach-Object { Write-Host $_ }
     exit 0
+}
+
+if ($Action -eq "watch") {
+    while ($true) {
+        $procs = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'Godot%'")
+        $lines = @(Format-MemLedger)
+        $godots = @(Get-CsvmGodots -Processes $procs)
+        $lines += "  scripted Godots: $($godots.Count)"
+        foreach ($g in $godots) {
+            $p = $procs | Where-Object { $_.ProcessId -eq $g.Pid } | Select-Object -First 1
+            $age = (Get-Date) - $p.CreationDate
+            # The user arguments follow Godot's own after " -- "; that is where the suite or probe is named.
+            $userArgs = (([string]$p.CommandLine) -split ' -- ', 2)[-1]
+            $lines += [string]::Format($MemInv, "  pid {0,-6} {1,-16} {2,3:0}m{3:00}s  {4}  {5}", $g.Pid, $g.Kind, [math]::Floor($age.TotalMinutes), $age.Seconds, (Split-Path -Leaf $g.Worktree), $userArgs)
+        }
+        $width = [math]::Max(40, $Host.UI.RawUI.WindowSize.Width - 1)
+        Clear-Host
+        Write-Host (Get-Date -Format "HH:mm:ss") -ForegroundColor DarkGray
+        foreach ($l in $lines) { Write-Host $(if ($l.Length -gt $width) { $l.Substring(0, $width) } else { $l }) }
+        Start-Sleep -Seconds 2
+    }
 }
 
 if ($SelfTest) {
