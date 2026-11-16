@@ -63,14 +63,14 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `build` | `dotnet build CSVM/CSVM.sln`; its exit code; a compile error, which also stops the run |
 | `units` | `dotnet test --no-build`; the TRX log in `.scratch/testresults/`, never the console summary; any failed test |
 | `engine` | Godot `--run-tests` in windowed processes for the suites that need a renderer or compile their shaders (LOG-8), `-Shards` headless ones and a synthetic one; each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124), a shader text no windowed process compiled |
-| `goldens` | One `--det` Godot per manifest shot; the raw-pixel md5 on its `[core] shot pixmd5=…` line, not the PNG bytes (SHOT-6); a hash, frame or size off the manifest |
+| `goldens` | One `--det` Godot per manifest shot (a release-only shot under `-Release` only); the raw-pixel md5 on its `[core] shot pixmd5=…` line, not the PNG bytes (SHOT-6); a hash, frame or size off the manifest |
 | `perf` | `-Perf` only: `analysis/perf/scenarios.json`; the `[perf]` lines, medianed into `perf-history.jsonl`; nothing, it records only |
 | `hitch` | `-Hitch` only, last: two scripted launches; each launch's `.hitches.jsonl` sidecar; nothing, awareness only |
 
 Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
 (engine suite names), **`-UnitFilter <expr>`** (into `dotnet test --filter`), **`-Shards <n>`**,
 **`-Quick`**, **`-SkipUnits`**, **`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**,
-**`-GoldenWorkers <n>`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`,
+**`-Release`** (the release-only golden shots too, below), **`-GoldenWorkers <n>`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`,
 `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`), and **`-Graphics
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
 `--graphics=enhanced` to the perf and hitch launches only), **`-RealData`** (the ci tier on the
@@ -138,7 +138,8 @@ not, read through a throwaway copy of the index (`TreeStampCore.ps1`, `Get-TreeK
 that content has the same key. The stamp is a file under `csvm-stamps/` in the common git
 directory, so every worktree reads it and none is committed; one older than 60 days is swept. Only
 the complete lane writes it (no selection, no skipped stage, units, engine and goldens each PASS or
-FLAKE, the key unchanged across the run), and the summary's `green stamp:` line says which of those
+FLAKE, the key unchanged across the run; the release-only golden shots are not part of it, with or
+without `-Release`), and the summary's `green stamp:` line says which of those
 held. The plain complete run on stamped content prints `already green` with the stamp's time, tree
 and stage lines and exits 0; any other argument runs, and `-Force` is the one that changes nothing
 else. `CheckPushGreen.ps1` is git's pre-push hook over the same key: a push to `refs/heads/main`
@@ -247,6 +248,12 @@ anything. A mismatch leaves the actual PNG and that shot's log in
 `.scratch/goldens/<shot>.{png,log}`. **`-RegenGoldens`** re-renders every shot and rewrites
 `manifest.json` in place, byte-identically apart from the hash lines that moved; GOLD-1 says when
 that is the right answer.
+
+**A shot marked `"release": true` in the manifest runs only under `-Release`**, the battery before
+a release. Every other run skips it, and its stage line counts the skipped shots ("17 release-only
+shot(s) not run"); `analysis/goldens/README.md` names the set. `-RegenGoldens` without `-Release` re-pins only the shots it
+ran and leaves the release-only pins as they are, so a change that moves one of them is re-pinned
+with `-RegenGoldens -Release`.
 
 **A shot's `frame` is checked before its hash**, off the capture's own `frame=N clock=<sim|render>`
 field, because a shot that photographed a different moment is a clock regression and reads as
@@ -522,6 +529,10 @@ tuning override out of every build. Smoke-test an export from a **bare folder** 
 CWD** and no `CSVM_DATA_ROOT`; either can mask a broken default root.
 
 ## Publishing a release
+
+**Before the publish, run `.\scripts\RunTests.ps1 -Release`** on the commit to be released: the
+complete battery plus the release-only golden shots, which no other run checks. `PublishRelease.ps1`
+does not run it and does not check that it ran.
 
 **`PublishRelease.ps1` (repo root)** is the publish, from one run: it reads the version from
 `CSVM/project.godot`, runs `ExportRelease.ps1 -Linux`, checks the zip and the tarball that came
