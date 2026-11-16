@@ -113,24 +113,32 @@ public sealed class VegetationScatterTests
         Assert.InRange(Kept(255f / VegetationMask.NeutralByte), 0.95 * weight, weight);
     }
 
-    /// <summary>Only a pick to a set with members and density stamps.
-    /// The reserved canopy set never does, even with a member, since painted forest takes no card.</summary>
+    /// <summary>Only a pick to a set with members and density stamps. The reserved canopy set is empty, so painted
+    /// forest takes no card, and a canopy-flagged set paints its ground and still stamps among the crowns.</summary>
     [Fact]
-    public void OnlyAPickedSetStampsAndTheCanopySetNever()
+    public void OnlyAPickedSetWithMembersStamps()
     {
         var entry = new VegetationEntry
         {
             Kinds = new[] { new VegetationKind("palmtree1.flt") },
             Sets = new[]
             {
-                new VegetationSet(CanopyMask.CanopySet, new[] { "palmtree1.flt" }),
+                new VegetationSet(CanopyMask.CanopySet, System.Array.Empty<string>()),
                 new VegetationSet("palms", new[] { "palmtree1.flt" }),
                 new VegetationSet("bare", new[] { "palmtree1.flt" }, Density: 0f),
+                new VegetationSet("jungle palms", new[] { "palmtree1.flt" }, Canopy: true),
             },
-            Picks = new[] { new TexturePick("forest1.tif", CanopyMask.CanopySet), new TexturePick("cliff1_toptrans.tif", "palms"), new TexturePick("sand.tif", "bare") },
+            Picks = new[]
+            {
+                new TexturePick("forest1.tif", CanopyMask.CanopySet), new TexturePick("cliff1_toptrans.tif", "palms"),
+                new TexturePick("sand.tif", "bare"), new TexturePick("cliff1_sidetrans.tif", "jungle palms"),
+            },
         };
         Assert.Null(VegetationScatter.Stamped(entry, "forest1.tif"));
         Assert.Equal("palms", VegetationScatter.Stamped(entry, "CLIFF1_TOPTRANS.tif")!.Name);
+        Assert.False(CanopyMask.IsCanopy(entry, "cliff1_toptrans.tif"));
+        Assert.Equal("jungle palms", VegetationScatter.Stamped(entry, "cliff1_sidetrans.tif")!.Name);
+        Assert.True(CanopyMask.IsCanopy(entry, "cliff1_sidetrans.tif"));
         Assert.Null(VegetationScatter.Stamped(entry, "sand.tif"));
         Assert.Null(VegetationScatter.Stamped(entry, "terpat03.tif"));
     }

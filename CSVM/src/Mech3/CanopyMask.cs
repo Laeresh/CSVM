@@ -163,9 +163,10 @@ public sealed class CanopyMask
         return mask;
     }
 
-    /// <summary>Whether <paramref name="texture"/> is picked as painted canopy in <paramref name="entry"/>.</summary>
+    /// <summary>Whether <paramref name="texture"/> is picked as painted canopy in <paramref name="entry"/>: to
+    /// <see cref="CanopySet"/>, or to a set flagged <see cref="VegetationSet.Canopy"/>.</summary>
     public static bool IsCanopy(VegetationEntry entry, string texture) =>
-        string.Equals(entry.SetFor(texture)?.Name, CanopySet, StringComparison.OrdinalIgnoreCase);
+        entry.SetFor(texture) is { } set && (set.Canopy || string.Equals(set.Name, CanopySet, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The cell holding a world X/Z, -1 off the area.</summary>
     public int CellAt(float x, float z)

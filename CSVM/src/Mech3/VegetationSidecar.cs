@@ -40,8 +40,10 @@ public sealed record VegetationKind(string Model, float JitterUv = 0f, float Yaw
 
 /// <summary>A named list of listed kinds that a texture pick stamps on its ground texture. <c>Density</c> is
 /// its added stamps per hectare of ground at a neutral mask. <c>Mass</c> says its kept stamps count as forest:
-/// they feed the canopy mask, the clump rate and the handover as the original's stamps do.</summary>
-public sealed record VegetationSet(string Name, IReadOnlyList<string> Models, float Density = VegetationSet.DefaultDensity, bool Mass = false)
+/// they feed the canopy mask, the clump rate and the handover as the original's stamps do. <c>Canopy</c> paints its
+/// ground as forest, as a pick to <see cref="CanopyMask.CanopySet"/> does, and its kinds still stamp among the crowns.</summary>
+public sealed record VegetationSet(string Name, IReadOnlyList<string> Models, float Density = VegetationSet.DefaultDensity, bool Mass = false,
+    bool Canopy = false)
 {
     /// <summary>The original's own palm stand on C3's <c>cliff1_sandtrans</c>: six <c>palm1</c> cards a texture
     /// repeat of 7,642 m², 7.85 a hectare.</summary>
@@ -412,7 +414,7 @@ public sealed class VegetationSidecar
                     models.Add((JsonNode)m);
                 double density = Math.Round(Math.Clamp(s.Density, 0f, VegetationSet.MaxDensity), 4);
                 // The bare list while the set keeps its defaults, so a file that names none round-trips unchanged.
-                if (density == Math.Round(VegetationSet.DefaultDensity, 4) && !s.Mass)
+                if (density == Math.Round(VegetationSet.DefaultDensity, 4) && !s.Mass && !s.Canopy)
                 {
                     sets[s.Name] = models;
                     continue;
@@ -420,6 +422,8 @@ public sealed class VegetationSidecar
                 var set = new JsonObject { ["kinds"] = models, ["density"] = density };
                 if (s.Mass)
                     set["mass"] = true;
+                if (s.Canopy)
+                    set["canopy"] = true;
                 sets[s.Name] = set;
             }
             node["sets"] = sets;
@@ -640,6 +644,10 @@ public sealed class VegetationSidecar
                 else if (key == "mass" && field is JsonValue mv && mv.TryGetValue(out bool mass))
                 {
                     set = set with { Mass = mass };
+                }
+                else if (key == "canopy" && field is JsonValue cv && cv.TryGetValue(out bool canopy))
+                {
+                    set = set with { Canopy = canopy };
                 }
                 else
                 {

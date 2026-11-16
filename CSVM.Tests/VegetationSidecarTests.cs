@@ -205,7 +205,8 @@ public sealed class VegetationSidecarTests
     }
 
     /// <summary>C3 ships its cliff-top and side transitions picked to its three palms at twice the beach stand's
-    /// density, not as forest. The shoreline transition stays unpicked, so no palm stands in the reef water.</summary>
+    /// density, not as forest. The set paints its ground as canopy, so the palms stand among the crowns. The shoreline transition stays
+    /// unpicked, so no palm stands in the reef water. The flag survives a Save.</summary>
     [Fact]
     public void TheShippedFilePicksC3sTransitionsToItsPalms()
     {
@@ -215,8 +216,11 @@ public sealed class VegetationSidecarTests
             var set = VegetationScatter.Stamped(c3, texture);
             Assert.NotNull(set);
             Assert.Equal(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }, set!.Models);
-            Assert.Equal((15.7f, false), (set.Density, set.Mass));
+            Assert.Equal((15.7f, false, true), (set.Density, set.Mass, set.Canopy));
         }
+        var back = VegetationSidecar.Parse(VegetationSidecar.WithEntry(null, "C3", c3));
+        Assert.Empty(back.Warnings);
+        Assert.Equal(c3.Sets, back.For("C3").Sets, (a, b) => a.Name == b.Name && a.Canopy == b.Canopy && a.Models.SequenceEqual(b.Models));
         Assert.All(new[] { "forest1.tif", "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
     }
 

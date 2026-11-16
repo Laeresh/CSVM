@@ -30,10 +30,10 @@ public static class VegetationScatter
 
     private const double HectareM2 = 10000.0;
 
-    /// <summary>The set a picked texture stamps, null when it stamps nothing: no pick, the reserved
-    /// <see cref="CanopyMask.CanopySet"/> (painted forest takes no card), no member or no density.</summary>
+    /// <summary>The set a picked texture stamps, null when it stamps nothing: no pick, no member or no density.
+    /// The reserved <see cref="CanopyMask.CanopySet"/> is empty; a <see cref="VegetationSet.Canopy"/> set stamps among the crowns.</summary>
     public static VegetationSet? Stamped(VegetationEntry entry, string texture) =>
-        entry.SetFor(texture) is { Models.Count: > 0, Density: > 0f } set && !CanopyMask.IsCanopy(entry, texture) ? set : null;
+        entry.SetFor(texture) is { Models.Count: > 0, Density: > 0f } set ? set : null;
 
     /// <summary>The added stream's seed from the Rich stream's (<see cref="VegetationVariation.Seed"/>).</summary>
     public static int StreamSeed(int richSeed) => richSeed ^ AddedStream;

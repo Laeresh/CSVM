@@ -1637,7 +1637,7 @@ internal static class WorldAndToolSuites
         + "a Clear stroke empties the cells it covers while their Original stamps stay, and a Neutral stroke gives the first mask back; "
         + "its densest cells stand a fir's height over their ground; added stamps from a C1 pick leave it as it was unless "
         + "their set is forest, when they cover more cells; C3's bakes from the ground its entry picks as canopy, "
-        + "covering about the 22 km2 of painted jungle the survey measured; a build with no entry has none")]
+        + "covering the 22 km2 of painted jungle the survey measured and its palm transitions; a build with no entry has none")]
     internal static void CanopyMaskBake(TestContext ctx)
     {
         foreach (var chapter in new[] { "C1", "C3" })
@@ -1748,7 +1748,7 @@ internal static class WorldAndToolSuites
             ctx.Check(b3.Canopy()!.Density.SequenceEqual(painted.Density), $"a C3 re-bake gives the same painted canopy");
             long paintMs = watch.ElapsedMilliseconds;
             float km2 = painted.Density.Sum() * CanopyMask.CellM * CanopyMask.CellM / 1e6f;
-            ctx.Check(km2 > 18f && km2 < 25f, $"C3's painted canopy covers {km2:0.0} km2 of the survey's 22.0 (forest1, forest1-128, cliff1)");
+            ctx.Check(km2 > 22f && km2 < 29f, $"C3's painted canopy covers {km2:0.0} km2: the survey's 22.0 of jungle (forest1, forest1-128, cliff1) and the palm transitions");
             ctx.Note($"canopy bake: C1 two builds and the mask {c1Ms} ms, C3 build and mask {c3Ms} ms, C3 canopy {km2:0.00} km2; a re-bake's canopy alone {stampMs} ms on C1, {paintMs} ms on C3; C1 {first.Width}x{first.Height} cells, C3 {painted.Width}x{painted.Height}");
 
             Draw("canopy-C1.png", first, g1, w1);
