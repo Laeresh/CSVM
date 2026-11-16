@@ -219,6 +219,15 @@ public sealed class HeadLook
              Mathf.Sqrt((localOffset.X * localOffset.X) + (localOffset.Z * localOffset.Z))),
          Mathf.Atan2(-localOffset.X, -localOffset.Z));
 
+    /// <summary>The head angles that look along the same world direction as <paramref name="aim"/>,
+    /// moved from frame <paramref name="from"/> into frame <paramref name="to"/>. Pure.</summary>
+    public static (float Elevation, float Azimuth) Reframe(
+        (float Elevation, float Azimuth) aim, Basis from, Basis to)
+    {
+        var local = new Basis(Vector3.Up, aim.Azimuth) * new Basis(Vector3.Right, aim.Elevation) * Vector3.Forward;
+        return PadlockTargets(to.Inverse() * (from * local));
+    }
+
     /// <summary>An angle folded onto the near side of <paramref name="shown"/>. A chase toward it
     /// then crosses the ±π seam by the short arc, not by unwinding through the front. The original
     /// applies this before every chase; only <see cref="LookMode.Padlock"/> reaches the seam here.

@@ -320,8 +320,12 @@ not its bank, so a turn never tilts the horizon. It follows the aircraft over th
 top of a loop, the world upside down there, and rolls upright as the aircraft
 rolls upright. The view stays level until the bank passes knife-edge by 20
 degrees, so a held knife-edge keeps it; past that it rolls half a turn to the
-other level, the way the aircraft is rolling. Cockpit, nose and the VR chase are
-unchanged.
+other level, the way the aircraft is rolling.
+
+The cockpit and nose views take the same level view: the eye stays in the seat,
+the horizon stays level, and the cockpit rolls around it. Track Target keeps the
+selected target in view in every one of these views, and the cockpit's autohead
+option leads a banked turn along the horizon. The VR views are unchanged.
 
 ## Any mode
 

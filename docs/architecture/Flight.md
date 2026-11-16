@@ -256,7 +256,7 @@ holds the state and the camera, `StepViewKeys` takes the selection controls' pre
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound. The zoom's three resets apply only with `Utils/CameraZoomMemory.cs`'s option off, and `RememberZoom` seeds and saves the remembering pilot's zoom.
 The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair, turned by two aircraft frames `EaseFrame` eases at the `*_catch_up` rates times `CatchUpScale`, frames the look-behind shares (on an Assisted seat those frames ease toward `LevelChase`'s bankless frame instead of the attitude, held per `Shot` in `_levelHold`); `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
-authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+authored `cockpit_camera` marker with `Head`'s angles and their own FOV, the angles turning in the level frame on a flat Assisted seat; `HeadFrame` is the frame the head turns in, which padlock's offset and autohead's aim (`ToHeadFrame`) are taken in; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a speed widening of that external FOV, inert on the faithful path; both presentations ride the same two eased frames. Under a headset (`Headset`) the head reads no input and the look-behind is off, the chase is `XrMount.Chase` at `VrChaseOffset`, the static cuts hold the level heading they cut to, each write names its `XrAnchor` and `Shot` counts the cuts; with the rig's `Fade` the view keys wait for black (`XrFade.Cover`) and land together on it. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
 The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death camera the pilot's
@@ -275,7 +275,7 @@ the frame (level in first person, straight down on the chase camera, the origina
 the snap, free-look, padlock, the centre key and autohead all reach the eye through one law. The four input paths are the original's: a snap-mode numpad direction mapped through `SnapTargets`, a free-look numpad direction or mouse pan integrating the targets at a fixed 2 rad/s along the normalised input direction, the centre key zeroing both, and padlock taking the whole bearing of whatever `TargetOffset` offers through `PadlockTargets`, with the caller's floor as its only clamp and no azimuth limit at all.
 `LookMode` is the original's own mode byte (0 snap, 1 free-look, 2 padlock) and `SelectMode` writes it exactly once a frame: the `K`, `L` and `J` selectors on their press edge, then `HeadLookInput.ForceSnap` (the cockpit look-back); no device writes it, so both the numpad and the mouse obey the mode the keys chose, and padlock is left only by its own exit scan, which `Step` runs after the frame's bearing so the frame a direction arrives on still aims at the target and the snap state owns the next one.
 A snap frame with no direction and no held pan zeroes the targets, and it and a padlock frame with nothing offered are the only kinds that consult `IdleAim`, the no-input hook `AutoheadTarget` fills; a free-look frame holds the pose the pan reached until a selector, a further pan or the centre key moves it.
-`HeadLookInput.Looking` claims the pan with no motion on it, in either mode, so a held control over a still mouse holds the pose. `Nearest` wraps the padlock target onto the near side of the shown angle, the original's own crossing of the tail, and is scoped to that arm alone so the clamped relative paths still swing back through the front.
+`HeadLookInput.Looking` claims the pan with no motion on it, in either mode, so a held control over a still mouse holds the pose. `Nearest` wraps the padlock target onto the near side of the shown angle, the original's own crossing of the tail, and is scoped to that arm alone so the clamped relative paths still swing back through the front. `Reframe` moves an aim between two frames along the same world direction, the level frame's autohead.
 `StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head, where snap aims by it and free-look turns at the 2 rad/s pan rate times it while `Active` (`PadRates`), both reaching below a level floor to the aim's lower edge, and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/Camera/SeatLook.cs
@@ -320,7 +320,7 @@ after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
 The cockpit interior's own render pass, the shipped path `--no-cockpit-pass` opts out of. It re-parents
 the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on the mount basis
 `PlaneBuilder` gave it, and puts the pass camera at that world's origin aimed by
-`CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
+`CameraController.FirstPersonPose` over `CameraController.HeadFrame` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
 lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does, through `FirstPersonDressing.BuildPass`; `Sync` follows
@@ -1721,14 +1721,14 @@ origin under a cutscene on the theater screen: the camera's eye on a held level 
 applies it; `CameraController.cs` writes the poses; the per-view choices are in [../org/cameraViews.md](../org/cameraViews.md), "Views under a headset".
 
 ## src/Flight/Camera/LevelChase.cs
-The flat chase's level frame (an Assisted seat's, `ControlScheme.Assisted`), engine-free: `Step` turns an attitude and last
+The flat level frame of an Assisted seat (`ControlScheme.Assisted`), engine-free: `Step` turns an attitude and last
 frame's `LevelChaseHold` (the frame's right axis and the level right it rolls to) into a frame with
-the aircraft's forward and no bank. `CameraController.Chase` feeds that frame to its eased frames in
-place of the attitude, so the rig's easing, distance, zoom and swing are unchanged. The level right
-is carried from last frame's, never chosen toward the sky (that is `XrMount.NoRoll`), so a loop goes
-over the top upside down. It flips only once the wing passes knife-edge by `FlipPastRad`, and the
-frame rolls there through the wing at `RollRateRad`; within `XrMount.VerticalConeCos` of vertical it
-is carried by projection. The rule and the rejected ones: [../org/cameraViews.md](../org/cameraViews.md), "The level chase camera".
+the aircraft's forward and no bank. The chase's eased frames chase it in place of the attitude and the
+flat first-person views turn the head in it; `Frame`, the same frame with no roll, is the one
+`CameraController.HeadFrame` takes padlock and autohead aims in. The level right is carried from
+last frame's, never chosen toward the sky (`XrMount.NoRoll`), so a loop goes over the top upside down.
+It flips past knife-edge by `FlipPastRad`, rolling through the wing at `RollRateRad`, and near vertical
+it is carried by projection. The rule and the rejected ones: [../org/cameraViews.md](../org/cameraViews.md), "The level chase camera".
 
 ## src/Flight/Camera/XrRig.cs
 The VR flavour of `PlayerRig.cs`: the one VR seat's `XROrigin3D` and tracked `XRCamera3D` (`Head`),
