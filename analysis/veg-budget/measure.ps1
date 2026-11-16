@@ -18,7 +18,11 @@ the range of its launches.
 The hidden desktop presents at the display's refresh even with max_fps=0, so frame_ms floors at
 8.33 ms on a 120 Hz display; read gpu_ms, render_cpu_ms, setup_ms and proc_ms, and the counts.
 
+C5 has four city views, run by name with the city modes: enhanced (View Distance at its default,
+Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline.
+
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb7,C5-cb1,C5-alt,C5-cm23 -Modes enhanced,vdnormal
 #>
 param(
     [string[]]$Chapters = @("C1", "C1B", "C2", "C3", "C4"),
@@ -50,6 +54,18 @@ $views = @{
     "C2"  = @("--pos=59,88,-2955", "--lookat=-241,8,-3255")
     "C3"  = @("--pos=-5439,80,-3077", "--lookat=-5739,0,-3377")
     "C4"  = @("--pos=-8957,827,-4918", "--lookat=-9257,747,-5218")
+    # C5's city, asked for by name (the chapter is the text before the first '-'). Ground is y=5.
+    # cb7: 120 m up over the unflagged cblock7 cells round (-3328,-3072), looking south. The large
+    # western district lies under the fog volumes fvol6 and fvol31-34 (up to y=183), where a low
+    # camera sees only the near-black whiteout, so its pose measures the fog. A pose here must not
+    # print "camera state 3". cb1: 160 m up (towers reach 108 m) over the largest unflagged
+    # cblock1 cells, X[-8704,-6656] Z[-12800,-11264]. alt: 450 m up over the unflagged cblock1 band,
+    # looking north-west across the city to the horizon; the distant draw-call rule is read here. cm23:
+    # CM23's PLAYER_INIT (C5/M03 objectives), the camera --freecam --mission=M03 starts on.
+    "C5-cb7"  = @("--pos=-3328,125,-3840", "--lookat=-3328,5,-3440")
+    "C5-cb1"  = @("--pos=-7124,165,-11732", "--lookat=-7424,5,-12032")
+    "C5-alt"  = @("--pos=-5000,450,-7000", "--lookat=-9000,250,-11000")
+    "C5-cm23" = @("--pos=-11061,400,-8370", "--lookat=-11061,400,-8371")
 }
 $modeArgs = @{
     "faithful" = @("--graphics=original")
@@ -59,6 +75,10 @@ $modeArgs = @{
     "nomodels" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=off")
     "nocover"  = @("--graphics=enhanced", "--vegetation-quality=rich", "--ground-cover=off")
     "far"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=far")
+    # C5 refuses every vegetation entry, so its city modes are Enhanced at each View Distance.
+    "enhanced"    = @("--graphics=enhanced")
+    "vdnormal"    = @("--graphics=enhanced", "--view-distance=normal")
+    "vdunlimited" = @("--graphics=enhanced", "--view-distance=unlimited")
 }
 # Extra views replace the chapter ones: the name's text before the first '-' is the chapter.
 if ($ExtraViews) {
@@ -94,7 +114,7 @@ function Get-Median($xs) {
 }
 
 $terms = "gpu_ms", "render_cpu_ms", "setup_ms", "proc_ms", "draws", "prims"
-"{0,-4} {1,-9} {2,3} " -f "ch", "mode", "n" + (($terms | ForEach-Object { "{0,24}" -f $_ }) -join "")
+"{0,-7} {1,-11} {2,3} " -f "ch", "mode", "n" + (($terms | ForEach-Object { "{0,24}" -f $_ }) -join "")
 foreach ($ch in $Chapters) {
     foreach ($mode in $Modes) {
         $perLaunch = @{}
@@ -122,6 +142,6 @@ foreach ($ch in $Chapters) {
             $hi = ($v | Measure-Object -Maximum).Maximum
             "{0,24}" -f ("{0:0.###} ({1:0.###}-{2:0.###})" -f (Get-Median $v), $lo, $hi)
         }
-        ("{0,-4} {1,-9} {2,3} " -f $ch, $mode, $n) + ($cells -join "")
+        ("{0,-7} {1,-11} {2,3} " -f $ch, $mode, $n) + ($cells -join "")
     }
 }
