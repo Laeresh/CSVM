@@ -157,6 +157,23 @@ public class LoadProgressTests
         Assert.Equal(0.90f, progress.Fraction);
     }
 
+    /// <summary>The longest wall time between two draws is kept with the second it ended at. Past
+    /// five seconds, Windows calls the window hung.</summary>
+    [Fact]
+    public void TheLongestGapBetweenDrawsIsKept()
+    {
+        double clock = 1d;
+        var progress = new LoadProgress(() => clock);
+        progress.Reach(LoadStep.RenderState);
+        clock = 4d;
+        progress.Reach(LoadStep.ChapterPaths);
+        clock = 4.5d;
+        progress.Pump();
+
+        Assert.Equal(3d, progress.LongestGap);
+        Assert.Equal(4d, progress.LongestGapEnd);
+    }
+
     /// <summary>The pump is wall-clock throttled to one draw per 0.1 s, which is what holds the
     /// propeller to its rate when a step leaves the bar where it was.</summary>
     [Fact]

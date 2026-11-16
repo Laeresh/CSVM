@@ -131,8 +131,20 @@ public sealed class LoadProgress
     /// <summary>Which of the cycle's frames is showing now.</summary>
     public int Frame => FrameAt(_seconds());
 
+    /// <summary>The longest wall time between two draws of this build, in seconds. Windows calls a
+    /// window hung after five seconds without a message check, and the repaint is that check.</summary>
+    public double LongestGap { get; private set; }
+
+    /// <summary>The second of the build the <see cref="LongestGap"/> ended at, read against the
+    /// trace's step times to say which step it fell in.</summary>
+    public double LongestGapEnd { get; private set; }
+
     /// <summary>Reports one build step to the screen over it, if there is one.</summary>
     public static void Report(LoadStep step) => Current?.Reach(step);
+
+    /// <summary>A throttled pump from inside a long step, so the window keeps answering Windows
+    /// and the propeller keeps turning between milestones. Free when no screen is up.</summary>
+    public static void Tick() => Current?.Pump();
 
     /// <summary>The lit pixels of a fill bitmap <paramref name="fillWidth"/> wide at
     /// <paramref name="fraction"/>: the repaint's own pixel clip against the bitmap's width, which
@@ -194,6 +206,12 @@ public sealed class LoadProgress
 
     private void Draw(double now)
     {
+        if (_draws > 0 && now - _lastDraw > LongestGap)
+        {
+            LongestGap = now - _lastDraw;
+            LongestGapEnd = now;
+        }
+
         _lastDraw = now;
         _draws++;
         Repaint?.Invoke();
