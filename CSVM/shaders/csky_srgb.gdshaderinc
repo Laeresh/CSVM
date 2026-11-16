@@ -13,7 +13,11 @@
 // cylindrical facades, and Clutter's trees (which share the world's baked-lighting model).
 // It was copy-pasted into four shaders before 2026-07-23; this file is the single source.
 
+// ⚠ Keep the max() in both curves. A varying extrapolated past a triangle's edge arrives below
+// zero, and pow of a negative base is NaN under D3D12 and on AMD. The mix keeps that NaN even
+// where it picks the other arm, and the glow pass spreads one such pixel into a white blob.
 vec3 csky_srgb_to_linear(vec3 c) {
+    c = max(c, vec3(0.0));
     vec3 higher = pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
     vec3 lower = c * (1.0 / 12.92);
     // per component: c <= 0.04045 -> linear toe, else the power curve
@@ -22,6 +26,7 @@ vec3 csky_srgb_to_linear(vec3 c) {
 
 // The inverse curve: a linear value back to the byte the original's framebuffer held.
 vec3 csky_linear_to_srgb(vec3 l) {
+    l = max(l, vec3(0.0));
     vec3 higher = 1.055 * pow(l, vec3(1.0 / 2.4)) - vec3(0.055);
     vec3 lower = l * 12.92;
     return mix(higher, lower, step(l, vec3(0.0031308)));
