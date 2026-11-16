@@ -221,7 +221,8 @@ public sealed class VegetationSidecarTests
         var back = VegetationSidecar.Parse(VegetationSidecar.WithEntry(null, "C3", c3));
         Assert.Empty(back.Warnings);
         Assert.Equal(c3.Sets, back.For("C3").Sets, (a, b) => a.Name == b.Name && a.Canopy == b.Canopy && a.Models.SequenceEqual(b.Models));
-        Assert.All(new[] { "forest1.tif", "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
+        Assert.All(new[] { "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
+        Assert.Equal((23.55f, false), (VegetationScatter.Stamped(c3, "forest1.tif")!.Density, VegetationScatter.Stamped(c3, "forest1.tif")!.Mass));
     }
 
     /// <summary>C1B's bare rock tops take sparse bushes, not forest. C4's grass-to-rock transitions take a forest

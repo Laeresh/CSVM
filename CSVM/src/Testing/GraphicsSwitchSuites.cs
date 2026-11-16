@@ -2118,11 +2118,11 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("vegetation-added-stamps",
-        "a C3 Enhanced flight at vegetation quality rich adds palms on the transition textures its entry picks, every one "
+        "a C3 Enhanced flight at vegetation quality rich adds palms on the jungle and transition textures its entry picks, every one "
         + "standing on a picked triangle, about the set's density under the neutral mask and none counted as forest; a live move to "
         + "original and a live switch to Original draw none of them, and a move back draws the same again; a pick of another "
         + "texture, a density edit and a Clear stroke each place them again live, the stroke dropping those under it alone, and the "
-        + "shipped entry gives the first stamps back exactly; a pick to the canopy set stamps none; no added stamp stands on C1's "
+        + "shipped entry gives the first stamps back exactly; a pick to a set with no member stamps none; no added stamp stands on C1's "
         + "railway, a polygon laid over its picked ground; C5 builds no added stamp")]
     internal static void VegetationAddedStamps(TestContext ctx)
     {
@@ -2152,7 +2152,7 @@ internal static class GraphicsSwitchSuites
                 int off = origins.Where((_, i) => i % 25 == 0).Count(o => !OnTriangles(ground, o));
                 var models = kinds.Where(k => k.Added).Select(k => k.Model).Distinct().OrderBy(m => m).ToList();
                 double share = clutter.AddedKept / (double)Math.Max(1, clutter.AddedCandidates);
-                ctx.Check(picked.Count == 2 && origins.Count > 0 && off == 0 && models.SequenceEqual(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }),
+                ctx.Check(picked.Count == 5 && origins.Count > 0 && off == 0 && models.SequenceEqual(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }),
                     $"the flight adds {origins.Count} palms ({string.Join(", ", models)}) on {string.Join(", ", picked)}, {off} of a sample of {(origins.Count + 24) / 25} off a picked triangle");
                 ctx.Check(share > 0.45 && share < 0.55 && kinds.Where(k => k.Added).All(k => !k.Mass) && Handover(c3) == "off",
                     $"the neutral mask keeps {clutter.AddedKept} of {clutter.AddedCandidates} candidates and none counts as forest ({Handover(c3)})");
@@ -2218,12 +2218,12 @@ internal static class GraphicsSwitchSuites
                     Seed = shipped.Seed,
                     Mask = shipped.Mask,
                     Kinds = shipped.Kinds,
-                    Sets = shipped.Sets,
-                    Picks = shipped.Picks.Select(p => p with { Set = Mech3.CanopyMask.CanopySet }).ToList(),
+                    Sets = shipped.Sets.Select(s => s with { Models = Array.Empty<string>() }).ToList(),
+                    Picks = shipped.Picks,
                 });
                 Step(c3);
                 ctx.Check(clutter.AddedCandidates == 0 && !kinds.Any(k => k.Added) && AddedDrawn(c3) == 0,
-                    $"a pick to the canopy set stamps none ({clutter.AddedCandidates} candidates)");
+                    $"a pick to a set with no member stamps none ({clutter.AddedCandidates} candidates)");
                 c3.Session.Vegetation?.Apply(shipped);
                 Step(c3);
             }

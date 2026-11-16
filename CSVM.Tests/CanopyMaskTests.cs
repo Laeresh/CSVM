@@ -146,8 +146,8 @@ public sealed class CanopyMaskTests
     }
 
     /// <summary>C3's painted jungle is picked as canopy in the shipped file. Its palm transitions are too, through their
-    /// set's canopy flag, so crowns and palms mix there. The beach stays off the canopy. The canopy set stays
-    /// empty, so no card is stamped on the jungle's treetops.</summary>
+    /// set's canopy flag. The beach stays off the canopy. The canopy set stamps the same palms among the jungle's
+    /// crowns.</summary>
     [Fact]
     public void TheShippedFilePicksC3sPaintedJungleAsCanopy()
     {
@@ -156,7 +156,7 @@ public sealed class CanopyMaskTests
         Assert.All(new[] { "forest1.tif", "forest1-128.tif", "cliff1.tif", "cliff1_toptrans.tif", "cliff1_sidetrans.tif" },
             t => Assert.True(CanopyMask.IsCanopy(c3, t), t));
         Assert.False(CanopyMask.IsCanopy(c3, "cliff1_sandtrans.tif"));
-        Assert.Empty(c3.SetFor("forest1.tif")!.Models);
+        Assert.Equal(c3.SetFor("cliff1_toptrans.tif")!.Models, VegetationScatter.Stamped(c3, "forest1.tif")!.Models);
         Assert.All(new[] { "C1", "C1B", "C2", "C4" }, c => Assert.DoesNotContain(sidecar.For(c).Picks, p => CanopyMask.IsCanopy(sidecar.For(c), p.Texture)));
     }
 

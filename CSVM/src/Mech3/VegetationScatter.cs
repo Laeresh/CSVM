@@ -31,7 +31,7 @@ public static class VegetationScatter
     private const double HectareM2 = 10000.0;
 
     /// <summary>The set a picked texture stamps, null when it stamps nothing: no pick, no member or no density.
-    /// The reserved <see cref="CanopyMask.CanopySet"/> is empty; a <see cref="VegetationSet.Canopy"/> set stamps among the crowns.</summary>
+    /// A canopy set's members stamp among the crowns.</summary>
     public static VegetationSet? Stamped(VegetationEntry entry, string texture) =>
         entry.SetFor(texture) is { Models.Count: > 0, Density: > 0f } set ? set : null;
 

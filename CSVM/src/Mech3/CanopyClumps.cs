@@ -437,7 +437,7 @@ public static class CanopyClumps
     // Crown cards cut from the painted canopy's own textures, CrownShapes silhouettes each. The volume then
     // wears the colour and grain the ground shows from above. Equal weights. They are one species, the crown
     // model's, so the tile rendered from the crown models (C3/canopytree) replaces every texture's crowns.
-    // A canopy set that stamps cards (C3's palm transitions) is not forest texture, so it lends the crowns no colour.
+    // Only the reserved canopy set's textures are forest; a flagged set's (C3's palm transitions) lend the crowns no colour.
     private static List<(string Texture, Vector2 Size, float Weight, VegetationKind? Look, Image? Image, string Species)> Crowns(
         VegetationEntry entry, TextureArchive textures)
     {
@@ -445,7 +445,7 @@ public static class CanopyClumps
             : new VegetationKind("", Tint: entry.Kinds.Average(k => k.Tint), Brightness: entry.Kinds.Average(k => k.Brightness));
         var size = new Vector2(CrownWidthM, PaintedRiseM);
         var cards = new List<(string, Vector2, float, VegetationKind?, Image?, string)>();
-        foreach (var pick in entry.Picks.Where(p => CanopyMask.IsCanopy(entry, p.Texture) && VegetationScatter.Stamped(entry, p.Texture) == null))
+        foreach (var pick in entry.Picks.Where(p => string.Equals(entry.SetFor(p.Texture)?.Name, CanopyMask.CanopySet, StringComparison.OrdinalIgnoreCase)))
         {
             if (textures.FindImage(pick.Texture) is not { } image)
                 continue;

@@ -21,8 +21,8 @@ public sealed class CanopyMask
     /// across) per cell, the spacing C1's <c>terpat02</c> stamps its firs at.</summary>
     public const float FullCrownShare = 0.075f;
 
-    /// <summary>The vegetation set a texture pick names to mark its ground as painted canopy. The set stays
-    /// empty, so a pick to it stamps no card on the painted treetops.</summary>
+    /// <summary>The vegetation set a texture pick names to mark its ground as painted forest, whose textures colour the
+    /// crowns. Its members, if any, stamp among the crowns (C3's palms).</summary>
     public const string CanopySet = "canopy";
 
     // Samples along each cell side for the painted bake, 8 m apart.
