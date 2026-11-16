@@ -159,7 +159,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Mech3.BodyTwins.Mirror(_mirrored, _owner, _panelLocal);
         }
 
-        var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
+        // The view turns in the head's frame, which is level under Assisted while the interior rolls.
+        var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, camera.HeadFrame(attitudeOnly), Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
         _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode) + camera.FovWidenDeg;

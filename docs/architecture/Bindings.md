@@ -223,8 +223,8 @@ players at one machine choose separately. Its source: `LaunchBindings.cs`.
 
 ## src/Bindings/ControlScheme.cs
 The remake-only choice a seat makes beside its keymap, Original by default. Original flies the
-original's controls and chase camera; Assisted flies the assist law and the level chase camera
-together, since neither flies well without the other. An enum rather than a switch, so a later
+original's controls and chase camera; Assisted flies the assist law and the level camera (chase
+and cockpit) together, since neither flies well without the other. An enum rather than a switch, so a later
 scheme has a place to go. It lives on `BindingProfile.cs` and saves in the keymap file as
 `controlScheme`; a file that still names an older `chaseCamera` field loads with it ignored. What
 the player sees: [../controls.md](../controls.md), "Assisted controls".

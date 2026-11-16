@@ -2623,7 +2623,7 @@ public partial class FlightController : Node3D
                 _cam.StepHead(simDt, !Pause.SheetOverFlight && _cam.BackActive()
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false, ForceSnap: true)
                     : Look.Read(Pause.SheetOverFlight), HeadLook.FirstPersonElevationFloor);
-                _cam.FirstPersonView(_renderPose);
+                _cam.FirstPersonView(_renderPose, simDt, ControlScheme == Bindings.ControlScheme.Assisted);
                 _cam.ApplyFirstPersonFov();
                 firstPersonPose = true;
                 logged = _cam.ViewMode == PilotViewMode.Nose ? CameraView.Nose : CameraView.Cockpit;
@@ -4186,8 +4186,8 @@ public partial class FlightController : Node3D
         }
     }
 
-    // HeadLook's TargetOffset: where this pilot's selection sits in the plane's own frame, the one
-    // thing the padlock state reads. Null with nothing selected, which is that state's no-target
+    // HeadLook's TargetOffset: where this pilot's selection sits in the frame the head turns in, the
+    // one thing the padlock state reads. Null with nothing selected, which is that state's no-target
     // frame. Taken off the SIM pose, the pose the original's own padlock differences against.
     private Vector3? PadlockOffset()
     {
@@ -4196,13 +4196,14 @@ public partial class FlightController : Node3D
             return null;
         }
 
-        return _model.Attitude.Inverse() * (target.Position - _model.Position);
+        var frame = _cam?.HeadFrame(_model.Attitude) ?? _model.Attitude;
+        return frame.Inverse() * (target.Position - _model.Position);
     }
 
     // HeadLook's IdleAim, asked only on a frame with no look input at all, against the view this
-    // pilot has selected.
+    // pilot has selected. Autohead leads the nose in the plane's frame, so it is turned into the head's.
     private (float Elevation, float Azimuth)? AutoheadTarget() =>
-        _cam == null ? null : Look.Autohead(_cam.ViewMode, _model);
+        _cam != null && Look.Autohead(_cam.ViewMode, _model) is { } aim ? _cam.ToHeadFrame(_model.Attitude, aim) : null;
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to
     // interleave with, plus the struck Node the report deliberately does not carry. One instance
