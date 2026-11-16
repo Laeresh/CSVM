@@ -144,8 +144,9 @@ it is queued behind while it waits):
 ```
 
 Its git calls into the main checkout happen inside the script, so a worktree-isolated session needs
-no `-C` redirect. A tree whose `CSVM/`, `CSVM.Tests/` and `analysis/goldens/` match a green stamp
-(documentation and tooling changes on a green main) passes the battery at once.
+no `-C` redirect. A merged tree whose `CSVM/`, `CSVM.Tests/` and `analysis/goldens/` equal main's
+(documentation and tooling changes) lands without the battery, and one that matches a green stamp
+passes it at once.
 
 | Exit | Meaning | Next |
 |---|---|---|

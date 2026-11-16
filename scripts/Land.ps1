@@ -12,6 +12,9 @@
 # A DIRECT COMMIT TO MAIN BYPASSES THE QUEUE. Before merging, the script checks main is still the
 # commit it merged in and refuses otherwise (exit 5); a rerun merges the new main and tests again.
 #
+# A merged tree whose CSVM/, CSVM.Tests/ and analysis/goldens/ equal main's lands without the battery:
+# documentation and tooling changes give it nothing to judge (PROJECT_CONTEXT.md exempts them).
+#
 # Exit codes: 0 landed; 1 battery FAIL; 2 refused before anything changed; 3 battery DEFERRED;
 # 4 merging main in conflicted (aborted, resolve by hand, commit, rerun); 5 main moved during the run.
 # On 1, 3 and 5 the branch keeps its merge of main; nothing reached main.
@@ -33,6 +36,7 @@ param(
 
 $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "TreeStampCore.ps1")
+$GreenWhat = "CSVM/, CSVM.Tests/ and analysis/goldens/"
 
 function Invoke-Git {
     param([string]$Root)
@@ -58,6 +62,7 @@ function Invoke-SelfTest {
     function Assert-Land([bool]$Ok, [string]$What) {
         if ($Ok) { Write-Host "  ok    $What" } else { Write-Host "  FAIL  $What" -ForegroundColor Red; $script:failures++ }
     }
+    # $File is relative to the branch's root; the battery's paths are CSVM/ and the like.
     function New-Branch([string]$Name, [string]$File, [string]$Text) {
         $wt = Join-Path $root $Name
         $null = Invoke-Git $main worktree add $wt -b $Name
@@ -82,31 +87,37 @@ function Invoke-SelfTest {
         $null = Invoke-Git $main init -q -b main
         $null = Invoke-Git $main config user.name selftest
         $null = Invoke-Git $main config user.email selftest@example.invalid
-        Set-Content -LiteralPath (Join-Path $main "a.txt") -Value "base"
+        $null = New-Item -ItemType Directory -Path (Join-Path $main "CSVM") -Force
+        Set-Content -LiteralPath (Join-Path $main "CSVM\a.txt") -Value "base"
         $null = Invoke-Git $main add -A
         $null = Invoke-Git $main commit -q -m base
 
-        $wt = New-Branch "pass" "b.txt" "pass"
+        $wt = New-Branch "pass" "CSVM\b.txt" "pass"
         $code = Invoke-Land $wt "pass"
         $merged = (Invoke-Git $main log -1 --format=%s main) -join ""
-        Assert-Land ($code -eq 0 -and $merged -eq "Merge pass" -and (Test-Path (Join-Path $main "b.txt"))) "a green branch lands with a merge commit ($code, '$merged')"
-        $verify = (Invoke-Git $main log -1 --format=%s main^2) -join ""
-        Assert-Land ($verify -like "Verification: pass with main merged in*") "the branch carries a Verification commit ('$verify')"
+        Assert-Land ($code -eq 0 -and $merged -eq "Merge pass" -and (Test-Path (Join-Path $main "CSVM\b.txt"))) "a green branch lands with a merge commit ($code, '$merged')"
+        $verify = (Invoke-Git $main log -1 --format=%B main^2) -join " "
+        Assert-Land ($verify -like "Verification: pass with main merged in*Complete RunTests.ps1 PASS*") "the branch carries a Verification commit ('$verify')"
 
         $before = (Invoke-Git $main rev-parse main) -join ""
-        $wt = New-Branch "red" "c.txt" "red"
+        $wt = New-Branch "red" "CSVM\c.txt" "red"
         $code = Invoke-Land $wt "fail"
         Assert-Land ($code -eq 1 -and ((Invoke-Git $main rev-parse main) -join "") -eq $before) "a red battery exits 1 and leaves main alone ($code)"
 
-        $wt = New-Branch "clash" "a.txt" "branch side"
-        Set-Content -LiteralPath (Join-Path $main "a.txt") -Value "main side"
+        $wt = New-Branch "docs" "notes.md" "docs"
+        $code = Invoke-Land $wt "fail"
+        $verify = (Invoke-Git $main log -1 --format=%B main^2) -join " "
+        Assert-Land ($code -eq 0 -and $verify -like "*No battery*") "a branch leaving CSVM/ as main has it lands without the battery ($code)"
+
+        $wt = New-Branch "clash" "CSVM\a.txt" "branch side"
+        Set-Content -LiteralPath (Join-Path $main "CSVM\a.txt") -Value "main side"
         $null = Invoke-Git $main commit -q -am "main edits a"
         $code = Invoke-Land $wt "pass"
         $gitDir = (Invoke-Git $wt rev-parse --absolute-git-dir) -join ""
         $mergeHead = Test-Path -LiteralPath (Join-Path $gitDir "MERGE_HEAD")
         Assert-Land ($code -eq 4 -and -not $mergeHead) "a conflict exits 4 with the merge aborted ($code)"
 
-        $wt = New-Branch "moved" "d.txt" "moved"
+        $wt = New-Branch "moved" "CSVM\d.txt" "moved"
         $code = Invoke-Land $wt "move"
         $tip = (Invoke-Git $main log -1 --format=%s main) -join ""
         Assert-Land ($code -eq 5 -and $tip -eq "direct") "main moved under the run exits 5 without merging ($code, '$tip')"
@@ -171,19 +182,27 @@ try {
     }
     if (((Invoke-Git $wt rev-list --count "$mainAt..HEAD") -join "") -eq "0") { Stop-Land 2 "$branch has nothing main does not already have" }
 
-    # --- The battery, as a child so its exit cannot end this script --------------------------------
-    $exe = (Get-Process -Id $PID).Path
-    & $exe -NoProfile -ExecutionPolicy Bypass -File $Runner
-    $battery = $LASTEXITCODE
-    if ($battery -eq 3) { Stop-Land 3 "the battery was DEFERRED; nothing landed, rerun Land.ps1 later" }
-    if ($battery -ne 0) { Stop-Land 1 "the battery failed (exit $battery); nothing landed. A waiver landing is merged by hand (PROJECT_CONTEXT.md)" }
+    $head = (Invoke-Git $wt rev-parse --short HEAD) -join ""
+    $headKey = Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit "HEAD"
+    $body = @("Verification: $branch with main merged in ($($mainAt.Substring(0, 9)))", "")
+    # The battery judges only these paths; a branch that leaves them as main has them (documentation,
+    # tooling) adds nothing for it to judge, whether or not main itself is stamped.
+    if ($headKey -and $headKey -eq (Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit $mainAt)) {
+        Write-Host "  Land: $GreenWhat match main; no battery"
+        $body += "No battery: the tree at $head holds main's $GreenWhat unchanged."
+    } else {
+        # --- The battery, as a child so its exit cannot end this script ----------------------------
+        $exe = (Get-Process -Id $PID).Path
+        & $exe -NoProfile -ExecutionPolicy Bypass -File $Runner
+        $battery = $LASTEXITCODE
+        if ($battery -eq 3) { Stop-Land 3 "the battery was DEFERRED; nothing landed, rerun Land.ps1 later" }
+        if ($battery -ne 0) { Stop-Land 1 "the battery failed (exit $battery); nothing landed. A waiver landing is merged by hand (PROJECT_CONTEXT.md)" }
+        $body += "Complete RunTests.ps1 PASS on the tree at $head, run by Land.ps1."
+        $stamp = Get-TreeStamp -Root $wt -Kind "green" -Key $headKey
+        if ($stamp) { $body += @("Green stamp from $($stamp.time) at $($stamp.commit):") + @($stamp.stages | ForEach-Object { "  $_" }) }
+    }
 
     # --- Record, recheck main, merge ---------------------------------------------------------------
-    $head = (Invoke-Git $wt rev-parse --short HEAD) -join ""
-    $stamp = Get-TreeStamp -Root $wt -Kind "green" -Key (Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit "HEAD")
-    $body = @("Verification: $branch with main merged in ($($mainAt.Substring(0, 9)))", "",
-        "Complete RunTests.ps1 PASS on the tree at $head, run by Land.ps1.")
-    if ($stamp) { $body += @("Green stamp from $($stamp.time) at $($stamp.commit):") + @($stamp.stages | ForEach-Object { "  $_" }) }
     $msgFile = Join-Path $common "csvm-landing-msg.txt"
     [IO.File]::WriteAllText($msgFile, ($body -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
     $null = Invoke-Git $wt commit -q --allow-empty -F $msgFile
