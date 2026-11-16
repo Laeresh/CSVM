@@ -295,7 +295,7 @@
     {
       "name": "c3-coast-enhanced",
       "frame": 120,
-      "hash": "0570c62000f30793d9bd9bf242ad9b49",
+      "hash": "02836c3683cc84a3749b4d165d57d655",
       "exercises": "Enhanced wave ocean at a C3 shore strip and cliff tile from 52 m: the shore train, the cliff tile's 25 m alpha blend by distance from the waterline, the procedural surf and the swash fading past the line; frame-sensitive 24.26 %.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4652,52,-3426", "--direction=0.38,-0.7,-0.93", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }
