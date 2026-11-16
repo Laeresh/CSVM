@@ -143,6 +143,35 @@ public sealed class VegetationScatterTests
         Assert.Null(VegetationScatter.Stamped(entry, "terpat03.tif"));
     }
 
+    /// <summary>The brush plants its set on unpicked ground alone, none at a neutral mask and nearly all at the
+    /// densest paint. A palm's variation comes from its foot alone.</summary>
+    [Fact]
+    public void TheBrushPlantsItsSetOnUnpickedGroundOnlyWherePainted()
+    {
+        var entry = new VegetationEntry
+        {
+            Kinds = new[] { new VegetationKind("palmtree1.flt") },
+            Sets = new[] { new VegetationSet("palms", new[] { "palmtree1.flt" }, Canopy: true) },
+            Picks = new[] { new TexturePick("forest1.tif", "palms") },
+            Brush = "palms",
+        };
+        Assert.Equal("palms", VegetationScatter.Brushed(entry, "sand.tif")!.Name);
+        Assert.Null(VegetationScatter.Brushed(entry, "forest1.tif"));
+        Assert.False(CanopyMask.IsCanopy(entry, "sand.tif"));
+        Assert.Null(VegetationScatter.Brushed(new VegetationEntry { Sets = entry.Sets, Picks = entry.Picks }, "sand.tif"));
+
+        var whole = new VegetationScatter.Candidate(0, 0, 0, 1f);
+        Assert.False(VegetationScatter.BrushKeeps(whole, 1f, 0.0));
+        Assert.False(VegetationScatter.BrushKeeps(whole, 0.5f, 0.0));
+        Assert.True(VegetationScatter.BrushKeeps(whole, 1.5f, 0.49));
+        Assert.False(VegetationScatter.BrushKeeps(whole, 1.5f, 0.51));
+        Assert.True(VegetationScatter.BrushKeeps(whole, 255f / VegetationMask.NeutralByte, 0.98));
+
+        var foot = new Godot.Vector3(120.3f, 40f, -77.9f);
+        Assert.Equal(VegetationScatter.BrushStream(5, foot).NextDouble(), VegetationScatter.BrushStream(5, foot).NextDouble());
+        Assert.NotEqual(VegetationScatter.BrushStream(5, foot).NextDouble(), VegetationScatter.BrushStream(5, foot + new Godot.Vector3(1f, 0f, 0f)).NextDouble());
+    }
+
     /// <summary>The scatter's seed is fixed arithmetic of the chapter's and the set's name, never a per-process hash.</summary>
     [Fact]
     public void TheScatterSeedIsFixedAndPerSet()

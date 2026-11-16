@@ -2213,6 +2213,28 @@ internal static class GraphicsSwitchSuites
                 Step(c3);
                 ctx.Check(SameAdded(AddedOf(kinds), opening), $"the neutral mask gives them back exactly");
 
+                // The brush set on unpicked ground: a Thicken stroke on the beach plants palms there and nowhere else.
+                var sand = Mech3.VegetationGround.Painted(gamez, t => string.Equals(t, "cliff1_sandtrans.tif", StringComparison.OrdinalIgnoreCase));
+                var beach = Enumerable.Range(0, sand.Length / 3).Select(t => (sand[3 * t], sand[(3 * t) + 1], sand[(3 * t) + 2]))
+                    .OrderByDescending(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length()).First();
+                var spot = (beach.Item1 + beach.Item2 + beach.Item3) / 3f;
+                Vector3[] Standing() => AddedOf(kinds).SelectMany(k => k.Rich).Where(xf => xf.Basis.Determinant() != 0f).Select(xf => xf.Origin).ToArray();
+                var before = Standing().Select(o => (Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z))).ToHashSet();
+                const float BrushRadius = 60f;
+                var painted = mask.Clone();
+                painted.Stroke(spot.X, spot.Z, BrushRadius, 1f, Mech3.VegetationBrush.Thicken);
+                c3.Session.Vegetation?.Apply(painted);
+                Step(c3);
+                var planted = Standing().Where(o => !before.Contains((Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z)))).ToList();
+                int onSand = planted.Count(o => OnTriangles(sand, o));
+                int far = planted.Count(o => Flat(o, spot) > BrushRadius + (2f * texel));
+                ctx.Note($"brush stroke at ({spot.X:0}, {spot.Z:0}): {planted.Count} new palms, {onSand} on the sand");
+                ctx.Check(shipped.Brush == "palms" && onSand > 0 && far == 0,
+                    $"a Thicken stroke on unpicked beach plants the brush set there: {planted.Count} new palms, {onSand} on the sand, {far} outside the stroke");
+                c3.Session.Vegetation?.Apply(mask);
+                Step(c3);
+                ctx.Check(SameAdded(AddedOf(kinds), opening), $"and the neutral mask takes the brushed palms away again");
+
                 c3.Session.Vegetation?.Apply(new Mech3.VegetationEntry
                 {
                     Seed = shipped.Seed,

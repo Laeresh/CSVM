@@ -85,6 +85,10 @@ public sealed class VegetationEntry
     /// <summary>The textures that grow ground cover, the file's <c>cover</c>.</summary>
     public IReadOnlyList<CoverPick> Cover { get; init; } = Array.Empty<CoverPick>();
 
+    /// <summary>The set the Thicken brush plants on ground no pick names, empty for none
+    /// (<see cref="VegetationScatter.Brushed"/>).</summary>
+    public string Brush { get; init; } = "";
+
     /// <summary>The ground cover a texture grows, matched by name without its extension, or null for none.</summary>
     public CoverPick? CoverFor(string texture)
     {
@@ -120,16 +124,16 @@ public sealed class VegetationEntry
         if (i < 0)
             throw new ArgumentException($"'{model}' is not a listed kind", nameof(model));
         kinds[i] = field.With(kinds[i], Math.Clamp(value, 0f, field.Max));
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = kinds, Sets = Sets, Picks = Picks, Cover = Cover };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = kinds, Sets = Sets, Picks = Picks, Cover = Cover, Brush = Brush };
     }
 
     /// <summary>A copy with the variation stream's seed salt at <paramref name="seed"/>.</summary>
     public VegetationEntry WithSeed(int seed) =>
-        new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover };
+        new() { Seed = seed, Mask = Mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover, Brush = Brush };
 
     /// <summary>A copy whose brush mask is <paramref name="mask"/>, a path relative to <c>CSVM/data</c>.</summary>
     public VegetationEntry WithMask(string mask) =>
-        new() { Seed = Seed, Mask = mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover };
+        new() { Seed = Seed, Mask = mask, Kinds = Kinds, Sets = Sets, Picks = Picks, Cover = Cover, Brush = Brush };
 
     /// <summary>A copy where <paramref name="texture"/> is picked for <paramref name="models"/>, the lab's pick.
     /// A set with exactly those members is reused, or one named by joining them with <c>+</c> is added.
@@ -159,7 +163,7 @@ public sealed class VegetationEntry
             picks.Add(new TexturePick(texture, set.Name));
         }
 
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks, Cover = Cover };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = picks, Cover = Cover, Brush = Brush };
     }
 
     /// <summary>A copy where set <paramref name="name"/> takes <paramref name="density"/> stamps a hectare, clamped,
@@ -171,7 +175,7 @@ public sealed class VegetationEntry
         if (i < 0)
             throw new ArgumentException($"'{name}' is not a set of this entry", nameof(name));
         sets[i] = sets[i] with { Density = Math.Clamp(density, 0f, VegetationSet.MaxDensity), Mass = mass };
-        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = Picks, Cover = Cover };
+        return new VegetationEntry { Seed = Seed, Mask = Mask, Kinds = Kinds, Sets = sets, Picks = Picks, Cover = Cover, Brush = Brush };
     }
 
     /// <summary>The vegetation set picked for a ground texture, or null when the texture has no pick.</summary>
@@ -435,6 +439,8 @@ public sealed class VegetationSidecar
                 picks[p.Texture] = p.Set;
             node["picks"] = picks;
         }
+        if (entry.Brush.Length > 0)
+            node["brush"] = entry.Brush;
         if (entry.Cover.Count > 0)
         {
             var cover = new JsonObject();
@@ -465,7 +471,7 @@ public sealed class VegetationSidecar
     private static VegetationEntry ReadEntry(string chapter, JsonObject fields, List<string> warnings)
     {
         int seed = 0;
-        string mask = "";
+        string mask = "", brush = "";
         var kinds = new List<VegetationKind>();
         JsonObject? sets = null, picks = null;
         var cover = new List<CoverPick>();
@@ -486,6 +492,12 @@ public sealed class VegetationSidecar
                         mask = m;
                     else
                         warnings.Add($"{chapter}: 'mask' is not a string, the chapter has no mask");
+                    break;
+                case "brush":
+                    if (node is JsonValue bv && bv.TryGetValue(out string? b))
+                        brush = b;
+                    else
+                        warnings.Add($"{chapter}: 'brush' is not a string, the brush plants nothing");
                     break;
                 case "kinds":
                     if (node is JsonObject k)
@@ -517,7 +529,12 @@ public sealed class VegetationSidecar
 
         var readSets = sets == null ? new List<VegetationSet>() : ReadSets(chapter, sets, new VegetationEntry { Kinds = kinds }, warnings);
         var readPicks = picks == null ? new List<TexturePick>() : ReadPicks(chapter, picks, readSets, warnings);
-        return new VegetationEntry { Seed = seed, Mask = mask, Kinds = kinds, Sets = readSets, Picks = readPicks, Cover = cover };
+        if (brush.Length > 0 && !readSets.Exists(s => string.Equals(s.Name, brush, StringComparison.OrdinalIgnoreCase)))
+        {
+            warnings.Add($"{chapter}: 'brush' names '{brush}', which is not a set, so the brush plants nothing");
+            brush = "";
+        }
+        return new VegetationEntry { Seed = seed, Mask = mask, Kinds = kinds, Sets = readSets, Picks = readPicks, Cover = cover, Brush = brush };
     }
 
     // A bare "grass" or "crop", or {"grows": ..., "min_saturation": n, "max_value": m, "covers": "cards"|"both"}, n and m

@@ -218,8 +218,13 @@ public sealed class VegetationSidecarTests
             Assert.Equal(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }, set!.Models);
             Assert.Equal((23.55f, false, true), (set.Density, set.Mass, set.Canopy));
         }
+        Assert.Equal("palms", c3.Brush);
         var back = VegetationSidecar.Parse(VegetationSidecar.WithEntry(null, "C3", c3));
         Assert.Empty(back.Warnings);
+        Assert.Equal("palms", back.For("C3").WithSeed(3).Brush);
+        var unknown = VegetationSidecar.Parse("{ \"C3\": { \"kinds\": {}, \"brush\": \"reeds\" } }");
+        Assert.Contains(unknown.Warnings, w => w.Contains("'brush' names 'reeds'"));
+        Assert.Equal("", unknown.For("C3").Brush);
         Assert.Equal(c3.Sets, back.For("C3").Sets, (a, b) => a.Name == b.Name && a.Canopy == b.Canopy && a.Models.SequenceEqual(b.Models));
         Assert.All(new[] { "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
         Assert.Equal((23.55f, false), (VegetationScatter.Stamped(c3, "forest1.tif")!.Density, VegetationScatter.Stamped(c3, "forest1.tif")!.Mass));

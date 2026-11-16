@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -27,6 +28,7 @@ public static class VegetationScatter
     // The added stream's and the scatter's labels beside the Rich seed, so neither replays the other or the Rich stream.
     private const int AddedStream = 0x51A7C0DE;
     private const int ScatterStream = 0x3D2B8F11;
+    private const int BrushStreamSalt = 0x6B1E5A07;
 
     private const double HectareM2 = 10000.0;
 
@@ -34,6 +36,23 @@ public static class VegetationScatter
     /// A canopy set's members stamp among the crowns.</summary>
     public static VegetationSet? Stamped(VegetationEntry entry, string texture) =>
         entry.SetFor(texture) is { Models.Count: > 0, Density: > 0f } set ? set : null;
+
+    /// <summary>The set the Thicken brush plants on <paramref name="texture"/>: the entry's <see cref="VegetationEntry.Brush"/>
+    /// set where no pick names the texture, null otherwise. It never makes the ground canopy, since that follows picks.</summary>
+    public static VegetationSet? Brushed(VegetationEntry entry, string texture) =>
+        entry.Brush.Length > 0 && entry.SetFor(texture) == null
+            && entry.Sets.FirstOrDefault(s => string.Equals(s.Name, entry.Brush, StringComparison.OrdinalIgnoreCase)) is { Models.Count: > 0, Density: > 0f } set
+            ? set : null;
+
+    /// <summary>Whether a brushed candidate stands. The mask's rise over neutral is the share kept: neutral ground
+    /// grows none, the densest paint twice the set's density.</summary>
+    public static bool BrushKeeps(Candidate candidate, float density, double draw) =>
+        Keeps(candidate, 2f * Math.Max(0f, density - 1f), draw);
+
+    /// <summary>A brushed candidate's variation stream, seeded from its foot alone. A stroke elsewhere then draws
+    /// no other palm differently.</summary>
+    public static Random BrushStream(int richSeed, Vector3 at) =>
+        new(unchecked(richSeed ^ BrushStreamSalt ^ (Mathf.RoundToInt(at.X * 4f) * 73856093) ^ (Mathf.RoundToInt(at.Z * 4f) * 19349663)));
 
     /// <summary>The added stream's seed from the Rich stream's (<see cref="VegetationVariation.Seed"/>).</summary>
     public static int StreamSeed(int richSeed) => richSeed ^ AddedStream;
