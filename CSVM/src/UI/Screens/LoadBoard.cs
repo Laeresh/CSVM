@@ -103,7 +103,8 @@ public sealed partial class LoadBoard : Control
     {
         var line = new StringBuilder();
         line.Append(progress.Trace.Count).Append(" step(s), ")
-            .Append(progress.Draws).Append(" draw(s):");
+            .Append(progress.Draws).Append(" draw(s), ")
+            .Append(CultureInfo.InvariantCulture, $"longest gap {progress.LongestGap:0.000}s to @{progress.LongestGapEnd:0.000}s:");
         foreach (var step in progress.Trace)
         {
             line.Append(CultureInfo.InvariantCulture, $" {step.Step}={step.Fraction:0.00}@{step.Seconds:0.000}s");
@@ -126,6 +127,9 @@ public sealed partial class LoadBoard : Control
             return;
         }
 
+        // Windows calls a window hung after 5 s without a message check. Input is dropped: no
+        // handler may run inside the build.
+        DisplayServer.ForceProcessAndDropEvents();
         var art = view.ArtSize(new BoardArt(BoardArtLibrary.Rimage, _motion.FillArt));
         view.PresentMoving(
             LoadScreens.Moving(_motion, art.X, art.Y, progress.Fraction, progress.Frame));

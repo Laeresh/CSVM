@@ -370,7 +370,11 @@ photographs each presented frame, which is how the bar is read back with nobody 
 The build stays one
 synchronous block: `Launch/Launcher.cs`, `Launch/GameSession.cs` and `Mech3/WorldSession.cs`
 report each phase boundary they cross, taking the fraction the table authors for it and never one
-derived from how long the phase took. The fill is the repaint's own pixel clip,
+derived from how long the phase took. Inside a phase, `LoadProgress.Tick` asks for a throttled
+pump (per gamez node in `SceneBuilder`, per clutter kind, per `StartupProfile.Record`), and every
+repaint checks the window's messages with input dropped, so Windows never sees five seconds
+without one and does not call the window hung. The screen's log line names the build's longest gap
+between draws. The fill is the repaint's own pixel clip,
 `floor(fillWidth * fraction)` of `prog_red` over `prog_blk` on the blackboard and `prog_redload`
 over `prog_blkload` on the chart sheet; the propeller steps the `Cycle` beat's six bitmaps
 (`prp0`, `prp7`, `prp15`, `prp22`, `prp30`, `prp37`) at the authored 6 fps off the wall clock, on
