@@ -204,8 +204,9 @@ public sealed class VegetationSidecarTests
         Assert.Equal(0f, back.For("C1").SetFor("grass1")!.Density);
     }
 
-    /// <summary>C3 ships its cliff-top and side transitions picked to its three palms at twice the beach stand's
-    /// density, not as forest. The shoreline transition stays unpicked, so no palm stands in the reef water.</summary>
+    /// <summary>C3 ships its cliff-top and side transitions picked to its three palms at three times the beach stand's
+    /// density, not as forest. The set paints its ground as canopy, so the palms stand among the crowns. The shoreline transition stays
+    /// unpicked, so no palm stands in the reef water. The flag survives a Save.</summary>
     [Fact]
     public void TheShippedFilePicksC3sTransitionsToItsPalms()
     {
@@ -215,9 +216,18 @@ public sealed class VegetationSidecarTests
             var set = VegetationScatter.Stamped(c3, texture);
             Assert.NotNull(set);
             Assert.Equal(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }, set!.Models);
-            Assert.Equal((15.7f, false), (set.Density, set.Mass));
+            Assert.Equal((23.55f, false, true), (set.Density, set.Mass, set.Canopy));
         }
-        Assert.All(new[] { "forest1.tif", "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
+        Assert.Equal("palms", c3.Brush);
+        var back = VegetationSidecar.Parse(VegetationSidecar.WithEntry(null, "C3", c3));
+        Assert.Empty(back.Warnings);
+        Assert.Equal("palms", back.For("C3").WithSeed(3).Brush);
+        var unknown = VegetationSidecar.Parse("{ \"C3\": { \"kinds\": {}, \"brush\": \"reeds\" } }");
+        Assert.Contains(unknown.Warnings, w => w.Contains("'brush' names 'reeds'"));
+        Assert.Equal("", unknown.For("C3").Brush);
+        Assert.Equal(c3.Sets, back.For("C3").Sets, (a, b) => a.Name == b.Name && a.Canopy == b.Canopy && a.Models.SequenceEqual(b.Models));
+        Assert.All(new[] { "cliff1_sandtrans.tif", "cliff1_watertrans2.t" }, t => Assert.Null(VegetationScatter.Stamped(c3, t)));
+        Assert.Equal((23.55f, false), (VegetationScatter.Stamped(c3, "forest1.tif")!.Density, VegetationScatter.Stamped(c3, "forest1.tif")!.Mass));
     }
 
     /// <summary>C1B's bare rock tops take sparse bushes, not forest. C4's grass-to-rock transitions take a forest

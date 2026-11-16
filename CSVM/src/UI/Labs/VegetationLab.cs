@@ -483,7 +483,9 @@ public sealed partial class VegetationLab : Node
 
         rows.AddChild(Small("Brush: hold the left button; the clutter follows on release.", Dim));
         // The density rule never adds an original stamp, so Thicken reaches only the added ones.
-        var thickenNote = Small("Thicken shows more of a picked texture's added stamps, up to twice its set's density. Original trees can only be thinned or cleared.", Dim);
+        var thickenNote = Small(_edit.Brush.Length > 0
+            ? $"Thicken shows more of a picked texture's added stamps, up to twice its set's density, and plants '{_edit.Brush}' on unpicked ground. Original trees can only be thinned or cleared."
+            : "Thicken shows more of a picked texture's added stamps, up to twice its set's density. Original trees can only be thinned or cleared.", Dim);
         thickenNote.Visible = Brush == VegetationBrush.Thicken;
         rows.AddChild(Choice(Enum.GetNames<VegetationBrush>(), (int)Brush, i =>
         {

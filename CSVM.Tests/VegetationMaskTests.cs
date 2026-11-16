@@ -54,7 +54,7 @@ public sealed class VegetationMaskTests
     }
 
     /// <summary>Thicken raises and Thin lowers, most at the centre and none at the radius; a dab with no
-    /// texel inside it changes nothing.</summary>
+    /// texel inside it changes nothing. <c>ThickenedIn</c> finds the raised texels and no other.</summary>
     [Fact]
     public void ThickenAndThinFallOffToTheRadius()
     {
@@ -64,8 +64,12 @@ public sealed class VegetationMaskTests
         float edge = mask.At(-6000f, -5600f);
         Assert.True(centre > edge && edge > 1f, $"centre {centre}, edge {edge}");
         Assert.Equal(1f, mask.At(-6000f, -5400f));
+        Assert.True(mask.ThickenedIn(-6010f, -6010f, -5990f, -5990f));
+        Assert.False(mask.ThickenedIn(-5000f, -5000f, -4900f, -4900f));
+        Assert.False(mask.ThickenedIn(90000f, 90000f, 90100f, 90100f));
 
         var thin = C1Shaped(256);
+        Assert.False(thin.ThickenedIn(-6010f, -6010f, -5990f, -5990f));
         thin.Stroke(-6000f, -6000f, 500f, 0.5f, VegetationBrush.Thin);
         Assert.InRange(thin.At(-6000f, -6000f), 0.45f, 0.55f);
         Assert.False(thin.Stroke(5000f, 5000f, 10f, 1f, VegetationBrush.Clear));

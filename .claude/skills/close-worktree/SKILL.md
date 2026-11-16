@@ -125,86 +125,75 @@ real conflicts against that new work, so `resolving-merge-conflicts` applies as 
 The rebase rewrites this branch's own hashes, so record the new ones for the final report and treat
 any verification recorded in an earlier commit message as describing a tree that no longer exists.
 
-**Ordinary new work** → in the worktree, merge main in:
-- `git merge main`
-- **Conflicts** → invoke the `resolving-merge-conflicts` skill to resolve them; do not hand-weave
-  conflict markers yourself. If that skill itself cannot resolve a conflict and stops, this skill
-  stops too — report where it left off.
+**Ordinary new work** → nothing to do by hand. Step 4's `Land.ps1` merges main in under the landing
+queue; merging it here as well would only be tested against a main that moves again before landing.
 
-### Verification after either path
+## 4. Land through `Land.ps1`
 
-Once main is folded in (merged or rebased onto, with or without conflicts to resolve), this
-combination has never been tested together. Run the project's full verification battery on the
-worktree — `dotnet build CSVM/CSVM.sln` and `.\scripts\RunTests.ps1` (or the narrower check that fits what
-the sync brought in, per CLAUDE.md's own hook logic) — and treat this as **mandatory**, not
-optional.
+`scripts/Land.ps1` does the merge of main into the branch, the complete battery on that tree, a
+`Verification:` commit recording it, and the `--no-ff` merge into main, all in one process holding a
+machine-wide mutex. Landings from other sessions queue behind it instead of each invalidating the
+last one's battery (the merge cascade). ⚠ **Never merge this branch into main by hand around it**:
+a landing outside the queue is what restarts the cascade.
 
-- **Failure** → report the failure output and **stop the entire skill here**. Do not proceed to
-  step 4 with a broken tree sitting in the worktree.
-- If the sync touched `analysis/goldens/manifest.json`, don't naively take either side —
-  regenerate goldens on the synced tree and commit the re-pin naming the shots, per the
-  worktree-merge lessons already learned on this project.
-- Record the result in its own `Verification:` commit, matching the convention already in the log.
-  After a rebase this is the only surviving record of what was gated, since the rebased commits'
-  own messages describe a tree that no longer exists.
-
-## 4. Leave the worktree, then merge back into main
-
-The merge needs `main` checked out, so the session has to leave the worktree rather than reach into
-it. Call `ExitWorktree` with `action: "keep"`: it returns the session to `Z:/CSVM` and leaves the
-worktree and its branch on disk for step 5. Do not pass `"remove"` here, since nothing has merged
-yet.
-
-- **It exits** → the session is in the main checkout. Merge with plain git, no redirect:
-
-  ```
-  git merge --no-ff <worktree-branch> -m "Merge <worktree-branch>: <one-line of what landed>"
-  ```
-
-- **It reports no active worktree session** → this session never entered through `EnterWorktree`, so
-  it is not isolated and the redirect is allowed from where it stands:
-
-  ```
-  git -C Z:/CSVM merge --no-ff <worktree-branch> -m "Merge <worktree-branch>: <one-line of what landed>"
-  ```
-
-⚠ **Re-read the divergence immediately before merging.** Other sessions land on main while this
-skill runs, so step 3's reading may already be stale: `git rev-list --count <worktree-branch>..main`
-must be 0. Anything else means main moved again — go back to step 3 and classify the new divergence
-before touching main.
-
-The `--no-ff` preserves the worktree's individual commits under a merge commit, matching the repo's
-existing convention (e.g. `Merge worktree-bl348-balloon-kill-chain: close BL-348`). Never push.
-
-If this merge itself conflicts, invoke `resolving-merge-conflicts` again, then re-run the mandatory
-verification battery from step 3 before continuing.
-
-## 5. Clean up
-
-Step 4 already left the worktree, so this is plain git in the main checkout with no redirect:
+Run it from the worktree, with `run_in_background`, and wait for it to exit (it prints which landing
+it is queued behind while it waits):
 
 ```
-git worktree remove <worktree-path>
-git branch -d <worktree-branch>
+<worktree-path>\scripts\Land.ps1 -Worktree <worktree-path> -Message "Merge <worktree-branch>: <one-line of what landed>"
 ```
 
-If step 4 took the `-C` fallback, the session is still standing inside the worktree it is about to
-delete. Change out of that directory first, since Windows refuses to remove a directory a process
-is sitting in, then keep the redirect:
+Its git calls into the main checkout happen inside the script, so a worktree-isolated session needs
+no `-C` redirect. A merged tree whose `CSVM/`, `CSVM.Tests/` and `analysis/goldens/` equal main's
+(documentation and tooling changes) lands without the battery, and one that matches a green stamp
+passes it at once.
 
-```
-git -C Z:/CSVM worktree remove <worktree-path>
-git -C Z:/CSVM branch -d <worktree-branch>
-```
+| Exit | Meaning | Next |
+|---|---|---|
+| 0 | landed | step 5 |
+| 1 | battery FAIL, nothing landed | report the failures and **stop the skill**; a waiver landing (PROJECT_CONTEXT.md) is the user's call |
+| 2 | refused before anything changed | read its reason (uncommitted changes, dirty main checkout, nothing to land) |
+| 3 | battery DEFERRED | rerun later; report the landing as owed, never merge by hand |
+| 4 | merging main in conflicted, merge aborted | `git merge main` in the worktree, resolve with `resolving-merge-conflicts`, commit, rerun `Land.ps1` |
+| 5 | main moved outside the queue during the battery | rerun `Land.ps1` |
+
+If merging main in touched `analysis/goldens/manifest.json`, don't take either side naively:
+regenerate goldens on the merged tree and commit the re-pin naming the shots before rerunning.
+After a step-3 rebase, the `Verification:` commit `Land.ps1` writes is the only record of what was
+gated, since the rebased commits' own messages describe a tree that no longer exists.
+
+## 5. Leave the worktree and clean up
+
+Windows refuses to remove a directory a process is sitting in, so leave the worktree first. Call
+`ExitWorktree` with `action: "keep"` (the branch is merged, but `"remove"` would skip the
+`branch -d` check below):
+
+- **It exits** → the session is in the main checkout. Plain git, no redirect:
+
+  ```
+  git worktree remove <worktree-path>
+  git branch -d <worktree-branch>
+  ```
+
+- **It reports no active worktree session** → this session never entered through `EnterWorktree`,
+  so it is not isolated, but it may still be standing inside the worktree it is about to delete.
+  Change out of that directory first, then use the redirect:
+
+  ```
+  git -C Z:/CSVM worktree remove <worktree-path>
+  git -C Z:/CSVM branch -d <worktree-branch>
+  ```
 
 `branch -d` (not `-D`) deliberately refuses if the branch isn't fully merged — treat that refusal
 as a signal something upstream of this step went wrong, not something to force past. `worktree
 remove` likewise refuses on uncommitted changes; there should be none left, and if there are,
 something after step 1 was never committed — go back and fix that rather than forcing.
 
-If step 2 closed a GitHub issue, post its close now that the closing commit is on main:
-`gh issue close N --comment-file <the drafted comment>` (or `--comment "..."` for a short one),
-with the merge-back commit's hash added to the comment.
+If step 2 closed a GitHub issue, post its close now that the closing commit is on main, with the
+merge-back commit's hash added to the drafted comment. `gh issue close` has no `--comment-file`, so
+post the record first, then close, then read the state back:
+`gh issue comment N --body-file <the drafted comment>`, `gh issue close N`,
+`gh issue view N --json state`.
 
 ## Report
 
