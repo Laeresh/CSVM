@@ -699,7 +699,8 @@ public sealed class ClutterBuilder
         if (painted)
         {
             var triangles = VegetationGround.Painted(_gamez, t => CanopyMask.IsCanopy(entry, t), worldName, SwitchedOff());
-            _canopy = CanopyMask.FromPainted(triangles, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom, _mask);
+            var brushed = VegetationGround.BrushedCanopy(_gamez, entry, _mask, worldName, SwitchedOff());
+            _canopy = CanopyMask.FromPainted(triangles, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom, _mask, brushed);
         }
         else
         {
@@ -1433,6 +1434,10 @@ public sealed class ClutterBuilder
 
         ForEachTriangle(_worldName, Resolve, stats, (picked, a, b, c, uva, uvb, uvc, owner) =>
         {
+            // Brushed ground grows nothing at neutral, so a triangle no stroke thickened takes no candidate.
+            if (picked.Brushed && _mask?.ThickenedIn(Math.Min(a.X, Math.Min(b.X, c.X)), Math.Min(a.Z, Math.Min(b.Z, c.Z)),
+                Math.Max(a.X, Math.Max(b.X, c.X)), Math.Max(a.Z, Math.Max(b.Z, c.Z))) != true)
+                return;
             if (Lattice(a, b, c, uva, uvb, uvc, stats) is not { } tri)
                 return;
             double perRepeat = VegetationScatter.PerRepeat(picked.Set.Density, tri);
@@ -1445,8 +1450,15 @@ public sealed class ClutterBuilder
             foreach (var cand in VegetationScatter.OnTriangle(tri, points, perRepeat, picked.Keys, seen, ref deduped))
             {
                 var member = picked.Members[cand.Member];
-                var v = VegetationVariation.Draw(tri, cand.U, cand.V, entry.Find(member.Model)!, rng);
-                float fadeDraw = (float)rng.NextDouble();
+                var draws = picked.Brushed ? VegetationScatter.BrushStream(richSeed, tri.World(cand.U, cand.V)) : rng;
+                var v = VegetationVariation.Draw(tri, cand.U, cand.V, entry.Find(member.Model)!, draws);
+                float fadeDraw = (float)draws.NextDouble();
+                var foot = tri.World(v.U, v.V);
+                var origin = foot + member.Lift;
+                float density = _mask?.At(origin.X, origin.Z) ?? 1f;
+                // Rebuilt on every stroke, so brushed ground keeps no zero-scaled index where nothing was painted.
+                if (picked.Brushed && density <= 1f)
+                    continue;
                 if (!byMember.TryGetValue((member, picked.Set.Mass), out var kind))
                 {
                     byMember[(member, picked.Set.Mass)] = kind = member.AddedTwin();
@@ -1455,10 +1467,10 @@ public sealed class ClutterBuilder
                 }
                 // The Original stands unvaried and is never drawn; Rich carries the variation and the drops.
                 var at = tri.World(cand.U, cand.V) + member.Lift;
-                var foot = tri.World(v.U, v.V);
-                var origin = foot + member.Lift;
-                bool covered = overlays.Covers(foot);
-                bool kept = !covered && VegetationScatter.Keeps(cand, _mask?.At(origin.X, origin.Z) ?? 1f, v.Keep);
+                // Brushed ground is every unpicked texture, so the overlay bins hold it; the painter steers instead.
+                bool covered = !picked.Brushed && overlays.Covers(foot);
+                bool kept = picked.Brushed ? VegetationScatter.BrushKeeps(cand, density, v.Keep)
+                    : !covered && VegetationScatter.Keeps(cand, density, v.Keep);
                 overlaid += covered ? 1 : 0;
                 var fade = ClutterKindProps.FadeThresholds(member.FarFadeMin, member.FarFadeMax, fadeDraw);
                 kind.Instances.Add(new Transform3D(Basis.Identity, at));
@@ -1480,21 +1492,27 @@ public sealed class ClutterBuilder
             Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} overlaid={overlaid} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
         return added;
 
-        // The set a texture stamps with its members resolved to card kinds, once per set.
+        // The set a texture stamps, or the brush's on unpicked ground, with its members resolved to card kinds, once per set.
         Picked? Resolve(string texture)
         {
+            bool brushed = false;
             if (VegetationScatter.Stamped(entry, texture) is not { } set)
-                return null;
-            if (bySet.TryGetValue(set.Name, out var known))
+            {
+                if (VegetationScatter.Brushed(entry, texture) is not { } brush)
+                    return null;
+                (set, brushed) = (brush, true);
+            }
+            string key = brushed ? $"{set.Name} (brush)" : set.Name;
+            if (bySet.TryGetValue(key, out var known))
                 return known;
             var members = set.Models.Select(m => entry.Find(m) == null ? null : _kindsByModel.GetValueOrDefault(m) ?? ResolveModel(m, ref minted))
                 .Select(k => k is { Solid: false } ? k : null).ToArray();
             Picked? picked = null;
             if (members.All(k => k != null))
-                picked = new Picked(set, members!, members.Select(k => k!.MeshIndex).ToArray(), new VegetationScatter.Scatter(VegetationScatter.ScatterSeed(richSeed, set.Name)));
+                picked = new Picked(set, members!, members.Select(k => k!.MeshIndex).ToArray(), new VegetationScatter.Scatter(VegetationScatter.ScatterSeed(richSeed, set.Name)), brushed);
             else
                 Log.Warn("world", $"clutter added stamps: set '{set.Name}' names a model this chapter draws no card for, so it stamps nothing");
-            bySet[set.Name] = picked;
+            bySet[key] = picked;
             return picked;
         }
     }
@@ -2382,7 +2400,7 @@ public sealed class ClutterBuilder
     }
 
     // A picked texture's set with its members as card kinds, their dedup keys and its scatter, for one bake.
-    private sealed record Picked(VegetationSet Set, Kind[] Members, int[] Keys, VegetationScatter.Scatter Cell);
+    private sealed record Picked(VegetationSet Set, Kind[] Members, int[] Keys, VegetationScatter.Scatter Cell, bool Brushed = false);
 
     // One kept card stamp as the Rich bake replays it: its kind and index, its triangle and texture
     // coordinate. The scale and mesh lift are the ones its Original transform took.

@@ -143,6 +143,29 @@ public sealed class VegetationMask
         return Lerp(top, bottom, fv) / NeutralByte;
     }
 
+    /// <summary>Whether any texel over the world rectangle is thickened past neutral: the brush plants only there.</summary>
+    public bool ThickenedIn(float minX, float minZ, float maxX, float maxZ)
+    {
+        if (maxX < MinX || minX > MaxX || maxZ < MinZ || minZ > MaxZ)
+            return false;
+        float texelX = (MaxX - MinX) / Side, texelZ = (MaxZ - MinZ) / Side;
+        // One texel of margin each side, since At blends a thickened texel into its neighbours.
+        int i0 = Math.Clamp((int)MathF.Floor((minX - MinX) / texelX) - 1, 0, Side - 1);
+        int i1 = Math.Clamp((int)MathF.Floor((maxX - MinX) / texelX) + 1, 0, Side - 1);
+        int j0 = Math.Clamp((int)MathF.Floor((minZ - MinZ) / texelZ) - 1, 0, Side - 1);
+        int j1 = Math.Clamp((int)MathF.Floor((maxZ - MinZ) / texelZ) + 1, 0, Side - 1);
+        for (int j = j0; j <= j1; j++)
+        {
+            for (int i = i0; i <= i1; i++)
+            {
+                if (_texels[(j * Side) + i] > NeutralByte)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>The byte of the texel holding a world position, unsampled: the ground cover's gate, which wants
     /// the strip clearance's edge where the texels put it. Neutral outside the area.</summary>
     public byte TexelAt(float x, float z)

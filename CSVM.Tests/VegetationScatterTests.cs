@@ -113,26 +113,63 @@ public sealed class VegetationScatterTests
         Assert.InRange(Kept(255f / VegetationMask.NeutralByte), 0.95 * weight, weight);
     }
 
-    /// <summary>Only a pick to a set with members and density stamps.
-    /// The reserved canopy set never does, even with a member, since painted forest takes no card.</summary>
+    /// <summary>Only a pick to a set with members and density stamps. The reserved canopy set is empty, so painted
+    /// forest takes no card, and a canopy-flagged set paints its ground and still stamps among the crowns.</summary>
     [Fact]
-    public void OnlyAPickedSetStampsAndTheCanopySetNever()
+    public void OnlyAPickedSetWithMembersStamps()
     {
         var entry = new VegetationEntry
         {
             Kinds = new[] { new VegetationKind("palmtree1.flt") },
             Sets = new[]
             {
-                new VegetationSet(CanopyMask.CanopySet, new[] { "palmtree1.flt" }),
+                new VegetationSet(CanopyMask.CanopySet, System.Array.Empty<string>()),
                 new VegetationSet("palms", new[] { "palmtree1.flt" }),
                 new VegetationSet("bare", new[] { "palmtree1.flt" }, Density: 0f),
+                new VegetationSet("jungle palms", new[] { "palmtree1.flt" }, Canopy: true),
             },
-            Picks = new[] { new TexturePick("forest1.tif", CanopyMask.CanopySet), new TexturePick("cliff1_toptrans.tif", "palms"), new TexturePick("sand.tif", "bare") },
+            Picks = new[]
+            {
+                new TexturePick("forest1.tif", CanopyMask.CanopySet), new TexturePick("cliff1_toptrans.tif", "palms"),
+                new TexturePick("sand.tif", "bare"), new TexturePick("cliff1_sidetrans.tif", "jungle palms"),
+            },
         };
         Assert.Null(VegetationScatter.Stamped(entry, "forest1.tif"));
         Assert.Equal("palms", VegetationScatter.Stamped(entry, "CLIFF1_TOPTRANS.tif")!.Name);
+        Assert.False(CanopyMask.IsCanopy(entry, "cliff1_toptrans.tif"));
+        Assert.Equal("jungle palms", VegetationScatter.Stamped(entry, "cliff1_sidetrans.tif")!.Name);
+        Assert.True(CanopyMask.IsCanopy(entry, "cliff1_sidetrans.tif"));
         Assert.Null(VegetationScatter.Stamped(entry, "sand.tif"));
         Assert.Null(VegetationScatter.Stamped(entry, "terpat03.tif"));
+    }
+
+    /// <summary>The brush plants its set on unpicked ground alone, none at a neutral mask and nearly all at the
+    /// densest paint. A palm's variation comes from its foot alone.</summary>
+    [Fact]
+    public void TheBrushPlantsItsSetOnUnpickedGroundOnlyWherePainted()
+    {
+        var entry = new VegetationEntry
+        {
+            Kinds = new[] { new VegetationKind("palmtree1.flt") },
+            Sets = new[] { new VegetationSet("palms", new[] { "palmtree1.flt" }, Canopy: true) },
+            Picks = new[] { new TexturePick("forest1.tif", "palms") },
+            Brush = "palms",
+        };
+        Assert.Equal("palms", VegetationScatter.Brushed(entry, "sand.tif")!.Name);
+        Assert.Null(VegetationScatter.Brushed(entry, "forest1.tif"));
+        Assert.False(CanopyMask.IsCanopy(entry, "sand.tif"));
+        Assert.Null(VegetationScatter.Brushed(new VegetationEntry { Sets = entry.Sets, Picks = entry.Picks }, "sand.tif"));
+
+        var whole = new VegetationScatter.Candidate(0, 0, 0, 1f);
+        Assert.False(VegetationScatter.BrushKeeps(whole, 1f, 0.0));
+        Assert.False(VegetationScatter.BrushKeeps(whole, 0.5f, 0.0));
+        Assert.True(VegetationScatter.BrushKeeps(whole, 1.5f, 0.49));
+        Assert.False(VegetationScatter.BrushKeeps(whole, 1.5f, 0.51));
+        Assert.True(VegetationScatter.BrushKeeps(whole, 255f / VegetationMask.NeutralByte, 0.98));
+
+        var foot = new Godot.Vector3(120.3f, 40f, -77.9f);
+        Assert.Equal(VegetationScatter.BrushStream(5, foot).NextDouble(), VegetationScatter.BrushStream(5, foot).NextDouble());
+        Assert.NotEqual(VegetationScatter.BrushStream(5, foot).NextDouble(), VegetationScatter.BrushStream(5, foot + new Godot.Vector3(1f, 0f, 0f)).NextDouble());
     }
 
     /// <summary>The scatter's seed is fixed arithmetic of the chapter's and the set's name, never a per-process hash.</summary>

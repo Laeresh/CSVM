@@ -41,7 +41,7 @@
                it). Each shot is
                launched under a per-shot timeout ($GoldenTimeoutSec); a shot that exceeds it is
                killed, reported as FAIL, and has its evidence preserved -- it never silently hangs
-               the suite (BL-320).
+               the suite (BL-320). A shot marked "release": true runs only under -Release.
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -163,7 +163,12 @@
 .PARAMETER RegenGoldens
     Re-render every shot and rewrite analysis/goldens/manifest.json with the hashes measured.
     Deliberately a separate switch and never automatic: the rewritten file is the review artifact,
-    so a moved hash has to be explained in the commit that moves it.
+    so a moved hash has to be explained in the commit that moves it. Without -Release, the
+    release-only shots keep the pins they have.
+
+.PARAMETER Release
+    Also run the golden shots marked "release": true in the manifest, which every other run skips.
+    The battery before a release passes it.
 
 .PARAMETER GoldenWorkers
     How many golden shots launch at once. Default 4: an A/B of 1/2/3/4 workers, three repeats each,
@@ -297,6 +302,7 @@ param(
     [switch]$SkipEngine,
     [switch]$SkipGoldens,
     [switch]$RegenGoldens,
+    [switch]$Release,
     [int]$GoldenWorkers = 4,
     [switch]$Hitch,
     [switch]$SkipHitch,
@@ -1656,6 +1662,7 @@ function Write-GoldenManifest {
         $null = $lines.Add("      ""frame"": $([int]$s.frame),")
         $null = $lines.Add("      ""hash"": $(ConvertTo-JsonString $s.hash),")
         $null = $lines.Add("      ""exercises"": $(ConvertTo-JsonString $s.exercises),")
+        if ($s.release) { $null = $lines.Add("      ""release"": true,") }
         $null = $lines.Add("      ""args"": [$($argJson -join ', ')]")
         $null = $lines.Add($(if ($i -eq $shots.Count - 1) { "    }" } else { "    }," }))
     }
@@ -1828,7 +1835,9 @@ if ($SkipGoldensNow) {
     }
 
     $states = @()
+    $releaseOnly = @(@($manifest.shots) | Where-Object { $_.release -and -not $Release }).Count
     foreach ($shot in @($manifest.shots)) {
+        if ($shot.release -and -not $Release) { continue }
         $state = [pscustomobject]@{
             Shot = $shot; Png = (Join-Path $GoldenDir "$($shot.name).png"); Log = (Join-Path $GoldenDir "$($shot.name).log")
             Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
@@ -2058,10 +2067,11 @@ if ($SkipGoldensNow) {
         $manifest.gpu = $liveGpu
     }
 
-    $shotCount = @($manifest.shots).Count
+    $shotCount = $states.Count
+    $releaseText = if ($releaseOnly -gt 0) { "; $releaseOnly release-only shot(s) not run (-Release runs them)" } else { "" }
     if ($RegenGoldens) {
         Write-GoldenManifest -Doc $manifest -Path $GoldenManifest
-        $detail = "regenerated $shotCount shot(s), $($moved.Count) hash(es) changed -> $GoldenManifest"
+        $detail = "regenerated $shotCount shot(s), $($moved.Count) hash(es) changed -> $GoldenManifest$releaseText"
         if ($broken.Count -gt 0) {
             Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($broken.Count) shot(s) did not render"
             foreach ($b in $broken) {
@@ -2075,7 +2085,7 @@ if ($SkipGoldensNow) {
         $passDetail = "$shotCount shot(s) hash-identical; gpu $liveGpu"
         if ($unrun.Count -gt 0) { $passDetail = "$($shotCount - $unrun.Count) of $shotCount shot(s) hash-identical, $($unrun.Count) not run; gpu $liveGpu" }
         if ($goldenWorkerCount -gt 1) { $passDetail = "$passDetail; $goldenWorkerCount workers" }
-        $passDetail = "$passDetail$deferredText"
+        $passDetail = "$passDetail$deferredText$releaseText"
         if ($flakes.Count -gt 0) {
             Add-Stage -Name "goldens" -Status "FLAKE" -Seconds $watch.Elapsed.TotalSeconds `
                 -Detail "$passDetail; $($flakes.Count) moved and came back on the pin at one re-render [$($flakes -join ', ')], kept in $failureRoot"

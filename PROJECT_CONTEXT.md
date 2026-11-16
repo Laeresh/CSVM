@@ -104,7 +104,7 @@ One line each, **the game files, the launch scripts and the release scripts are 
 - `extracted/`, a developer's unzbd output (git-ignored), the model diffs' oracle and an example modding folder; nothing reads it unless named. Layout: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1`, play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `scripts/`, every other tooling script below; the root keeps only `RunGame.ps1`, `RunDev.ps1` and `GamingMode.ps1`. Run them as `.\scripts\<name>.ps1` from the repo root.
-- `RunTests.ps1`, one command, one exit code: build → `dotnet test` → `--run-tests` (`-Shards`, default 6 shared shards, plus one per alone suite) → goldens (`-GoldenWorkers`, default 4) → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`) → hitch (`-Hitch`, opt-in and last). Details: `docs/tooling.md`.
+- `RunTests.ps1`, one command, one exit code: build → `dotnet test` → `--run-tests` (`-Shards`, default 6 shared shards, plus one per alone suite) → goldens (`-GoldenWorkers`, default 4; the shots marked `"release": true` only under `-Release`, the battery before a release) → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`) → hitch (`-Hitch`, opt-in and last). Details: `docs/tooling.md`.
 - `RunCiSuites.ps1`, CI's engine stage, runnable on Linux or macOS: `--run-tests=tier:ci` headless over the `--synthetic-data` tree, judged from the report. Details: `docs/tooling.md`.
 - `ExportRelease.ps1`, builds, headless-imports, and exports the "Windows Desktop" release preset to `.scratch/export/CSVM.exe`; checks the export templates are installed and creates `.scratch/export/` if missing before starting. Details: `docs/tooling.md`.
 - `PublishRelease.ps1`, the publish in one run: version, `ExportRelease.ps1 -Linux`, `sandbox/LinuxRelease.ps1` on the tarball, both archives' SHA-256s, the annotated tag on the commit that was built, and the GitHub release carrying the zip and the tarball (`-NotesFile` for the prose above the generated sections, `-DryRun`, `-TagSuffix` for a rehearsal run). Refuses a dirty tree or an existing tag, and never re-points one. Details: `docs/tooling.md`.
@@ -245,15 +245,5 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 ## Current status / next step
 
-**Fixed shape, five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense**,  If this section is longer after your edit than before it, the edit was wrong.
-
-**Where the project is.** Milestones 1 through 6 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
-
-**Active plans:** none.
-
 Use the targeted/quick development loop above, then verify landed code with the complete
-**`.\scripts\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
-
-The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
-
-Everything else unscheduled, known issues, deferred items, fidelity questions, the TUNE list (the `type:tuning` label), is in the open `backlog` issues; close each as it lands.
+**`.\scripts\RunTests.ps1`**;
