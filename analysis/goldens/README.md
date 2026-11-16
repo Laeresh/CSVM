@@ -18,6 +18,7 @@ picture is a function of.
 .\scripts\RunTests.ps1                              # goldens are a stage of the normal run
 .\scripts\RunTests.ps1 -SkipUnits -SkipEngine       # the goldens alone
 .\scripts\RunTests.ps1 -RegenGoldens                # re-render and rewrite the hashes
+.\scripts\RunTests.ps1 -Release                     # the release-only shots too, before a release
 .\scripts\RunTests.ps1 -SkipGoldens                 # skip the stage (it is the slow one)
 ```
 
@@ -145,6 +146,12 @@ eye, where the head plate the stereo interior leaves out would otherwise fill bo
 `stage-gunsight-xr-sim` holds the sight glass over the empty stage's sky, where the collimated
 reticle sits on the same eye-local pixel in both eyes and the glass and the sight body keep their own
 disparity.
+
+**Seventeen shots are release-only** (`"release": true`): every `-xr-sim` shot, `c1-stunt-marker`,
+`campaign-4p-grid`, `campaign-intro-fill` and `menu-original-flag`. Only `RunTests.ps1 -Release`
+renders them, so between releases a change to the stereo path, the stunt marker, a co-op campaign
+launch or the Original menu is caught at the next release battery, not at its landing. Run
+`-SkipUnits -SkipEngine -Release` after touching one of those subjects.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of clock
 (`viewer-bhawk` 30, `c1-crash` 20, `c1-stunt-marker` 90, `c1-flight-kill` 280, `c1-debris-rest`
