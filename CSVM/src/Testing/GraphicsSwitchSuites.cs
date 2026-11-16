@@ -1326,8 +1326,10 @@ internal static class GraphicsSwitchSuites
                     if (holds && n.GetParent() is Node3D parent && parent.IsVisibleInTree())
                         islands.Add(n);
                 });
+                // Baked as the session bakes, the brush's painted ground included.
                 CanopyMask Bake(Func<GameZNode, bool>? prune) => CanopyMask.FromPainted(
-                    Mech3.VegetationGround.Painted(clutter.Gamez, canopy, switchedOff: prune), w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
+                    Mech3.VegetationGround.Painted(clutter.Gamez, canopy, switchedOff: prune), w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom,
+                    clutter.Mask, Mech3.VegetationGround.BrushedCanopy(clutter.Gamez, entry, clutter.Mask, switchedOff: prune));
                 var every = Bake(null);
                 var shown = Bake(n => off.Contains(n.Index));
                 bool OnHidden(Vector3 at) => every.CellAt(at.X, at.Z) is int c and >= 0 && every.PaintedShare(c) > 0f && shown.PaintedShare(c) == 0f;

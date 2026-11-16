@@ -696,10 +696,7 @@ public sealed class ClutterBuilder
         if (painted)
         {
             var triangles = VegetationGround.Painted(_gamez, t => CanopyMask.IsCanopy(entry, t), worldName, SwitchedOff());
-            // A canopy brush set paints crowns where a stroke thickened its ground, so only those triangles join.
-            var brushed = _mask == null ? null
-                : VegetationGround.Painted(_gamez, t => VegetationScatter.Brushed(entry, t) is { Canopy: true }, worldName, SwitchedOff())
-                    .Chunk(3).Where(t => _mask.ThickenedIn(t.Min(p => p.X), t.Min(p => p.Z), t.Max(p => p.X), t.Max(p => p.Z))).SelectMany(t => t).ToArray();
+            var brushed = VegetationGround.BrushedCanopy(_gamez, entry, _mask, worldName, SwitchedOff());
             _canopy = CanopyMask.FromPainted(triangles, w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom, _mask, brushed);
         }
         else
