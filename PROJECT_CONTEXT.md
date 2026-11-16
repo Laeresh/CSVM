@@ -154,8 +154,11 @@ One line each, **the game files, the launch scripts and the release scripts are 
   `not checked:` line. A selector or filter matching nothing fails its stage rather than passing
   empty.
 - **A commit on a worktree branch needs its targeted surface and `-Quick` green; the complete
-  `.\scripts\RunTests.ps1` runs once per merge into main, on the merged tree.** Merge main into the
-  branch, run it there, then merge the branch into main. Targeted and quick runs are partial by
+  `.\scripts\RunTests.ps1` runs once per merge into main, on the merged tree.** `.\scripts\Land.ps1
+  -Worktree <wt> -Message "Merge <branch>: ..."` does all of it (merge main in, the complete run, a
+  `Verification:` commit, the `--no-ff` merge into main) under one machine-wide lock, so concurrent
+  landings queue instead of each invalidating the last one's run; land every branch through it, and
+  its header lists the exit codes. Targeted and quick runs are partial by
   design and never satisfy that landing gate. `CSVM.Tests/`-only, documentation, and tooling
   changes do not require the full run to land.
 - **A complete PASS writes a green stamp** keyed on the content of `CSVM/`, `CSVM.Tests/` and
