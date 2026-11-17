@@ -24,6 +24,7 @@ covers the glass, 255 clear glass), A 255. Roof and metal cells and free cells a
 """
 
 import copy
+import math
 
 import numpy as np
 
@@ -51,30 +52,33 @@ WALL_LUMA = (118.0, 104.0, 124.0, 100.0, 118.0, 104.0)
 ROOF_LUMA = (82.0, 76.0, 86.0, 78.0, 100.0, 100.0)
 
 # One facade row per entry. Colours are sRGB 0..1. bays: windows groups per tile width; pair: two
-# windows per bay; win: (width, height, sill) in metres, the sill above the floor line.
+# windows per bay; win: (width, height, sill) in metres, the sill above the floor line. Every row's
+# bay count is even, so each family's rows share a pier every 4 m (grid_m) and a wall fitted to that
+# grid ends between windows whichever row a building takes; stream_bays is the count a row was
+# first painted with (_paint_wall).
 FAMILIES = (
     (  # 0, grey stone walk-up
-        dict(wall=(0.52, 0.52, 0.50), finish="ashlar", bays=3, win=(1.1, 2.0, 1.0), frame=(0.80, 0.80, 0.76),
+        dict(wall=(0.52, 0.52, 0.50), finish="ashlar", bays=4, stream_bays=3, win=(1.1, 2.0, 1.0), frame=(0.80, 0.80, 0.76),
              muntins="2x2", sill=(0.66, 0.65, 0.60), lintel=0.22),
         dict(wall=(0.60, 0.56, 0.47), finish="ashlar", bays=4, win=(1.0, 2.1, 0.9), frame=(0.82, 0.78, 0.66),
              muntins="sash", sill=(0.70, 0.67, 0.58), lintel=0.25, keystone=True, course=(0.68, 0.64, 0.55)),
         dict(wall=(0.48, 0.49, 0.42), finish="render", bays=2, pair=True, win=(0.9, 2.0, 1.0), frame=(0.30, 0.33, 0.30),
              muntins="sash", sill=(0.60, 0.60, 0.54)),
-        dict(wall=(0.42, 0.42, 0.43), finish="ashlar", bays=3, win=(1.2, 2.0, 1.0), frame=(0.78, 0.78, 0.76),
+        dict(wall=(0.42, 0.42, 0.43), finish="ashlar", bays=4, stream_bays=3, win=(1.2, 2.0, 1.0), frame=(0.78, 0.78, 0.76),
              muntins="6over6", sill=(0.58, 0.58, 0.56), lintel=0.3, course=(0.55, 0.55, 0.54)),
     ),
     (  # 1, brick tenement
-        dict(wall=(0.55, 0.30, 0.22), finish="brick", bays=3, win=(1.1, 2.0, 1.0), frame=(0.80, 0.78, 0.72),
+        dict(wall=(0.55, 0.30, 0.22), finish="brick", bays=4, stream_bays=3, win=(1.1, 2.0, 1.0), frame=(0.80, 0.78, 0.72),
              muntins="sash", sill=(0.70, 0.66, 0.58), lintel=0.25),
         dict(wall=(0.42, 0.27, 0.20), finish="brick", bays=4, win=(1.0, 2.0, 1.0), frame=(0.25, 0.22, 0.20),
              muntins="sash", sill=(0.55, 0.40, 0.32), arch="segment"),
         dict(wall=(0.62, 0.36, 0.25), finish="brick", bays=2, pair=True, win=(0.9, 2.0, 1.0), frame=(0.82, 0.78, 0.68),
              muntins="sash", sill=(0.72, 0.68, 0.60), sillcourse=True),
-        dict(wall=(0.45, 0.30, 0.28), finish="brick", bays=3, win=(1.1, 1.7, 0.9), frame=(0.80, 0.76, 0.66),
+        dict(wall=(0.45, 0.30, 0.28), finish="brick", bays=4, stream_bays=3, win=(1.1, 1.7, 0.9), frame=(0.80, 0.76, 0.66),
              muntins="2x2", sill=(0.62, 0.55, 0.48), arch="round"),
     ),
     (  # 2, warm office tower
-        dict(wall=(0.66, 0.58, 0.46), finish="cladding", bays=5, win=(1.0, 2.2, 0.85), frame=(0.40, 0.34, 0.27),
+        dict(wall=(0.66, 0.58, 0.46), finish="cladding", bays=4, stream_bays=5, win=(1.0, 2.2, 0.85), frame=(0.40, 0.34, 0.27),
              muntins="sash", spandrel=(0.45, 0.38, 0.30)),
         dict(wall=(0.62, 0.48, 0.35), finish="brick", bays=4, pair=True, win=(0.75, 2.1, 0.9), frame=(0.72, 0.66, 0.55),
              muntins="sash", sill=(0.74, 0.68, 0.56), pier=(0.70, 0.60, 0.46)),
@@ -84,13 +88,13 @@ FAMILIES = (
              muntins="tri", sill=(0.68, 0.63, 0.55), course=(0.68, 0.62, 0.53)),
     ),
     (  # 3, dark steel office tower
-        dict(wall=(0.36, 0.38, 0.42), finish="cladding", bays=5, win=(1.1, 2.2, 0.85), frame=(0.55, 0.57, 0.60),
+        dict(wall=(0.36, 0.38, 0.42), finish="cladding", bays=4, stream_bays=5, win=(1.1, 2.2, 0.85), frame=(0.55, 0.57, 0.60),
              muntins="sash", spandrel=(0.25, 0.26, 0.29)),
         dict(wall=(0.34, 0.35, 0.30), finish="render", bays=4, pair=True, win=(0.8, 2.2, 0.85), frame=(0.28, 0.24, 0.20),
              muntins="sash", pier=(0.40, 0.41, 0.36)),
         dict(wall=(0.45, 0.47, 0.50), finish="cladding", bays=6, win=(0.8, 2.3, 0.85), frame=(0.36, 0.38, 0.42),
              muntins="deco", pier=(0.60, 0.62, 0.66), spandrel=(0.32, 0.34, 0.37), ribs=True),
-        dict(wall=(0.33, 0.30, 0.30), finish="brick", bays=5, win=(1.1, 2.0, 1.0), frame=(0.62, 0.62, 0.60),
+        dict(wall=(0.33, 0.30, 0.30), finish="brick", bays=4, stream_bays=5, win=(1.1, 2.0, 1.0), frame=(0.62, 0.62, 0.60),
              muntins="2x2", sill=(0.60, 0.58, 0.55)),
     ),
 )
@@ -345,6 +349,16 @@ def _scale_to(img, target):
     return np.clip(img * (target / m), 0, 1)
 
 
+def _paint_wall(spec, rng):
+    """paint_tile, with the stream advanced as a row re-spaced to a common bay grid was first drawn
+    (its stream_bays), so every cell painted after it keeps its noise."""
+    if "stream_bays" not in spec:
+        return paint_tile(spec, rng)
+    out = paint_tile(spec, copy.deepcopy(rng))
+    paint_tile(dict(spec, bays=spec["stream_bays"]), rng)
+    return out
+
+
 def paint(seed=11):
     """The atlas (ATLAS, ATLAS, 3) uint8 sRGB, the ids (ATLAS, ATLAS, 4) uint8, image row 0 on top,
     and per family the mean sRGB 0..255 of its wall tiles and of its roof."""
@@ -357,11 +371,11 @@ def paint(seed=11):
         held = copy.deepcopy(rng)
         walls = []
         for c, spec in enumerate(rows):
-            img, idt = paint_tile(spec, rng)
+            img, idt = _paint_wall(spec, rng)
             walls.append(_scale_to(img, WALL_LUMA[f]))
             _place(ids, idt, f, c)
         if f in MEAN_OF:
-            ref = [_scale_to(paint_tile(spec, held)[0], WALL_LUMA[f]) for spec in FAMILIES[MEAN_OF[f]]]
+            ref = [_scale_to(_paint_wall(spec, held)[0], WALL_LUMA[f]) for spec in FAMILIES[MEAN_OF[f]]]
             gain = _mean(ref) / _mean(walls)
             walls = [w * gain for w in walls]
             assert max(w.max() for w in walls) <= 1, "a held wall clips: lower its colour"
@@ -382,6 +396,11 @@ def _place(dst, tile, row, col):
     t = np.pad(tile[::-1], ((GUTTER, GUTTER), (GUTTER, GUTTER), (0, 0)), mode="wrap")
     y, x = row * CELL, col * CELL
     dst[y:y + CELL, x:x + CELL, :t.shape[2]] = t
+
+
+def grid_m(family):
+    """The family's common bay in metres: every row has a pier centred on each multiple of it."""
+    return TILE_M / math.gcd(*(spec["bays"] for spec in FAMILIES[family]))
 
 
 def cell_origin(row, col):

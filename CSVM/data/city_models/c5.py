@@ -42,7 +42,7 @@ WALKUP = (
     dict(parapet=1.1, kit=[("tank", (0.25, 0.7)), ("bulkhead", (0.8, 0.25)), ("vent",), ("vent",)]),
     dict(parapet=0.7, raised=1.0, kit=[("bulkhead", (0.2, 0.3)), ("vent",), ("vent",), ("vent",)]),
     dict(setback=1.5, parapet=0.9, ledge=0.5, kit=[("tank", (0.5, 0.5)), ("vent",), ("vent",)]),
-    dict(notch=[("z-", 6.0, 2.5), ("z+", 6.0, 2.5)], parapet=1.2,
+    dict(notch=[("z-", 8.0, 2.5), ("z+", 8.0, 2.5)], parapet=1.2,
          kit=[("bulkhead", (0.2, 0.5)), ("tank", (0.8, 0.5)), ("vent",), ("vent",)]),
 )
 TENEMENT = (
@@ -207,6 +207,7 @@ def dormers(axis, front, back, spans, y0, y1):
         for sign in (-1, 1):
             f, b = sign * front, sign * back
             for s0, s1 in spans:
+                planes.bay((axis, f, sign), s0, s1)
                 cb.wall(mesh, planes, (axis, f, sign, s0, s1), y0, y1)
                 for s, d in ((s0, -1), (s1, 1)):
                     pts = [(s, y0, b), (s, y0, f), (s, y1, f), (s, y1, b)] if axis == 2 else \
@@ -254,18 +255,18 @@ AWN_12A = awnings(2, 6, [(-10, 10)], 4.0, 2.0, 2.0)
 AWN_12B = awnings(2, 6, [(-10, 10)], 5.6, 3.6, 2.0)
 AWN_13 = awnings(0, 6, [(-10, 10)], 4.0, 2.0, 2.0)
 # Light wells 2.5 m deep, above the floors whose awnings would make them deeper than the margin.
-WELL12 = cb.exposed([R12], [(-4, 4, 3.5, 6)])
-WELLS13 = cb.exposed([R13], [(-6, -3.5, -3, 3), (3.5, 6, -3, 3)])
+WELL12 = cb.exposed([R12], [(-2, 2, 3.5, 6)])
+WELLS13 = cb.exposed([R13], [(-6, -3.5, -2, 2), (3.5, 6, -2, 2)])
 
 # cb12a, a three-floor brick walk-up under a flat tile roof, 20 x 12 m: flat with a tank; the top
 # floor set back all round; the right third a floor lower; the ends lower round a central attic.
 FLAT12A = (
     dict(parapet=0.9, kit=[("tank", (0.3, 0.5)), ("vent",)], extras=AWN_12A),
-    dict(profile=[(0, [R12]), (8, [R12]), (8, [cb.inset(R12, 1.5)]), (14, [cb.inset(R12, 1.5)])],
+    dict(profile=[(0, [R12]), (8, [R12]), (8, [cb.inset(R12, 2.0)]), (14, [cb.inset(R12, 2.0)])],
          parapet=0.6, ledge=0.5, kit=[("bulkhead", (0.5, 0.5))], extras=AWN_12A),
     dict(profile=[(0, [R12]), (11.5, [R12]), (11.5, [(-10, 2, -6, 6)]), (14, [(-10, 2, -6, 6)])],
          parapet=1.0, ledge=0.6, kit=[("tank", (0.4, 0.5))], ledge_kit=[("bulkhead",)], extras=AWN_12A),
-    dict(profile=[(0, [R12]), (12, [R12]), (12, [(-4, 4, -6, 6)]), (14, [(-4, 4, -6, 6)])],
+    dict(profile=[(0, [R12]), (12, [R12]), (12, [(-6, 6, -6, 6)]), (14, [(-6, 6, -6, 6)])],
          parapet=0.7, ledge=0.5, kit=[("chimney", (0.05, 0.5)), ("chimney", (0.95, 0.5))], ledge_kit=[("tank",)],
          extras=AWN_12A),
 )
@@ -277,7 +278,7 @@ FLAT12B = (
          kit=[("tank", (0.15, 0.4))], extras=AWN_12B + [chimney_cb12b(14)]),
     dict(profile=[(0, [R12]), (8, [R12]), (8, [(-10, 10, -4.5, 4.5)]), (14, [(-10, 10, -4.5, 4.5)])],
          parapet=0.6, ledge=0.7, kit=[("bulkhead", (0.1, 0.5))], extras=AWN_12B + [chimney_cb12b(14)]),
-    dict(profile=[(0, [R12]), (11.5, [R12]), (11.5, [(-3, 10, -6, 6)]), (14, [(-3, 10, -6, 6)])],
+    dict(profile=[(0, [R12]), (11.5, [R12]), (11.5, [(-2, 10, -6, 6)]), (14, [(-2, 10, -6, 6)])],
          parapet=0.9, ledge=0.5, kit=[("bulkhead", (0.1, 0.3))], ledge_kit=[("tank",)],
          extras=AWN_12B + [chimney_cb12b(14)]),
 )
@@ -285,11 +286,11 @@ FLAT12B = (
 # wells in both long sides; the back wing a little lower.
 TALL13 = (
     dict(parapet=0.9, kit=[("tank", (0.5, 0.3)), ("bulkhead", (0.5, 0.85))], extras=AWN_13),
-    dict(profile=[(0, [R13]), (20, [R13]), (20, [cb.inset(R13, 1.5)]), (26, [cb.inset(R13, 1.5)])],
+    dict(profile=[(0, [R13]), (20, [R13]), (20, [cb.inset(R13, 2.0)]), (26, [cb.inset(R13, 2.0)])],
          parapet=0.6, ledge=0.6, kit=[("tank", (0.5, 0.5))], extras=AWN_13),
     dict(profile=[(0, [R13]), (4, [R13]), (4, WELLS13), (26, WELLS13)], parapet=1.1, ledge=0.3,
          kit=[("bulkhead", (0.5, 0.15)), ("tank", (0.5, 0.85))], extras=AWN_13),
-    dict(profile=[(0, [R13]), (23.5, [R13]), (23.5, [(-6, 6, -10, 3)]), (26, [(-6, 6, -10, 3)])],
+    dict(profile=[(0, [R13]), (23.5, [R13]), (23.5, [(-6, 6, -10, 2)]), (26, [(-6, 6, -10, 2)])],
          parapet=0.8, ledge=0.6, kit=[("chimney", (0.1, 0.1)), ("chimney", (0.9, 0.1))], ledge_kit=[("tank",)],
          extras=AWN_13),
 )
@@ -298,14 +299,14 @@ HIP14 = dict(
     chimneys=dict(extras=[chimneys([(-4.0, 2.5), (4.5, -2.0)], 12.0, 15.9)]),
     deck=dict(profile=[(0, [R14]), (12, [R14]), (14.5, [(-4, 4, -3, 3)])], parapet=0.5,
               kit=[("tank", (0.5, 0.5))]),
-    setback=dict(profile=[(0, [R14]), (8, [R14]), (8, [cb.inset(R14, 1.5)]), (12, [cb.inset(R14, 1.5)]), (17, APEX)],
+    setback=dict(profile=[(0, [R14]), (8, [R14]), (8, [cb.inset(R14, 2.0)]), (12, [cb.inset(R14, 2.0)]), (17, APEX)],
                  ledge=0.5, extras=[chimneys([(2.0, -1.0)], 12.0, 16.9)]),
     dormers=dict(profile=[(0, [R14]), (12, [R14]), (12, [cb.inset(R14, 0.8)]), (17, APEX)], ledge=0.7,
-                 extras=[dormers(2, 4.6, 2.0, [(-1.2, 1.2)], 12.0, 15.0)]),
+                 extras=[dormers(2, 4.6, 2.0, [(-1.0, 1.0)], 12.0, 15.0)]),
     walk=dict(profile=[(0, [R14]), (12, [R14]), (15.5, [(-2.4, 2.4, -1.8, 1.8)])], parapet=0.4,
               extras=[lambda mesh, planes: cb.box(mesh, -1.0, 1.0, -0.8, 0.8, 15.5, 17.3),
                       chimneys([(-5.0, 0.0)], 12.0, 15.6)]),
-    four_dormers=dict(extras=[dormers(2, 5.0, 2.4, [(-3.4, -1.2), (1.2, 3.4)], 12.0, 15.0),
+    four_dormers=dict(extras=[dormers(2, 5.0, 2.4, [(-3.0, -1.0), (1.0, 3.0)], 12.0, 15.0),
                               chimneys([(0.0, 0.0)], 15.0, 18.2)]),
 )
 # cb14c, the same block under a gable along its length: the ridge chimney at one end; the ridge cut
@@ -316,7 +317,7 @@ GABLE14 = (
          kit=[("chimney", (0.05, 0.5)), ("chimney", (0.95, 0.5))]),
     dict(profile=[(0, [R14]), (8, [R14]), (8, [(-8, 8, -4.5, 4.5)]), (12, [(-8, 8, -4.5, 4.5)]),
                   (17, [(-8, 8, 0, 0)])], ledge=0.5, extras=[chimneys([(-6.8, 0.0)], 12.0, 18.4)]),
-    dict(extras=[dormers(2, 5.0, 2.4, [(-5.0, -2.6), (2.6, 5.0)], 12.0, 15.0), chimneys([(6.8, 0.0)], 12.0, 18.4)]),
+    dict(extras=[dormers(2, 5.0, 2.4, [(-5.0, -3.0), (3.0, 5.0)], 12.0, 15.0), chimneys([(6.8, 0.0)], 12.0, 18.4)]),
 )
 # cb15a, a long six-floor block, 56 x 24 m, with a roof light; cb15b, five floors with a raised
 # middle; cb16a and cb16b, 24 x 56 m blocks of five floors under a hipped roof to a point.
@@ -339,7 +340,7 @@ AWN_16B = [awning(0, sign, sign * 12, sign * -12, sign * 8, 4.0, 2.75, 2.13) for
 HIP16A = (
     dict(extras=AWN_16A + [chimneys([(-6.0, -14.0), (6.0, 12.0)], 22.0, 27.4)]),
     dict(profile=[(0, [R16]), (22, [R16]), (22, [cb.inset(R16, 0.8)]), (30, APEX)], ledge=0.8,
-         extras=AWN_16A + [dormers(0, 8.4, 4.3, [(-10.0, -7.6), (7.6, 10.0)], 24.0, 26.9)]),
+         extras=AWN_16A + [dormers(0, 8.4, 4.3, [(-10.0, -8.0), (8.0, 10.0)], 24.0, 26.9)]),
 )
 HIP16B = (
     dict(extras=AWN_16B + [chimneys([(-5.0, -10.0), (5.0, 14.0)], 22.0, 25.7)]),
@@ -347,6 +348,10 @@ HIP16B = (
          ledge=0.6, extras=AWN_16B + [chimneys([(0.0, -8.0)], 22.0, 26.4)]),
 )
 
+# cb02a's L-steps, measured at 5.3 m, stand on the 4 m grid of its 31.78 m walls, 1.33 m in.
+L02 = -15.89 + 5 * 31.78 / 8
+# Its set-back and stepped tops stand in less, so they stay inside the margin with the step's 1.33 m.
+TOWER02A = (TOWER[0], dict(TOWER[1], setback=1.5), dict(TOWER[2], steps=[(8.0, 0.75), (4.0, 1.5)]))
 P_CB00 = [(0, [(-20, 20, -12, 12)]), (16, [(-20, 20, -12, 12)])]
 P_CB01 = [(0, sq(16)), (24, sq(16))]
 P_CB03 = [
@@ -370,13 +375,13 @@ HULLS = {
     "cb01c": dict(family=BRICK, rgb=(35, 31, 27), profile=P_CB01, near=TENEMENT[:2]),  # smbldg3
     "cb01d": dict(family=BRICK, rgb=(37, 28, 18), near=HIP,                          # smbldg4
                   profile=[(0, sq(16)), (20, sq(16)), (24, APEX)]),
-    "cb02a": dict(family=STEEL, rgb=(31, 32, 42), near=TOWER, profile=[              # bldg3
+    "cb02a": dict(family=STEEL, rgb=(31, 32, 42), near=TOWER02A, profile=[           # bldg3
         (0, sq(15.89)), (35, sq(15.89)),
-        (35, [(-15.89, 15.89, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89)]),
-        (40, [(-15.89, 15.89, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89)]),
-        (40, [(-15.89, 5.3, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89), (5.3, 15.89, -5.3, 5.3)]),
-        (44.99, [(-15.89, 5.3, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89), (5.3, 15.89, -5.3, 5.3)]),
-        (44.99, [(-15.89, 5.3, -15.89, 5.3)]), (65.18, [(-15.89, 5.3, -15.89, 5.3)])]),
+        (35, [(-15.89, 15.89, -15.89, L02), (-L02, 15.89, L02, 15.89)]),
+        (40, [(-15.89, 15.89, -15.89, L02), (-L02, 15.89, L02, 15.89)]),
+        (40, [(-15.89, L02, -15.89, L02), (-L02, 15.89, L02, 15.89), (L02, 15.89, -L02, L02)]),
+        (44.99, [(-15.89, L02, -15.89, L02), (-L02, 15.89, L02, 15.89), (L02, 15.89, -L02, L02)]),
+        (44.99, [(-15.89, L02, -15.89, L02)]), (65.18, [(-15.89, L02, -15.89, L02)])]),
     "cb02b": dict(family=WARM, rgb=(36, 32, 27), near=TOWER, profile=[               # bldg4
         (0, sq(16)), (36, sq(16)),
         (36, [(-16, 16, -16, 4), (-4, 16, 4, 16)]), (40, [(-16, 16, -16, 4), (-4, 16, 4, 16)]),
@@ -455,10 +460,10 @@ def main():
         if args.only and model not in args.only:
             continue
         gables = h.get("gables", False)
-        far = cb.far_model(h["profile"], gables, h.get("cornice", 0.0))
+        far = cb.far_model(h["profile"], h["family"], gables, h.get("cornice", 0.0))
         for extra in h.get("far_extras", ()):
             extra(far, None)
-        nears = [cb.near_model(h["profile"], n, np.random.default_rng([zlib.crc32(model.encode()), i]), gables,
+        nears = [cb.near_model(h["profile"], h["family"], n, np.random.default_rng([zlib.crc32(model.encode()), i]), gables,
                         h.get("cornice", 0.0))
                  for i, n in enumerate(h["near"])]
         if h.get("turn"):

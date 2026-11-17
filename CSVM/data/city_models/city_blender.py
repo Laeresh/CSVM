@@ -15,9 +15,11 @@ What a model file holds (docs/tooling.md, "City models"):
   outward winding, flat normals, no bottom faces. baseColorFactor is the grade that puts the
   far box's mean atlas colour on the original's mean unlit colour (its painted lit windows left
   out, c5.py).
-- TEXCOORD_0: facade tile coordinates. On a wall, u is metres along the wall plane, left to right
-  seen from outside, over the tile width, plus a whole number per wall plane, so every window
-  column of a building has its own integer u; v is metres up over the tile height. A wall piece
+- TEXCOORD_0: facade tile coordinates. On a wall, u runs along the wall plane, left to right seen
+  from outside, plus a whole number per wall plane, so every window column of a building has its
+  own integer u; v is metres up over the tile height. A plane holds a whole number of the family's
+  common bays between its ends (Planes), and a wall end off that grid is a solid strip, so no
+  window is cut at a corner. A wall piece
   whose top or foot falls inside a floor's glass band is mapped onto the solid band round a floor
   line instead, so no window is cut. On a roof, slope or dressing, (u, v) is a planar map in
   tile units.
@@ -177,15 +179,23 @@ def v_pieces(y0, y1):
 
 
 class Planes:
-    """Wall planes of a building and the whole-number u base of each, so window columns are
-    unique round the building. Built from the hull, so the near models and the far box agree."""
+    """Wall planes of a building and the u map of each. A plane's grid marks stand a whole number
+    of grid widths apart between its ends: stretched by at most STRETCH, or else unstretched and
+    centred, the rest a solid strip at each end. The grid width is the family's common bay
+    (city_atlas.grid_m): every facade row of the family has a pier centred on each mark, so a wall
+    that ends on a mark cuts no window whichever row the shader picks. The whole-number base of each
+    plane keeps window columns unique round the building. Built from the hull, so the near models
+    and the far box agree; a plane only a near model has (a set-back top floor, a light well, a
+    parapet's inner face) is fitted to the first face mapped on it."""
 
-    # A plane only a near model has (a parapet's inner face, a set-back top floor) takes this many
-    # tile widths of its own, starting this far left of the first point it maps.
-    NEAR_SPAN, NEAR_LEFT = 16, 64.0
+    STRETCH = 0.10
+    # A near-only plane's tiles: its first face's grid starts NEAR_ROOM tiles into them.
+    NEAR_SPAN, NEAR_ROOM = 16, 4
+    # A face end this close to a mark ends on it.
+    SNAP = 0.02
 
-    def __init__(self):
-        self.base, self.lo, self.hi, self.next = {}, {}, {}, 0
+    def __init__(self, grid=TW):
+        self.grid, self.map, self.lo, self.hi, self.next = grid, {}, {}, {}, 0
 
     def add(self, axis, coord, sign, s0, s1):
         k = (axis, round(coord, 2), sign)
@@ -193,19 +203,60 @@ class Planes:
         self.lo[k] = min([self.lo.get(k, math.inf)] + ends)
         self.hi[k] = max([self.hi.get(k, -math.inf)] + ends)
 
+    def _fit(self, k, lo, hi, room=0, span=0):
+        """Plane k's (base, origin, metres of wall per mark, tiles per mark) for lo..hi along its right direction."""
+        g, w = self.grid, hi - lo
+        n = round(w / g)
+        if n >= 1 and abs(n * g / w - 1) <= self.STRETCH:
+            step, origin = w / n, lo
+        else:
+            n = math.floor(w / g + 1e-6)
+            step, origin = g, lo + (w - n * g) / 2
+        self.map[k] = (self.next + room, origin, step, g / TW)
+        self.next += max(math.ceil(n * g / TW - 1e-6) + 1, span)
+
     def seal(self):
         for k in sorted(self.lo):
-            self.base[k] = self.next
-            self.next += math.ceil((self.hi[k] - self.lo[k]) / TW - 1e-6) + 1
+            self._fit(k, self.lo[k], self.hi[k])
+
+    def bay(self, key, s0, s1):
+        """Maps the near-only plane key unstretched with a tile edge at s0 and marks every |s1 - s0|
+        metres, so a dormer front s0..s1 two metres wide shows one 2 m bay: one whole window of
+        every walk-up row."""
+        axis, coord, sign = key
+        k = (axis, round(coord, 2), sign)
+        d = float(_right(axis, sign)[2 if axis == 0 else 0])
+        if k not in self.map:
+            self.map[k] = (self.next + self.NEAR_ROOM, min(d * s0, d * s1), abs(s1 - s0), abs(s1 - s0) / TW)
+            self.next += self.NEAR_SPAN
 
     def u(self, axis, coord, sign, p):
         k = (axis, round(coord, 2), sign)
-        s = float(np.dot(_right(axis, sign), p))
-        if k not in self.base:
-            self.lo[k], self.base[k] = s - self.NEAR_LEFT, self.next
-            self.next += self.NEAR_SPAN
-        return self.base[k] + (s - self.lo[k]) / TW
+        t = float(np.dot(_right(axis, sign), p))
+        if k not in self.map:
+            self._fit(k, t, t, self.NEAR_ROOM, self.NEAR_SPAN)
+        base, origin, step, q = self.map[k]
+        return base + (t - origin) / step * q
 
+    def pieces(self, key, s0, s1):
+        """The face s0..s1 on plane key split at the grid marks next to its ends: (a, b, u), u None
+        for the windowed part between marks and the mark's u for a solid strip outside them."""
+        axis, coord, sign = key
+        k = (axis, round(coord, 2), sign)
+        d = float(_right(axis, sign)[2 if axis == 0 else 0])
+        t0, t1 = sorted((d * s0, d * s1))
+        if k not in self.map:
+            self._fit(k, t0, t1, self.NEAR_ROOM, self.NEAR_SPAN)
+        base, origin, step, q = self.map[k]
+        j0 = math.ceil((t0 - origin - self.SNAP) / step)
+        j1 = math.floor((t1 - origin + self.SNAP) / step)
+        m0, m1 = origin + j0 * step, origin + j1 * step
+        c0 = m0 if m0 - t0 > self.SNAP else t0
+        c1 = m1 if t1 - m1 > self.SNAP else t1
+        if j0 >= j1 or c1 - c0 <= self.SNAP:
+            return [(s0, s1, base + q * round(((t0 + t1) / 2 - origin) / step))]
+        out = [(t0, c0, base + q * j0), (c0, c1, None), (c1, t1, base + q * j1)]
+        return [(min(d * a, d * b), max(d * a, d * b), u) for a, b, u in out if b - a > 1e-6]
 
 def wall(mesh, planes, run, y0, y1, band_only=False, collect=None):
     """A wall run from y0 to y1. Straight-mapped pieces go to collect when given, so pieces of
@@ -213,14 +264,17 @@ def wall(mesh, planes, run, y0, y1, band_only=False, collect=None):
     axis, coord, sign, s0, s1 = run
     pieces = [(y0, y1, (round(y0 / FLOOR) * FLOOR - SOLID) / TW,
                (round(y0 / FLOOR) * FLOOR - SOLID + min(2 * SOLID, y1 - y0)) / TW)] if band_only else v_pieces(y0, y1)
-    for ya, yb, va, vb in pieces:
-        if collect is not None and abs(va - ya / TW) < 1e-9 and abs(vb - yb / TW) < 1e-9:
-            collect.append((axis, coord, sign, s0, s1, ya, yb))
-            continue
-        _wall_face(mesh, planes, (axis, coord, sign), s0, s1, ya, yb, va, vb)
+    # The run's ends off the plane's grid are solid strips, cut here so merging a plane's pieces
+    # across tiers never moves a cut off a mark.
+    for a, b, solid in planes.pieces((axis, coord, sign), s0, s1):
+        for ya, yb, va, vb in pieces:
+            if solid is None and collect is not None and abs(va - ya / TW) < 1e-9 and abs(vb - yb / TW) < 1e-9:
+                collect.append((axis, coord, sign, a, b, ya, yb))
+                continue
+            _wall_face(mesh, planes, (axis, coord, sign), a, b, ya, yb, va, vb, solid=solid)
 
 
-def _wall_face(mesh, planes, key, s0, s1, ya, yb, va, vb, cls=WALL):
+def _wall_face(mesh, planes, key, s0, s1, ya, yb, va, vb, cls=WALL, solid=None):
     axis, coord, sign = key
     for (b_axis, b_coord, b_sign), b0, b1, y0, y1 in mesh.cornice if cls == WALL else ():
         lo, hi, y0, y1 = max(s0, b0), min(s1, b1), max(ya, y0), min(yb, y1)
@@ -230,11 +284,13 @@ def _wall_face(mesh, planes, key, s0, s1, ya, yb, va, vb, cls=WALL):
         # The rest of the face round the overlap: the full-height sides, then below and above it.
         for a, b, c, d in ((s0, lo, ya, yb), (hi, s1, ya, yb), (lo, hi, ya, y0), (lo, hi, y1, yb)):
             if b - a > 1e-6 and d - c > 1e-6:
-                _wall_face(mesh, planes, key, a, b, c, d, v(c), v(d))
+                _wall_face(mesh, planes, key, a, b, c, d, v(c), v(d), solid=solid)
         _wall_face(mesh, planes, key, lo, hi, y0, y1, v(y0), v(y1), CORNICE)
         return
+    # A solid strip is held on its grid mark's u, the pier between two window columns of every row.
     pts = _run_points(axis, coord, s0, s1, ya, yb)
-    uvs = [(planes.u(axis, coord, sign, _v(p)), va if p[1] == ya else vb) for p in pts]
+    uvs = [(planes.u(axis, coord, sign, _v(p)) if solid is None or cls != WALL else solid, va if p[1] == ya else vb)
+           for p in pts]
     mesh.face(pts, uvs, cls, _normal(axis, sign))
 
 
@@ -336,8 +392,8 @@ def slope(mesh, ra, ya, rb, yb, gable_planes=None):
 
 # ---- a profile to geometry
 
-def planes_for(profile):
-    planes = Planes()
+def planes_for(profile, family):
+    planes = Planes(A.grid_m(family))
     for (ya, ra), (yb, rb) in zip(profile, profile[1:]):
         if yb > ya and _same(ra, rb):
             for run in outline(ra):
@@ -500,17 +556,17 @@ def dress_roof(mesh, rect, y, kit, rng, blocked=()):
 
 # ---- variants
 
-def far_model(profile, gables=False, cornice=0.0):
+def far_model(profile, family, gables=False, cornice=0.0):
     mesh = Mesh()
-    build_profile(mesh, planes_for(profile), profile, gables=gables, cornice=cornice)
+    build_profile(mesh, planes_for(profile, family), profile, gables=gables, cornice=cornice)
     return mesh
 
 
-def near_model(profile, near, rng, gables=False, cornice=0.0):
+def near_model(profile, family, near, rng, gables=False, cornice=0.0):
     """A near model: the hull profile, or the variant's own profile of the same hull, with the
     variant's edits, parapets on every flat roof edge that is open to the sky, and the variant's
     dressing kit on the top roof."""
-    planes = planes_for(profile)
+    planes = planes_for(profile, family)
     prof = list(near.get("profile", profile))
     if near.get("notch"):
         prof = _notch(prof, near["notch"])

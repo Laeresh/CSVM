@@ -83,6 +83,7 @@ objected to; reopen any of them by asking.
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
+| 41 | Windows on corners (C21) | The user: "some windows are right on corners". A family's four facade rows shared no bay grid but the 8 m tile, so no mesh fit suits all four. Shown the options, the user chose **"Common grid, all buildings"**: the eight walk-up rows with 3 bays take 4 and the three tower rows with 5 take 4, which changes approved facades. Of the result, with a pier of 0.4 to 0.5 m on each side of a corner: **"Land it"**. |
 | 40 | The option's label (C22) | **"3D Scenery"** replaces "3D Vegetation" on the VIDEO page. The stored key and values stay. |
 
 ## ⚠ Read this before implementing anything
@@ -974,6 +975,20 @@ and gain are matched to the original's line on a night frame: about 0.6 m, and a
 about 120 against the original's 120. Class 2 is unchanged, so `cb07b`'s posts stay as they were.
 Each far box gains 8 triangles and stays under its original (at most 64 of `cb15b`'s 96).
 
+No window is cut at a corner (Decision 41). Each facade family's four rows share a pier every 4 m
+(`city_atlas.grid_m`): the eight walk-up rows with 3 bays and the three tower rows with 5 bays are
+re-spaced to 4, and nothing else in their spec changes. A wall plane holds a whole number of 4 m
+bays between its ends, stretched by at most 10 % (8.6 % on `cb02b`, 6.7 % on `cb05a`, under 5 %
+elsewhere), the same on the far box and the near variants. The variants' set-backs, light wells,
+low ends and attics stand on that grid (`c5.py`). Solid strips remain only on the 2.5 m sides of
+light wells and notches and at the ends of the long-side set-backs of `cb12b` and `cb14c`. A
+dormer front is 2 m wide and shows one whole window of every walk-up row, off centre in the
+paired row. `cb02a`'s L-step moves 1.33 m inward onto its grid and its variants use shallower
+set-backs to stay in the margin. `analysis/city-hulls/corners.py` checks every windowed wall edge
+of the shipped models against every row's bays. A corner shows 0.4 to 0.5 m of wall on each side,
+the gap between two neighbouring windows. The walk-ups carry 16 windows per tile floor where they
+had 14, the warm towers 22 for 23 and the dark towers 22 for 24.
+
 **Verified so far.** By the tranche's agent. Every near and far mesh is inside the margin
 (`analysis/city-hulls/margin.py`): at most 2.5 m in, 3.77 m above, nothing sideways, and every far
 box reads 0, 0, 0. The `cblock1` files without a new variant and the atlas are byte-identical. The
@@ -1022,12 +1037,23 @@ moved; it is re-pinned to 62905965, pixel-identical on re-render, and the golden
 41 after the pin. The orchestrator read the diff and the montages and sent them to the user. Not
 measured: the line under a moving camera, and its cost.
 
-**Open so far.** The user on the dressed city: "some windows are right on corners". A wall plane
-maps its tile from the plane's low end (`Planes.u` in `city_blender.py`), so a wall whose width is
-not a whole number of bays cuts its last window column at the far corner, and a set-back wall
-starts mid-bay. The height is already split so no piece cuts a window (`v_pieces`); the width is
-not. It is fixed after the cornice and before the `cblock5`/`cblock6` shapes, since it regenerates
-every model. Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
+The corner fix is verified by its agent. `corners.py` reads 0 cut windows on every near variant
+and far box, against 597 on the files before it, with no window column shared by two planes and
+14 dormer edges clear of any window by 0.1 m or more. Every mesh is inside the margin (at most
+3.00 m in, 3.77 m above, nothing sideways). Every far box keeps its triangle count, each at or
+under its original (`cb02a` 46 of 50); the near models go from 14,836 to 15,444 triangles. Eleven
+atlas cells changed and four more by one level; every other cell is byte-identical. The grades
+moved by at most 2.8 % per channel. Near reach and Extreme show the window columns of a building
+in the same places. `CityModelsTests`, the five targeted engine suites and `-Quick` (1,584 units,
+13 engine suites) pass. Of 41 goldens only `c5-city-night-enhanced` moved; it is re-pinned to
+47a9c340, pixel-identical on re-render, and the golden stage reads 41 of 41 after the pin. The
+orchestrator read the atlas and doc diff and the montages and sent them to the user. Not checked:
+the dormers in game at close range, the cost.
+
+**Open so far.** The 2.5 m sides of light wells and notches are plain wall, and the paired row's
+dormer window sits off centre. Lit windows in the pinned frames rose by 4 to 7 % over the walk-ups
+and fell by 6 to 7 % over the towers with the re-spaced rows; `LitShareMin/Max` are not retuned.
+Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
 tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
 dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
 the new walls. `cb12b`'s chimney wears the roof cell where the original's is

@@ -855,7 +855,18 @@ painter and its layout (numpy only, so the analysis scripts import it).
   for byte the same.
 - `TEXCOORD_0` is facade tile coordinates (8 m tiles, two 4 m floors): on a wall u runs left to
   right along the wall plane with a whole-number offset per plane, so every window column of a
-  building has its own integer u, and v is height over 8 m. `TEXCOORD_1` is (family, surface class:
+  building has its own integer u, and v is height over 8 m. Every facade row has an even bay
+  count, so all four rows of a family have a pier every 4 m (`city_atlas.grid_m`). A plane holds
+  a whole number of those 4 m bays between its ends, stretched by at most 10 %, or else centred
+  with a solid strip at each end; a wall end inside a plane that falls off the grid is a solid
+  strip too, so no window is cut at a corner whichever row the shader picks. The near variants'
+  set-backs, light wells, low ends and attics stand on the grid, which leaves solid only the
+  2.5 m sides of light wells and notches and the ends of the long-side set-backs under `cb12b`'s
+  and `cb14c`'s roofs. A dormer front is 2 m wide and shows one 2 m bay from a tile edge: one
+  whole window of every walk-up row, off centre in the paired row. `cb02a`'s L-steps stand on its
+  grid, 1.33 m in from the measured 5.3 m. `py -I analysis/city-hulls/corners.py` checks every
+  windowed wall edge of the shipped models against every row's bays (`--strips` lists the solid
+  strips). `TEXCOORD_1` is (family, surface class:
   0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
   dark building, 3 cornice, the light metal cell ungraded and brightened by
   `CityModels.CorniceGain`). The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a
