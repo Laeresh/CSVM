@@ -827,6 +827,40 @@ tiles' mean colour, and leaves Blender's log in
 else the tree, else the main checkout, and the generator stops if the card's size differs from
 the one it was built for. The script launches no Godot.
 
+## City models (`MakeVegetationModel.ps1 -Folder city_models`)
+
+The Enhanced look's C5 buildings are generated the same way, headless in Blender 5.2, from
+`CSVM/data/city_models/`: `c5.py` holds each building kind's measured hull and its near variants,
+`city_blender.py` the shared builder and the file conventions, and `city_atlas.py` the facade atlas
+painter and its layout (numpy only, so the analysis scripts import it).
+
+- A kind's hull is a profile of horizontal sections from the base up, measured from the original
+  mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. The far box is that
+  profile alone. Each near variant adds parapets, a set-back top floor or a reshaped crown, and roof
+  dressing (water tanks, bulkheads, machine rooms, vents, chimneys), inside the plan's margin: at
+  most about 3 m in from the original's surface, at most about 4 m above it, nothing past it
+  sideways. `analysis/city-hulls/margin.py` measures the three per mesh.
+- The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0`, `near1`
+  and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
+  original's), `facade.png.bin` (the atlas, sRGB) and `facade_ids.png.bin` (per texel the window
+  id, the floor within the tile and the glass weight). The export's `data/*.bin` filter packs them
+  as it packs the vegetation models. A rerun under the same Blender build writes every file byte
+  for byte the same.
+- `TEXCOORD_0` is facade tile coordinates (8 m tiles, two 4 m floors): on a wall u runs left to
+  right along the wall plane with a whole-number offset per plane, so every window column of a
+  building has its own integer u, and v is height over 8 m. `TEXCOORD_1` is (family, surface class:
+  0 wall, 1 roof). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
+- Nothing from the original's textures goes into a model or the atlas: the facade families are
+  drawn after what the originals show, and each kind's grade is a number set from the original's
+  mean colour as `analysis/city-hulls/census.py` measures it.
+
+`.\scripts\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender` regenerates the atlas
+and every kind, printing a `CITY` line per kind (triangles per mesh, family, grade); Blender's log
+is `.scratch/vegetation/c5.log`. With `CSVM_DATA_ROOT` naming a checkout that holds `extracted/`,
+`py -I analysis/city-hulls/margin.py` prints the margin per mesh and
+`py -I analysis/city-hulls/preview.py <dir outside the repo>` draws the originals beside the
+models, the atlas and a night mock. The previews hold original pixels and are never committed.
+
 ## `tools/` (git-ignored)
 
 Downloaded binaries: the Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/` (use
