@@ -1176,7 +1176,7 @@ internal static class GraphicsSwitchSuites
         + "C5/cb00b.glb keeps that kind off the city; the hull's grade is its baseColorFactor; live moves to Off, original "
         + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
         + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
-        + "the shipped hulls carry the facade atlas, the window ids and each facade row's glass share")]
+        + "the shipped hulls carry the facade atlas and the window ids")]
     internal static void CityBuildings(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1330,11 +1330,9 @@ internal static class GraphicsSwitchSuites
                 var shipped = CityModels.For("C5", "cb00a");
                 var atlas = shipped?.BoxMaterial.GetShaderParameter("facade_tex").As<Texture2D>();
                 var ids = shipped?.NearMaterial.GetShaderParameter("facade_ids").As<Texture2D>();
-                var glass = shipped?.NearMaterial.GetShaderParameter("glass_mean").AsProjection() ?? Projection.Zero;
                 ctx.Check(atlas != null && ids != null && atlas.GetImage().HasMipmaps() && !ids.GetImage().HasMipmaps()
-                        && atlas.GetWidth() == 1024 && ids.GetWidth() == 1024 && shipped!.BoxMaterial.GetShaderParameter("facade_ids").As<Texture2D>() == ids
-                        && glass.X.X > 0.05f && glass.X.X < 0.5f && glass.W.W > 0.05f && glass.W.W < 0.5f,
-                    $"a shipped hull's materials carry the facade atlas with mipmaps, the window ids without, and each facade row's glass share ({glass.X.X:0.###} .. {glass.W.W:0.###})");
+                        && atlas.GetWidth() == 1024 && ids.GetWidth() == 1024 && shipped!.BoxMaterial.GetShaderParameter("facade_ids").As<Texture2D>() == ids,
+                    $"a shipped hull's materials carry the facade atlas with mipmaps and the window ids without");
             }
             finally
             {

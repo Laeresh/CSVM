@@ -41,9 +41,10 @@ public static class CityModels
     // TUNE. The emission of clear lit glass, before its light colour. FOG darkens it with the rest of the building.
     private const float WindowGain = 0.4f;
 
-    // TUNE. The even glow of windows too small to resolve, against their mean emission. Night exposure drives a
-    // resolved lit window into the tonemap's shoulder, so the plain mean spread over a wall reads far brighter.
-    private const float DistantGlow = 0.25f;
+    // TUNE. Where single windows fall under a pixel, the wall lights points instead, cells about FarPointPx pixels
+    // wide. A cell lights by a roll against the lit share times FarPointShare, at FarPointGain of a lit window.
+    // An even mean glow there read as a beige wash, since night exposure pushes a resolved window into the tonemap.
+    private const float FarPointPx = 1.5f, FarPointShare = 0.05f, FarPointGain = 0.4f;
 
     // TUNE. Under the slow mode, the seconds between a window's chances to change, and a floor's. Each divides
     // ShaderTime.RolloverSecs, so the clock's wrap changes nothing.
@@ -130,12 +131,10 @@ public static class CityModels
     /// word, so neither changes at the hand-over. <paramref name="mode"/> picks the window lines.</summary>
     internal static string LookCode(WindowMode mode)
     {
-        var mean = Vector3.Zero;
         var pick = new System.Text.StringBuilder();
         float upTo = 0f;
         foreach (var (rgb, share) in Lights)
         {
-            mean += rgb * share;
             upTo += share;
             pick.Append(CultureInfo.InvariantCulture, $"    if (p < {upTo:0.0###}) {{ return {Vec(rgb)}; }}\n");
         }
@@ -150,7 +149,6 @@ public static class CityModels
                         step(csky_city_rand(level_key ^ csky_city_hash(floor_epoch + 977u)), LIT_FLOORS));
                 """,
         };
-        string mean_lit = mode == WindowMode.Scatter ? "share" : "share + LIT_FLOORS * (1.0 - share)";
         return $$"""
             const float LIT_FLOORS = {{F(LitFloorShare)}};
 
@@ -169,6 +167,14 @@ public static class CityModels
 
             vec3 csky_city_light(float p) {
             {{pick}}    return {{Vec(Lights[^1].Rgb)}};
+            }
+
+            // One level of the far points: cells of 1 m square doubled per level, in tile coordinates, so each point
+            // stays on its building. A cell lights whole, a point of about FarPointPx pixels.
+            vec3 csky_city_points(vec2 uv, float level, uint salt, float share) {
+                vec2 cell = floor(uv / ({{F(1f / WindowsPerTile)}} * exp2(level)));
+                uint h = csky_city_hash(salt ^ csky_city_hash(uint(int(cell.x)) ^ csky_city_hash(uint(int(cell.y)) ^ (uint(level) << 28u))));
+                return step(csky_city_rand(h), share * {{F(FarPointShare)}}) * csky_city_light(csky_city_rand(h + 1u));
             }
 
             // The building's facade from the atlas (city_atlas.py's layout) and its lit glass, from the seed.
@@ -192,13 +198,15 @@ public static class CityModels
                     uint level_key = csky_city_hash(salt ^ (level + 0x9e3779b9u));
                     uint win = csky_city_hash(salt ^ csky_city_hash(uint(int(floor(uv.x))) ^ csky_city_hash(uint(ids.r * 255.0 + 0.5) ^ (level << 8u))));
                     {{on}}
-                    // Below about a pixel a window's roll would sparkle, so it fades to the building's mean.
-                    float window_px = {{F(1f / WindowsPerTile)}} / max(max(length(dFdx(uv)), length(dFdy(uv))), 1e-6);
-                    float detail = smoothstep(0.5, 1.5, window_px);
-                    float glass = mix(glass_mean[int(family)][int(row)] * ({{mean_lit}}) * {{F(DistantGlow)}}, ids.b * on, detail);
-                    vec3 light = mix({{Vec(mean)}}, csky_city_light(csky_city_rand(win + 1u)), detail)
-                        * mix(1.0, 0.7 + 0.6 * csky_city_rand(win + 2u), detail);
-                    glow = light * glass * {{F(WindowGain)}};
+                    // Below about a pixel a window's roll would sparkle, so the wall hands over to the far points.
+                    // Two levels blend by the pixel's footprint, so a level change fades instead of popping.
+                    float footprint = max(max(length(dFdx(uv)), length(dFdy(uv))), 1e-6);
+                    float detail = smoothstep(0.5, 1.5, {{F(1f / WindowsPerTile)}} / footprint);
+                    float far_level = clamp(log2({{F(FarPointPx * WindowsPerTile)}} * footprint), 0.0, 3.0);
+                    float base = floor(far_level);
+                    vec3 far = mix(csky_city_points(uv, base, salt, share), csky_city_points(uv, base + 1.0, salt, share), far_level - base);
+                    vec3 near = csky_city_light(csky_city_rand(win + 1u)) * (0.7 + 0.6 * csky_city_rand(win + 2u)) * ids.b * on;
+                    glow = mix(far * {{F(FarPointGain)}}, near, detail) * {{F(WindowGain)}};
                 }
                 return grade_rgb * albedo * gain * vec3(1.0 + lean, 1.0, 1.0 - lean);
             }
@@ -229,7 +237,6 @@ public static class CityModels
             uniform vec2 {{VegetationModels.BandParam}};
             uniform sampler2D facade_tex : source_color, filter_linear_mipmap, repeat_enable;
             uniform sampler2D facade_ids : hint_default_black, filter_nearest, repeat_enable;
-            uniform mat4 glass_mean;
             varying flat float v_far;
             varying flat float v_box;
             varying flat float v_dark;
@@ -276,8 +283,8 @@ public static class CityModels
 
     private static string Vec(Vector3 v) => $"vec3({F(v.X)}, {F(v.Y)}, {F(v.Z)})";
 
-    // A chapter folder's facade atlas (sRGB, mipmapped) and its window ids (linear, no mipmaps). Each facade row's
-    // mean glass weight is what a window too small to resolve draws. Null, warned, where either file is missing.
+    // A chapter folder's facade atlas (sRGB, mipmapped) and its window ids (linear, no mipmaps). Null, warned, where
+    // either file is missing.
     private static Facade? LoadFacade(string folder)
     {
         var atlas = new Image();
@@ -291,24 +298,8 @@ public static class CityModels
         }
         atlas.GenerateMipmaps();
         ids.Convert(Image.Format.Rgba8);
-        byte[] data = ids.GetData();
-        int width = ids.GetWidth();
-        var columns = new Vector4[4];
-        for (int family = 0; family < 4; family++)
-        {
-            for (int row = 0; row < Variants; row++)
-            {
-                long sum = 0;
-                for (int y = 0; y < Tile; y++)
-                {
-                    for (int x = 0; x < Tile; x++)
-                        sum += data[((((family * Cell) + Gutter + y) * width) + (row * Cell) + Gutter + x) * 4 + 2];
-                }
-                columns[family][row] = sum / (Tile * Tile * 255f);
-            }
-        }
-        Log.Info("world", $"city facade {folder}: atlas {atlas.GetWidth()}x{atlas.GetHeight()}, glass {columns[0]} {columns[1]} {columns[2]} {columns[3]}");
-        return new Facade(TextureUpload.Create(atlas), TextureUpload.Create(ids), new Projection(columns[0], columns[1], columns[2], columns[3]));
+        Log.Info("world", $"city facade {folder}: atlas {atlas.GetWidth()}x{atlas.GetHeight()}, ids {ids.GetWidth()}x{ids.GetHeight()}");
+        return new Facade(TextureUpload.Create(atlas), TextureUpload.Create(ids));
     }
 
     // The mesh nodes `far` and `near0`, `near1`... by node name, each unmoved. The far mesh's baseColorFactor is the
@@ -374,7 +365,6 @@ public static class CityModels
         {
             material.SetShaderParameter("facade_tex", facade.Albedo);
             material.SetShaderParameter("facade_ids", facade.Ids);
-            material.SetShaderParameter("glass_mean", facade.GlassMean);
         }
         return material;
     }
@@ -383,6 +373,6 @@ public static class CityModels
     /// distance), and the materials drawing each.</summary>
     public sealed record Hull(ArrayMesh Box, IReadOnlyList<ArrayMesh> Near, ShaderMaterial BoxMaterial, ShaderMaterial NearMaterial);
 
-    // A chapter's facade textures, and per family (column) and facade row (component) the tile's mean glass weight.
-    private sealed record Facade(Texture2D Albedo, Texture2D Ids, Projection GlassMean);
+    // A chapter's facade textures.
+    private sealed record Facade(Texture2D Albedo, Texture2D Ids);
 }

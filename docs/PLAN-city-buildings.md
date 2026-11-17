@@ -244,7 +244,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Building generator, facade atlas, near models and far boxes for the `cblock1` hulls
 12. ☑ Draw the near model and the far box on the building stamps
-13. ◐ Per-building facade, tint and the three window modes in the shader
+13. ☑ Per-building facade, tint and the three window modes in the shader
 14. ☐ Measure the prototype against the budget
 15. ☐ The user's verdict on the prototype
 
@@ -665,7 +665,7 @@ a 16-vec4 block of a fixed buffer, and the near tier is thousands of nodes. Do n
 green; the golden `c5-city-night-enhanced` moves once a dressed hull is in its view, and
 `c5-city-night` must not.
 
-## B13 ◐ Per-building facade, tint and the three window modes in the shader
+## B13 ☑ Per-building facade, tint and the three window modes in the shader
 
 **Landed.** `CityModels.LookCode` expands each building's seed in the shader, one text shared word
 for word by the far box and the near model. It gives a facade row of the building's family, a warm
@@ -674,8 +674,11 @@ atlas is sampled sRGB and mipmapped with `textureGrad` on the unwrapped tile coo
 window ids are read nearest without mipmaps. Both load once per chapter folder, with each facade
 row's mean glass weight. A window is (`floor(u)`, its id, its floor) hashed with the salt. A lit
 one emits through its glass weight in one of four light colours, mostly warm yellow, and the night
-fog darkens it with its building. Once a window falls under about a pixel, its decision fades to
-the building's mean glow, scaled by `DistantGlow`. `--city-windows=scatter|slow|floors` picks
+fog darkens it with its building. Where single windows fall under a pixel, the wall lights far
+points instead: square cells of 1 m doubled per level in the building's tile coordinates, sized
+from the pixel's footprint to stay about 1.5 px wide, with two levels blended so a change fades.
+Each cell lights by a roll against the building's lit share times `FarPointShare`. The far points
+show no whole lit floors and do not follow the clock. `--city-windows=scatter|slow|floors` picks
 single windows, single windows with whole lit floors, or that mix rolling again every 300 s
 (windows) and 360 s (floors) of `csky_time`, each window and floor on its own offset. Only the
 slow mode includes the clock. A hull folder without the facade files warns and draws the flat
@@ -697,11 +700,23 @@ held. Mean linear luminance over the buildings against the original, at 2560x142
 to 0.013 against 0.015. The orchestrator read the whole source diff and looked at the three
 montages, the slow-mode crop and the golden-pose pair, and sent them to the user; it ran no test.
 
-**Open after this item.** At 1280x720 the towers 500 to 1400 m away read as an even beige mass
-where the original shows dark blocks with points of light; the item stays ◐ until that is fixed.
-The golden `c5-city-night-enhanced` is not re-pinned until the look is settled in B15, so the
-goldens stage is red on the branch for that one frame. Motion (shimmer of the nearest-sampled ids
-at one to two pixels, the slow mode's pace) is judged in B15 at the controls. The floors and slow
+The far points replaced an even mean glow, which read as a beige wash over the towers 500 to
+1400 m away at 1280x720. Measured there at the golden pose, the glow was about 60 percent of the
+wash and the wall the rest; a mip cap on the atlas moved the far wall's median only from 0.0028 to
+0.0030, so the albedo was left alone. With the far points the far band reads mean 0.0057 against
+the original's 0.0064, with 3.4 against 3.6 percent of pixels lit, where the even glow read 0.0084
+and 1.6 percent. At 2560x1421 the three poses change in 0.01 to 0.18 percent of pixels, all in the
+far band. Over 4 m camera steps 75 to 85 percent of lit far pixels stay within one pixel. The same
+19 suites, the 64 unit tests and `-Quick` pass again, two `--det` launches are identical in
+scatter and in floors, and `c5-city-night-enhanced` now renders 9d63838a, stable on re-render.
+
+**Open after this item.** The golden `c5-city-night-enhanced` is not re-pinned until the look is
+settled in B15, so the goldens stage is red on the branch for that one frame. Motion (shimmer of
+the nearest-sampled ids at one to two pixels, the far points under TAA, the slow mode's pace) is
+judged in B15 at the controls. The original lights each face differently, many of them black,
+where the new walls take an even ambient on every face, so the new far walls stay a little lighter
+(median 0.0031 against 0.0018). At 1280x720 the converted towers are darker overall than the
+original, which paints every window lit (towers view 0.0133 against 0.0228). The floors and slow
 modes are about 15 percent brighter than scatter. The map-edge `node_bias` loose end from B12
 stands.
 
