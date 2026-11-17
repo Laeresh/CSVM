@@ -23,7 +23,7 @@
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "3e6e610b3f75c1527d2b87307e723eeb",
+      "hash": "209232301df7c8a45039aa1c2332ff05",
       "exercises": "night lighting, skydome, islands, coastline sheets dimmed by the 0.426 world light like every lit surface, the placed cloud-puff facades on their world-up look-at pose; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -37,7 +37,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "c530a830245d320a2be9bd8a7543b7e7",
+      "hash": "d2f33fb893b34c21966955da5f493857",
       "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, wake spray with far puffs culled, the cloud-puff facades on the world-up look-at, Eiffel lattice and bridge cables blended not cut, two mesh point lights; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -58,7 +58,7 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "4b842a6d541a5b29f3e0d6f15363d759",
+      "hash": "412886180aefcce4e3a5357cab863067",
       "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, city blocks drawing every mesh of their decoration chain, the star field, the -0.8 mip LOD bias, and culled torch puffs.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -88,7 +88,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "27639c6a47286e051c2777598496eb20",
+      "hash": "e8cb1a29fcaeed2c79f9aafe876a78d6",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down seconds earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -102,7 +102,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "323c0fed01e45793eb2ecd6fe24e3d5f",
+      "hash": "1e407a339cf9a5e3a2c8ecd56a4bc5bb",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -163,7 +163,7 @@
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "52d84488c72a9627437311e2624a2ca8",
+      "hash": "3b35e0b1f03ad6b4d365a77a8644c504",
       "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks lit out to their own fade, the far towers darkening into the black fog from 1,400 m, the far skyline fading into it, TAA, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -177,14 +177,14 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "84abf65988874df942fa04671a3db68c",
+      "hash": "181a8a97e57e01e952ab2bb7a627e761",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "abc1b3a427b2a7b6a923c5511d1a66d2",
+      "hash": "e1cebdb0cece39d46382531683bcf94c",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
