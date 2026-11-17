@@ -533,6 +533,10 @@ public class SessionSpecParserTests
         Assert.True(SessionSpec.Parse(new[] { "--fly", "--terrain-shadows=on" }).TerrainShadows);
         Assert.False(spec.VegetationShadows);
         Assert.True(SessionSpec.Parse(new[] { "--fly", "--vegetation-shadows=on" }).VegetationShadows);
+        Assert.Equal(Mech3.CityModels.WindowMode.Scatter, spec.CityWindows);
+        Assert.Equal(Mech3.CityModels.WindowMode.Slow, SessionSpec.Parse(new[] { "--fly", "--city-windows=slow" }).CityWindows);
+        Assert.Equal(Mech3.CityModels.WindowMode.Floors, SessionSpec.Parse(new[] { "--fly", "--city-windows=floors" }).CityWindows);
+        Assert.Equal(Mech3.CityModels.WindowMode.Scatter, SessionSpec.Parse(new[] { "--fly", "--city-windows=2" }).CityWindows);
         Assert.True(spec.Fly);
         Assert.Equal(4f, spec.TerrainShadowCell);
         Assert.Equal(8f, SessionSpec.Parse(new[] { "--fly", "--terrain-shadow-cell=8" }).TerrainShadowCell);

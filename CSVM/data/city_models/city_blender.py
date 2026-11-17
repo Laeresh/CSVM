@@ -13,7 +13,8 @@ hull sideways.
 What a model file holds (docs/tooling.md, "City models"):
 - Mesh nodes near0, near1 and far, one material named after the model, opaque, single sided,
   outward winding, flat normals, no bottom faces. baseColorFactor is the grade that puts the
-  far box's mean atlas colour on the original's mean colour.
+  far box's mean atlas colour on the original's mean unlit colour (its painted lit windows left
+  out, c5.py).
 - TEXCOORD_0: facade tile coordinates. On a wall, u is metres along the wall plane, left to right
   seen from outside, over the tile width, plus a whole number per wall plane, so every window
   column of a building has its own integer u; v is metres up over the tile height. A wall piece
@@ -551,7 +552,7 @@ def grade_material(name, factor):
 
 def grade(far, family, rgb, means):
     """The linear per-channel factor that puts the far box's area-weighted mean atlas colour
-    (sRGB) on the original's mean colour, as census.py measures it (sRGB texel means)."""
+    (sRGB) on the original's mean unlit colour, as census.py measures it (sRGB texel means)."""
     wall_mean, roof_mean = means[family]
     aw, ar = far.area(WALL), far.area(ROOF)
     mean = (wall_mean * aw + roof_mean * ar) / (aw + ar)

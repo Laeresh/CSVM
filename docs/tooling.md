@@ -842,7 +842,8 @@ painter and its layout (numpy only, so the analysis scripts import it).
   sideways. `analysis/city-hulls/margin.py` measures the three per mesh.
 - The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0`, `near1`
   and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
-  original's), `facade.png.bin` (the atlas, sRGB) and `facade_ids.png.bin` (per texel the window
+  original's mean unlit colour, its painted lit windows left out because the engine lights the
+  windows itself), `facade.png.bin` (the atlas, sRGB) and `facade_ids.png.bin` (per texel the window
   id, the floor within the tile and the glass weight). The export's `data/*.bin` filter packs them
   as it packs the vegetation models. A rerun under the same Blender build writes every file byte
   for byte the same.
@@ -852,7 +853,8 @@ painter and its layout (numpy only, so the analysis scripts import it).
   0 wall, 1 roof). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
 - Nothing from the original's textures goes into a model or the atlas: the facade families are
   drawn after what the originals show, and each kind's grade is a number set from the original's
-  mean colour as `analysis/city-hulls/census.py` measures it.
+  mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures
+  it (its `unlit colour` table).
 
 `.\scripts\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender` regenerates the atlas
 and every kind, printing a `CITY` line per kind (triangles per mesh, family, grade); Blender's log

@@ -147,29 +147,37 @@ def tex_png(name):
 
 _mean = {}
 
+# The original facades paint their lit windows in as pale texels (sRGB luma above about 115, with
+# a halo down to about 90) on walls below about 60. The unlit colour is the mean of the texels at
+# or below this luma: the wall a building shows with no window lit.
+UNLIT_LUMA = 90
 
-def tex_mean(name):
-    if name not in _mean:
+
+def tex_mean(name, below=None):
+    """The mean sRGB texel of a texture, or of its texels with luma at most `below`."""
+    if (name, below) not in _mean:
         from PIL import Image
         p = tex_png(name) if name else None
         if not p:
-            _mean[name] = None
+            _mean[name, below] = None
         else:
             import numpy as np
-            a = np.asarray(Image.open(p).convert("RGB"), dtype=float)
-            _mean[name] = tuple(float(x) for x in a.reshape(-1, 3).mean(axis=0))
-    return _mean[name]
+            a = np.asarray(Image.open(p).convert("RGB"), dtype=float).reshape(-1, 3)
+            if below is not None:
+                a = a[luma(a.T) <= below]
+            _mean[name, below] = tuple(float(x) for x in a.mean(axis=0))
+    return _mean[name, below]
 
 
 def luma(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
 
-def model_colour(tris):
+def model_colour(tris, below=None):
     """Mean texture colour weighted by each texture's share of the model's surface area."""
     acc, tot = [0.0, 0.0, 0.0], 0.0
     for t in tris:
-        m = tex_mean(t[2])
+        m = tex_mean(t[2], below)
         if m is None:
             continue
         a = tri_area(t)
@@ -278,6 +286,7 @@ def main():
             "tris_by_part": [sum(max(0, len(p.get("vertex_indices") or []) - 2)
                                  for p in ch.models[mi]["polygons"]) for mi, _, _ in ch.parts(node)],
             "textures": texes, "rgb": col, "luma": round(luma(col)) if col else None,
+            "rgb_unlit": model_colour(tris, UNLIT_LUMA),
             "direct": dict(direct.get(m, {})), "templates": sorted(reach.get(m, [])),
             "fade": b["fade"] if b else None,
             "substitute": b["substitute"] if b else [],
@@ -351,6 +360,11 @@ def main():
         print("  minted targets: %s" % placed["minted"])
         print("  total 3D decorations %d, of which a building's det half %d; triangles placed %d"
               % (placed["total"], placed["det"], placed["tris"]))
+    print()
+    print("== unlit colour (texels of luma <= %d, area weighted), the city models' grade targets" % UNLIT_LUMA)
+    for m in built:
+        if rows[m]["rgb_unlit"]:
+            print("  %-12s %s (all texels %s)" % (m, rows[m]["rgb_unlit"], rows[m]["rgb"]))
     print()
     print("== hull table (markdown)")
     markdown(rows, classes, placed)

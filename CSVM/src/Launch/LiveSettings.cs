@@ -90,6 +90,7 @@ internal sealed class LiveSettings
         ShadowQualitySetting.HardShadows = (spec.SkippedPasses & EnhancedPasses.SoftShadows) != 0;
         ShadowQualitySetting.TerrainShadows = spec.TerrainShadows;
         Mech3.VegetationModels.CastShadows = spec.VegetationShadows;
+        Mech3.CityModels.Windows = spec.CityWindows;
         Effects.TerrainShadowRaster.Cell = spec.TerrainShadowCell;
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={graphicsWord} {WordSettings.Describe()}");

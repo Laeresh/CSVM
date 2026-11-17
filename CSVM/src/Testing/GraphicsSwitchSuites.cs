@@ -1175,7 +1175,8 @@ internal static class GraphicsSwitchSuites
         + "and region bodies equal the bare build's and its visible clutter nodes are at most the bare build's; a pack's "
         + "C5/cb00b.glb keeps that kind off the city; the hull's grade is its baseColorFactor; live moves to Off, original "
         + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
-        + "further meshes, and the original after a move to Off")]
+        + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
+        + "the shipped hulls carry the facade atlas, the window ids and each facade row's glass share")]
     internal static void CityBuildings(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1283,6 +1284,13 @@ internal static class GraphicsSwitchSuites
                         && !nearCode.Contains("csky_instance_uniforms", StringComparison.Ordinal) && boxCode.Contains("v_box *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
                         && nearCode.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_box)", StringComparison.Ordinal),
                     $"neither city shader declares an instance uniform, the box fades by the band's share and the near model keeps the cells it gives up");
+                string look = CityModels.LookCode(CityModels.Windows);
+                ctx.Check(boxCode.Contains(look, StringComparison.Ordinal) && nearCode.Contains(look, StringComparison.Ordinal)
+                        && boxCode.Contains("v_seed = uint(INSTANCE_CUSTOM.w + 0.5);", StringComparison.Ordinal)
+                        && nearCode.Contains("ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);", StringComparison.Ordinal)
+                        && !boxCode.Contains("csky_time", StringComparison.Ordinal) && !nearCode.Contains("csky_time", StringComparison.Ordinal)
+                        && CityModels.ShaderCode(true, CityModels.WindowMode.Slow).Contains("csky_time", StringComparison.Ordinal),
+                    $"the box and the near model expand the stamp's seed by one look ({CityModels.Windows}), and only the slow mode reads the shader clock");
 
                 ctx.Check(on.Collision == b.Collision && on.Bodies == b.Bodies && on.Colliders == b.Colliders,
                     $"collision equals the bare build's ({on.Collision}; {on.Bodies.Length} body chars)");
@@ -1314,6 +1322,19 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(ReadCity(clutter, kinds, clutterRoot).Visible == on.Visible && ModelCells(models).Count == near.Count
                         && CityCells(clutterRoot, hull!.Box).Count > 0,
                     $"and back in Enhanced the same city draws again");
+
+                ctx.Check(hull!.BoxMaterial.GetShaderParameter("facade_tex").VariantType == Variant.Type.Nil
+                        && hull.NearMaterial.GetShaderParameter("facade_ids").VariantType == Variant.Type.Nil,
+                    $"a hull folder with no facade files leaves the textures unset, so its buildings draw the flat grade");
+                CityModels.Root = CityModels.ShippedRoot;
+                var shipped = CityModels.For("C5", "cb00a");
+                var atlas = shipped?.BoxMaterial.GetShaderParameter("facade_tex").As<Texture2D>();
+                var ids = shipped?.NearMaterial.GetShaderParameter("facade_ids").As<Texture2D>();
+                var glass = shipped?.NearMaterial.GetShaderParameter("glass_mean").AsProjection() ?? Projection.Zero;
+                ctx.Check(atlas != null && ids != null && atlas.GetImage().HasMipmaps() && !ids.GetImage().HasMipmaps()
+                        && atlas.GetWidth() == 1024 && ids.GetWidth() == 1024 && shipped!.BoxMaterial.GetShaderParameter("facade_ids").As<Texture2D>() == ids
+                        && glass.X.X > 0.05f && glass.X.X < 0.5f && glass.W.W > 0.05f && glass.W.W < 0.5f,
+                    $"a shipped hull's materials carry the facade atlas with mipmaps, the window ids without, and each facade row's glass share ({glass.X.X:0.###} .. {glass.W.W:0.###})");
             }
             finally
             {

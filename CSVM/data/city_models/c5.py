@@ -2,8 +2,10 @@
 model file with two near variants and a far box (city_blender.py holds the conventions).
 
 Each HULLS entry holds measured numbers only: PROFILE is analysis/city-hulls/tiers.py's output
-for the kind's main mesh, RGB its area-weighted mean texture colour from census.py (the
-grade's target), FAMILY the facade family its original texture belongs to (city_atlas.py). The
+for the kind's main mesh, RGB its area-weighted mean unlit texture colour from census.py (the
+texels at or below its UNLIT_LUMA, so the original's painted lit windows are left out; the
+grade's target, since the engine lights the windows itself), FAMILY the facade family its
+original texture belongs to (city_atlas.py). The
 cblock1 prototype's fourteen kinds are here; the other districts' hulls join them.
 
   .\\scripts\\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender
@@ -101,35 +103,35 @@ P_CB03 = [
 # Family by the original's facade texture: smbldg1 and smbldg2 are grey stone walk-ups, smbldg3
 # and smbldg4 brick tenements, bldg1 and bldg4 warm office towers, bldg2 and bldg3 dark ones.
 HULLS = {
-    "cb00a": dict(family=STONE, rgb=(49, 50, 49), profile=P_CB00, near=WALKUP),      # smbldg1
-    "cb00b": dict(family=STONE, rgb=(43, 44, 36), profile=P_CB00, near=WALKUP),      # smbldg2
-    "cb01a": dict(family=STONE, rgb=(51, 52, 51), profile=P_CB01, near=WALKUP),      # smbldg1
-    "cb01b": dict(family=STONE, rgb=(43, 44, 35), profile=P_CB01, near=WALKUP),      # smbldg2
-    "cb01c": dict(family=BRICK, rgb=(44, 41, 37), profile=P_CB01, near=TENEMENT),    # smbldg3
-    "cb01d": dict(family=BRICK, rgb=(46, 38, 29), near=HIP,                          # smbldg4
+    "cb00a": dict(family=STONE, rgb=(35, 36, 35), profile=P_CB00, near=WALKUP),      # smbldg1
+    "cb00b": dict(family=STONE, rgb=(33, 34, 27), profile=P_CB00, near=WALKUP),      # smbldg2
+    "cb01a": dict(family=STONE, rgb=(34, 35, 34), profile=P_CB01, near=WALKUP),      # smbldg1
+    "cb01b": dict(family=STONE, rgb=(31, 33, 24), profile=P_CB01, near=WALKUP),      # smbldg2
+    "cb01c": dict(family=BRICK, rgb=(35, 31, 27), profile=P_CB01, near=TENEMENT),    # smbldg3
+    "cb01d": dict(family=BRICK, rgb=(37, 28, 18), near=HIP,                          # smbldg4
                   profile=[(0, sq(16)), (20, sq(16)), (24, APEX)]),
-    "cb02a": dict(family=STEEL, rgb=(50, 51, 55), near=TOWER, profile=[              # bldg3
+    "cb02a": dict(family=STEEL, rgb=(31, 32, 42), near=TOWER, profile=[              # bldg3
         (0, sq(15.89)), (35, sq(15.89)),
         (35, [(-15.89, 15.89, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89)]),
         (40, [(-15.89, 15.89, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89)]),
         (40, [(-15.89, 5.3, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89), (5.3, 15.89, -5.3, 5.3)]),
         (44.99, [(-15.89, 5.3, -15.89, 5.3), (-5.3, 15.89, 5.3, 15.89), (5.3, 15.89, -5.3, 5.3)]),
         (44.99, [(-15.89, 5.3, -15.89, 5.3)]), (65.18, [(-15.89, 5.3, -15.89, 5.3)])]),
-    "cb02b": dict(family=WARM, rgb=(65, 62, 54), near=TOWER, profile=[               # bldg4
+    "cb02b": dict(family=WARM, rgb=(36, 32, 27), near=TOWER, profile=[               # bldg4
         (0, sq(16)), (36, sq(16)),
         (36, [(-16, 16, -16, 4), (-4, 16, 4, 16)]), (40, [(-16, 16, -16, 4), (-4, 16, 4, 16)]),
         (40, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]), (44, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]),
         (44, [(-16, 4, -16, 4)]), (64, [(-16, 4, -16, 4)])]),
-    "cb03a": dict(family=WARM, rgb=(72, 65, 57), profile=P_CB03, near=TOWER),        # bldg1
-    "cb03b": dict(family=STEEL, rgb=(43, 44, 37), profile=P_CB03, near=TOWER),       # bldg2
-    "cb04a": dict(family=STEEL, rgb=(43, 44, 37), near=(                             # bldg2, clock, motif
+    "cb03a": dict(family=WARM, rgb=(42, 33, 28), profile=P_CB03, near=TOWER),        # bldg1
+    "cb03b": dict(family=STEEL, rgb=(33, 34, 28), profile=P_CB03, near=TOWER),       # bldg2
+    "cb04a": dict(family=STEEL, rgb=(33, 35, 29), near=(                             # bldg2, clock, motif
         dict(TOWER[0], extras=[fins_cb04a]), dict(TOWER[1], extras=[fins_cb04a])),
         profile=[(0, sq(16)), (32, sq(16)), (36, sq(12)), (63.53, sq(12)), (68, sq(8)), (80, sq(8))]),
-    "cb04b": dict(family=STEEL, rgb=(54, 52, 54), near=TOWER,                        # bldg3
+    "cb04b": dict(family=STEEL, rgb=(36, 34, 41), near=TOWER,                        # bldg3
                   profile=[(0, sq(16)), (16, sq(16)), (20, sq(12)), (60, sq(12)), (64, sq(8)), (80, sq(8))]),
-    "cb05a": dict(family=WARM, rgb=(68, 68, 60), near=DECO_CROWN,                    # bldg4, teal crown
+    "cb05a": dict(family=WARM, rgb=(37, 34, 30), near=DECO_CROWN,                    # bldg4, teal crown
                   profile=[(0, sq(11.86)), (56, sq(11.86)), (58.93, APEX)]),
-    "cb05b": dict(family=WARM, rgb=(73, 65, 57), near=TOWER,                         # bldg1
+    "cb05b": dict(family=WARM, rgb=(42, 33, 28), near=TOWER,                         # bldg1
                   profile=[(0, sq(12)), (64, sq(12)), (64, sq(8)), (92, sq(8))]),
 }
 

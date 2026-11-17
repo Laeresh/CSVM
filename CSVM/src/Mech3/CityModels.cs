@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Utils;
 using Godot;
 
@@ -20,15 +21,71 @@ public static class CityModels
     /// <summary>TUNE. The edge of the square cells the near variants are cut into, each cell one node per variant.</summary>
     public const float CellM = 512f;
 
+    // The facade atlas's layout, city_atlas.py's. Each family is a row of cells, its facade rows then its roof. A cell
+    // is a tile inside a wrapped gutter, and a tile is two floors and about eight windows wide.
+    private const int Atlas = 1024, Cell = 160, Gutter = 16, Tile = 128, Variants = 4, Floors = 2, WindowsPerTile = 8;
+
+    // TUNE. The share of its windows a building lights, rolled per building between the two.
+    private const float LitShareMin = 0.15f, LitShareMax = 0.70f;
+
+    // TUNE. How far a building's tint leans warm or cool: a gain on red and its opposite on blue, rolled within
+    // plus or minus this.
+    private const float TintSpread = 0.10f;
+
+    // TUNE. How far a building's brightness strays from its grade, rolled within plus or minus this share.
+    private const float BrightnessSpread = 0.20f;
+
+    // TUNE. Under the floors and slow modes, the share of a building's floors lit whole, over its single windows.
+    private const float LitFloorShare = 0.12f;
+
+    // TUNE. The emission of clear lit glass, before its light colour. FOG darkens it with the rest of the building.
+    private const float WindowGain = 0.4f;
+
+    // TUNE. The even glow of windows too small to resolve, against their mean emission. Night exposure drives a
+    // resolved lit window into the tonemap's shoulder, so the plain mean spread over a wall reads far brighter.
+    private const float DistantGlow = 0.25f;
+
+    // TUNE. Under the slow mode, the seconds between a window's chances to change, and a floor's. Each divides
+    // ShaderTime.RolloverSecs, so the clock's wrap changes nothing.
+    private const int WindowPeriodS = 300, FloorPeriodS = 360;
+
+    // TUNE. The lights a lit window takes, linear, each with its share of the windows: warm yellow mostly.
+    private static readonly (Vector3 Rgb, float Share)[] Lights =
+    {
+        (new Vector3(1.00f, 0.70f, 0.36f), 0.50f),
+        (new Vector3(1.00f, 0.55f, 0.24f), 0.20f),
+        (new Vector3(0.95f, 0.88f, 0.72f), 0.20f),
+        (new Vector3(0.70f, 0.80f, 1.00f), 0.10f),
+    };
+
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<bool, Shader> Shaders = new();
+    private static readonly Dictionary<string, Facade?> Facades = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<(bool Near, WindowMode Mode), Shader> Shaders = new();
     private static string _root = ShippedRoot;
+
+    /// <summary>How a building's lit windows behave, <c>--city-windows</c>. Each building rolls its lit share, and
+    /// each window rolls against it.</summary>
+    public enum WindowMode
+    {
+        /// <summary>Each window lit or dark by its roll against the building's lit share, fixed.</summary>
+        Scatter,
+
+        /// <summary>The floors mode, each window and floor rolling again every few minutes on the shader clock.</summary>
+        Slow,
+
+        /// <summary>Single lit windows and whole lit floors, fixed.</summary>
+        Floors,
+    }
+
+    /// <summary>Gets or sets the window mode, a prototype switch. The launcher sets it once from the spec, before
+    /// the first hull is read.</summary>
+    public static WindowMode Windows { get; set; }
 
     /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Vegetation word other than Off.</summary>
     public static bool On => VegetationQualitySetting.RichOn && VegetationModels.On;
 
     /// <summary>Gets or sets the folder <see cref="For"/> reads, <see cref="ShippedRoot"/> outside a suite. A suite's
-    /// fixture hulls stand in its scratch folder. Setting it forgets every hull read.</summary>
+    /// fixture hulls stand in its scratch folder. Setting it forgets every hull and facade read.</summary>
     internal static string Root
     {
         get => _root;
@@ -36,6 +93,7 @@ public static class CityModels
         {
             _root = value;
             Hulls.Clear();
+            Facades.Clear();
         }
     }
 
@@ -57,15 +115,205 @@ public static class CityModels
     /// <paramref name="chapter"/>, read once. No file gives null; a file that is not a hull is warned and gives null.</summary>
     public static Hull? For(string chapter, string model)
     {
-        string key = $"{chapter.ToUpperInvariant()}/{model}";
+        string folder = $"{_root}/{chapter.ToUpperInvariant()}";
+        string key = $"{folder}/{model}";
         if (!Hulls.TryGetValue(key, out var hull))
-            Hulls[key] = hull = Load($"{_root}/{key}.glb.bin");
+        {
+            if (!Facades.TryGetValue(folder, out var facade) && FileAccess.FileExists($"{key}.glb.bin"))
+                Facades[folder] = facade = LoadFacade(folder);
+            Hulls[key] = hull = Load($"{key}.glb.bin", facade);
+        }
         return hull;
+    }
+
+    /// <summary>The GLSL that expands a building's seed into its look. The box and the near model share it word for
+    /// word, so neither changes at the hand-over. <paramref name="mode"/> picks the window lines.</summary>
+    internal static string LookCode(WindowMode mode)
+    {
+        var mean = Vector3.Zero;
+        var pick = new System.Text.StringBuilder();
+        float upTo = 0f;
+        foreach (var (rgb, share) in Lights)
+        {
+            mean += rgb * share;
+            upTo += share;
+            pick.Append(CultureInfo.InvariantCulture, $"    if (p < {upTo:0.0###}) {{ return {Vec(rgb)}; }}\n");
+        }
+        string on = mode switch
+        {
+            WindowMode.Scatter => "float on = step(csky_city_rand(win), share);",
+            WindowMode.Floors => "float on = max(step(csky_city_rand(win), share), step(csky_city_rand(level_key), LIT_FLOORS));",
+            _ => $$"""
+                uint win_epoch = uint(floor(csky_time / {{WindowPeriodS}}.0 + csky_city_rand(win + 3u))) % {{(int)ShaderTime.RolloverSecs / WindowPeriodS}}u;
+                    uint floor_epoch = uint(floor(csky_time / {{FloorPeriodS}}.0 + csky_city_rand(level_key + 3u))) % {{(int)ShaderTime.RolloverSecs / FloorPeriodS}}u;
+                    float on = max(step(csky_city_rand(win ^ csky_city_hash(win_epoch)), share),
+                        step(csky_city_rand(level_key ^ csky_city_hash(floor_epoch + 977u)), LIT_FLOORS));
+                """,
+        };
+        string mean_lit = mode == WindowMode.Scatter ? "share" : "share + LIT_FLOORS * (1.0 - share)";
+        return $$"""
+            const float LIT_FLOORS = {{F(LitFloorShare)}};
+
+            uint csky_city_hash(uint x) {
+                x ^= x >> 16u;
+                x *= 0x7feb352du;
+                x ^= x >> 15u;
+                x *= 0x846ca68bu;
+                x ^= x >> 16u;
+                return x;
+            }
+
+            float csky_city_rand(uint x) {
+                return float(csky_city_hash(x) >> 8u) * (1.0 / 16777216.0);
+            }
+
+            vec3 csky_city_light(float p) {
+            {{pick}}    return {{Vec(Lights[^1].Rgb)}};
+            }
+
+            // The building's facade from the atlas (city_atlas.py's layout) and its lit glass, from the seed.
+            vec3 csky_city_look(uint seed, vec2 uv, vec2 uv2, vec3 grade_rgb, out vec3 glow) {
+                uint s = seed * 8u;
+                float row = floor(csky_city_rand(s + 1u) * {{Variants}}.0);
+                float family = floor(uv2.x + 0.5);
+                bool roof = uv2.y > 0.5;
+                vec2 cell = vec2(roof ? {{Variants}}.0 : row, family) * {{Cell}}.0 + {{Gutter}}.0;
+                vec2 st = (cell + vec2(fract(uv.x), 1.0 - fract(uv.y)) * {{Tile}}.0) / {{Atlas}}.0;
+                vec2 k = vec2({{Tile}}.0, -{{Tile}}.0) / {{Atlas}}.0;
+                vec3 albedo = textureGrad(facade_tex, st, dFdx(uv) * k, dFdy(uv) * k).rgb;
+                float lean = {{F(TintSpread)}} * (2.0 * csky_city_rand(s + 2u) - 1.0);
+                float gain = 1.0 + {{F(BrightnessSpread)}} * (2.0 * csky_city_rand(s + 3u) - 1.0);
+                glow = vec3(0.0);
+                if (!roof) {
+                    vec4 ids = texture(facade_ids, st);
+                    float share = mix({{F(LitShareMin)}}, {{F(LitShareMax)}}, csky_city_rand(s + 4u));
+                    uint salt = csky_city_hash(s + 5u);
+                    uint level = uint(int(floor(uv.y)) * {{Floors}} + int(ids.g * 255.0 + 0.5));
+                    uint level_key = csky_city_hash(salt ^ (level + 0x9e3779b9u));
+                    uint win = csky_city_hash(salt ^ csky_city_hash(uint(int(floor(uv.x))) ^ csky_city_hash(uint(ids.r * 255.0 + 0.5) ^ (level << 8u))));
+                    {{on}}
+                    // Below about a pixel a window's roll would sparkle, so it fades to the building's mean.
+                    float window_px = {{F(1f / WindowsPerTile)}} / max(max(length(dFdx(uv)), length(dFdy(uv))), 1e-6);
+                    float detail = smoothstep(0.5, 1.5, window_px);
+                    float glass = mix(glass_mean[int(family)][int(row)] * ({{mean_lit}}) * {{F(DistantGlow)}}, ids.b * on, detail);
+                    vec3 light = mix({{Vec(mean)}}, csky_city_light(csky_city_rand(win + 1u)), detail)
+                        * mix(1.0, 0.7 + 0.6 * csky_city_rand(win + 2u), detail);
+                    glow = light * glass * {{F(WindowGain)}};
+                }
+                return grade_rgb * albedo * gain * vec3(1.0 + lean, 1.0, 1.0 - lean);
+            }
+            """;
+    }
+
+    // The clutter's Enhanced lit arm on the building's look: the world light, the ambient fill, the terrain shadow and
+    // the night darkening through FOG. FOG darkens the lit windows too. The box fades out over the band by
+    // ModelShare, and the near model keeps exactly the dither cells the box gives up. Both keep the kind's far fade.
+    // ⚠ Never include csky_instance_uniforms: every near cell would take 16 slots of Godot's global buffer.
+    internal static string ShaderCode(bool near, WindowMode mode)
+    {
+        bool shadow = ShadowQualitySetting.TerrainShadows;
+        string keep = near ? "step(0.004, v_far - v_box)" : "step(0.004, v_box)";
+        string discard = near
+            ? "!csky_clutter_dither_keep(FRAGCOORD.xy, v_far) || csky_clutter_dither_keep(FRAGCOORD.xy, v_box)"
+            : "!csky_clutter_dither_keep(FRAGCOORD.xy, v_box)";
+        string ao = shadow ? " * csky_cloud_ao(v_terrain_pos)" : "";
+        return $$"""
+            shader_type spatial;
+
+            {{SceneBuilder.AtmosphereInclude}}
+            {{SceneBuilder.ClutterFadeInclude}}
+            {{(shadow ? SceneBuilder.TerrainShadowInclude + "\nvarying vec3 v_terrain_pos;" : "")}}
+            {{(mode == WindowMode.Slow ? SceneBuilder.TimeInclude : "")}}
+
+            uniform vec3 grade = vec3(1.0);
+            uniform vec2 {{VegetationModels.BandParam}};
+            uniform sampler2D facade_tex : source_color, filter_linear_mipmap, repeat_enable;
+            uniform sampler2D facade_ids : hint_default_black, filter_nearest, repeat_enable;
+            uniform mat4 glass_mean;
+            varying flat float v_far;
+            varying flat float v_box;
+            varying flat float v_dark;
+            varying flat uint v_seed;
+
+            {{LookCode(mode)}}
+
+            void vertex() {
+                vec3 origin = MODEL_MATRIX[3].xyz;
+                v_seed = uint(INSTANCE_CUSTOM.w + 0.5);
+                v_far = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
+                v_box = v_far;
+                if ({{VegetationModels.BandParam}}.y > 0.0) {
+                    v_box *= {{ClutterBuilder.ModelShare}};
+                }
+                VERTEX *= {{keep}};
+                v_dark = csky_clutter_dark_lit(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
+                {{(shadow ? "v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;" : "")}}
+            }
+
+            void fragment() {
+                if ({{discard}}) {
+                    discard;
+                }
+                vec3 glow;
+                ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);
+                ROUGHNESS = 1.0;
+                METALLIC = 0.0;
+                SPECULAR = 0.0;
+                EMISSION = ALBEDO * csky_gi_ambient_fill{{ao}} + glow;
+                vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+                float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);
+                if (csky_night_fog(csky_fog_color_at(CAMERA_POSITION_WORLD))) {
+                    fog_amt = max(fog_amt, v_dark);
+                }
+                FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+                {{(shadow ? "AO = csky_cloud_ao(v_terrain_pos);" : "")}}
+            }
+            {{(shadow ? SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", 0f, "v_terrain_pos") : "")}}
+            """;
+    }
+
+    private static string F(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
+
+    private static string Vec(Vector3 v) => $"vec3({F(v.X)}, {F(v.Y)}, {F(v.Z)})";
+
+    // A chapter folder's facade atlas (sRGB, mipmapped) and its window ids (linear, no mipmaps). Each facade row's
+    // mean glass weight is what a window too small to resolve draws. Null, warned, where either file is missing.
+    private static Facade? LoadFacade(string folder)
+    {
+        var atlas = new Image();
+        var ids = new Image();
+        string atlasPath = $"{folder}/facade.png.bin", idsPath = $"{folder}/facade_ids.png.bin";
+        if (!FileAccess.FileExists(atlasPath) || atlas.LoadPngFromBuffer(FileAccess.GetFileAsBytes(atlasPath)) != Error.Ok
+            || !FileAccess.FileExists(idsPath) || ids.LoadPngFromBuffer(FileAccess.GetFileAsBytes(idsPath)) != Error.Ok)
+        {
+            Log.Warn("world", $"city facade {folder}: no readable facade.png.bin and facade_ids.png.bin, the buildings draw their flat grade");
+            return null;
+        }
+        atlas.GenerateMipmaps();
+        ids.Convert(Image.Format.Rgba8);
+        byte[] data = ids.GetData();
+        int width = ids.GetWidth();
+        var columns = new Vector4[4];
+        for (int family = 0; family < 4; family++)
+        {
+            for (int row = 0; row < Variants; row++)
+            {
+                long sum = 0;
+                for (int y = 0; y < Tile; y++)
+                {
+                    for (int x = 0; x < Tile; x++)
+                        sum += data[((((family * Cell) + Gutter + y) * width) + (row * Cell) + Gutter + x) * 4 + 2];
+                }
+                columns[family][row] = sum / (Tile * Tile * 255f);
+            }
+        }
+        Log.Info("world", $"city facade {folder}: atlas {atlas.GetWidth()}x{atlas.GetHeight()}, glass {columns[0]} {columns[1]} {columns[2]} {columns[3]}");
+        return new Facade(TextureUpload.Create(atlas), TextureUpload.Create(ids), new Projection(columns[0], columns[1], columns[2], columns[3]));
     }
 
     // The mesh nodes `far` and `near0`, `near1`... by node name, each unmoved. The far mesh's baseColorFactor is the
     // grade, which Godot's import holds in sRGB. A file without `far` is not a hull.
-    private static Hull? Load(string path)
+    private static Hull? Load(string path, Facade? facade)
     {
         if (!FileAccess.FileExists(path))
             return null;
@@ -108,80 +356,33 @@ public static class CityModels
             return null;
         }
         var variants = new List<ArrayMesh>(near.Values);
-        var hull = new Hull(box!, variants, Material(false, grade), Material(true, grade));
+        var hull = new Hull(box!, variants, Material(false, grade, facade), Material(true, grade, facade));
         Log.Info("world", $"city model {path}: far {box!.GetFaces().Length / 3} triangles, {variants.Count} near variant(s), grade {grade.R:0.###} {grade.G:0.###} {grade.B:0.###}");
         return hull;
     }
 
-    private static ShaderMaterial Material(bool near, Color grade)
+    // Without a facade the textures stay unset: the atlas reads white, so the flat grade draws, and the ids black, so
+    // no window lights.
+    private static ShaderMaterial Material(bool near, Color grade, Facade? facade)
     {
-        if (!Shaders.TryGetValue(near, out var shader))
-            Shaders[near] = shader = new Shader { Code = ShaderCode(near) };
+        if (!Shaders.TryGetValue((near, Windows), out var shader))
+            Shaders[(near, Windows)] = shader = new Shader { Code = ShaderCode(near, Windows) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("grade", new Vector3(grade.R, grade.G, grade.B));
         material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+        if (facade != null)
+        {
+            material.SetShaderParameter("facade_tex", facade.Albedo);
+            material.SetShaderParameter("facade_ids", facade.Ids);
+            material.SetShaderParameter("glass_mean", facade.GlassMean);
+        }
         return material;
-    }
-
-    // The clutter's Enhanced lit arm on a flat graded colour: the world light, the ambient fill, the terrain shadow and
-    // the night darkening through FOG. The box fades out over the band by ModelShare. The near model keeps exactly the
-    // dither cells the box gives up, so a stamp never draws both or neither. Both keep the kind's own far fade.
-    // ⚠ Never include csky_instance_uniforms: every near cell would take 16 slots of Godot's global buffer.
-    private static string ShaderCode(bool near)
-    {
-        bool shadow = ShadowQualitySetting.TerrainShadows;
-        string keep = near ? "step(0.004, v_far - v_box)" : "step(0.004, v_box)";
-        string discard = near
-            ? "!csky_clutter_dither_keep(FRAGCOORD.xy, v_far) || csky_clutter_dither_keep(FRAGCOORD.xy, v_box)"
-            : "!csky_clutter_dither_keep(FRAGCOORD.xy, v_box)";
-        string ao = shadow ? " * csky_cloud_ao(v_terrain_pos)" : "";
-        return $$"""
-            shader_type spatial;
-
-            {{SceneBuilder.AtmosphereInclude}}
-            {{SceneBuilder.ClutterFadeInclude}}
-            {{(shadow ? SceneBuilder.TerrainShadowInclude + "\nvarying vec3 v_terrain_pos;" : "")}}
-
-            uniform vec3 grade = vec3(1.0);
-            uniform vec2 {{VegetationModels.BandParam}};
-            varying flat float v_far;
-            varying flat float v_box;
-            varying flat float v_dark;
-
-            void vertex() {
-                vec3 origin = MODEL_MATRIX[3].xyz;
-                v_far = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
-                v_box = v_far;
-                if ({{VegetationModels.BandParam}}.y > 0.0) {
-                    v_box *= {{ClutterBuilder.ModelShare}};
-                }
-                VERTEX *= {{keep}};
-                v_dark = csky_clutter_dark_lit(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
-                {{(shadow ? "v_terrain_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;" : "")}}
-            }
-
-            void fragment() {
-                if ({{discard}}) {
-                    discard;
-                }
-                ALBEDO = grade;
-                ROUGHNESS = 1.0;
-                METALLIC = 0.0;
-                SPECULAR = 0.0;
-                EMISSION = ALBEDO * csky_gi_ambient_fill{{ao}};
-                vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-                float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);
-                if (csky_night_fog(csky_fog_color_at(CAMERA_POSITION_WORLD))) {
-                    fog_amt = max(fog_amt, v_dark);
-                }
-                FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
-                {{(shadow ? "AO = csky_cloud_ao(v_terrain_pos);" : "")}}
-            }
-            {{(shadow ? SceneBuilder.TerrainShadowLight("csky_terrain_sun(v_terrain_pos)", 0f, "v_terrain_pos") : "")}}
-            """;
     }
 
     /// <summary>One building model's hull: its far box, its near variants in name order (none draws the box at every
     /// distance), and the materials drawing each.</summary>
     public sealed record Hull(ArrayMesh Box, IReadOnlyList<ArrayMesh> Near, ShaderMaterial BoxMaterial, ShaderMaterial NearMaterial);
+
+    // A chapter's facade textures, and per family (column) and facade row (component) the tile's mean glass weight.
+    private sealed record Facade(Texture2D Albedo, Texture2D Ids, Projection GlassMean);
 }

@@ -244,7 +244,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Building generator, facade atlas, near models and far boxes for the `cblock1` hulls
 12. ☑ Draw the near model and the far box on the building stamps
-13. ☐ Per-building facade, tint and the three window modes in the shader
+13. ◐ Per-building facade, tint and the three window modes in the shader
 14. ☐ Measure the prototype against the budget
 15. ☐ The user's verdict on the prototype
 
@@ -665,7 +665,47 @@ a 16-vec4 block of a fixed buffer, and the near tier is thousands of nodes. Do n
 green; the golden `c5-city-night-enhanced` moves once a dressed hull is in its view, and
 `c5-city-night` must not.
 
-## B13 ☐ Per-building facade, tint and the three window modes in the shader
+## B13 ◐ Per-building facade, tint and the three window modes in the shader
+
+**Landed.** `CityModels.LookCode` expands each building's seed in the shader, one text shared word
+for word by the far box and the near model. It gives a facade row of the building's family, a warm
+or cool lean, a brightness, a lit share between 15 and 70 percent, and a window salt. The facade
+atlas is sampled sRGB and mipmapped with `textureGrad` on the unwrapped tile coordinates. The
+window ids are read nearest without mipmaps. Both load once per chapter folder, with each facade
+row's mean glass weight. A window is (`floor(u)`, its id, its floor) hashed with the salt. A lit
+one emits through its glass weight in one of four light colours, mostly warm yellow, and the night
+fog darkens it with its building. Once a window falls under about a pixel, its decision fades to
+the building's mean glow, scaled by `DistantGlow`. `--city-windows=scatter|slow|floors` picks
+single windows, single windows with whole lit floors, or that mix rolling again every 300 s
+(windows) and 360 s (floors) of `csky_time`, each window and floor on its own offset. Only the
+slow mode includes the clock. A hull folder without the facade files warns and draws the flat
+grade. The grade targets the original's unlit wall: `census.py` measures each texture's mean at
+or below luma 90, `c5.py` takes those values, and the models are regenerated (the atlas files are
+byte for byte the same). The tunables are named constants in `CityModels.cs`.
+
+**Verified.** By the item's agent, on the targeted runs and `-Quick`; the complete battery is the
+merge gate and is not run yet. `CityModelsTests` and `SessionSpecParserTests` pass 64 of 64. 19
+targeted engine suites, among them every suite that opens C5 under Enhanced, are green with engine
+errors clean. `-Quick` passes with 1,586 unit tests and 13 engine suites. The two new
+`city-buildings` checks and `OnlyTheSlowModeReadsTheClock` were each seen to fail. Two `--det`
+launches are pixel-identical in scatter and in floors. Slow frames 300 s apart differ in 6.9 to
+8.4 percent of pixels, and whole floors and single windows are seen to switch. The near model and
+the far box differ in 0.5 percent of pixels at a forced hand-over, all of it geometry edges. Of 41
+goldens only `c5-city-night-enhanced` moved (to 22d28f5c, stable on re-render); `c5-city-night`
+held. Mean linear luminance over the buildings against the original, at 2560x1421: towers 0.017 to
+0.020 against 0.027, street 0.026 to 0.031 against 0.022, the `cblock1` patch from altitude 0.012
+to 0.013 against 0.015. The orchestrator read the whole source diff and looked at the three
+montages, the slow-mode crop and the golden-pose pair, and sent them to the user; it ran no test.
+
+**Open after this item.** At 1280x720 the towers 500 to 1400 m away read as an even beige mass
+where the original shows dark blocks with points of light; the item stays ◐ until that is fixed.
+The golden `c5-city-night-enhanced` is not re-pinned until the look is settled in B15, so the
+goldens stage is red on the branch for that one frame. Motion (shimmer of the nearest-sampled ids
+at one to two pixels, the slow mode's pace) is judged in B15 at the controls. The floors and slow
+modes are about 15 percent brighter than scatter. The map-edge `node_bias` loose end from B12
+stands.
+
+**Original approach (kept for reference).**
 
 **Goal.** Two buildings of one hull differ in facade row, tint and brightness and lit windows, each
 building looks the same near and far, and a debug switch selects between the three window modes.

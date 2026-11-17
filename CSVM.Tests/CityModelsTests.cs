@@ -38,4 +38,19 @@ public sealed class CityModelsTests
         int ones = seeds.Count(s => CityModels.VariantOf(s, 2) == 1);
         Assert.InRange(ones, 150, 250);
     }
+
+    /// <summary>Only the slow mode's look reads the shader clock, so the fixed modes' frames pin; the scatter mode
+    /// lights no whole floor. The <c>city-buildings</c> suite checks that both materials carry the one look.</summary>
+    [Theory]
+    [InlineData(CityModels.WindowMode.Scatter)]
+    [InlineData(CityModels.WindowMode.Slow)]
+    [InlineData(CityModels.WindowMode.Floors)]
+    public void OnlyTheSlowModeReadsTheClock(CityModels.WindowMode mode)
+    {
+        string look = CityModels.LookCode(mode);
+        Assert.Contains("csky_city_look(uint seed", look, System.StringComparison.Ordinal);
+        Assert.Equal(mode == CityModels.WindowMode.Slow, look.Contains("csky_time", System.StringComparison.Ordinal));
+        Assert.Equal(mode != CityModels.WindowMode.Scatter, look.Contains("LIT_FLOORS)", System.StringComparison.Ordinal));
+        Assert.Equal(look, CityModels.LookCode(mode));
+    }
 }
