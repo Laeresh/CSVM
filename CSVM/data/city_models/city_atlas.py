@@ -404,8 +404,10 @@ PORT_CELL = (PORT_TILE[0] + 2 * STRIP_GUTTER, PORT_TILE[1] + 2 * STRIP_GUTTER)
 LAND_Y = len(FAMILIES) * CELL
 PORT_X = (METAL_COL + 1) * CELL
 # The board class's formats, TEXCOORD_1.x on its faces: a landscape poster or a portrait one picked by the
-# building's seed, the plank back, the brick gable. The back and the gable tile at PX_M.
-LANDSCAPE, PORTRAIT, BACK, GABLE = 0, 1, 2, 3
+# building's seed, the plank back, the brick gable, the dressing's lattice. All but the posters tile at PX_M.
+LANDSCAPE, PORTRAIT, BACK, GABLE, LATTICE = 0, 1, 2, 3, 4
+# The lattice's rows: a truss LATTICE_ROW texels tall between two chords, the cell three rows tall.
+LATTICE_ROW = 24
 
 # A 5 x 7 block letter per character the posters spell, rows top down.
 GLYPHS = {
@@ -580,6 +582,22 @@ def paint_back(rng):
     return np.clip(np.ones((h, w, 3)) * np.array((74, 52, 44)) / 255 * shade[..., None], 0, 1)
 
 
+def paint_lattice():
+    """The dressing's open lattice, our own: per row of LATTICE_ROW texels a light metal chord along each edge and a
+    zigzag of diagonals between them, bars 5 texels wide and one V a row tall so a mip level or two keeps them, on black, which the
+    cut-out shader discards; seamless both ways."""
+    h, w = PORT_TILE[1], PORT_TILE[0]
+    on = np.zeros((h, w), bool)
+    r, bar, period = LATTICE_ROW, 5, LATTICE_ROW
+    for y0 in range(0, h, r):
+        on[y0:y0 + bar] = True
+        on[y0 + r - bar:y0 + r] = True
+        for x in range(w):
+            y = y0 + bar + abs((x % period) - period / 2) * (r - 3 * bar) / (period / 2)
+            on[int(y):int(y) + bar, x] = True
+    return np.where(on[..., None], METAL, 0.0)
+
+
 def paint_gable(rng):
     """Red brick for a gable end, seamless, at the original gable texture's mean of its unlit texels,
     (99, 60, 35), as analysis/city-hulls/census.py's rule measures it."""
@@ -603,7 +621,8 @@ def paint_boards(atlas, seed):
     for i, t in enumerate(land):
         x = i * LAND_CELL[0]
         atlas[LAND_Y:LAND_Y + LAND_CELL[1], x:x + LAND_CELL[0]] = np.pad(t, ((g, g), (g, g), (0, 0)), mode="edge")
-    for i, (t, mode) in enumerate([(t, "edge") for t in port] + [(paint_back(rng), "wrap"), (paint_gable(rng), "wrap")]):
+    for i, (t, mode) in enumerate([(t, "edge") for t in port] + [(paint_back(rng), "wrap"), (paint_gable(rng), "wrap"),
+                                                                 (paint_lattice(), "wrap")]):
         y = i * PORT_CELL[1]
         atlas[y:y + PORT_CELL[1], PORT_X:PORT_X + PORT_CELL[0]] = np.pad(t, ((g, g), (g, g), (0, 0)), mode=mode)
     return len(land), len(port)

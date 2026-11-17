@@ -77,6 +77,9 @@ public static class CityModels
     // The first family with a tile roof (city_atlas.py's TILE_ROOF); every family from it up has one.
     private const int TileRoofFamily = 4;
 
+    // TUNE. A lattice texel darker than this linear luma is a hole: half the light metal bars city_atlas.py paints on black.
+    private const float CutLuma = 0.075f;
+
     // TUNE. The lights a lit window takes, linear, each with its share of the windows: warm yellow mostly.
     private static readonly (Vector3 Rgb, float Share)[] Lights =
     {
@@ -101,7 +104,7 @@ public static class CityModels
 
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Facade?> Facades = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<bool, Shader> Shaders = new();
+    private static readonly Dictionary<(bool Near, bool Cut), Shader> Shaders = new();
     private static string _root = ShippedRoot;
 
     /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Scenery word other than Off.</summary>
@@ -148,6 +151,12 @@ public static class CityModels
         }
         return hull;
     }
+
+    /// <summary>The cut-out shader's one addition: a board of the lattice format (class 4, format 4 and up) drops a
+    /// texel darker than <see cref="CutLuma"/>. Only a hull whose material is named <c>*.cutout</c> takes it, so the
+    /// buildings keep their shader text.</summary>
+    internal static string CutCode() =>
+        $"if (UV2.y > 3.5 && UV2.x > 3.5 && dot(ALBEDO, vec3(0.299, 0.587, 0.114)) < {F(CutLuma)}) {{ discard; }}";
 
     /// <summary>The GLSL that expands a building's seed into its look. The box and the near model share it word for
     /// word, so neither changes at the hand-over.</summary>
@@ -267,7 +276,7 @@ public static class CityModels
     // the night darkening through FOG. FOG darkens the lit windows too. The box fades out over the band by
     // ModelShare, and the near model keeps exactly the dither cells the box gives up. Both keep the kind's far fade.
     // ⚠ Never include csky_instance_uniforms: every near cell would take 16 slots of Godot's global buffer.
-    internal static string ShaderCode(bool near)
+    internal static string ShaderCode(bool near, bool cut = false)
     {
         bool shadow = ShadowQualitySetting.TerrainShadows;
         string keep = near ? "step(0.004, v_far - v_box)" : "step(0.004, v_box)";
@@ -312,7 +321,7 @@ public static class CityModels
                     discard;
                 }
                 vec3 glow;
-                ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);
+                ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);{{(cut ? " " + CutCode() : "")}}
                 ROUGHNESS = 1.0;
                 METALLIC = 0.0;
                 SPECULAR = 0.0;
@@ -377,6 +386,7 @@ public static class CityModels
         ArrayMesh? box = null;
         var near = new SortedDictionary<int, ArrayMesh>();
         var grade = Colors.White;
+        bool cut = false;
         string? fault = new GltfDocument().AppendFromBuffer(FileAccess.GetFileAsBytes(path), string.Empty, state) != Error.Ok
             ? "not a glTF binary" : null;
         var nodes = state.GetNodes();
@@ -398,7 +408,10 @@ public static class CityModels
             {
                 box = mesh;
                 if (importer.GetSurfaceCount() > 0 && importer.GetSurfaceMaterial(0) is BaseMaterial3D material)
+                {
                     grade = material.AlbedoColor.SrgbToLinear();
+                    cut = material.ResourceName.EndsWith(".cutout", StringComparison.Ordinal);
+                }
             }
             else
             {
@@ -412,17 +425,17 @@ public static class CityModels
             return null;
         }
         var variants = new List<ArrayMesh>(near.Values);
-        var hull = new Hull(box!, variants, Material(false, grade, facade), Material(true, grade, facade));
-        Log.Info("world", $"city model {path}: far {box!.GetFaces().Length / 3} triangles, {variants.Count} near variant(s), grade {grade.R:0.###} {grade.G:0.###} {grade.B:0.###}");
+        var hull = new Hull(box!, variants, Material(false, grade, facade, cut), Material(true, grade, facade, cut));
+        Log.Info("world", $"city model {path}: far {box!.GetFaces().Length / 3} triangles, {variants.Count} near variant(s), grade {grade.R:0.###} {grade.G:0.###} {grade.B:0.###}{(cut ? ", cut out" : "")}");
         return hull;
     }
 
     // Without a facade the textures stay unset: the atlas reads white, so the flat grade draws, and the ids black, so
     // no window lights.
-    private static ShaderMaterial Material(bool near, Color grade, Facade? facade)
+    private static ShaderMaterial Material(bool near, Color grade, Facade? facade, bool cut)
     {
-        if (!Shaders.TryGetValue(near, out var shader))
-            Shaders[near] = shader = new Shader { Code = ShaderCode(near) };
+        if (!Shaders.TryGetValue((near, cut), out var shader))
+            Shaders[(near, cut)] = shader = new Shader { Code = ShaderCode(near, cut) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("grade", new Vector3(grade.R, grade.G, grade.B));
         material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);

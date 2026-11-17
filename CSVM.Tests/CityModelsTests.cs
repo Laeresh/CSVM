@@ -60,4 +60,15 @@ public sealed class CityModelsTests
         Assert.Contains("floor(csky_city_rand(s + 7u) * (family < 0.5 ?", look, System.StringComparison.Ordinal);
         Assert.Equal(look, CityModels.LookCode());
     }
+
+    /// <summary>The cut-out shader adds one discard and nothing else. Only a board of the lattice format drops its
+    /// dark texels, so a building's frame cannot move with it.</summary>
+    [Fact]
+    public void OnlyTheLatticeOfACutOutHullIsDiscarded()
+    {
+        string cut = CityModels.CutCode();
+        Assert.StartsWith("if (UV2.y > 3.5 && UV2.x > 3.5 && dot(ALBEDO,", cut, System.StringComparison.Ordinal);
+        Assert.EndsWith("{ discard; }", cut, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("discard", CityModels.LookCode(), System.StringComparison.Ordinal);
+    }
 }

@@ -893,6 +893,15 @@ painter and its layout (numpy only, so the analysis scripts import it).
   poster to the original's lit poster on a night frame. `cb17a`'s gable ends take the brick cell
   at the original gable texture's unlit mean colour, since another family's solid band under the
   kind's grade came out about 2.5 times too dark.
+- The `det` dressing (`c5.py`'s `DRESSING`) is a model file per dressing kind like a building's,
+  with one near node and a far node, its pieces at the places measured on the original and its far
+  node at the original's triangles: street awnings in light metal, fire escapes as dark plates for
+  the flights and landings with a lattice band along each flight and a rail over each landing, roof
+  boxes and vent stubs, a ledge ring, and a lattice mast. The near node adds the flat pieces'
+  undersides. The lattice is the board format 4, our own truss drawn as light metal on black;
+  a file whose material is named `*.cutout` draws through `CityModels`'s cut-out shader, which
+  discards its black. `analysis/city-hulls/margin.py` checks a dressing model by its box: within
+  the original's grown by `DET_TOL` (0.05 m).
 - Nothing from the original's textures goes into a model or the atlas: the facade families are
   drawn after what the originals show, and each kind's grade is a number set from the original's
   mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures

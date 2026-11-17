@@ -83,6 +83,8 @@ objected to; reopen any of them by asking.
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
+| 46 | The `det` dressing's fire escapes and look (C21) | Shown three ways to build a fire escape: **"B: see-through lattice"**, one flat panel per flight with a lattice of our own drawing, cut out so the wall shows through. Shown the build, with roof boxes paler than the original's and one zigzag per lattice band against the original's finer diamonds: **"Land as shown"**. |
+| 45 | Original posters on the new boards (C21) | The user: "could we place the original posters on the new buildings boards, mixed with the new ones?" The three C5 posters (`poster02`, `poster03`, `poster04`) are copied from the game's loaded textures into the atlas in memory, never into the repo; `poster03` joins the tall designs, `poster02` and `poster04` the wide ones. **"Equal chance"**: each original is one more design in the seed's draw. Not built; it follows the `det` run. |
 | 44 | Pitched tower roofs of `cblock5` and `cblock6` (C21) | The original's hip and pyramid roofs on `cb18`, `cb19b` and `cb20` read dark red at night; the new ones follow each building's tint. **"Keep as shown"**. |
 | 43 | `cb17a`'s gable ends (C21) | The original's gables are orange-red brick against pale walls; the first build painted them in the wall's colour. **"Red brick gables"**. |
 | 42 | Roof billboards of `cb22` and `cb23` (C21) | The originals show a lit poster; the first build drew blank pale boards. **"Own painted posters"**, then on the wording: "Perhaps you can get some plane,parts manufactures or fictional companies from the game files." Shown ten designs (Blake, Tornado, Achilles Armor, Hughes, Wright, Bristol, Ford, Colt, and the words EAT and INN on the narrow board), five of them names of real firms the game names as makers: **"Land it"**. |
@@ -967,8 +969,20 @@ stepped podium. `cb19a`'s roof stands at 24.8 m (measured 25.22) so the far box'
 split, and its notch backs stand 4 cm inside its top floor's wall so they keep their windows. The
 walk-ups under tile roofs (`cb21` to `cb24`) wear the cornice line; the towers do not, and their
 pitched roofs follow each building's tint (Decision 44). `measure.ps1` gains `C5-cb5` and
-`C5-cb6`. The model files hold 20,728 near and 1,812 far triangles. Remaining: the 16 `det`
-shapes.
+`C5-cb6`.
+
+The `det` dressing is rebuilt (Decision 46): each of the 16 dressing kinds has a model file like a
+building's, one near node and a far node, its pieces at the places measured on the original and
+its far node at the original's triangle count. Street awnings are light metal; roof boxes, vents
+and a ledge ring's top are the roof surface, its edge light metal. A fire escape is dark plates
+for its flights and landings with a lattice band along each flight and a rail over each landing,
+and `cb02det02`'s mast is four lattice panels. The lattice is an atlas cell of our own drawing
+(board format 4), a truss of light metal bars on black. A hull whose material is named `*.cutout`
+draws through a second pair of shaders, the buildings' text with `CityModels.CutCode()` appended,
+which discards a lattice texel darker than `CutLuma`; the buildings keep their shader text. The
+`city models:` line reads 0 solid stamps drawing an original on C5. The model files hold 21,556
+near and 2,378 far triangles. Remaining: the original posters among ours (Decision 45) and the two
+roof clashes named under Open.
 
 The billboards of `cb22` and `cb23` show posters of our own (Decision 42) at their measured places
 on the far box and both near variants, on the face the original's poster faces (both faces on
@@ -1099,13 +1113,29 @@ specs were not read line by line, the margin and corner scripts and the sheets s
 measured: the cost of the boards and gables (the display had changed to 1920x1080 and another
 session's run overlapped the batch), which C24's rerun covers.
 
+The dressing is verified by its agent. Every dressing node stays within its original's box grown
+by 0.05 m (at most 0.006 m past it), each far node holds its original's triangles (566 in all),
+and `corners.py` reads 0 faults over all 71 models. The 55 earlier model files and the window ids
+are byte-identical, and the atlas changed in the new cell alone. With the dressing files set aside
+and the earlier atlas, the code renders the earlier build's `cblock5` frame pixel for pixel; the
+new atlas moves 10 horizon pixels by one level through its deepest mips. On pinned 8-frame bursts
+a fire escape at about 80 m changes by 0.08 levels frame to frame (the original's 0.14), no pixel
+pair by more than 16; the whole frame at about 230 m changes by 0.14 (the original's 0.12). The
+log reads 96 kinds with a hull, 4,433 near nodes and 0 solid stamps drawing an original.
+`CityModelsTests` (4), the six targeted engine suites and `-Quick` (1,585 units, 13 engine suites)
+pass. The orchestrator read the shader and test diff and the montages and sent them to the user;
+`c5.py`'s piece builders were not read. Not run: the golden stage, so `c5-city-night-enhanced`'s
+pin may be stale, and the cost batch, since other sessions held the GPU.
+
 **Open so far.** The 2.5 m sides of light wells and notches are plain wall, and the paired row's
 dormer window sits off centre. Lit windows in the pinned frames rose by 4 to 7 % over the walk-ups
 and fell by 6 to 7 % over the towers with the re-spaced rows; `LitShareMin/Max` are not retuned.
 Extreme's distant draws at `C5-alt` are 1.6 over the city off (3.4 after the second tranche, 33
-after the first, one with the prototype); Decision 33 puts the excess to the user in C24. The
-`det` dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes
-stand on the new walls. The solid strips include `cb19a`'s 3.22 m notch sides and the sides of the
+after the first, one with the prototype); Decision 33 puts the excess to the user in C24. On
+`cb00`'s fourth near variant its own tank reaches into the dressing's roof box, and on `cb02b`'s
+first a vent stands inside it. The lattice has one zigzag per band where the original's truss
+shows finer diamonds, and the dressing's roof boxes read paler than the original's; the user keeps
+both (Decision 46). The golden stage and the cost of the dressing are not run. The solid strips include `cb19a`'s 3.22 m notch sides and the sides of the
 light wells and notches of `cb21a`, `cb22`, `cb23` and `cb24b`. `cb18b`'s arched windows are not
 drawn. Five of the ten posters carry names of real firms the game names as makers (Hughes, Wright,
 Bristol, Ford, Colt), each one cell of `paint_posters`. `cb17a`'s gable reads about 1.75 times

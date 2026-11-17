@@ -647,6 +647,150 @@ HULLS = {
                   profile=[(0, [R24]), (22, [R24]), (22, [(-12, 12, -8, 12)]), (24, [(-12, 12, -8, 12)])]),
 }
 
+# ---- the det dressing: pieces at their measured places, each its original's triangles on the far node. The near
+# node adds the undersides of the flat pieces, so a stair or an awning seen from below does not vanish.
+
+
+def _quad(mesh, pts, uvs, cls, out, near, family=None):
+    mesh.face(pts, uvs, cls, out, family)
+    if near:
+        mesh.face(pts, uvs, cls, -cb.np.asarray(out, float), family)
+
+
+def _at(axis, s, y, d):
+    """A point s along the wall plane and d off axis 0 (x) or 2 (z), at height y."""
+    return (d, y, s) if axis == 0 else (s, y, d)
+
+
+def fire_escape(axis, wall, out, lo, hi, flights, top=False):
+    """A fire escape on the wall plane x (axis 0) or z (axis 2) = wall, standing 1 m out (out +1 or -1): flights
+    rising 8 m from the lo end to the hi end and landings between them, dark plates of the roof surface as the
+    original's are; on the outer face a lattice band
+    1.6 m deep along each flight and a 1 m rail over each landing, cut out (board format LATTICE). With top, a
+    last landing at the head of the top flight."""
+    d0, d1 = wall, wall + out
+    n = cb.np.zeros(3)
+    n[axis] = out
+    span = hi - lo
+
+    def build(mesh, near):
+        for k in range(flights):
+            y = 8.0 * k
+            slope = [_at(axis, lo, y, d0), _at(axis, lo, y, d1), _at(axis, hi, y + 8, d1), _at(axis, hi, y + 8, d0)]
+            _quad(mesh, slope, [(p[0] / cb.TW, p[2] / cb.TW) for p in slope], cb.ROOF, (0, 1, 0), near)
+            band = [_at(axis, lo, y, d1), _at(axis, lo, y + 1.6, d1), _at(axis, hi - 0.2 * span, y + 8, d1),
+                    _at(axis, hi, y + 8, d1)]
+            length = (span ** 2 + 64) ** 0.5
+            uvs = [(0, 0), (0, 1 / 3), (length * 0.8 / BOARD_TILE[0], 1 / 3), (length / BOARD_TILE[0], 0)]
+            mesh.face(band, uvs, cb.BOARD, n, family=cb.A.LATTICE)
+            if k:
+                land = [_at(axis, lo, y, d0), _at(axis, lo, y, d1), _at(axis, hi, y, d1), _at(axis, hi, y, d0)]
+                _quad(mesh, land, [(p[0] / cb.TW, p[2] / cb.TW) for p in land], cb.ROOF, (0, 1, 0), near)
+                rail = [_at(axis, lo, y, d1), _at(axis, lo + 0.125 * span, y + 1, d1), _at(axis, hi, y + 1, d1),
+                        _at(axis, hi, y, d1)]
+                w = abs(span) / BOARD_TILE[0]
+                mesh.face(rail, [(0, 0), (w * 0.125, 1 / 3), (w, 1 / 3), (w, 0)], cb.BOARD, n, family=cb.A.LATTICE)
+        if top:
+            y = 8.0 * flights
+            land = [_at(axis, lo, y, d0), _at(axis, lo, y, d1), _at(axis, hi, y, d1), _at(axis, hi, y, d0)]
+            _quad(mesh, land, [(p[0] / cb.TW, p[2] / cb.TW) for p in land], cb.ROOF, (0, 1, 0), near)
+    return build
+
+
+def awnings_on(axis, wall, spans, y_wall, y_edge, depth=2.17):
+    """A street awning on both walls x (axis 0) or z (axis 2) = +-wall over each span: a slope from y_wall at the
+    wall to y_edge depth metres out, and an end triangle at each side, in light metal: the originals are pale."""
+    def build(mesh, near):
+        for sign in (-1, 1):
+            w, e = sign * wall, sign * (wall + depth)
+            for s0, s1 in spans:
+                top = [_at(axis, s0, y_wall, w), _at(axis, s1, y_wall, w), _at(axis, s1, y_edge, e), _at(axis, s0, y_edge, e)]
+                up = cb.np.zeros(3)
+                up[axis] = sign
+                _quad(mesh, top, [(p[0] / cb.TW, p[2] / cb.TW) for p in top], cb.METAL, up + (0, 1, 0), near)
+                for s, side in ((s0, -1), (s1, 1)):
+                    tri = [_at(axis, s, y_wall, w), _at(axis, s, y_edge, e), _at(axis, s, y_edge, w)]
+                    nn = cb.np.zeros(3)
+                    nn[2 - axis] = side
+                    _quad(mesh, tri, [((p[0] + p[2]) / cb.TW, p[1] / cb.TW) for p in tri], cb.METAL, nn, near)
+    return build
+
+
+def roof_box(x0, x1, z0, z1, y0, y1):
+    """A roof box or a vent stub: four sides and a top, the tower dressing's roof surface."""
+    return lambda mesh, near: cb.box(mesh, x0, x1, z0, z1, y0, y1)
+
+
+def ledge_ring(outer, inner, y0, y1):
+    """A ledge round the footprint: a flat ring at y1 between inner and outer, a light metal band under its edge."""
+    def build(mesh, near):
+        (ox0, ox1, oz0, oz1), (ix0, ix1, iz0, iz1) = outer, inner
+        o = [(ox0, oz0), (ox1, oz0), (ox1, oz1), (ox0, oz1)]
+        i = [(ix0, iz0), (ix1, iz0), (ix1, iz1), (ix0, iz1)]
+        for k in range(4):
+            j = (k + 1) % 4
+            top = [(o[k][0], y1, o[k][1]), (o[j][0], y1, o[j][1]), (i[j][0], y1, i[j][1]), (i[k][0], y1, i[k][1])]
+            _quad(mesh, top, [(p[0] / cb.TW, p[2] / cb.TW) for p in top], cb.ROOF, (0, 1, 0), near)
+            band = [(o[k][0], y0, o[k][1]), (o[j][0], y0, o[j][1]), (o[j][0], y1, o[j][1]), (o[k][0], y1, o[k][1])]
+            mid = cb.np.array(((o[k][0] + o[j][0]) / 2, 0, (o[k][1] + o[j][1]) / 2))
+            mesh.face(band, [((p[0] + p[2]) / cb.TW, p[1] / cb.TW) for p in band], cb.METAL, mid / cb.np.linalg.norm(mid))
+    return build
+
+
+def mast(base, y0, top, y1):
+    """A lattice mast: the four faces of a frustum from rectangle base at y0 to rectangle top at y1."""
+    def build(mesh, near):
+        cb_, ct = ([(r[0], r[2]), (r[1], r[2]), (r[1], r[3]), (r[0], r[3])] for r in (base, top))
+        centre = cb.np.array(((base[0] + base[1]) / 2, (y0 + y1) / 2, (base[2] + base[3]) / 2))
+        for k in range(4):
+            j = (k + 1) % 4
+            pts = [(cb_[k][0], y0, cb_[k][1]), (cb_[j][0], y0, cb_[j][1]), (ct[j][0], y1, ct[j][1]), (ct[k][0], y1, ct[k][1])]
+            wide = ((cb_[j][0] - cb_[k][0]) ** 2 + (cb_[j][1] - cb_[k][1]) ** 2) ** 0.5
+            uvs = [(0, 0), (wide / BOARD_TILE[0], 0), (wide / BOARD_TILE[0], (y1 - y0) / BOARD_TILE[1]), (0, (y1 - y0) / BOARD_TILE[1])]
+            mid = cb.np.mean([cb.np.array(p) for p in pts], axis=0)
+            mesh.face(pts, uvs, cb.BOARD, mid - centre, family=cb.A.LATTICE)
+    return build
+
+
+# Measured per piece in each decoration's own frame (analysis/city-hulls/FINDINGS.md, "The det dressing"); the
+# cb06, cb08 and cb11 dressing stands turned 45 degrees like its building. FAMILY is the building's, RGB the
+# original's unlit mean (census.py), the grade of the roof pieces. CUTOUT marks a file with lattice.
+AWN_00 = awnings_on(2, 12, [(-18.75, -11.25), (6.25, 13.75)], 4.92, 3.67)
+AWN_01 = awnings_on(2, 16, [(-11.75, -4.25), (4.25, 11.75)], 7.12, 5.87)
+AWN_02 = awnings_on(2, 15.89, [(-10.56, -3.06), (3.06, 10.56)], 4.92, 3.67)
+AWN_03 = awnings_on(0, 15.89, [(-10.56, -3.06), (3.06, 10.56)], 4.92, 3.67)
+FE_00X = fire_escape(0, -20, -1, 3.8, -2.2, 2)
+FE_00Z = fire_escape(2, 12, 1, -4, -10, 2)
+BOX_00 = roof_box(13.04, 18.04, -5.2, 5.8, 16, 17.72)
+VENT_00 = roof_box(-15, -13.95, -6.9, -6, 16, 17.05)
+RING_00 = ledge_ring((-22, 22, -14, 14), (-20, 20, -12, 12), 3.55, 4)
+RING_01 = ledge_ring((-18, 18, -18, 18), (-16, 16, -16, 16), 3.55, 4)
+DRESSING = {
+    "cb00det01": dict(family=STONE, rgb=(56, 55, 53), pieces=[AWN_00, FE_00X], cutout=True),
+    "cb00det02": dict(family=STONE, rgb=(57, 57, 56), pieces=[AWN_00, FE_00Z, VENT_00, BOX_00], cutout=True),
+    "cb00det03": dict(family=STONE, rgb=(48, 50, 49), pieces=[FE_00Z, BOX_00, RING_00], cutout=True),
+    "cb01det01": dict(family=STONE, rgb=(50, 52, 51), cutout=True, pieces=[
+        fire_escape(2, 16, 1, 0, -6, 3), roof_box(9.04, 14.04, 1.77, 12.77, 22.28, 25.72), RING_01]),
+    "cb01det02": dict(family=STONE, rgb=(57, 58, 57), cutout=True, pieces=[
+        AWN_01, fire_escape(0, 16, 1, 0, 6, 3, top=True), roof_box(9.04, 14.04, 1.77, 12.77, 22.28, 25.72)]),
+    "cb02det01": dict(family=STEEL, rgb=(66, 66, 65), pieces=[
+        AWN_02, roof_box(2.3, 3.35, -12.59, -11.69, 65.18, 66.23), roof_box(-12.7, -7.7, -4.71, 2.11, 65.18, 66.9)]),
+    "cb02det02": dict(family=STEEL, rgb=(50, 52, 52), cutout=True, pieces=[
+        roof_box(12.89, 13.94, 10.8, 11.7, 44.99, 46.04), roof_box(-13.7, -8.7, -12.89, -6.06, 65.18, 66.9),
+        mast((-0.7, 1.3, -1.89, 0.11), 65.18, (0.05, 0.55, -1.14, -0.64), 69.18)]),
+    "cb03det01": dict(family=WARM, rgb=(72, 70, 68), pieces=[AWN_03, roof_box(8.71, 9.76, 8.81, 9.71, 65.18, 66.23)]),
+    "cb03det02": dict(family=WARM, rgb=(74, 75, 75), pieces=[roof_box(-8.29, -7.24, -8.19, -7.29, 65.18, 66.23)]),
+    "cb06det01": dict(family=STONE, rgb=(48, 50, 49), turn=45, pieces=[FE_00Z, BOX_00, RING_00], cutout=True),
+    "cb06det02": dict(family=STONE, rgb=(57, 57, 56), turn=45, pieces=[AWN_00, FE_00Z, VENT_00, BOX_00], cutout=True),
+    "cb06det03": dict(family=STONE, rgb=(56, 55, 53), turn=45, pieces=[AWN_00, FE_00X], cutout=True),
+    "cb08det01": dict(family=WARM, rgb=(72, 70, 68), turn=45, pieces=[AWN_03, roof_box(7.81, 8.71, 8.66, 9.71, 65.18, 66.23)]),
+    "cb08det02": dict(family=WARM, rgb=(74, 75, 75), turn=45, pieces=[roof_box(-8.18, -7.28, -8.67, -7.62, 65.18, 66.23)]),
+    "cb11det01": dict(family=STONE, rgb=(46, 48, 46), turn=45, cutout=True, pieces=[
+        fire_escape(2, 16, 1, 0, -6, 4), roof_box(9.04, 14.04, 1.77, 12.77, 32, 33.72), RING_01]),
+    "cb11det02": dict(family=STONE, rgb=(51, 52, 50), turn=45, cutout=True, pieces=[
+        AWN_01, fire_escape(0, 16, 1, 0, 6, 4), roof_box(9.04, 14.04, 1.77, 12.77, 32, 33.72)]),
+}
+
 
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -685,6 +829,28 @@ def main():
         print("CITY %s: %s, far %d triangles; family %d; grade %.4f %.4f %.4f; %s (%d bytes)" % (
             model, ", ".join("near%d %d" % (i, m.triangles()) for i, m in enumerate(nears)), far.triangles(),
             h["family"], *factor, path, os.path.getsize(path)))
+        for o in objs:
+            me = o.data
+            cb.bpy.data.objects.remove(o)
+            cb.bpy.data.meshes.remove(me)
+        cb.bpy.data.materials.remove(mat)
+    for model, h in DRESSING.items():
+        if args.only and model not in args.only:
+            continue
+        far, near = cb.Mesh(), cb.Mesh()
+        for piece in h["pieces"]:
+            piece(far, False)
+            piece(near, True)
+        if h.get("turn"):
+            for m in (near, far):
+                cb.turn(m, h["turn"])
+        factor = cb.grade(far, h["family"], h["rgb"], means)
+        # CityModels reads the name's suffix as the flag for its cut-out shader.
+        mat = cb.grade_material(model + (".cutout" if h.get("cutout") else ""), factor)
+        objs = [cb.to_object("near0", near, h["family"], mat), cb.to_object("far", far, h["family"], mat)]
+        path = cb.export(objs, args.out, args.chapter, model)
+        print("CITY %s: near0 %d, far %d triangles; family %d; grade %.4f %.4f %.4f; %s (%d bytes)" % (
+            model, near.triangles(), far.triangles(), h["family"], *factor, path, os.path.getsize(path)))
         for o in objs:
             me = o.data
             cb.bpy.data.objects.remove(o)

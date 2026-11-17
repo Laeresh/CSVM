@@ -186,6 +186,73 @@ of them, since their roofs are bands between unlike sections; these are read off
   the ends, its roof light at the same place. `cb24b`: `cb15b` turned a quarter, walls to 20 m, a
   cornice to 22 m and a raised middle 20 m long to 24 m.
 
+## The `det` dressing
+
+Sixteen shapes, 12,569 stamps, each a separate solid decoration at its building's origin. Every
+one is a few kinds of piece, measured per piece (triangles joined by shared vertices) in the
+decoration frame, `cb06`, `cb08` and `cb11`'s turned back by 45 degrees:
+
+- **Street awning** (`genbldg3`): a 7.5 m slab 2.17 m off a long wall, sloping 1.25 m from about
+  4.9 m (7.1 m on `cb01` and `cb11`) at the wall; 4 triangles. Four per shape on the walk-ups
+  and on `cb02` and `cb03`.
+- **Fire escape** (`nosegun5` landings, `scafolding1` lattice): a zigzag stair 6 m wide and 1 m off
+  a wall, from the ground to the roof (16, 24 or 32 m); 12 to 28 triangles.
+- **Roof box** (`oildock1`, `roof01`): 5 x 11 m and 1.72 m tall (3.44 m on `cb01`), on the roof;
+  10 triangles.
+- **Vent stub** (`genbldg3`, `oildock1`): a 1 m cube on the roof; 10 triangles. `cb03det02` and
+  `cb08det02` are this alone.
+- **Ledge ring** (`aluminum_border2`, `roof01`): a band 0.45 m deep at 3.55 to 4 m, 2 m out round
+  the whole footprint (44 x 28 m on `cb00` and `cb06`, 36 m square on `cb01` and `cb11`);
+  16 triangles.
+- **Mast** (`scafolding1`): a lattice cone 2 m square and 4 m tall on `cb02det02`'s roof;
+  8 triangles.
+
+| Shape | On | Placed | Tris | Pieces |
+|---|---|---:|---:|---|
+| `cb00det01` | `cb00` | 1,050 | 28 | 4 awnings, fire escape |
+| `cb00det02` | `cb00` | 1,077 | 48 | 4 awnings, fire escape, vent, roof box |
+| `cb00det03` | `cb00` | 994 | 38 | fire escape, roof box, ledge ring |
+| `cb01det01` | `cb01` | 1,171 | 46 | fire escape, roof box, ledge ring |
+| `cb01det02` | `cb01` | 1,179 | 48 | 4 awnings, fire escape, roof box |
+| `cb02det01` | `cb02` | 1,144 | 36 | 4 awnings, vent, roof box |
+| `cb02det02` | `cb02` | 1,207 | 28 | vent, roof box, mast |
+| `cb03det01` | `cb03` | 819 | 26 | 4 awnings, vent |
+| `cb03det02` | `cb03` | 747 | 10 | vent |
+| `cb06det01` | `cb06` | 463 | 38 | fire escape, roof box, ledge ring |
+| `cb06det02` | `cb06` | 481 | 48 | 4 awnings, fire escape, vent, roof box |
+| `cb06det03` | `cb06` | 427 | 28 | 4 awnings, fire escape |
+| `cb08det01` | `cb08` | 242 | 26 | 4 awnings, vent |
+| `cb08det02` | `cb08` | 266 | 10 | vent |
+| `cb11det01` | `cb11` | 664 | 54 | fire escape, roof box, ledge ring |
+| `cb11det02` | `cb11` | 638 | 54 | 4 awnings, fire escape, roof box |
+
+`cb06det0n` repeats `cb00det0n` and `cb08det0n` `cb03det0n` in their turned frames. Only
+`scafolding1` cuts texels out by alpha (55 % of them), so the fire escapes and the mast are
+see-through lattices; every other dressing texture is opaque.
+
+**How a dressing stamp is drawn.** A `det` decoration is a solid kind like a building: its own
+roll among `det01` to `det03`, its own MultiMesh and cells, its own collision shape, and its
+source block's fade (75 to 250 m). It is stamped at its building's point, so its custom data
+carries the building's seed (`CityModels.Seed`). `Clutter.CityOf` looks a hull up by the
+decoration's name, so a `cbNNdetMM.glb.bin` model file takes the kind into the city path like a
+building, its original MultiMesh suppressed by layout and its collider kept. The dressing fades
+out before the 3D Scenery band's hand-over starts (400 m at Near), so the far node is drawn only
+on the map edge's copies and in a spyglass disc.
+
+**The rebuild** (`c5.py`'s `DRESSING`) puts each piece at its measured place with one near node
+and a far node; no shape takes a second near variant, since every piece repeats with its building
+already. Each far node holds its original's triangles exactly (566 over the sixteen). The near node
+adds the undersides of the flat pieces (flights, landings, awnings, the ledge ring), so they do not
+vanish from below. A fire escape's flights and landings are dark plates of the building family's
+roof surface, as the original's are; its lattice bands and rails, and the mast, are flat panels of
+the board format 4, our own truss of light metal bars on black, which the cut-out shader discards.
+Awnings and the ledge ring's edge are light metal, roof boxes, vents and the ring's top the roof
+surface. Every node stays within its original's box grown by 0.05 m (`margin.py`, at most
+0.006 m past it). The roof boxes and vents stand where the original's do: on `cb00`'s fourth
+near variant a tank of its own reaches into the `det02` and `det03` roof box (box overlap
+0.62 m³), on `cb02b`'s first a vent stands inside the `det01` roof box (1.67 m³), and on `cb01d`
+the box pierces the hipped roof as the original's does.
+
 ## Variants
 
 The near variants per shape follow the placed counts above, summed over the models of one shape:

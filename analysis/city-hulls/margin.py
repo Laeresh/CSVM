@@ -8,7 +8,8 @@ it, and the column is taken as solid below that. The city's buildings are stacke
 dressing standing on roofs, so this holds for them; an overhang (cb04a's cornice ring, 0.25 m
 past its tier) reads as solid down to the roof below it, which only makes the check more lenient
 by that overhang. Inward: a column of the original missing in the model, at a height y, is as
-deep as the nearer of the original's surface above it and the original's outline at y. Above:
+deep as the nearer of the original's surface above it and the original's outline at y. A det dressing model is thin pieces, not a
+hull, so it is checked by its bounding box instead: within the original's grown by DET_TOL. Above:
 over the original's footprint, the model's top minus the original's. Sideways: a model column
 outside the original's footprint, its distance to that footprint. The original is every mesh of
 the decoration's chain (census.py's geometry). Prints numbers only.
@@ -33,6 +34,8 @@ MODELS = os.path.join(C.REPO, "CSVM", "data", "city_models")
 GRID = 0.25
 PAD = 8.0
 LIMITS = {"in": 3.0, "above": 4.0, "side": 0.3}
+# A det dressing model is measured by its box: at most this far past the original's, in metres.
+DET_TOL = 0.05
 
 
 def read_glb(path):
@@ -113,6 +116,15 @@ def main():
         node = next(i for i in ch.by_name[m + ".flt"] if ch.parts(i))
         orig = [t[0] for t in ch.geometry(node)]
         meshes, _ = read_glb(os.path.join(MODELS, "C5", m + ".glb.bin"))
+        if "det" in m:
+            # Dressing is thin pieces, not a hull: its box must stay inside the original's grown by DET_TOL.
+            olo, ohi = np.min(np.reshape(orig, (-1, 3)), 0), np.max(np.reshape(orig, (-1, 3)), 0)
+            for name in sorted(meshes, key=lambda n: (n == "far", n)):
+                pos, _, _, tri = meshes[name]
+                past = float(max(0.0, *(olo - pos.min(0)), *(pos.max(0) - ohi)))
+                print("%-6s %-6s %6d   box: %.3f m past the original's box  %s" % (
+                    m, name, len(tri), past, "yes" if past <= DET_TOL else "NO"))
+            continue
         allp = np.concatenate([np.asarray(orig).reshape(-1, 3)] + [p for p, _, _, _ in meshes.values()])
         x0, z0 = allp[:, 0].min() - PAD, allp[:, 2].min() - PAD
         nx = int(np.ceil((allp[:, 0].max() + PAD - x0) / GRID))

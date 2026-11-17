@@ -46,6 +46,8 @@ FONT = ImageFont.load_default(size=14)
 CORNICE_GAIN = 2.5
 # CityModels.PosterGain, mirrored.
 POSTER_GAIN = 1.25
+# CityModels.CutLuma, mirrored.
+CUT_LUMA = 0.075
 SS = 2
 
 
@@ -126,8 +128,12 @@ def raster(P, attrs, scale, colour, az=35.0, el=22.0, pad=6, bg=R.BG, light=None
         if not m.any():
             continue
         vals = w0[m][:, None] * attrs[i, 0] + w1[m][:, None] * attrs[i, 1] + w2[m][:, None] * attrs[i, 2]
+        col = colour(i, vals, n / np.linalg.norm(n))
+        # A NaN colour is a discarded texel (the lattice's holes): it writes neither colour nor depth.
+        keep = ~np.isnan(col).any(1)
+        m[m] = keep
         sub[m] = z[m]
-        img[ay:by + 1, ax:bx + 1][m] = colour(i, vals, n / np.linalg.norm(n))
+        img[ay:by + 1, ax:bx + 1][m] = col[keep]
     im = Image.fromarray(np.round(lin_to_srgb(img) * 255).astype(np.uint8))
     return im.resize((max(1, W // SS), max(1, H // SS)), Image.BOX)
 
@@ -151,7 +157,10 @@ def flat_colour(factor, row, exposure=1.0):
         grade = np.where(((vals[:, 3] > 3.5) & (vals[:, 2] < A.PORTRAIT + 0.5))[:, None], POSTER_GAIN, grade)
         alb = srgb_to_lin(ATLAS[y, x, :3] / 255.0) * grade
         shade = 0.55 + 0.45 * abs(float(n @ R.LIGHT))
-        return srgb_to_lin(lin_to_srgb(alb) * shade) * exposure
+        out = srgb_to_lin(lin_to_srgb(alb) * shade) * exposure
+        # CityModels.CutCode, mirrored: a lattice texel darker than CUT_LUMA is a hole.
+        hole = (vals[:, 3] > 3.5) & (vals[:, 2] > 3.5) & (alb @ np.array((0.299, 0.587, 0.114)) < CUT_LUMA)
+        return np.where(hole[:, None], np.nan, out)
     return colour
 
 
