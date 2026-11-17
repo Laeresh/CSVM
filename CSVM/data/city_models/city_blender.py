@@ -21,8 +21,9 @@ What a model file holds (docs/tooling.md, "City models"):
   whose top or foot falls inside a floor's glass band is mapped onto the solid band round a floor
   line instead, so no window is cut. On a roof, slope or dressing, (u, v) is a planar map in
   tile units.
-- TEXCOORD_1: (family index, surface class), class 0 wall, 1 roof and 2 light metal (posts, rails,
-  slab edges; the look shader takes it ungraded, so it stays pale on a dark building).
+- TEXCOORD_1: (family index, surface class), class 0 wall, 1 roof, 2 light metal (posts, rails,
+  slab edges; the look shader takes it ungraded, so it stays pale on a dark building) and 3 a
+  walk-up's cornice line (the light metal cell, ungraded and brightened by CityModels.CorniceGain).
   city_atlas.py holds the atlas layout the two index.
 - A hull with gables (gables=True) maps a slope's vertical faces, its gable ends, onto the wall's
   solid band, so they wear the facade's wall and take no window.
@@ -45,7 +46,7 @@ import veg_blender as vb  # noqa: E402
 TW = A.TILE_M
 FLOOR = A.FLOOR_M
 SOLID = A.SOLID_M
-WALL, ROOF, METAL = 0, 1, 2
+WALL, ROOF, METAL, CORNICE = 0, 1, 2, 3
 EPS = 0.01
 
 
@@ -58,6 +59,8 @@ class Mesh:
 
     def __init__(self):
         self.faces = []
+        # Cornice bands, cornice_bands()'s: the wall faces they overlap are split and the overlap is class CORNICE.
+        self.cornice = []
 
     def face(self, pts, uvs, cls, outward):
         pts = [_v(p) for p in pts]
@@ -217,11 +220,22 @@ def wall(mesh, planes, run, y0, y1, band_only=False, collect=None):
         _wall_face(mesh, planes, (axis, coord, sign), s0, s1, ya, yb, va, vb)
 
 
-def _wall_face(mesh, planes, key, s0, s1, ya, yb, va, vb):
+def _wall_face(mesh, planes, key, s0, s1, ya, yb, va, vb, cls=WALL):
     axis, coord, sign = key
+    for (b_axis, b_coord, b_sign), b0, b1, y0, y1 in mesh.cornice if cls == WALL else ():
+        lo, hi, y0, y1 = max(s0, b0), min(s1, b1), max(ya, y0), min(yb, y1)
+        if (b_axis, b_sign) != (axis, sign) or abs(b_coord - coord) > 1e-3 or hi - lo < 1e-6 or y1 - y0 < 1e-6:
+            continue
+        v = lambda y: va + (y - ya) / (yb - ya) * (vb - va)
+        # The rest of the face round the overlap: the full-height sides, then below and above it.
+        for a, b, c, d in ((s0, lo, ya, yb), (hi, s1, ya, yb), (lo, hi, ya, y0), (lo, hi, y1, yb)):
+            if b - a > 1e-6 and d - c > 1e-6:
+                _wall_face(mesh, planes, key, a, b, c, d, v(c), v(d))
+        _wall_face(mesh, planes, key, lo, hi, y0, y1, v(y0), v(y1), CORNICE)
+        return
     pts = _run_points(axis, coord, s0, s1, ya, yb)
     uvs = [(planes.u(axis, coord, sign, _v(p)), va if p[1] == ya else vb) for p in pts]
-    mesh.face(pts, uvs, WALL, _normal(axis, sign))
+    mesh.face(pts, uvs, cls, _normal(axis, sign))
 
 
 def _sweep(ps):
@@ -340,9 +354,26 @@ def _degenerate(rects):
     return all(r[1] - r[0] < 1e-6 and r[3] - r[2] < 1e-6 for r in rects)
 
 
-def build_profile(mesh, planes, profile, roofs=None, gables=False):
-    """Walls, slopes and caps of a profile. Every flat roof is reported to roofs as
-    (y, lower footprint, upper footprint or None) for parapets and dressing."""
+def cornice_bands(profile, c):
+    """The wall strips c metres tall under every roof edge open to the sky and every eave, above
+    the street floor (a light well's foot, where the awnings sit): (plane key, s0, s1, y0, y1)."""
+    bands = []
+    for i, ((ya, ra), (yb, rb)) in enumerate(zip(profile, profile[1:])):
+        if yb - ya < 1e-6 or not _same(ra, rb) or yb <= FLOOR + 1e-6:
+            continue
+        nxt = profile[i + 2] if i + 2 < len(profile) else None
+        covered = nxt[1] if nxt and abs(nxt[0] - yb) < 1e-6 else ()
+        for axis, coord, sign, s0, s1 in outline(ra, covered):
+            bands.append(((axis, coord, sign), s0, s1, max(ya, yb - c), yb))
+    return bands
+
+
+def build_profile(mesh, planes, profile, roofs=None, gables=False, cornice=0.0):
+    """Walls, slopes and caps of a profile, with a cornice line cornice metres tall when given.
+    Every flat roof is reported to roofs as (y, lower footprint, upper footprint or None) for
+    parapets and dressing."""
+    if cornice:
+        mesh.cornice = cornice_bands(profile, cornice)
     pieces = []
     for (ya, ra), (yb, rb) in zip(profile, profile[1:]):
         if abs(yb - ya) < 1e-6:
@@ -469,13 +500,13 @@ def dress_roof(mesh, rect, y, kit, rng, blocked=()):
 
 # ---- variants
 
-def far_model(profile, gables=False):
+def far_model(profile, gables=False, cornice=0.0):
     mesh = Mesh()
-    build_profile(mesh, planes_for(profile), profile, gables=gables)
+    build_profile(mesh, planes_for(profile), profile, gables=gables, cornice=cornice)
     return mesh
 
 
-def near_model(profile, near, rng, gables=False):
+def near_model(profile, near, rng, gables=False, cornice=0.0):
     """A near model: the hull profile, or the variant's own profile of the same hull, with the
     variant's edits, parapets on every flat roof edge that is open to the sky, and the variant's
     dressing kit on the top roof."""
@@ -491,7 +522,7 @@ def near_model(profile, near, rng, gables=False):
         prof = prof[:-1] + near["crown"]
     mesh = Mesh()
     roofs = []
-    build_profile(mesh, planes, prof, roofs, gables)
+    build_profile(mesh, planes, prof, roofs, gables, cornice)
     for y, lower, upper in roofs:
         top = upper is None
         h = near.get("parapet", 1.0) if top else near.get("ledge", 0.6)

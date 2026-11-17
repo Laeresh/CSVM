@@ -240,7 +240,10 @@ def chimney_cb12b(y0):
 R12, R13, R14 = (-10, 10, -6, 6), (-6, 6, -10, 10), (-8, 8, -6, 6)
 R15, R16 = (-28, 28, -12, 12), (-12, 12, -28, 28)
 # The walls run to the cornice's top, which falls in a floor's glass band, so the cornice band reads
-# as the solid band; the cornice's 0.2 to 0.55 m flare is left out (inside the margin).
+# as the solid band; the cornice's 0.2 to 0.55 m flare is left out (inside the margin). The top
+# CORNICE_M metres under each roof edge and eave are the cornice class, the originals' bright line
+# along their dentil cornice (measured on a night frame).
+CORNICE_M = 0.6
 P_CB12 = [(0, [R12]), (14, [R12])]
 P_CB13 = [(0, [R13]), (26, [R13])]
 P_CB14 = [(0, [R14]), (12, [R14]), (17, APEX)]
@@ -411,23 +414,23 @@ HULLS = {
     "cb11c": dict(family=BRICK, rgb=(34, 31, 26), profile=P_CB11, near=TENEMENT, turn=45),    # smbldg3
     # cblock4 and cblock7 (cb12 to cb14 also stand in cblock4), none turned. The awnings, the
     # cornice ring and the further walls are part of their building (analysis/city-hulls/FINDINGS.md).
-    "cb12a": dict(family=BRICK_TILE, rgb=(46, 38, 31), profile=P_CB12, near=FLAT12A),       # smbldg3, roof02
-    "cb12b": dict(family=BRICK_TILE, rgb=(51, 36, 24), profile=P_CB12, near=FLAT12B,        # smbldg4, roof02
+    "cb12a": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(46, 38, 31), profile=P_CB12, near=FLAT12A),       # smbldg3, roof02
+    "cb12b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(51, 36, 24), profile=P_CB12, near=FLAT12B,        # smbldg4, roof02
                   far_extras=[chimney_cb12b(14)]),
-    "cb13a": dict(family=BRICK_TILE, rgb=(43, 31, 23), profile=P_CB13, near=TALL13),        # smbldg5, roof02
-    "cb13b": dict(family=STONE_TILE, rgb=(41, 38, 35), profile=P_CB13, near=TALL13),        # smbldg1, roof02
+    "cb13a": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(43, 31, 23), profile=P_CB13, near=TALL13),        # smbldg5, roof02
+    "cb13b": dict(cornice=CORNICE_M, family=STONE_TILE, rgb=(41, 38, 35), profile=P_CB13, near=TALL13),        # smbldg1, roof02
     "cb14a": dict(family=STONE, rgb=(34, 35, 34), profile=P_CB14, near=tuple(                # smbldg1
         HIP14[k] for k in ("chimneys", "deck", "setback", "dormers"))),
     "cb14b": dict(family=STONE, rgb=(32, 34, 26), profile=P_CB14, near=tuple(                # smbldg2
         HIP14[k] for k in ("walk", "four_dormers", "deck", "setback"))),
     "cb14c": dict(family=BRICK, rgb=(39, 34, 29), profile=P_CB14C, near=GABLE14, gables=True),  # smbldg3
-    "cb15a": dict(family=BRICK_TILE, rgb=(58, 43, 33), profile=[(0, [R15]), (26, [R15])],
+    "cb15a": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(58, 43, 33), profile=[(0, [R15]), (26, [R15])],
                   near=LONG15A, far_extras=[skylight]),                                      # smbldg1/3/5, roof02
-    "cb15b": dict(family=BRICK_TILE, rgb=(59, 44, 35), near=LONG15B,                         # smbldg1/3, roof02
+    "cb15b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(59, 44, 35), near=LONG15B,                         # smbldg1/3, roof02
                   profile=[(0, [R15]), (22, [R15]), (22, [(-8, 12, -12, 12)]), (24, [(-8, 12, -12, 12)])]),
-    "cb16a": dict(family=BRICK_TILE, rgb=(54, 42, 34), near=HIP16A,                          # smbldg1/3, roof02
+    "cb16a": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(54, 42, 34), near=HIP16A,                          # smbldg1/3, roof02
                   profile=[(0, [R16]), (22, [R16]), (30, APEX)]),
-    "cb16b": dict(family=BRICK_TILE, rgb=(54, 41, 32), near=HIP16B,                          # smbldg1/4/5, roof02
+    "cb16b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(54, 41, 32), near=HIP16B,                          # smbldg1/4/5, roof02
                   profile=[(0, [R16]), (22, [R16]), (26, APEX)]),
 }
 
@@ -452,10 +455,11 @@ def main():
         if args.only and model not in args.only:
             continue
         gables = h.get("gables", False)
-        far = cb.far_model(h["profile"], gables)
+        far = cb.far_model(h["profile"], gables, h.get("cornice", 0.0))
         for extra in h.get("far_extras", ()):
             extra(far, None)
-        nears = [cb.near_model(h["profile"], n, np.random.default_rng([zlib.crc32(model.encode()), i]), gables)
+        nears = [cb.near_model(h["profile"], n, np.random.default_rng([zlib.crc32(model.encode()), i]), gables,
+                        h.get("cornice", 0.0))
                  for i, n in enumerate(h["near"])]
         if h.get("turn"):
             for m in nears + [far]:

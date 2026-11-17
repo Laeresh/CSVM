@@ -42,6 +42,8 @@ import city_atlas as A  # noqa: E402
 
 SHAPES = ["cb00a", "cb01a", "cb01c", "cb01d", "cb02a", "cb02b", "cb03a", "cb03b", "cb04a", "cb04b", "cb05a", "cb05b"]
 FONT = ImageFont.load_default(size=14)
+# CityModels.CorniceGain, mirrored.
+CORNICE_GAIN = 2.5
 SS = 2
 
 
@@ -117,7 +119,7 @@ def raster(P, attrs, scale, colour, az=35.0, el=22.0, pad=6, bg=R.BG, light=None
 
 def model_tris(meshes, name, offset=(0, 0, 0)):
     pos, uv0, uv1, tri = meshes[name]
-    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0, 2.0}, "TEXCOORD_1.y is not a surface class"
+    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0, 2.0, 3.0}, "TEXCOORD_1.y is not a surface class"
     P = pos[tri] + np.array(offset)
     attrs = np.concatenate([uv0, uv1], axis=1)[tri]
     return P, attrs
@@ -125,10 +127,12 @@ def model_tris(meshes, name, offset=(0, 0, 0)):
 
 def flat_colour(factor, row, exposure=1.0):
     """render.py's flat key: albedo times 0.55 + 0.45 |n.L|, in sRGB space as render.py shades,
-    times exposure (linear). Light metal (class 2) takes no grade, as in the shader."""
+    times exposure (linear). Light metal (class 2) takes no grade, as in the shader, and the cornice
+    line (class 3) is that cell times CORNICE_GAIN."""
     def colour(i, vals, n):
         x, y = texel(vals[:, 0], vals[:, 1], vals[:, 2], vals[:, 3], row)
         grade = np.where((vals[:, 3] > 1.5)[:, None], 1.0, np.array(factor)[None, :])
+        grade = np.where((vals[:, 3] > 2.5)[:, None], CORNICE_GAIN, grade)
         alb = srgb_to_lin(ATLAS[y, x, :3] / 255.0) * grade
         shade = 0.55 + 0.45 * abs(float(n @ R.LIGHT))
         return srgb_to_lin(lin_to_srgb(alb) * shade) * exposure

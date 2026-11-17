@@ -43,6 +43,10 @@ public static class CityModels
     // TUNE. The emission of clear lit glass, before its light colour. FOG darkens it with the rest of the building.
     private const float WindowGain = 0.4f;
 
+    // TUNE. The brightening of surface class 3, a walk-up's cornice line on the ungraded light metal cell. It reads
+    // near-white like the original's dentil line at night. An albedo gain: it emits nothing.
+    private const float CorniceGain = 2.5f;
+
     // TUNE. Where single windows fall under a pixel, the wall lights points instead, cells about FarPointPx pixels
     // wide. A cell lights by a roll against the lit share times FarPointShare, at FarPointGain of a lit window.
     // An even mean glow there read as a beige wash, since night exposure pushes a resolved window into the tonemap.
@@ -198,6 +202,10 @@ public static class CityModels
                 vec3 albedo = textureGrad(facade_tex, st, du * k, dv * k).rgb;
                 if (roof && !metal && family > {{F(TileRoofFamily - 0.5f)}}) {
                     albedo *= csky_city_roof(csky_city_rand(s + 6u));
+                }
+                // Class 3, a walk-up's cornice line, is the metal cell brightened.
+                if (uv2.y > 2.5) {
+                    albedo *= {{F(CorniceGain)}};
                 }
                 float lean = {{F(TintSpread)}} * (2.0 * csky_city_rand(s + 2u) - 1.0);
                 float gain = 1.0 + {{F(BrightnessSpread)}} * (2.0 * csky_city_rand(s + 3u) - 1.0);

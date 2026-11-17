@@ -857,7 +857,10 @@ painter and its layout (numpy only, so the analysis scripts import it).
   right along the wall plane with a whole-number offset per plane, so every window column of a
   building has its own integer u, and v is height over 8 m. `TEXCOORD_1` is (family, surface class:
   0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
-  dark building). A gabled kind maps its gable ends onto the wall's solid band. The six families
+  dark building, 3 cornice, the light metal cell ungraded and brightened by
+  `CityModels.CorniceGain`). The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a
+  0.6 m cornice line at the top of the wall under every roof edge and eave, after the bright line
+  along the originals' dentil cornice (`c5.py`'s `CORNICE_M`). A gabled kind maps its gable ends onto the wall's solid band. The six families
   are grey stone and brick walk-ups, warm and dark office towers, and the two walk-ups again under
   a brown tile roof, their rows in wall colours of their own (`TILE_WALLS`) held to the first two
   families' mean, so their grades stand. The shader recolours a tile roof per building

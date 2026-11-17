@@ -51,6 +51,9 @@ public sealed class CityModelsTests
         Assert.DoesNotContain("TIME", look, System.StringComparison.Ordinal);
         Assert.Contains("LIT_FLOORS)", look, System.StringComparison.Ordinal);
         Assert.Contains("albedo *= csky_city_roof(csky_city_rand(s + 6u))", look, System.StringComparison.Ordinal);
+        // Class 3, the cornice line, takes the ungraded metal cell (every class over 1.5) and its own gain.
+        Assert.Contains("bool metal = uv2.y > 1.5;", look, System.StringComparison.Ordinal);
+        Assert.Contains("if (uv2.y > 2.5) {", look, System.StringComparison.Ordinal);
         Assert.Equal(look, CityModels.LookCode());
     }
 }

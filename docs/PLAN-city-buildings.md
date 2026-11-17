@@ -80,7 +80,7 @@ objected to; reopen any of them by asking.
 | 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. A follow-up issue filed in C24, outside this plan (Decision 5). |
 | 35 | Walk-up colour variety (C21) | Of the dressed `cblock4` the user said: "The cblock4 could use more color variation at least the roofs", and of the other walk-up district: "cblock7 looks good". Each tile roof takes one of six colours and the walls under tile roofs four per family; shown both districts before and after, the user chose **"Land it as shown"**, so the variety reaches `cblock7` too. At the controls afterwards: "works for me". |
 | 36 | `cb07b`'s two tops (C21) | **"Keep both"**: the open frame with two slabs on one near variant and the far box, the landing deck with edge rails on the other. |
-| 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. |
+| 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
 | 40 | The option's label (C22) | **"3D Scenery"** replaces "3D Vegetation" on the VIDEO page. The stored key and values stay. |
@@ -964,6 +964,16 @@ changed. The tar roofs (the towers, and families 0 and 1 with the `cb14` houses)
 The change reaches `cb12`, `cb13`, `cb15` and `cb16`: 12 of 17 buildings per `cblock4` tile and 14
 of 25 per `cblock7` tile.
 
+The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a thin near-white cornice
+line (Decision 37). The top 0.6 m of the wall under every roof edge open to the sky and under
+every eave is surface class 3, which samples the light metal cell ungraded and multiplies it by
+`CityModels.CorniceGain` (2.5), an albedo gain that emits nothing. It is on every near variant and
+the far box, and follows set-back floors, light wells, a low end, a central attic and `cb15b`'s
+raised middle; roofs at street-floor height take none, and parapets stay brick above it. Height
+and gain are matched to the original's line on a night frame: about 0.6 m, and a raw luma peak of
+about 120 against the original's 120. Class 2 is unchanged, so `cb07b`'s posts stay as they were.
+Each far box gains 8 triangles and stays under its original (at most 64 of `cb15b`'s 96).
+
 **Verified so far.** By the tranche's agent. Every near and far mesh is inside the margin
 (`analysis/city-hulls/margin.py`): at most 2.5 m in, 3.77 m above, nothing sideways, and every far
 box reads 0, 0, 0. The `cblock1` files without a new variant and the atlas are byte-identical. The
@@ -1000,11 +1010,27 @@ golden stage reads 41 of 41 after the pin. The orchestrator read the diff, looke
 `cblock7` and tower montages and sent them to the user, who chose to land it as shown. Its cost
 was not measured (one roll and one multiply on roof pixels).
 
-**Open so far.** Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
+The cornice is verified by its agent. Every changed mesh is inside the margin with nothing
+sideways (at most 3.00 m in, 3.70 m above). The atlas and the 33 other model files, `cb07`'s
+included, are byte-identical, and the `C5-cb1` and `C5-cb23` tower views are pixel-identical
+before and after. On 8-frame `--det` bursts with the camera pinned, at a pose where the line is 1
+to 2 pixels and one where it is a pixel or less, the line raises the mean frame-to-frame luma
+change from 0.14 to 0.58 and from 0.20 to 0.63 levels, and at most 0.03 % of its pixel pairs change
+by more than 16 levels, so it does not crawl. `CityModelsTests`, the five targeted engine suites
+and `-Quick` (1,584 units, 13 engine suites) pass. Of 41 goldens only `c5-city-night-enhanced`
+moved; it is re-pinned to 62905965, pixel-identical on re-render, and the golden stage reads 41 of
+41 after the pin. The orchestrator read the diff and the montages and sent them to the user. Not
+measured: the line under a moving camera, and its cost.
+
+**Open so far.** The user on the dressed city: "some windows are right on corners". A wall plane
+maps its tile from the plane's low end (`Planes.u` in `city_blender.py`), so a wall whose width is
+not a whole number of bays cuts its last window column at the far corner, and a set-back wall
+starts mid-bay. The height is already split so no piece cuts a window (`v_pieces`); the width is
+not. It is fixed after the cornice and before the `cblock5`/`cblock6` shapes, since it regenerates
+every model. Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
 tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
 dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
-the new walls. The originals' pale dentil cornice on `cb12`, `cb13`, `cb15` and `cb16` reads as a
-plain wall band on the new models until Decision 37's band is built. `cb12b`'s chimney wears the roof cell where the original's is
+the new walls. `cb12b`'s chimney wears the roof cell where the original's is
 orange-red brick, and `cb03a` and `cb08a` show a reddish band on the top roof edge that is not
 traced to a texture. The new walk-ups wear brighter, more tinted walls than the originals' dark
 ones, which the user keeps (Decision 38). A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
