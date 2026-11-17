@@ -69,6 +69,9 @@ internal sealed class FlightRosterPolicy
     public bool ThrottlePlate { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
+
+    /// <summary>Whether each human seat's headlight switch starts on (<c>--headlight</c>).</summary>
+    public bool HeadlightOn { get; init; }
     public bool DebugMarkers { get; init; }
     public bool DebugScoreboard { get; init; }
 
@@ -138,6 +141,7 @@ internal sealed class FlightRosterPolicy
         ThrottlePlate = spec.ThrottlePlate,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
+        HeadlightOn = spec.HeadlightOn,
         DebugMarkers = spec.DebugMarkers,
         DebugScoreboard = spec.DebugScoreboard,
         DebugRaceGhost = spec.DebugRaceGhost,

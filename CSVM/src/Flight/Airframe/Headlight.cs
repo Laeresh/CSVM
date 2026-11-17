@@ -19,7 +19,7 @@ public sealed class Headlight
     public const float ConeDegrees = 20f;
 
     /// <summary>The beam's energy. TUNE.</summary>
-    public const float Energy = 8f;
+    public const float Energy = 3f;
 
     /// <summary>How far ahead of the hull's front the light sits, in metres. ⚠ Keep it outside the
     /// hull: a light inside the nose has its whole beam shadowed by the airframe.</summary>
@@ -86,6 +86,8 @@ public sealed class Headlight
             Name = "headlight",
             Position = new Vector3(0f, 0f, NoseZ(host, model)),
             SpotRange = Range,
+            // ⚠ Keep Godot's inverse-distance term off. At its default the beam is energy/d, gone by 60 m in daylight.
+            SpotAttenuation = WorldLights.OmniAttenuation,
             SpotAngle = ConeDegrees,
             LightEnergy = Energy,
             LightColor = WarmWhite,

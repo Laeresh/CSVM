@@ -56,7 +56,9 @@ already-live gate would drop every ejection but one per 2 s window):
   sit behind edge-on surfaces unlit, the Warhawk's wing-leading-edge guns being the measured case.
   In original mode it joins the session's `WorldLights` set. In Enhanced mode it joins the pool's
   own `WorldLights.ForAircraft` set, which only the Enhanced aircraft arm reads, as emission, since
-  the world set's lamps already reach a plane there as omnis. Guns that sit about 1.2 m or more
+  the world set's lamps already reach a plane there as omnis. That arm scales the emission by
+  `SceneBuilder.AircraftMuzzleGain` (6): at the original's strength a one-frame flash is lost
+  against Enhanced's sunlight, and a 20x capture lit the cowl plainly. Guns that sit about 1.2 m or more
   clear of the hull (the Peacemaker's 40, the Kestrel's and Hellhound's nose guns) light little of
   their own aircraft in either model, as in the original. A pool with no set bound falls back to
   an omni.

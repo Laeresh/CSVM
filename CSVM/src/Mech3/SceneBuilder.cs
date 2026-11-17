@@ -521,6 +521,11 @@ void fragment() {
     // picked by eye against the original's screenshots, at the controls and not by a luminance
     // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
+
+    // Enhanced only: the gain on the muzzle lights' emission on an aircraft. At the original's 1 a
+    // one-frame flash is lost against Enhanced's sunlight; picked at the controls over a 20x capture.
+    private const float AircraftMuzzleGain = 6f;
+
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -3042,9 +3047,12 @@ void fragment() {{");
         }
         // Light falling on the texel, as the sun-lit arm's point term is; emission so no N.L shades it, faded with the fog.
         if (aircraftPoint)
+        {
+            string gain = AircraftMuzzleGain.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
             sb.AppendLine(fogged
-                ? "    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * (1.0 - csky_fog_on * fog_amt);"
-                : "    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb;");
+                ? $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain} * (1.0 - csky_fog_on * fog_amt);"
+                : $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain};");
+        }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
         // fogged texture, which C5's night art would otherwise swallow whole.
