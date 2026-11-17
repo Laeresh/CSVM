@@ -248,6 +248,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ Measure the prototype against the budget
 15. ☐ The user's verdict on the prototype
 
+The complete battery on the branch after B14: 8,506 unit tests pass, 681 engine suites pass with 2
+skipped and engine errors clean, and of 41 goldens only `c5-city-night-enhanced` moves, held red
+until B15 settles the look.
+
 ### Wave C, the rest of the city
 
 21. ☐ Generate the remaining hulls
