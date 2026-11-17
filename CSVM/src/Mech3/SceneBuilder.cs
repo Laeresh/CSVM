@@ -2965,6 +2965,10 @@ void fragment() {{");
         // a scalar on ALBEDO would dim the surface a second time.
         if (fullbright && lit)
             sb.AppendLine("    ALBEDO *= csky_world_light_at(CAMERA_POSITION_WORLD);");
+        // SDFGI's floor: the flat ambient it replaced, shaded by a cloud shadow as the AO below shades it.
+        string giFloor = terrainShadow
+            ? "    EMISSION = ALBEDO * csky_gi_ambient_fill * csky_cloud_ao(v_terrain_pos);"
+            : "    EMISSION = ALBEDO * csky_gi_ambient_fill;";
         if (shaded && !sunLit)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
@@ -2980,6 +2984,7 @@ void fragment() {{");
             sb.AppendLine($"    ROUGHNESS = {WaterRoughnessLiteral};");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine($"    SPECULAR = {WaterSpecularLiteral};");
+            sb.AppendLine(giFloor);
         }
         else if (worldLit)
         {
@@ -2988,10 +2993,7 @@ void fragment() {{");
             sb.AppendLine("    ROUGHNESS = 1.0;");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.0;");
-            // SDFGI's floor: the flat ambient it replaced, shaded by a cloud shadow as the AO below shades it.
-            sb.AppendLine(terrainShadow
-                ? "    EMISSION = ALBEDO * csky_gi_ambient_fill * csky_cloud_ao(v_terrain_pos);"
-                : "    EMISSION = ALBEDO * csky_gi_ambient_fill;");
+            sb.AppendLine(giFloor);
         }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
         // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world.
