@@ -4,7 +4,7 @@ using Godot;
 
 namespace CSVM.Flight.Airframe;
 
-/// <summary>The headlight: a forward spotlight ahead of the aircraft's nose that a human pilot
+/// <summary>The headlight: a forward cone of light ahead of the aircraft's nose that a human pilot
 /// switches, which the original does not have. The switch starts off with the aircraft and nothing
 /// resets it, so it survives a respawn. The caller allows the beam under Enhanced graphics alone,
 /// and it casts shadows unless Shadow Quality is Off. The light is built on its first shown frame,

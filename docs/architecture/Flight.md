@@ -1354,7 +1354,7 @@ kick, the two defs and the keyed `snd_nitro` loop. `RestoreCharge` puts back a s
 snapshot after `Reset`. Decode: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/Headlight.cs
-The headlight, a remake-only forward spotlight a human pilot switches, drawn under Enhanced graphics
+The headlight, a remake-only forward cone of light a human pilot switches, drawn under Enhanced graphics
 alone. `On` is the switch: off with a new aircraft, never reset by a respawn, and a remote seat's
 comes from its owner's `AircraftStateMessage`. `Read` splits one control the view cycle and the
 switch both hold by hold length (`TapHoldButton`), which is how the pad's d-pad down carries both.

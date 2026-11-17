@@ -1145,7 +1145,7 @@ internal static class CombatSuites
     }
 
     // A third-person shot light reaches a plane the original's way in both modes. Original takes the
-    // world set's point term, Enhanced the aircraft's own set. Neither lights an omni, whose N.L left
+    // world set's point term, Enhanced the aircraft's own set. Neither lights an omni, whose N.L leaves
     // the Warhawk's hull unlit. Every shot keeps one authored pair whole.
     [Suite("muzzle-light-third-person-point-term",
         "a third-person shot light joins the world point set in Original and the aircraft set in Enhanced with no omni, always at one of the three authored near/far pairs, the Enhanced aircraft shader reads the aircraft set as emission, and an unbound pool keeps the omni")]

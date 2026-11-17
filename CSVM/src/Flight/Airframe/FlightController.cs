@@ -2531,7 +2531,10 @@ public partial class FlightController : Node3D
             PollChatKeys();
         // Nothing left to draw, animate, interpolate or point a camera at while inert.
         if (Inert)
+        {
+            Headlight.Show(this, PlaneModel, false);
             return;
+        }
         var (cycleKey, cyclePad) = StepHeadlight((float)delta, halted);
 
         // ⚠ A halt does NOT orbit: a board's cursor keys ARE the orbit keys, so the free look
@@ -3842,7 +3845,7 @@ public partial class FlightController : Node3D
         }
 
         _headlightPrev = flips;
-        Headlight.Show(this, PlaneModel, Headlight.On && GraphicsMode.Enhanced && !Crashed);
+        Headlight.Show(this, PlaneModel, Headlight.On && GraphicsMode.Enhanced && !Crashed && !Destroyed);
         return (read.CycleKey, read.CyclePad);
     }
 
