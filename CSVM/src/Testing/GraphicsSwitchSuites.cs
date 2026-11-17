@@ -1634,6 +1634,8 @@ internal static class GraphicsSwitchSuites
                 var grids = builtFresh?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new();
                 ctx.Check(grids.Count > 0 && grids.All(g => g.GIMode == GeometryInstance3D.GIModeEnum.Disabled),
                     $"the ocean's grids stay out of SDFGI's voxels, which blot the water dark next to the camera (#341; {string.Join(", ", grids.Select(g => $"{g.Name}={g.GIMode}"))})");
+                ctx.Check(enhanced.Session.Ocean?.Ocean?.ShaderText.Contains($"EMISSION = ALBEDO * {WeatherRig.GiAmbientFillParam}", StringComparison.Ordinal) == true,
+                    $"the ocean takes SDFGI's ambient floor, as the terrain does, so the sea is not left dark under GI (#341)");
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
