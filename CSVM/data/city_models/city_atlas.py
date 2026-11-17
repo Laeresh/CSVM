@@ -23,6 +23,8 @@ floor index within the tile (0 the lower floor), B the glass weight (0 none, BLI
 covers the glass, 255 clear glass), A 255. Roof and metal cells and free cells are all zero.
 """
 
+import copy
+
 import numpy as np
 
 ATLAS = 1024
@@ -94,8 +96,14 @@ FAMILIES = (
 )
 # 4 and 5, the walk-ups of cblock4 and cblock7 under a brown tile roof (the original's roof02): the
 # stone and brick facade rows again (painted after the first four families, so those stay as they
-# were), with a tile roof.
-FAMILIES = FAMILIES + (FAMILIES[0], FAMILIES[1])
+# were), with a tile roof. TUNE: their walls differ more, so a street shows different houses: grey
+# stone, buff limestone, brownstone and grey-green render; red, brown and buff brick and a painted wall.
+TILE_WALLS = (((0.44, 0.46, 0.47), (0.52, 0.48, 0.39), (0.49, 0.43, 0.38), (0.43, 0.49, 0.45)),
+              ((0.63, 0.32, 0.24), (0.50, 0.36, 0.32), (0.55, 0.42, 0.27), (0.47, 0.36, 0.35)))
+FAMILIES = FAMILIES + tuple(tuple(dict(spec, wall=w) for spec, w in zip(FAMILIES[f], TILE_WALLS[f])) for f in (0, 1))
+# Family f's wall mean is held to the mean family MEAN_OF[f]'s rows give on the same noise, so its
+# grades stay where they were.
+MEAN_OF = {4: 0, 5: 1}
 ROOFS = ((0.30, 0.30, 0.31), (0.33, 0.29, 0.26), (0.36, 0.34, 0.31), (0.29, 0.30, 0.32), (0.42, 0.27, 0.19),
          (0.42, 0.27, 0.19))
 TILE_ROOF = (False, False, False, False, True, True)
@@ -326,6 +334,11 @@ def paint_metal(rng):
     return np.clip(np.ones((n, n, 3)) * METAL * shade[..., None], 0, 1)
 
 
+def _mean(tiles):
+    """The mean sRGB 0..1 colour of equal-sized tiles."""
+    return np.mean([t.reshape(-1, 3).mean(0) for t in tiles], axis=0)
+
+
 def _scale_to(img, target):
     """Scales a tile so its mean luma over sRGB 0..255 texels is target."""
     m = luma(img * 255).mean()
@@ -341,16 +354,22 @@ def paint(seed=11):
     ids[..., 3] = 255
     means = []
     for f, rows in enumerate(FAMILIES):
+        held = copy.deepcopy(rng)
         walls = []
         for c, spec in enumerate(rows):
             img, idt = paint_tile(spec, rng)
-            img = _scale_to(img, WALL_LUMA[f])
-            walls.append(img)
-            _place(atlas, img, f, c)
+            walls.append(_scale_to(img, WALL_LUMA[f]))
             _place(ids, idt, f, c)
+        if f in MEAN_OF:
+            ref = [_scale_to(paint_tile(spec, held)[0], WALL_LUMA[f]) for spec in FAMILIES[MEAN_OF[f]]]
+            gain = _mean(ref) / _mean(walls)
+            walls = [w * gain for w in walls]
+            assert max(w.max() for w in walls) <= 1, "a held wall clips: lower its colour"
+        for c, img in enumerate(walls):
+            _place(atlas, img, f, c)
         roof = _scale_to((paint_tile_roof if TILE_ROOF[f] else paint_roof)(ROOFS[f], rng), ROOF_LUMA[f])
         _place(atlas, roof, f, ROOF_COL)
-        means.append((np.mean([w.reshape(-1, 3).mean(0) for w in walls], axis=0) * 255, roof.reshape(-1, 3).mean(0) * 255))
+        means.append((_mean(walls) * 255, roof.reshape(-1, 3).mean(0) * 255))
     # A stream of its own, so the cells above paint as they did before the metal joined.
     metal_rng = np.random.default_rng(seed + 1)
     for f in range(len(FAMILIES)):

@@ -61,6 +61,9 @@ public static class CityModels
     // so the clock's wrap changes nothing.
     private const int WindowPeriodS = 300, FloorPeriodS = 360;
 
+    // The first family with a tile roof (city_atlas.py's TILE_ROOF); every family from it up has one.
+    private const int TileRoofFamily = 4;
+
     // TUNE. The lights a lit window takes, linear, each with its share of the windows: warm yellow mostly.
     private static readonly (Vector3 Rgb, float Share)[] Lights =
     {
@@ -68,6 +71,19 @@ public static class CityModels
         (new Vector3(1.00f, 0.55f, 0.24f), 0.20f),
         (new Vector3(0.95f, 0.88f, 0.72f), 0.20f),
         (new Vector3(0.70f, 0.80f, 1.00f), 0.10f),
+    };
+
+    // TUNE. The tile roofs' colours with their shares, sRGB as they show beside the first, the atlas's weathered brown.
+    // Then terracotta, dark slate, blue-grey slate, green-grey and near-black tar. A roof takes its colour's ratio to
+    // the brown, so the tiles and the hull's grade hold.
+    private static readonly (Vector3 Rgb, float Share)[] Roofs =
+    {
+        (new Vector3(126f, 98f, 76f) / 255f, 0.30f),
+        (new Vector3(134f, 88f, 68f) / 255f, 0.20f),
+        (new Vector3(80f, 80f, 84f) / 255f, 0.15f),
+        (new Vector3(92f, 98f, 108f) / 255f, 0.15f),
+        (new Vector3(94f, 102f, 88f) / 255f, 0.10f),
+        (new Vector3(52f, 50f, 48f) / 255f, 0.10f),
     };
 
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
@@ -124,13 +140,8 @@ public static class CityModels
     /// word, so neither changes at the hand-over.</summary>
     internal static string LookCode()
     {
-        var pick = new System.Text.StringBuilder();
-        float upTo = 0f;
-        foreach (var (rgb, share) in Lights)
-        {
-            upTo += share;
-            pick.Append(CultureInfo.InvariantCulture, $"    if (p < {upTo:0.0###}) {{ return {Vec(rgb)}; }}\n");
-        }
+        var brown = Roofs[0].Rgb;
+        var roofGains = Array.ConvertAll(Roofs, r => (Linear(r.Rgb) / Linear(brown), r.Share));
         return $$"""
             const float LIT_FLOORS = {{F(LitFloorShare)}};
 
@@ -147,9 +158,8 @@ public static class CityModels
                 return float(csky_city_hash(x) >> 8u) * (1.0 / 16777216.0);
             }
 
-            vec3 csky_city_light(float p) {
-            {{pick}}    return {{Vec(Lights[^1].Rgb)}};
-            }
+            {{Pick("csky_city_light", Lights)}}
+            {{Pick("csky_city_roof", roofGains)}}
 
             // One level of the far points: cells of 1 m square doubled per level, in tile coordinates, so each point
             // stays on its building. A cell lights whole, a point of about FarPointPx pixels.
@@ -186,6 +196,9 @@ public static class CityModels
                 vec2 k = vec2({{Tile}}.0, -{{Tile}}.0) / {{Atlas}}.0;
                 vec2 du = dFdx(uv), dv = dFdy(uv);
                 vec3 albedo = textureGrad(facade_tex, st, du * k, dv * k).rgb;
+                if (roof && !metal && family > {{F(TileRoofFamily - 0.5f)}}) {
+                    albedo *= csky_city_roof(csky_city_rand(s + 6u));
+                }
                 float lean = {{F(TintSpread)}} * (2.0 * csky_city_rand(s + 2u) - 1.0);
                 float gain = 1.0 + {{F(BrightnessSpread)}} * (2.0 * csky_city_rand(s + 3u) - 1.0);
                 glow = vec3(0.0);
@@ -287,6 +300,21 @@ public static class CityModels
     private static string F(float v) => v.ToString("0.0#####", CultureInfo.InvariantCulture);
 
     private static string Vec(Vector3 v) => $"vec3({F(v.X)}, {F(v.Y)}, {F(v.Z)})";
+
+    private static Vector3 Linear(Vector3 srgb) => new(Mathf.Pow(srgb.X, 2.2f), Mathf.Pow(srgb.Y, 2.2f), Mathf.Pow(srgb.Z, 2.2f));
+
+    // A GLSL function of a roll p in [0, 1) that picks a palette entry by its share.
+    private static string Pick(string name, (Vector3 Rgb, float Share)[] palette)
+    {
+        var code = new System.Text.StringBuilder($"vec3 {name}(float p) {{\n");
+        float upTo = 0f;
+        foreach (var (rgb, share) in palette)
+        {
+            upTo += share;
+            code.Append(CultureInfo.InvariantCulture, $"    if (p < {upTo:0.0###}) {{ return {Vec(rgb)}; }}\n");
+        }
+        return code.Append(CultureInfo.InvariantCulture, $"    return {Vec(palette[^1].Rgb)};\n}}").ToString();
+    }
 
     // A chapter folder's facade atlas (sRGB, mipmapped) and its window ids (linear, no mipmaps). Null, warned, where
     // either file is missing.

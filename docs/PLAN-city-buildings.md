@@ -78,6 +78,7 @@ objected to; reopen any of them by asking.
 | 32 | The `det` dressing models (B15) | **"Rebuild them too"**: each dressing piece gets a model in the new towers' style, and its original is not drawn in the Enhanced city. Done in C21. |
 | 33 | Extreme's reach for the city (B15) | **"Full reach, re-measure later."** Extreme hands the city over across its own band. With 2048 m cells the prototype draws 1,776.5 at `C5-alt` against 1,775.5 with the city off, one draw over Decision 8's rule, which the user accepts until C24 measures the whole city; the reach is shortened then if the excess has grown past a figure the user accepts. |
 | 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. A follow-up issue filed in C24, outside this plan (Decision 5). |
+| 35 | Walk-up colour variety (C21) | Of the dressed `cblock4` the user said: "The cblock4 could use more color variation at least the roofs", and of the other walk-up district: "cblock7 looks good". Each tile roof takes one of six colours and the walls under tile roofs four per family; shown both districts before and after, the user chose **"Land it as shown"**, so the variety reaches `cblock7` too. |
 
 ## ⚠ Read this before implementing anything
 
@@ -946,6 +947,18 @@ round (-4600, -5600). The model files hold 14,422 near and 1,104 far triangles. 
 `cblock5` and `cblock6` (`cb17` to `cb24`, 2,496 buildings, none placed 1,000 times), then the 16
 `det` shapes.
 
+The walk-up districts under tile roofs vary in colour (Decision 35). The shader picks each tile
+roof's colour from the building's seed out of `CityModels.Roofs`: weathered brown 30 %, terracotta
+20 %, dark slate 15 %, blue-grey slate 15 %, green-grey 10 %, near-black tar 10 %. A colour is
+applied as its ratio to the atlas's brown, so the tiles, the grade and the agreement of near model
+and far box hold. The two tile-roof atlas families (rows 4 and 5) paint their four wall rows in
+colours of their own (`city_atlas.py`'s `TILE_WALLS`): grey stone, buff limestone, brownstone and
+grey-green render; red, brown and buff brick and a painted wall. Each family's mean colour is held
+to its former value, so every hull file and grade is byte-identical and only `C5/facade.png.bin`
+changed. The tar roofs (the towers, and families 0 and 1 with the `cb14` houses) are unchanged.
+The change reaches `cb12`, `cb13`, `cb15` and `cb16`: 12 of 17 buildings per `cblock4` tile and 14
+of 25 per `cblock7` tile.
+
 **Verified so far.** By the tranche's agent. Every near and far mesh is inside the margin
 (`analysis/city-hulls/margin.py`): at most 2.5 m in, 3.77 m above, nothing sideways, and every far
 box reads 0, 0, 0. The `cblock1` files without a new variant and the atlas are byte-identical. The
@@ -971,6 +984,17 @@ suites, `CityModelsTests` and `-Quick` (1,584 units, 13 engine suites) pass. Of 
 golden stage reads 41 of 41 after the pin. The orchestrator read the C# diff, looked at the
 `cblock7` district montage and the `cb07b` night crop, and sent the montages to the user.
 
+The colour variety is verified by its agent. A cell-by-cell comparison of the regenerated atlas
+shows families 0 to 3, every roof and metal cell and the window ids byte-identical, and the 39
+hull files are byte-identical. A tower view (`C5-cb1`) differs in 0.02 % of its pixels by one
+level. Near reach and Extreme show the same roof colour building for building across the
+hand-over, and two `--det` launches give byte-identical frames. `CityModelsTests` (3), five
+targeted engine suites and `-Quick` (1,584 units, 13 engine suites) pass. Of 41 goldens only
+`c5-city-night-enhanced` moved; it is re-pinned to 55b3fc37, pixel-identical on re-render, and the
+golden stage reads 41 of 41 after the pin. The orchestrator read the diff, looked at the `cblock4`,
+`cblock7` and tower montages and sent them to the user, who chose to land it as shown. Its cost
+was not measured (one roll and one multiply on roof pixels).
+
 **Open so far.** Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
 tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
 dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
@@ -978,7 +1002,7 @@ the new walls. The originals' pale dentil cornice on `cb12`, `cb13`, `cb15` and 
 plain wall band on the new models, `cb12b`'s chimney wears the roof cell where the original's is
 orange-red brick, and `cb03a` and `cb08a` show a reddish band on the top roof edge that is not
 traced to a texture. The new walk-ups wear brighter, more tinted walls than the originals' dark
-ones. A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
+ones. The roof and wall colour variety is judged from pinned montages, not yet at the controls. A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
 and `cb14b` are one hipped geometry. From altitude the new towers read warmer than the original's
 blue-white ones. `city-buildings` checks
 fixture hulls, not the shipped geometry; the margin script is the geometry check. The Deck is

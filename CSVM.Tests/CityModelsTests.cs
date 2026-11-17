@@ -50,6 +50,7 @@ public sealed class CityModelsTests
         Assert.Contains("csky_time", look, System.StringComparison.Ordinal);
         Assert.DoesNotContain("TIME", look, System.StringComparison.Ordinal);
         Assert.Contains("LIT_FLOORS)", look, System.StringComparison.Ordinal);
+        Assert.Contains("albedo *= csky_city_roof(csky_city_rand(s + 6u))", look, System.StringComparison.Ordinal);
         Assert.Equal(look, CityModels.LookCode());
     }
 }

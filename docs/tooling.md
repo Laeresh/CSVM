@@ -859,7 +859,9 @@ painter and its layout (numpy only, so the analysis scripts import it).
   0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
   dark building). A gabled kind maps its gable ends onto the wall's solid band. The six families
   are grey stone and brick walk-ups, warm and dark office towers, and the two walk-ups again under
-  a brown tile roof. `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
+  a brown tile roof, their rows in wall colours of their own (`TILE_WALLS`) held to the first two
+  families' mean, so their grades stand. The shader recolours a tile roof per building
+  (`CityModels.Roofs`). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
 - Nothing from the original's textures goes into a model or the atlas: the facade families are
   drawn after what the originals show, and each kind's grade is a number set from the original's
   mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures
