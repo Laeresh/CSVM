@@ -467,8 +467,12 @@ def near_model(profile, near, rng):
     that is open to the sky, and the variant's dressing kit on the top roof."""
     planes = planes_for(profile)
     prof = list(profile)
+    if near.get("notch"):
+        prof = _notch(prof, near["notch"])
     if near.get("setback"):
         prof = _set_back(prof, near["setback"])
+    if near.get("steps"):
+        prof = _steps(prof, near["steps"])
     if near.get("crown"):
         prof = prof[:-1] + near["crown"]
     mesh = Mesh()
@@ -485,7 +489,7 @@ def near_model(profile, near, rng):
                 _raised(mesh, planes, run, y + h, near["raised"])
     y, top = prof[-1]
     if not _degenerate(top):
-        dress_roof(mesh, top[0], y, near.get("kit", ()), rng)
+        dress_roof(mesh, max(top, key=lambda r: (r[1] - r[0]) * (r[3] - r[2])), y, near.get("kit", ()), rng)
     for y, lower, upper in roofs:
         if upper is not None and near.get("ledge_kit"):
             for r in lower:
@@ -505,6 +509,45 @@ def _set_back(prof, d):
         return prof
     yc = yb - FLOOR
     return prof[:-1] + [(yc, ra), (yc, [inset(r, d)]), (yb, [inset(r, d)])]
+
+
+def _steps(prof, steps):
+    """The top prism's upper floors stepped in: each (drop, d) sets the part above its top minus
+    drop d metres in, the deepest step last, on ledges at those heights."""
+    (ya, ra), (yb, rb) = prof[-2], prof[-1]
+    if not (_same(ra, rb) and len(ra) == 1 and yb - ya > max(s[0] for s in steps)):
+        return prof
+    out, cur = prof[:-1], ra
+    for drop, d in steps:
+        out += [(yb - drop, cur), (yb - drop, [inset(ra[0], d)])]
+        cur = [inset(ra[0], d)]
+    return out + [(yb, cur)]
+
+
+def _notch(prof, notches):
+    """Light wells: every tier on the base footprint loses a slot cut in from the middle of a side,
+    each notch (side, width, depth) with side one of x-, x+, z-, z+."""
+    base = prof[0][1]
+    if len(base) != 1:
+        return prof
+    x0, x1, z0, z1 = base[0]
+    cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+    cuts = []
+    for side, w, d in notches:
+        cuts.append({"x-": (x0, x0 + d, cz - w / 2, cz + w / 2), "x+": (x1 - d, x1, cz - w / 2, cz + w / 2),
+                     "z-": (cx - w / 2, cx + w / 2, z0, z0 + d), "z+": (cx - w / 2, cx + w / 2, z1 - d, z1)}[side])
+    cut = exposed(base, cuts)
+    return [(y, cut if _same(rects, base) else rects) for y, rects in prof]
+
+
+def turn(mesh, deg):
+    """Turns a built model about Y by deg, for a building that stands turned in its own mesh frame
+    (analysis/city-hulls/tiers.py --turn measures it turned back)."""
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    mesh.faces = [([_v((c * p[0] + s * p[2], p[1], -s * p[0] + c * p[2])) for p in pts], uvs, cls)
+                  for pts, uvs, cls in mesh.faces]
+    return mesh
 
 
 def _raised(mesh, planes, run, y, h):

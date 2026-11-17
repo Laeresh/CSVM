@@ -125,6 +125,31 @@ Estimated buildings per template, from each source's own count divided by its ow
 `cblock1` about 12,686, `cblock2` 2,270, `cblock3` 1,265, `cblock4` 2,802, `cblock5` 2,115,
 `cblock6` 1,750, `cblock7` 31,077. The `cblock4` plus `cblock7` total, 34,216, is exact.
 
+Every `cblock2` and `cblock3` building (`cb06` to `cb11`) stands turned 45 degrees in its own mesh
+frame: `cb06` is `cb00`'s 40 x 24 m slab, `cb08` is `cb03`'s notched tower, and the others are
+32 m squares, so their 45.3 m boxes are a square's diagonal. `tiers.py --turn=45` measures them
+turned back.
+
+## Variants
+
+The near variants per shape follow the placed counts above, summed over the models of one shape:
+a shape placed 1,000 times or more takes a third variant, and one placed 2,000 times or more a
+fourth. The cut sits in the largest gap of the dressed shapes' counts (1,166 to 805).
+
+| Shape | Placed | Near variants |
+|---|---:|---:|
+| `cb00` (`cb00a`, `cb00b`) | 3,121 | 4 |
+| `cb11` (`cb11a`, `cb11b`, `cb11c`) | 1,613 | 3 |
+| `cb06` (`cb06a`, `cb06b`, `cb06c`) | 1,371 | 3 |
+| `cb01a` (`cb01a`, `cb01b`) | 1,208 | 3 |
+| `cb02b` | 1,185 | 3 |
+| `cb02a` | 1,166 | 3 |
+| `cb04a`, `cb03b`, `cb05a`, `cb05b`, `cb03a`, `cb04b` | 805 to 766 each | 2 |
+| `cb01c`, `cb01d`, `cb08` (`a` and `b`), `cb09` (`a` and `b`), `cb07a`, `cb07b`, `cb10b`, `cb10a` | 577 to 218 each | 2 |
+
+The shapes not dressed yet that pass the cut for four are `cb12a` (6,065), `cb12b` (6,201), `cb13`
+(5,523), `cb14a` (5,013), `cb14b` (5,046) and `cb14c` (5,059).
+
 ## Caveats (measured / inferred / assumed)
 
 - Measured: boxes, triangles, textures, colours, the shape comparisons, the template census, the

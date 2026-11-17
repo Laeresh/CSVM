@@ -14,6 +14,10 @@ Writes into <out dir>, which must be outside the repo (compare.png holds origina
 
     set CSVM_DATA_ROOT=Z:\\CSVM
     py -I analysis/city-hulls/preview.py <out dir>
+    py -I analysis/city-hulls/preview.py <out dir> cb00a cb06a ...
+
+With shapes named, it writes only compare-<shapes>.png: each named shape's original beside every
+near variant and the far box in its model file, one shape per row.
 """
 import io
 import math
@@ -127,28 +131,29 @@ def flat_colour(factor, row):
     return colour
 
 
-def compare(out):
+def compare(out, shapes=SHAPES, per_row=2, name="compare.png", scale=5.0,
+            title="cblock1 shapes: original | near0 | near1 | far"):
+    """Each shape's original beside every node of its model file, near0 first and far last."""
     ch = C.Chapter()
-    scale = 5.0
     lines = []
-    for k in range(0, len(SHAPES), 2):
+    for k in range(0, len(shapes), per_row):
         row = []
-        for m in SHAPES[k:k + 2]:
+        for m in shapes[k:k + per_row]:
             node = next(i for i in ch.by_name[m + ".flt"] if ch.parts(i))
             tris = ch.geometry(node)
             r = R.render(tris, scale)
             row.append(R.label(r, ["%s original" % m, "%d tri" % len(tris)]))
             meshes, factor = M.read_glb(os.path.join(M.MODELS, "C5", m + ".glb.bin"))
             fam = int(meshes["far"][2][0, 0])
-            for variant, (name, facade) in enumerate((("near0", 0), ("near1", 1), ("far", 2))):
-                P, attrs = model_tris(meshes, name)
-                im = raster(P, attrs, scale, flat_colour(factor, facade))
-                row.append(R.label(im, ["%s %s" % (m, name), "%d tri, %s row %d" % (
-                    len(P), A.FAMILY_NAMES[fam], facade)]))
+            for facade, node_name in enumerate(sorted(meshes, key=lambda n: (n == "far", n))):
+                P, attrs = model_tris(meshes, node_name)
+                im = raster(P, attrs, scale, flat_colour(factor, facade % A.VARIANTS))
+                row.append(R.label(im, ["%s %s" % (m, "far box" if node_name == "far" else "near variant " + node_name[4:]),
+                                        "%d tri, %s row %d" % (len(P), A.FAMILY_NAMES[fam], facade % A.VARIANTS)]))
         lines.append(row)
-    img = R.sheet(lines, "cblock1 shapes: original | near0 | near1 | far, %.0f px/m, flat key light; each model "
-                         "graded by its baseColorFactor, wearing facade row 0, 1 and 2 of its family" % scale)
-    R.fit(img).save(os.path.join(out, "compare.png"))
+    img = R.sheet(lines, "%s, %.0f px/m, flat key light; each model graded by its baseColorFactor, each node "
+                         "wearing the next facade row of its family" % (title, scale))
+    R.fit(img).save(os.path.join(out, name))
 
 
 def atlas_views(out):
@@ -274,6 +279,11 @@ def main():
     if os.path.abspath(out).lower().startswith(os.path.abspath(C.REPO).lower()):
         raise SystemExit("write the previews outside the repo: compare.png holds original pixels")
     os.makedirs(out, exist_ok=True)
+    if len(sys.argv) > 2:
+        # Named shapes: one sheet, a shape per row.
+        compare(out, sys.argv[2:], 1, "compare-%s.png" % "-".join(sys.argv[2:]), 4.0,
+                "original | each near variant | far box")
+        return
     atlas_views(out)
     night(out)
     compare(out)

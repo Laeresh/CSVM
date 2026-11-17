@@ -680,7 +680,11 @@ public sealed class ClutterBuilder
             Log.Info("world", $"vegetation models: {modelled.Sum(k => k.Instances?.ModelCellCount ?? 0)} node(s) over {modelled.Count} kind(s), {string.Join(", ", modelled.Select(k => $"{k.Model}{(k.Added ? " added" : "")} {k.Instances?.ModelCellCount ?? 0}"))}");
         var hulls = exported.Where(k => k.City?.Box != null).ToList();
         if (hulls.Count > 0)
-            Log.Info("world", $"city models: {hulls.Count} kind(s) with a hull ({(CityModels.On ? "drawn" : "not drawn")}), {hulls.Sum(k => k.Instances?.CellCount ?? 0)} far node(s), {hulls.Sum(k => k.Instances?.ModelCellCount ?? 0)} near node(s), {exported.Count(k => k.City is { Box: null })} further mesh(es) it hides; models {string.Join(", ", hulls.Select(k => Extraction.HdModels.NodeKey(k.Model)).Distinct())}");
+        {
+            // Solid decorations with no hull (a building not dressed yet, a det half) draw their original mesh in the city.
+            var undressed = exported.Where((k, i) => k.Solid && k.City == null && exportedFrom[i].Part == 0).ToList();
+            Log.Info("world", $"city models: {hulls.Count} kind(s) with a hull ({(CityModels.On ? "drawn" : "not drawn")}), {hulls.Sum(k => k.Instances?.CellCount ?? 0)} far node(s), {hulls.Sum(k => k.Instances?.ModelCellCount ?? 0)} near node(s), {exported.Count(k => k.City is { Box: null })} further mesh(es) it hides, {undressed.Sum(k => k.Placements.Count)} solid stamp(s) in {undressed.Count} kind(s) still draw their original; models {string.Join(", ", hulls.Select(k => Extraction.HdModels.NodeKey(k.Model)).Distinct())}");
+        }
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 

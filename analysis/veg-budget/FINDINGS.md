@@ -211,12 +211,42 @@ GPU figures in the tables above are the unfiltered look.
 The Steam Deck, and the vertex cost there of the off-band stamps a large cell submits, are
 unmeasured.
 
+### The `cblock1` to `cblock3` towers
+
+The city with the `cblock2` and `cblock3` kinds dressed (38 kinds, 2,066 near nodes) and a third
+or fourth near variant on the common shapes, against the city off, one interleaved batch, n=3.
+C5-cb23 is `--pos=-5000,70,-8200 --lookat=-5900,20,-9000`, 65 m over the unflagged `cblock2` cells
+round (-5600, -8700), looking across the `cblock2` and `cblock3` towers and walk-ups.
+
+| View | Mode | GPU (ms) | GPU added | `render_cpu_ms` added | `proc_ms` added | Draws | Primitives |
+|---|---|---:|---:|---:|---:|---:|---:|
+| C5-cb1 | off | 4.835 | | | | 893 | 770,150 |
+| C5-cb1 | near | 5.43 | +0.595 | +0.025 | +0.034 | 847 | 930,703 |
+| C5-cb1 | extreme | 5.355 | +0.52 | +0.075 | +0.05 | 934 | 1,231,113 |
+| C5-street | off | 6.08 | | | | 744 | 695,703 |
+| C5-street | near | 6.055 | -0.025 | +0.015 | +0.026 | 704 | 857,253 |
+| C5-street | extreme | 6.055 | -0.025 | +0.065 | +0.037 | 817 | 1,116,835 |
+| C5-alt | off | 3.45 | | | | 1,775.5 | 774,563 |
+| C5-alt | near | 3.60 | +0.15 | -0.02 | +0.026 | 1,679.9 | 738,398 |
+| C5-alt | extreme | 3.945 | +0.495 | +0.045 | +0.04 | 1,808.9 | 1,088,748 |
+| C5-cm23 | off | 3.795 | | | | 1,160 | 580,292 |
+| C5-cm23 | near | 3.87 | +0.075 | -0.025 | +0.014 | 1,063 | 522,563 |
+| C5-cm23 | extreme | 3.99 | +0.195 | +0.02 | +0.029 | 1,138 | 680,625 |
+| C5-cb23 | off | 4.56 | | | | 2,098.6 | 805,449 |
+| C5-cb23 | near | 4.50 | -0.06 | +0.02 | +0.037 | 2,039.6 | 838,564 |
+| C5-cb23 | extreme | 4.495 | -0.065 | +0.10 | +0.03 | 2,168.6 | 1,234,488 |
+
+Every view holds the budget. **Extreme draws 1,808.9 at C5-alt against 1,775.5 with the city off,
+33 over**, where the `cblock1` city alone read one over; near holds the rule with 1,679.9. The
+scene gains 2,104 nodes and the world build about 60 ms of clutter and 65 ms of bind.
+
 ## Reproducing
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb7,C5-cb1,C5-alt,C5-cm23 -Modes enhanced,vdnormal,vdunlimited -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7 -Modes nomodels,near,far,extreme,original -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-alt,C5-cm23 -Modes nomodels,far,veryfar,extreme -Launches 3
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb23 -Modes nomodels,near,extreme -Launches 3
 
 From PowerShell 7 the comma lists go through `powershell -NoProfile -Command "& '<path>' ..."`.
 

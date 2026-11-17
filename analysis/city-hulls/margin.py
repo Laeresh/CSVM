@@ -1,5 +1,5 @@
 """Checks each city model (CSVM/data/city_models/<chapter>/<model>.glb.bin) against its original
-hull: per mesh node (near0, near1, far), the largest inward deviation, the largest height above
+hull: per mesh node (near0, near1 and so on, far), the largest inward deviation, the largest height above
 the hull and the largest sideways overhang, in metres, against the plan's margin (about 3 m in,
 about 4 m above, nothing sideways).
 
@@ -118,7 +118,7 @@ def main():
         nx = int(np.ceil((allp[:, 0].max() + PAD - x0) / GRID))
         nz = int(np.ceil((allp[:, 2].max() + PAD - z0) / GRID))
         Ho = heightfield(orig, x0, z0, nx, nz)
-        for name in ("near0", "near1", "far"):
+        for name in sorted(meshes, key=lambda n: (n == "far", n)):
             pos, _, _, tri = meshes[name]
             Hn = heightfield(pos[tri], x0, z0, nx, nz)
             i, a, s = deviations(Ho, Hn)

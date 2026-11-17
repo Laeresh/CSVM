@@ -260,7 +260,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the rest of the city
 
-21. ☐ Generate the remaining hulls
+21. ◐ Generate the remaining hulls
 22. ☐ Relabel the 3D Vegetation option to cover scenery
 23. ☐ Engine checks and golden frames for the new city
 24. ☐ Closing measurement, the integrated-GPU default, and follow-up issues
@@ -912,7 +912,46 @@ they gave a reason.
 
 # Wave C, the rest of the city
 
-## C21 ☐ Generate the remaining hulls
+## C21 ◐ Generate the remaining hulls
+
+**Landed so far.** The first tranche dresses `cblock2` and `cblock3`: 14 kinds in 8 shapes, `cb06`
+to `cb11`, which also dresses `cb06` and `cb11` where `cblock5` and `cblock6` place them. Each of
+these buildings stands turned 45 degrees in its mesh frame. `analysis/city-hulls/tiers.py
+--turn=45` measures it turned back, and the generator builds it in its own frame and turns it on
+export. The facade families and the atlas are unchanged. A shape placed 1,000 times or more gets a
+third near variant and one placed 2,000 times or more a fourth (Decision 31; the counts and the cut
+are in `analysis/city-hulls/FINDINGS.md`, "Variants"). That gives `cb00` four, and `cb01a/b`,
+`cb02a`, `cb02b`, `cb06` and `cb11` three. The added variants differ in massing: a set-back top
+floor, light wells cut 2.5 m into the walls, or a crown stepped in twice. Every other shape keeps
+two. New near shapes are `cb07b`'s open frame crown along either axis, a mast or a three-step crown
+on `cb09`'s pyramid, and four floors stepping up under `cb10a`'s shed roof. The model files hold
+10,582 near and 840 far triangles (4,092 and 410 before). The `city models:` log line counts the
+solid stamps that still draw their original mesh. `measure.ps1` gains `C5-cb23`, 65 m over the
+`cblock2` cells. Remaining: `cblock4` and `cblock7`, then `cblock5` and `cblock6`, then the 16
+`det` shapes.
+
+**Verified so far.** By the tranche's agent. Every near and far mesh is inside the margin
+(`analysis/city-hulls/margin.py`): at most 2.5 m in, 3.77 m above, nothing sideways, and every far
+box reads 0, 0, 0. The `cblock1` files without a new variant and the atlas are byte-identical. The
+log reads 38 kinds with a hull, 2,066 near nodes, and 49,281 solid stamps in 58 kinds still drawing
+their original (12,569 `det` halves and 36,712 buildings of `cblock4` to `cblock7`). In one
+interleaved batch, n=3, the city adds at most 0.595 ms GPU (`C5-cb1`, near) and 0.10 ms
+`render_cpu_ms` (`C5-cb23`, extreme). `C5-alt` draws 1,679.9 at near and 1,808.9 at Extreme,
+against 1,775.5 with the city off. The targeted suites, `CityModelsTests` and `-Quick` (1,584
+units, 13 engine suites) pass. Of 41 goldens only `c5-city-night-enhanced` moved; it is re-pinned
+to 144dee34, pixel-identical on re-render. The orchestrator read the C# and script diff, looked at
+the district and variant montages and sent them to the user.
+
+**Open so far.** Extreme's distant draws at `C5-alt` are 33 over the city off, where the prototype
+read one over; Decision 33 puts the excess to the user in C24, and it is likely to grow with
+`cblock4` and `cblock7`. The `det` dressing on `cb06`, `cb08` and `cb11` still draws its
+originals, so original fire escapes stand on the new walls. `cb07b`'s crown is an open aluminium
+frame in the original; the new one wears the roof texture and its far box is a closed block. From
+altitude the new towers read warmer than the original's blue-white ones. `city-buildings` checks
+fixture hulls, not the shipped geometry; the margin script is the geometry check. The Deck is
+unmeasured.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every C5 building hull from A1's census has its near models and its far box, and no
 building in the Enhanced city draws an original mesh.

@@ -13,9 +13,15 @@ from the base up, in the gamez mesh's own frame (metres, Y up). Two entries at o
 flat roof between two footprints; two entries with one footprint are a vertical prism. Holds
 measured numbers only.
 
+`--turn=D` (degrees, for the models after it) measures a building that stands turned about Y in
+its own mesh frame, as the cblock2 and cblock3 hulls stand at 45 degrees: the mesh is turned back
+by D before slicing, so the profile is in the building's own frame, and city_blender.turn turns
+the built model by D again.
+
     set CSVM_DATA_ROOT=Z:\\CSVM
-    py -I analysis/city-hulls/tiers.py cb00a cb01d cb04a ...
+    py -I analysis/city-hulls/tiers.py cb00a cb01d cb04a --turn=45 cb06a ...
 """
+import math
 import os
 import sys
 
@@ -32,10 +38,17 @@ def snap(v):
     return round(round(v / SNAP) * SNAP, 2) + 0.0
 
 
-def mesh_tris(ch, node, part=0):
+def unturn(p, deg):
+    """p turned about Y by -deg, the inverse of city_blender.turn."""
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    return (c * p[0] - s * p[2], p[1], s * p[0] + c * p[2])
+
+
+def mesh_tris(ch, node, part=0, turn=0.0):
     mi, xf, _ = ch.parts(node)[part]
     m = ch.models[mi]
-    verts = [C.E._apply(xf, (v["x"], v["y"], v["z"])) for v in m["vertices"]]
+    verts = [unturn(C.E._apply(xf, (v["x"], v["y"], v["z"])), turn) for v in m["vertices"]]
     out = []
     for p in m["polygons"]:
         vi = p.get("vertex_indices") or []
@@ -143,13 +156,17 @@ def fmt(prof):
 
 def main():
     ch = C.Chapter()
+    turn = 0.0
     for m in sys.argv[1:]:
+        if m.startswith("--turn="):
+            turn = float(m[7:])
+            continue
         node = next(i for i in ch.by_name[m + ".flt"] if ch.parts(i))
         parts = ch.parts(node)
-        tris = mesh_tris(ch, node, 0)
-        print("# %s: main mesh %d triangles, %d further mesh(es)" % (m, len(tris), len(parts) - 1))
+        tris = mesh_tris(ch, node, 0, turn)
+        print("# %s: main mesh %d triangles, %d further mesh(es), turned %g" % (m, len(tris), len(parts) - 1, turn))
         for k in range(1, len(parts)):
-            pt = mesh_tris(ch, node, k)
+            pt = mesh_tris(ch, node, k, turn)
             lo, hi = C.bbox([(t, None, None) for t in pt])
             print("#   further mesh %d (%s): %d triangles, x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f" % (
                 k, ch.nodes[parts[k][2]].name, len(pt), lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]))

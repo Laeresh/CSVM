@@ -18,7 +18,7 @@ the range of its launches.
 The hidden desktop presents at the display's refresh even with max_fps=0, so frame_ms floors at
 8.33 ms on a 120 Hz display; read gpu_ms, render_cpu_ms, setup_ms and proc_ms, and the counts.
 
-C5 has five city views, run by name with the city modes: enhanced (View Distance at its default,
+C5 has six city views, run by name with the city modes: enhanced (View Distance at its default,
 Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline. C5 refuses
 every vegetation entry, so there the 3D Vegetation word reaches only the new city (CityModels.On,
 Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
@@ -73,6 +73,9 @@ $views = @{
     "C5-cm23" = @("--pos=-11061,400,-8370", "--lookat=-11061,400,-8371")
     # street: 45 m over the cblock1 street grid, looking 900 m down it at the near city.
     "C5-street" = @("--pos=-7306,50,-11700", "--lookat=-7306,40,-12600")
+    # cb23: 65 m over the unflagged cblock2 cells round (-5600,-8700), looking 1.2 km across them at
+    # the cblock2 and cblock3 towers and walk-ups.
+    "C5-cb23" = @("--pos=-5000,70,-8200", "--lookat=-5900,20,-9000")
 }
 $modeArgs = @{
     "faithful" = @("--graphics=original")

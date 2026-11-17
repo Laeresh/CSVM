@@ -835,13 +835,16 @@ The Enhanced look's C5 buildings are generated the same way, headless in Blender
 painter and its layout (numpy only, so the analysis scripts import it).
 
 - A kind's hull is a profile of horizontal sections from the base up, measured from the original
-  mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. The far box is that
-  profile alone. Each near variant adds parapets, a set-back top floor or a reshaped crown, and roof
-  dressing (water tanks, bulkheads, machine rooms, vents, chimneys), inside the plan's margin: at
-  most about 3 m in from the original's surface, at most about 4 m above it, nothing past it
-  sideways. `analysis/city-hulls/margin.py` measures the three per mesh.
-- The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0`, `near1`
-  and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
+  mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. A building that stands
+  turned in its mesh frame (the `cblock2` and `cblock3` kinds, at 45 degrees) is measured turned
+  back (`tiers.py --turn=45`), built in its own frame and turned again on export. The far box is
+  that profile alone. Each near variant adds parapets, a set-back top floor, light wells, a crown
+  stepped in or reshaped, and roof dressing (water tanks, bulkheads, machine rooms, vents,
+  chimneys), inside the plan's margin: at most about 3 m in from the original's surface, at most
+  about 4 m above it, nothing past it sideways. `analysis/city-hulls/margin.py` measures the three
+  per mesh.
+- The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0` to
+  `near3`, two to four by how often the shape is placed, and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
   original's mean unlit colour, its painted lit windows left out because the engine lights the
   windows itself), `facade.png.bin` (the atlas, sRGB) and `facade_ids.png.bin` (per texel the window
   id, the floor within the tile and the glass weight). The export's `data/*.bin` filter packs them
@@ -861,7 +864,9 @@ and every kind, printing a `CITY` line per kind (triangles per mesh, family, gra
 is `.scratch/vegetation/c5.log`. With `CSVM_DATA_ROOT` naming a checkout that holds `extracted/`,
 `py -I analysis/city-hulls/margin.py` prints the margin per mesh and
 `py -I analysis/city-hulls/preview.py <dir outside the repo>` draws the originals beside the
-models, the atlas and a night mock. The previews hold original pixels and are never committed.
+models, the atlas and a night mock; with model names after the folder it draws only those shapes,
+each original beside every near variant and its far box. The previews hold original pixels and are
+never committed.
 
 ## `tools/` (git-ignored)
 
