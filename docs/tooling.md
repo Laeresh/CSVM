@@ -836,10 +836,14 @@ painter and its layout (numpy only, so the analysis scripts import it).
 
 - A kind's hull is a profile of horizontal sections from the base up, measured from the original
   mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. A building that stands
-  turned in its mesh frame (the `cblock2` and `cblock3` kinds, at 45 degrees) is measured turned
-  back (`tiers.py --turn=45`), built in its own frame and turned again on export. The far box is
-  that profile alone, plus any measured part a profile cannot hold (a chimney, a roof light,
-  `cb07b`'s open frame). A near variant is the profile or its own profile of the same hull, with
+  turned in its mesh frame (the `cblock2`, `cblock3`, `cblock5` and `cblock6` kinds, at 45 degrees)
+  is measured turned back (`tiers.py --turn=45`), built in its own frame and turned again on
+  export. A band between unlike sections, which a stack of rectangles cannot hold (ridged wings
+  with gable ends, a hipped skirt round a notched plan, twin pyramids), is built by the hull's
+  `bands` entry (`city_blender.hip_band`, `c5.py`'s `pyramids`). The far box is that profile
+  alone, plus any measured part a profile cannot hold (a chimney, a roof light, `cb07b`'s open
+  frame, the roof billboards of `cb22` and `cb23`). A near variant is the profile or its own
+  profile of the same hull, with
   parapets, a set-back top floor, light wells, a crown stepped in or reshaped, a pitched roof cut
   to a flat walk, dormers, street awnings, and roof dressing (water tanks, bulkheads, machine
   rooms, vents, chimneys), inside the plan's margin: at most about 3 m in from the original's
@@ -869,13 +873,26 @@ painter and its layout (numpy only, so the analysis scripts import it).
   strips). `TEXCOORD_1` is (family, surface class:
   0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
   dark building, 3 cornice, the light metal cell ungraded and brightened by
-  `CityModels.CorniceGain`). The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a
+  `CityModels.CorniceGain`, 4 board, whose `TEXCOORD_1.x` is the board's format instead of the
+  family). The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a
   0.6 m cornice line at the top of the wall under every roof edge and eave, after the bright line
   along the originals' dentil cornice (`c5.py`'s `CORNICE_M`). A gabled kind maps its gable ends onto the wall's solid band. The six families
   are grey stone and brick walk-ups, warm and dark office towers, and the two walk-ups again under
   a brown tile roof, their rows in wall colours of their own (`TILE_WALLS`) held to the first two
   families' mean, so their grades stand. The shader recolours a tile roof per building
   (`CityModels.Roofs`). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
+- The boards (surface class 4) fill the atlas's free strips under the families and right of the
+  metal cells, ungraded: six landscape posters (12 x 6 m boards) and four portrait ones
+  (5.9 x 8.86 m), the shader picking one per building from its seed so the near model and the far
+  box agree, a plank back and a red brick gable, which tile. A poster's face is the one the
+  original's poster faces, both faces on `cb23`'s single board, and the other face is the back.
+  The posters are ours: block lettering and plain shapes (a plane, a propeller, a shield, rays,
+  stripes, a skyline) over companies the game's own text names (`ui_strings.json`: Blake
+  Aviation, the Tornado engines, the Achilles Armor Company, and the plane and engine makers
+  Hughes, Wright, Bristol, Ford and Colt) and two plain words. `CityModels.PosterGain` lifts a
+  poster to the original's lit poster on a night frame. `cb17a`'s gable ends take the brick cell
+  at the original gable texture's unlit mean colour, since another family's solid band under the
+  kind's grade came out about 2.5 times too dark.
 - Nothing from the original's textures goes into a model or the atlas: the facade families are
   drawn after what the originals show, and each kind's grade is a number set from the original's
   mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures

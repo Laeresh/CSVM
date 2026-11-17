@@ -6,8 +6,9 @@ for the kind's main mesh, RGB its area-weighted mean unlit texture colour from c
 texels at or below its UNLIT_LUMA, so the original's painted lit windows are left out; the
 grade's target, since the engine lights the windows itself), FAMILY the facade family its
 original texture belongs to (city_atlas.py), TURN the degrees the building stands turned in
-its mesh frame, GABLES whether its slopes' vertical faces are walls. The kinds of cblock1 to
-cblock4 and cblock7 are here; the other districts' hulls join them.
+its mesh frame, GABLES whether its slopes' vertical faces are walls, BANDS the builders of the
+bands a stack of rectangles cannot hold (city_blender.hip_band, pyramids). Every C5 building kind
+is here; the det dressing models are not.
 
   .\\scripts\\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender
 """
@@ -348,6 +349,183 @@ HIP16B = (
          ledge=0.6, extras=AWN_16B + [chimneys([(0.0, -8.0)], 22.0, 26.4)]),
 )
 
+# ---- the cblock5 and cblock6 kinds (cb17 to cb24), each turned 45 degrees in its mesh frame
+
+def pyramids(pairs, y0, y1):
+    """A slope per (lower rectangle, upper rectangle or apex) pair, for twin roofs over one band."""
+    return lambda mesh, planes: [cb.slope(mesh, a, y0, b, y1) for a, b in pairs]
+
+
+def board(axis, coord, s0, s1, y0, y1, fmt, front):
+    """A roof billboard, measured: a thin board standing on the roof at x = coord (axis 0) or
+    z = coord (axis 2) over s0..s1. The face toward front (+1 or -1 along the axis, 0 for both, as the
+    original's) shows a poster of format fmt, whole, picked by the building's seed; another face the
+    plank back."""
+    def build(mesh, planes):
+        pts = [(coord, y0, s0), (coord, y0, s1), (coord, y1, s1), (coord, y1, s0)] if axis == 0 else \
+              [(s0, y0, coord), (s1, y0, coord), (s1, y1, coord), (s0, y1, coord)]
+        for d in (-1, 1):
+            n = cb.np.zeros(3)
+            n[axis] = d
+            r = [float(cb.np.dot(cb._right(axis, d), p)) for p in pts]
+            if front in (0, d):
+                uvs = [((t - min(r)) / (max(r) - min(r)), (p[1] - y0) / (y1 - y0)) for t, p in zip(r, pts)]
+                mesh.face(pts, uvs, cb.BOARD, n, family=fmt)
+            else:
+                uvs = [(t / BOARD_TILE[0], p[1] / BOARD_TILE[1]) for t, p in zip(r, pts)]
+                mesh.face(pts, uvs, cb.BOARD, n, family=cb.A.BACK)
+    return build
+
+
+# A tiling board cell's size in metres: its texels at the atlas's PX_M.
+BOARD_TILE = (cb.A.PORT_TILE[0] / cb.A.PX_M, cb.A.PORT_TILE[1] / cb.A.PX_M)
+
+
+def brick_gable(mesh, pts, out):
+    """A gable end in red brick, the original's: the board class's gable cell, tiled in metres."""
+    axis = 0 if abs(out[0]) > 0.5 else 2
+    right = cb._right(axis, int(round(out[axis])))
+    uvs = [(float(cb.np.dot(right, p)) / BOARD_TILE[0], p[1] / BOARD_TILE[1]) for p in pts]
+    mesh.face(pts, uvs, cb.BOARD, out, family=cb.A.GABLE)
+
+
+def masts(spots, y0, y1, w=0.5):
+    return lambda mesh, planes: [cb.box(mesh, x - w / 2, x + w / 2, z - w / 2, z + w / 2, y0, y1) for x, z in spots]
+
+
+# cb17a, a U of 8 m wings round a court open to +z, walls to 24 m under ridged roofs to 32 m with
+# red brick gable ends on the wing ends. The ridge band's corners move in
+# along their mitre; the gable corners only across their wing.
+U17A = [(-16, -8, -16, 16), (-8, 16, -16, -8), (8, 16, -8, 16)]
+OUT17A = [(-16, 16), (-16, -16), (16, -16), (16, 16), (8, 16), (8, -8), (-8, -8), (-8, 16)]
+DIR17A = [(1, 0), (1, 1), (-1, 1), (-1, 0), (1, 0), (1, -1), (-1, -1), (-1, 0)]
+RIDGE17A = {24: cb.hip_band(OUT17A, DIR17A, 24, 32, 4, brick_gable)}
+# The ridges cut to a flat walk 2 m wide at 30 m, a mansard.
+WALK17A = [(-13, -11, -13, 16), (-11, 11, -13, -11), (11, 13, -13, 16)]
+U17 = (
+    dict(extras=[chimneys([(-12, 2.0), (12, 6.0), (0, -12)], 30.5, 33.6)]),
+    dict(profile=[(0, U17A), (24, U17A), (30, WALK17A)], bands={24: cb.hip_band(OUT17A, DIR17A, 24, 30, 3, brick_gable)},
+         parapet=0.4, extras=[chimneys([(-12, -4.0), (12, -4.0), (-4, -12), (4, -12)], 29.5, 31.6)]),
+)
+# cb17b, a U round a court open to -z with flat roofs at 24 m and a corner stair tower to 32 m
+# under a pyramid to 36 m; the court's back wall is its further mesh.
+U17B = [(-16, -8, -16, 16), (-8, 16, 8, 16), (8, 16, -16, 8)]
+T17B = (-16, -8, -16, -8)
+TOWER17 = (
+    dict(ledge=1.0, ledge_kit=[("tank", (0.5, 0.6)), ("bulkhead", (0.5, 0.2)), ("vent",)],
+         extras=[masts([(-12, -12)], 35.0, 38.0, 0.3)]),
+    dict(crown=[(32, [(-14, -10, -14, -10)]), (35, [(-14, -10, -14, -10)])], parapet=0.5, ledge=0.7,
+         ledge_kit=[("bulkhead", (0.5, 0.5)), ("vent",)], extras=[masts([(-12, -12)], 35.0, 38.5, 0.3)]),
+)
+P_CB18 = [(0, sq(16)), (20, sq(16)), (24, APEX)]
+# cb18b: the low hip as is, or its top floor set back under the hip.
+HIP18B = (
+    HIP[0],
+    dict(profile=[(0, sq(16)), (16, sq(16)), (16, sq(14)), (20, sq(14)), (24, APEX)], ledge=0.6,
+         extras=[chimneys([(-7.0, 4.0), (7.0, -5.0)], 20.0, 23.0)]),
+)
+# cb19a, a square with a notch in the middle of each side and the top floor set in. The notch
+# backs stand 4 cm in from the top floor's wall above them, so each is a wall plane of its own
+# whose 7.94 m fits two bays and keeps its windows (on the top floor's 6-bay grid they were solid).
+# Its 25.22 m roof stands at 24.8 m, the foot of a floor's glass, so the far box's walls are not
+# split there.
+B19A = [(-15.89, -3.97, -15.89, -3.97), (-15.89, -3.97, 3.97, 15.89), (-12.67, 12.67, -3.97, 3.97),
+        (-3.97, 15.89, -12.67, -3.97), (-3.97, 15.89, 3.97, 12.67), (3.97, 15.89, -15.89, -12.67),
+        (3.97, 15.89, 12.67, 15.89)]
+NOTCH19A = (
+    TOWER[0],
+    dict(crown=[(28.0, sq(12.71)), (28.0, sq(10.71)), (30.09, sq(10.71))], parapet=0.8,
+         ledge=0.6, kit=[("tank", (0.7, 0.3)), ("bulkhead", (0.2, 0.7))]),
+)
+# cb19b, a square with 4 m notches in the middle of each side to 20 m, a hipped skirt rising 4 m
+# to the 24 m square of its upper block, and a pyramid to 40 m.
+B19B = [(-16, -4, -16, -4), (-16, -4, 4, 16), (-12, 12, -4, 4), (-4, 16, -12, -4), (-4, 16, 4, 12),
+        (4, 16, -16, -12), (4, 16, 12, 16)]
+OUT19B = [(-16, -16), (-4, -16), (-4, -12), (4, -12), (4, -16), (16, -16), (16, -4), (12, -4), (12, 4), (16, 4),
+          (16, 16), (4, 16), (4, 12), (-4, 12), (-4, 16), (-16, 16), (-16, 4), (-12, 4), (-12, -4), (-16, -4)]
+DIR19B = [(1, 1), (0, 1), (0, 0), (0, 0), (0, 1), (-1, 1), (-1, 0), (0, 0), (0, 0), (-1, 0),
+          (-1, -1), (0, -1), (0, 0), (0, 0), (0, -1), (1, -1), (1, 0), (0, 0), (0, 0), (1, 0)]
+SKIRT19B = {20: cb.hip_band(OUT19B, DIR19B, 20, 24, 4)}
+P_CB19B = [(0, B19B), (20, B19B), (24, sq(12)), (32, sq(12)), (40, APEX)]
+SKIRT19 = (
+    dict(extras=[masts([(0, 0)], 38.5, 43.0, 0.4), chimneys([(-14, -10), (14, 10), (10, -14), (-10, 14)], 20.5, 23.6)]),
+    dict(profile=P_CB19B[:4] + [(28, sq(12)), (28, sq(10.5)), (32, sq(10.5)), (37.5, sq(3.28))], parapet=0.5,
+         ledge=0.6, kit=[("bulkhead", (0.5, 0.5))]),
+)
+# cb20a, a podium stepping up at 12, 16 and 20 m round a 20 m tower to 44 m under a pyramid whose
+# apex stands off centre, over the podium's inner corner.
+T20 = (-4, 16, -4, 16)
+P_CB20A = [(0, sq(16)), (12, sq(16)), (12, [(-16, 4, -16, 16), (4, 16, -4, 16)]), (16, [(-16, 4, -16, 16), (4, 16, -4, 16)]),
+           (16, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]), (20, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]),
+           (20, [T20]), (44, [T20]), (52, [(4, 4, 4, 4)])]
+STEP20A = (
+    dict(ledge=0.9, ledge_kit=[("tank",), ("vent",)], extras=[masts([(4, 4)], 50.0, 54.5, 0.4)]),
+    dict(profile=P_CB20A[:7] + [(40, [T20]), (40, [cb.inset(T20, 2.0)]), (44, [cb.inset(T20, 2.0)]), (52, [(4, 4, 4, 4)])],
+         ledge=0.6, ledge_kit=[("bulkhead",), ("vent",)]),
+)
+# cb20b, the same podium widened round two towers, 24 m and 20 m, each under its own pyramid.
+TA20, TB20 = (-28, -4, -28, -4), (-4, 16, -4, 16)
+A20B, B20B = (-16, -16, -16, -16), (4, 4, 4, 4)
+P_CB20B = [(0, [(-28, 4, -28, 4), (-16, 16, 4, 16), (4, 16, -16, 4)]), (12, [(-28, 4, -28, 4), (-16, 16, 4, 16), (4, 16, -16, 4)]),
+           (12, [(-28, 4, -28, -4), (-16, 16, -4, 16)]), (16, [(-28, 4, -28, -4), (-16, 16, -4, 16)]),
+           (16, [(-28, -4, -28, -4), (-16, 16, -4, 4), (-4, 4, -16, -4), (-4, 16, 4, 16)]),
+           (20, [(-28, -4, -28, -4), (-16, 16, -4, 4), (-4, 4, -16, -4), (-4, 16, 4, 16)]),
+           (20, [TA20, TB20]), (44, [TA20, TB20]), (52, [A20B, B20B])]
+TWIN20B = {44: pyramids([(TA20, A20B), (TB20, B20B)], 44, 52)}
+# Or both pyramids cut at 49 m, five eighths of the way to their apexes, to flat decks.
+TOP20B = [(-20.5, -11.5, -20.5, -11.5), (1, 8.5, 1, 8.5)]
+TWIN20 = (
+    dict(ledge=0.9, ledge_kit=[("tank",), ("vent",)], extras=[masts([(-16, -16), (4, 4)], 50.0, 54.5, 0.4)]),
+    dict(profile=P_CB20B[:-1] + [(49, TOP20B)], bands={44: pyramids([(TA20, TOP20B[0]), (TB20, TOP20B[1])], 44, 49)},
+         parapet=0.5, ledge=0.7, kit=[("bulkhead", (0.5, 0.5))], ledge_kit=[("vent",)]),
+)
+# cb22 and cb23, two-floor walk-ups of 16 x 12 m off their lot's centre, walls to the cornice's top
+# at 10 m, a street awning on each long wall, and billboards on the roof: cb22a two 12 x 6 m boards
+# across, cb22b two 5.9 x 8.86 m, cb23 one 12 x 6 m board along the middle. A variant cuts light
+# wells into the ends above the awning floor, clear of the boards.
+R22, R23 = (-7.41, 8.59, -4.59, 7.41), (-4.59, 7.41, -8.59, 7.41)
+P_CB22, P_CB23 = [(0, [R22]), (10, [R22])], [(0, [R23]), (10, [R23])]
+WELLS22 = cb.exposed([R22], [(-7.41, -4.91, -0.59, 3.41), (6.09, 8.59, -0.59, 3.41)])
+WELLS23 = cb.exposed([R23], [(-4.59, -2.19, -0.59, 3.41), (5.01, 7.41, -0.59, 3.41)])
+AWN_22 = [awning(2, -1, -4.59, -5.22, 4.67, 4.0, 2.0, 2.0), awning(2, 1, 7.41, -5.22, 4.67, 4.0, 2.0, 2.0)]
+AWN_23 = [awning(0, -1, -4.59, -4.67, 5.22, 4.0, 2.0, 2.0), awning(0, 1, 7.41, -4.67, 5.22, 4.0, 2.0, 2.0)]
+BOARDS_22A = [board(2, -3.0, -5.41, 6.59, 10.0, 16.0, cb.A.LANDSCAPE, -1), board(2, 5.0, -5.41, 6.59, 10.0, 16.0, cb.A.LANDSCAPE, 1)]
+BOARDS_22B = [board(2, -2.17, -1.41, 4.49, 10.0, 18.86, cb.A.PORTRAIT, -1), board(2, 5.0, -1.41, 4.49, 10.0, 18.86, cb.A.PORTRAIT, 1)]
+BOARDS_23 = [board(0, 1.84, -6.59, 5.41, 10.0, 16.0, cb.A.LANDSCAPE, 0)]
+
+
+# cb21's light wells stand 2.4 m deep where cb13's are 2.5, so turned onto margin.py's grid they
+# read inside the margin.
+WELLS21 = dict(TALL13[2], profile=[(0, [R13]), (4, [R13]),
+                                   (4, cb.exposed([R13], [(-6, -3.6, -2, 2), (3.6, 6, -2, 2)])),
+                                   (26, cb.exposed([R13], [(-6, -3.6, -2, 2), (3.6, 6, -2, 2)]))])
+
+
+def billboard_set(r, wells, extras):
+    return (dict(parapet=0.6, extras=extras),
+            dict(profile=[(0, [r]), (4, [r]), (4, wells), (10, wells)], parapet=0.9, ledge=0.4, extras=extras))
+
+
+# cb24a and cb24b are cb15a and cb15b turned a quarter: 24 x 56 m, the roof light measured on cb24a.
+R24 = (-12, 12, -28, 28)
+
+
+def skylight24(mesh, planes):
+    cb.slope(mesh, (-3.76, 4.24, -2.56, 5.44), 26.0, (0.24, 0.24, 1.44, 1.44), 30.83)
+
+
+LONG24A = (
+    dict(parapet=1.0, raised=1.0, kit=[("tank", (0.5, 0.12)), ("tank", (0.3, 0.88)), ("bulkhead", (0.85, 0.8))],
+         extras=[skylight24]),
+    dict(profile=[(0, [R24]), (20, [R24]), (20, [cb.inset(R24, 2.0)]), (26, [cb.inset(R24, 2.0)])],
+         parapet=0.7, ledge=0.6, kit=[("bulkhead", (0.5, 0.1)), ("tank", (0.5, 0.85))], extras=[skylight24]),
+)
+LONG24B = (
+    dict(parapet=0.8, ledge=0.9, kit=[("tank", (0.5, 0.5))], ledge_kit=[("bulkhead",), ("vent",)]),
+    dict(notch=[("z-", 8.0, 2.0), ("z+", 8.0, 2.0)], parapet=1.0, ledge=0.6,
+         kit=[("bulkhead", (0.5, 0.3)), ("tank", (0.5, 0.75))]),
+)
+
 # cb02a's L-steps, measured at 5.3 m, stand on the 4 m grid of its 31.78 m walls, 1.33 m in.
 L02 = -15.89 + 5 * 31.78 / 8
 # Its set-back and stepped tops stand in less, so they stay inside the margin with the step's 1.33 m.
@@ -437,6 +615,36 @@ HULLS = {
                   profile=[(0, [R16]), (22, [R16]), (30, APEX)]),
     "cb16b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(54, 41, 32), near=HIP16B,                          # smbldg1/4/5, roof02
                   profile=[(0, [R16]), (22, [R16]), (26, APEX)]),
+    # cblock5 and cblock6 (cb06 and cb11 above also stand there), each turned 45 degrees in its
+    # mesh frame. The towers carry no cornice line; the walk-ups under tile roofs do.
+    "cb17a": dict(family=WARM, rgb=(42, 34, 29), profile=[(0, U17A), (24, U17A), (32, APEX)], bands=RIDGE17A,  # bldg1
+                  near=U17, turn=45),
+    "cb17b": dict(family=STEEL, rgb=(31, 32, 42), near=TOWER17, turn=45,                                      # bldg3
+                  profile=[(0, U17B), (24, U17B), (24, [T17B]), (32, [T17B]), (36, [(-12, -12, -12, -12)])]),
+    "cb18a": dict(family=STONE, rgb=(34, 35, 34), profile=P_CB18, near=HIP, turn=45),                         # smbldg1
+    "cb18b": dict(family=BRICK, rgb=(37, 29, 24), profile=P_CB18, near=HIP18B, turn=45),                      # smbldg5
+    "cb19a": dict(family=WARM, rgb=(36, 32, 27), near=NOTCH19A, turn=45,                                      # bldg4
+                  profile=[(0, B19A), (24.8, B19A), (24.8, sq(12.71)), (30.09, sq(12.71))]),
+    "cb19b": dict(family=STEEL, rgb=(32, 33, 41), profile=P_CB19B, bands=SKIRT19B, near=SKIRT19, turn=45),     # bldg3
+    "cb20a": dict(family=WARM, rgb=(36, 33, 29), profile=P_CB20A, near=STEP20A, turn=45),                     # bldg4
+    "cb20b": dict(family=WARM, rgb=(41, 34, 29), profile=P_CB20B, bands=TWIN20B, near=TWIN20, turn=45),       # bldg1
+    # cb21a (= cb21b) is cb13's walk-up turned: two variants each, a different pair per model.
+    "cb21a": dict(cornice=CORNICE_M, family=STONE_TILE, rgb=(41, 38, 35), profile=P_CB13, turn=45,           # smbldg1, roof02
+                  near=(TALL13[0], WELLS21)),
+    "cb21b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(41, 35, 28), profile=P_CB13, turn=45,           # smbldg3, roof02
+                  near=(TALL13[1], TALL13[3])),
+    "cb22a": dict(cornice=CORNICE_M, family=STONE_TILE, rgb=(51, 45, 42), profile=P_CB22, turn=45,           # smbldg1, roof02
+                  near=billboard_set(R22, WELLS22, AWN_22 + BOARDS_22A), far_extras=BOARDS_22A),
+    "cb22b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(52, 38, 28), profile=P_CB22, turn=45,           # smbldg5, roof02
+                  near=billboard_set(R22, WELLS22, AWN_22 + BOARDS_22B), far_extras=BOARDS_22B),
+    "cb23a": dict(cornice=CORNICE_M, family=STONE_TILE, rgb=(46, 40, 28), profile=P_CB23, turn=45,           # smbldg2, roof02
+                  near=billboard_set(R23, WELLS23, AWN_23 + BOARDS_23), far_extras=BOARDS_23),
+    "cb23b": dict(cornice=CORNICE_M, family=STONE_TILE, rgb=(48, 44, 42), profile=P_CB23, turn=45,           # smbldg1, roof02
+                  near=billboard_set(R23, WELLS23, AWN_23 + BOARDS_23), far_extras=BOARDS_23),
+    "cb24a": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(57, 43, 34), profile=[(0, [R24]), (26, [R24])],  # smbldg1/3, roof02
+                  near=LONG24A, far_extras=[skylight24], turn=45),
+    "cb24b": dict(cornice=CORNICE_M, family=BRICK_TILE, rgb=(59, 44, 35), near=LONG24B, turn=45,             # smbldg1/3, roof02
+                  profile=[(0, [R24]), (22, [R24]), (22, [(-12, 12, -8, 12)]), (24, [(-12, 12, -8, 12)])]),
 }
 
 
@@ -460,11 +668,11 @@ def main():
         if args.only and model not in args.only:
             continue
         gables = h.get("gables", False)
-        far = cb.far_model(h["profile"], h["family"], gables, h.get("cornice", 0.0))
+        far = cb.far_model(h["profile"], h["family"], gables, h.get("cornice", 0.0), h.get("bands"))
         for extra in h.get("far_extras", ()):
             extra(far, None)
         nears = [cb.near_model(h["profile"], h["family"], n, np.random.default_rng([zlib.crc32(model.encode()), i]), gables,
-                        h.get("cornice", 0.0))
+                        h.get("cornice", 0.0), h.get("bands"))
                  for i, n in enumerate(h["near"])]
         if h.get("turn"):
             for m in nears + [far]:

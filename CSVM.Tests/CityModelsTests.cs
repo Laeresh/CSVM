@@ -54,6 +54,10 @@ public sealed class CityModelsTests
         // Class 3, the cornice line, takes the ungraded metal cell (every class over 1.5) and its own gain.
         Assert.Contains("bool metal = uv2.y > 1.5;", look, System.StringComparison.Ordinal);
         Assert.Contains("if (uv2.y > 2.5) {", look, System.StringComparison.Ordinal);
+        // Class 4, a board, returns before the cornice and the windows: its poster is the seed's own roll.
+        Assert.True(look.IndexOf("if (uv2.y > 3.5) {", System.StringComparison.Ordinal)
+            < look.IndexOf("if (uv2.y > 2.5) {", System.StringComparison.Ordinal));
+        Assert.Contains("floor(csky_city_rand(s + 7u) * (family < 0.5 ?", look, System.StringComparison.Ordinal);
         Assert.Equal(look, CityModels.LookCode());
     }
 }

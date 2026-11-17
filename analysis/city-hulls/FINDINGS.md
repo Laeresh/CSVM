@@ -129,6 +129,10 @@ Every `cblock2` and `cblock3` building (`cb06` to `cb11`) stands turned 45 degre
 frame: `cb06` is `cb00`'s 40 x 24 m slab, `cb08` is `cb03`'s notched tower, and the others are
 32 m squares, so their 45.3 m boxes are a square's diagonal. `tiers.py --turn=45` measures them
 turned back. The `cblock4` and `cblock7` buildings (`cb12` to `cb16`) stand square in their frames.
+Every `cblock5` and `cblock6` building (`cb17` to `cb24`, and `cb06` and `cb11`) stands turned 45
+degrees as well, so their boxes are diagonals too: `cb18` is a 32 m square, not 45.3 m, `cb21` is
+`cb13`'s 12 x 20 m block, `cb22` and `cb23` are 16 x 12 m, and `cb24a` and `cb24b` are `cb15a` and
+`cb15b` turned a quarter (24 x 56 m).
 
 The `cblock4` and `cblock7` shapes, from their sections (all meshes of the chain):
 
@@ -146,6 +150,41 @@ The `cblock4` and `cblock7` shapes, from their sections (all meshes of the chain
 - `cb16a` and `cb16b`: 24 x 56 m, walls to 20 m, a cornice to 22 m, a hipped roof to a point at
   30 m (`cb16a`) or 26 m (`cb16b`); awnings on the long walls (and, on `cb16b`, two on the ends)
   over spans a half turn apart.
+
+The `cblock5` and `cblock6` shapes, turned back (all meshes of the chain). `tiers.py` refuses most
+of them, since their roofs are bands between unlike sections; these are read off the sections.
+
+- `cb17a`: a U of 8 m wings round a court open on one side, walls to 24 m, ridged roofs to 32 m
+  along each wing's middle, mitred at the two corners, with gable ends (the brick-red
+  `aphagar05` triangles, mean (99, 60, 35) over their texels at or below `UNLIT_LUMA`) on the wing
+  ends.
+- `cb17b`: a U of 8 m wings round a court open on the other side, flat at 24 m, with an 8 m stair
+  tower at one outer corner to 32 m under a pyramid to 36 m. The court's back wall is the further
+  mesh `o2`.
+- `cb18a` and `cb18b`: a 32 m square, walls to 20 m, a low pyramid to 24 m.
+- `cb19a`: a 31.78 m square with a 7.94 m wide, 3.18 m deep notch in the middle of each side to
+  25.22 m, and a 25.42 m square top floor to 30.09 m. The pale vertical stripes on its upper walls
+  are its window texture stretched over short faces, not a crown.
+- `cb19b`: a 32 m square with an 8 m wide, 4 m deep notch in the middle of each side to 20 m, a
+  hipped skirt rising 4 m to the 24 m square of an upper block (the notches' back walls run on up
+  through it), the block to 32 m and a pyramid to 40 m.
+- `cb20a`: a 32 m podium stepping in at 12, 16 and 20 m round a 20 m tower in one corner, the
+  tower to 44 m under a pyramid to 52 m whose apex stands over the podium's inner corner, 6 m off
+  the tower's centre. `cb20b`: the podium widened round two towers, 24 m and 20 m, each under its
+  own off-centre pyramid to 52 m.
+- `cb21a` (= `cb21b`): `cb13`'s block, walls to 24 m, a cornice leaning 0.42 m out to 26 m, awnings
+  on the long walls.
+- `cb22a` and `cb22b`: 16 x 12 m off the lot's centre by (0.59, 1.41) m, walls to 8 m, a cornice
+  leaning 0.41 m out on the long walls to a flat tile roof at 10 m, an awning on each long wall,
+  and billboards standing on the roof as single planes: `cb22a` two 12 x 6 m boards across the
+  roof, 8 m apart; `cb22b` two 5.9 x 8.86 m boards, reaching 18.86 m. Each board's poster faces
+  away from the roof's middle; in game its other face shows plain brown planks with a thin pale
+  rim round the poster.
+- `cb23a` and `cb23b`: the same block turned a quarter, with one 12 x 6 m board along its middle,
+  its poster on both faces.
+- `cb24a`: `cb15a` turned a quarter, its cornice leaning 0.24 m out on the long walls and 0.56 m on
+  the ends, its roof light at the same place. `cb24b`: `cb15b` turned a quarter, walls to 20 m, a
+  cornice to 22 m and a raised middle 20 m long to 24 m.
 
 ## Variants
 
@@ -170,10 +209,14 @@ fourth. The cut sits in the largest gap of the dressed shapes' counts (1,166 to 
 | `cb04a`, `cb03b`, `cb05a`, `cb05b`, `cb03a`, `cb04b` | 805 to 766 each | 2 |
 | `cb01c`, `cb01d`, `cb08` (`a` and `b`), `cb09` (`a` and `b`), `cb07a`, `cb07b`, `cb10b`, `cb10a` | 577 to 218 each | 2 |
 | `cb16a`, `cb15a`, `cb15b`, `cb16b` | 330 to 325 each | 2 |
+| `cb21` (`cb21a`, `cb21b`) | 621 | 2 |
+| `cb19a`, `cb19b`, `cb18a`, `cb17a`, `cb20a`, `cb18b`, `cb17b`, `cb20b` | 280 to 151 each | 2 |
+| `cb22b`, `cb22a`, `cb24a`, `cb23a`, `cb23b`, `cb24b` | 65 to 39 each | 2 |
 
 `cb14a` and `cb14b` share one geometry and draw two different sets of four, sharing two (the flat
-walk with a tank and the set-back top floor), so that lot shows six massings. No shape left to
-dress passes the cut: the `cblock5` and `cblock6` shapes are placed 39 to 336 times each.
+walk with a tank and the set-back top floor), so that lot shows six massings. `cb21a` and `cb21b`
+likewise draw two different pairs of `cb13`'s massings, so that lot shows four. No `cblock5` or
+`cblock6` shape passes the cut.
 
 ## Caveats (measured / inferred / assumed)
 

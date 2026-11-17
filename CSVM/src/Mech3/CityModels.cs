@@ -47,6 +47,15 @@ public static class CityModels
     // near-white like the original's dentil line at night. An albedo gain: it emits nothing.
     private const float CorniceGain = 2.5f;
 
+    // city_atlas.py's board strips. Landscape posters run along the bottom. Portrait posters, the plank back and the
+    // brick gable run down the right.
+    private const int StripY = 960, StripX = 960, StripGutter = 8, LandW = 96, LandH = 48, PortW = 48, PortH = 72;
+    private const int LandPosters = 6, PortPosters = 4;
+
+    // TUNE. The albedo gain of a poster, class 4's formats 0 and 1. Its raw luma on a night frame matches the
+    // original's lit poster at the same pose. Like CorniceGain it emits nothing.
+    private const float PosterGain = 1.25f;
+
     // TUNE. Where single windows fall under a pixel, the wall lights points instead, cells about FarPointPx pixels
     // wide. A cell lights by a roll against the lit share times FarPointShare, at FarPointGain of a lit window.
     // An even mean glow there read as a beige wash, since night exposure pushes a resolved window into the tonemap.
@@ -200,6 +209,21 @@ public static class CityModels
                 vec2 k = vec2({{Tile}}.0, -{{Tile}}.0) / {{Atlas}}.0;
                 vec2 du = dFdx(uv), dv = dFdy(uv);
                 vec3 albedo = textureGrad(facade_tex, st, du * k, dv * k).rgb;
+                // Class 4 is a board, its format in TEXCOORD_1.x. Formats 0 and 1 are a poster the seed picks, shown
+                // whole; 2 a board's back and 3 a brick gable, tiled. Ungraded, it keeps its colour on any building.
+                if (uv2.y > 3.5) {
+                    float design = floor(csky_city_rand(s + 7u) * (family < 0.5 ? {{LandPosters}}.0 : {{PortPosters}}.0));
+                    float index = family < 1.5 ? design : {{PortPosters}}.0 + family - 2.0;
+                    vec2 size = family < 0.5 ? vec2({{LandW}}.0, {{LandH}}.0) : vec2({{PortW}}.0, {{PortH}}.0);
+                    vec2 origin = family < 0.5
+                        ? vec2(index * {{LandW + 2 * StripGutter}}.0 + {{StripGutter}}.0, {{StripY + StripGutter}}.0)
+                        : vec2({{StripX + StripGutter}}.0, index * {{PortH + 2 * StripGutter}}.0 + {{StripGutter}}.0);
+                    vec2 f = family < 1.5 ? clamp(uv, 0.0, 1.0) : fract(uv);
+                    vec2 bk = vec2(size.x, -size.y) / {{Atlas}}.0;
+                    glow = vec3(0.0);
+                    vec3 board = textureGrad(facade_tex, (origin + vec2(f.x, 1.0 - f.y) * size) / {{Atlas}}.0, du * bk, dv * bk).rgb;
+                    return board * (family < 1.5 ? {{F(PosterGain)}} : 1.0);
+                }
                 if (roof && !metal && family > {{F(TileRoofFamily - 0.5f)}}) {
                     albedo *= csky_city_roof(csky_city_rand(s + 6u));
                 }

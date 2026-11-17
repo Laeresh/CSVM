@@ -279,6 +279,49 @@ over**, where the towers alone read 33 over: a dressed kind's distant cells draw
 the original drew its mesh chain. Near draws 1,649.9. The scene gains 3,391 nodes, and the world
 build 50 to 130 ms of clutter and 40 to 80 ms of bind.
 
+### The `cblock5` and `cblock6` kinds
+
+The city with every building kind dressed (73 kinds, 3,852 near nodes; the `det` dressing still
+draws its originals) against the city off, one interleaved batch, n=3, nine views. C5-cb5 is
+`--pos=-7680,60,-4800 --lookat=-7680,15,-4200` and C5-cb6 `--pos=-10750,60,-4100
+--lookat=-10750,15,-3500`, 60 m over the `cblock5` cells round (-7680, -4352) and the `cblock6`
+cells round (-10752, -3584), clear of the fog volumes. This batch's baseline GPU times sit 0.35 to
+0.65 ms above the previous batch's at the same counts, so only the differences within it are read.
+
+| View | Mode | GPU (ms) | GPU added | CPU added | Draws | Primitives |
+|---|---|---:|---:|---:|---:|---:|
+| C5-cb1 | off | 5.325 | | | 893 | 770,150 |
+| C5-cb1 | near | 5.99 | +0.665 | +0.016 | 833 | 943,511 |
+| C5-cb1 | extreme | 5.935 | +0.61 | +0.051 | 920 | 1,251,825 |
+| C5-street | off | 6.62 | | | 744 | 695,703 |
+| C5-street | near | 6.675 | +0.055 | +0.057 | 690 | 869,107 |
+| C5-street | extreme | 6.63 | +0.01 | +0.071 | 803 | 1,136,117 |
+| C5-alt | off | 3.805 | | | 1,775.5 | 774,563 |
+| C5-alt | near | 3.97 | +0.165 | -0.048 | 1,626.1 | 743,130 |
+| C5-alt | extreme | 4.425 | +0.62 | +0.095 | 1,777.1 | 1,125,832 |
+| C5-cm23 | off | 4.16 | | | 1,160 | 580,292 |
+| C5-cm23 | near | 4.29 | +0.13 | -0.009 | 977 | 539,158 |
+| C5-cm23 | extreme | 4.5 | +0.34 | +0.068 | 1,091 | 728,034 |
+| C5-cb7 | off | 6.6 | | | 945 | 612,851 |
+| C5-cb7 | near | 6.765 | +0.165 | +0.028 | 878 | 659,415 |
+| C5-cb7 | extreme | 6.78 | +0.18 | +0.092 | 949 | 1,058,577 |
+| C5-cb23 | off | 5.05 | | | 2,098.6 | 805,449 |
+| C5-cb23 | near | 5.005 | -0.045 | +0.026 | 2,010.6 | 871,788 |
+| C5-cb23 | extreme | 4.965 | -0.085 | +0.116 | 2,139.6 | 1,277,742 |
+| C5-cb4 | off | 6.855 | | | 1,090.3 | 505,288 |
+| C5-cb4 | near | 6.88 | +0.025 | +0.007 | 974.3 | 597,157 |
+| C5-cb4 | extreme | 6.82 | -0.035 | +0.07 | 1,106.3 | 750,375 |
+| C5-cb5 | off | 5.36 | | | 717.1 | 530,331 |
+| C5-cb5 | near | 5.515 | +0.155 | +0.06 | 624.1 | 700,245 |
+| C5-cb5 | extreme | 5.395 | +0.035 | +0.084 | 747.1 | 798,309 |
+| C5-cb6 | off | 5.76 | | | 918.1 | 562,168 |
+| C5-cb6 | near | 5.805 | +0.045 | -0.019 | 700.1 | 629,304 |
+| C5-cb6 | extreme | 5.71 | -0.05 | +0.059 | 778.1 | 689,056 |
+
+Every view holds the budget: at most 0.665 ms GPU (C5-cb1, near) and 0.116 ms CPU (C5-cb23,
+extreme). **Extreme draws 1,777.1 at C5-alt against 1,775.5 with the city off, 1.6 over** (3.4
+before these kinds); near draws 1,626.1. The scene gains 3,925 nodes.
+
 ## Reproducing
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"
@@ -286,6 +329,7 @@ build 50 to 130 ms of clutter and 40 to 80 ms of bind.
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7 -Modes nomodels,near,far,extreme,original -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-alt,C5-cm23 -Modes nomodels,far,veryfar,extreme -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7,C5-cb23,C5-cb4 -Modes nomodels,near,extreme -Launches 3
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7,C5-cb23,C5-cb4,C5-cb5,C5-cb6 -Modes nomodels,near,extreme -Launches 3
 
 From PowerShell 7 the comma lists go through `powershell -NoProfile -Command "& '<path>' ..."`.
 

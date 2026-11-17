@@ -44,6 +44,8 @@ SHAPES = ["cb00a", "cb01a", "cb01c", "cb01d", "cb02a", "cb02b", "cb03a", "cb03b"
 FONT = ImageFont.load_default(size=14)
 # CityModels.CorniceGain, mirrored.
 CORNICE_GAIN = 2.5
+# CityModels.PosterGain, mirrored.
+POSTER_GAIN = 1.25
 SS = 2
 
 
@@ -66,11 +68,24 @@ IDS = load_png("facade_ids.png.bin")
 
 
 def texel(u, v, fam, cls, row):
-    """Nearest texel (x, y) of the atlas for facade tile coordinates, as the shader would fetch."""
+    """Nearest texel (x, y) of the atlas for facade tile coordinates, as the shader would fetch. A board
+    (class 4) reads its strip cell; row stands in for the seed's poster pick."""
     col = np.where(cls > 1.5, A.METAL_COL, np.where(cls > 0.5, A.ROOF_COL, row))
     fu, fv = u - np.floor(u), v - np.floor(v)
     x = col * A.CELL + A.GUTTER + np.minimum(np.floor(fu * A.TILE), A.TILE - 1)
     y = np.round(fam).astype(int) * A.CELL + A.GUTTER + np.minimum(np.floor((1 - fv) * A.TILE), A.TILE - 1)
+    board = cls > 3.5
+    if board.any():
+        fmt = np.round(fam).astype(int)
+        poster = fmt <= A.PORTRAIT
+        bu, bv = np.where(poster, np.clip(u, 0, 0.9999), fu), np.where(poster, np.clip(v, 0, 0.9999), fv)
+        land = fmt == A.LANDSCAPE
+        idx = np.where(poster, row % np.where(land, A.POSTERS[0], A.POSTERS[1]), A.POSTERS[1] + fmt - A.BACK)
+        w, h = np.where(land, A.LAND_TILE[0], A.PORT_TILE[0]), np.where(land, A.LAND_TILE[1], A.PORT_TILE[1])
+        ox = np.where(land, idx * A.LAND_CELL[0], A.PORT_X) + A.STRIP_GUTTER
+        oy = np.where(land, A.LAND_Y, idx * A.PORT_CELL[1]) + A.STRIP_GUTTER
+        x = np.where(board, ox + np.floor(bu * w), x)
+        y = np.where(board, oy + np.floor((1 - bv) * h), y)
     return x.astype(int), y.astype(int)
 
 
@@ -119,7 +134,7 @@ def raster(P, attrs, scale, colour, az=35.0, el=22.0, pad=6, bg=R.BG, light=None
 
 def model_tris(meshes, name, offset=(0, 0, 0)):
     pos, uv0, uv1, tri = meshes[name]
-    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0, 2.0, 3.0}, "TEXCOORD_1.y is not a surface class"
+    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0, 2.0, 3.0, 4.0}, "TEXCOORD_1.y is not a surface class"
     P = pos[tri] + np.array(offset)
     attrs = np.concatenate([uv0, uv1], axis=1)[tri]
     return P, attrs
@@ -132,7 +147,8 @@ def flat_colour(factor, row, exposure=1.0):
     def colour(i, vals, n):
         x, y = texel(vals[:, 0], vals[:, 1], vals[:, 2], vals[:, 3], row)
         grade = np.where((vals[:, 3] > 1.5)[:, None], 1.0, np.array(factor)[None, :])
-        grade = np.where((vals[:, 3] > 2.5)[:, None], CORNICE_GAIN, grade)
+        grade = np.where(((vals[:, 3] > 2.5) & (vals[:, 3] < 3.5))[:, None], CORNICE_GAIN, grade)
+        grade = np.where(((vals[:, 3] > 3.5) & (vals[:, 2] < A.PORTRAIT + 0.5))[:, None], POSTER_GAIN, grade)
         alb = srgb_to_lin(ATLAS[y, x, :3] / 255.0) * grade
         shade = 0.55 + 0.45 * abs(float(n @ R.LIGHT))
         return srgb_to_lin(lin_to_srgb(alb) * shade) * exposure

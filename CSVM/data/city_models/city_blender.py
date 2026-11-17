@@ -25,7 +25,9 @@ What a model file holds (docs/tooling.md, "City models"):
   tile units.
 - TEXCOORD_1: (family index, surface class), class 0 wall, 1 roof, 2 light metal (posts, rails,
   slab edges; the look shader takes it ungraded, so it stays pale on a dark building) and 3 a
-  walk-up's cornice line (the light metal cell, ungraded and brightened by CityModels.CorniceGain).
+  walk-up's cornice line (the light metal cell, ungraded and brightened by CityModels.CorniceGain),
+  4 a board (a roof billboard's poster or back, a red brick gable: city_atlas.py's board strips,
+  ungraded), whose TEXCOORD_1.x is the board's format instead of the family (Mesh.face's family).
   city_atlas.py holds the atlas layout the two index.
 - A hull with gables (gables=True) maps a slope's vertical faces, its gable ends, onto the wall's
   solid band, so they wear the facade's wall and take no window.
@@ -48,7 +50,7 @@ import veg_blender as vb  # noqa: E402
 TW = A.TILE_M
 FLOOR = A.FLOOR_M
 SOLID = A.SOLID_M
-WALL, ROOF, METAL, CORNICE = 0, 1, 2, 3
+WALL, ROOF, METAL, CORNICE, BOARD = 0, 1, 2, 3, 4
 EPS = 0.01
 
 
@@ -63,8 +65,10 @@ class Mesh:
         self.faces = []
         # Cornice bands, cornice_bands()'s: the wall faces they overlap are split and the overlap is class CORNICE.
         self.cornice = []
+        # Face index to the TEXCOORD_1.x it carries instead of the model's family (a board's format).
+        self.family = {}
 
-    def face(self, pts, uvs, cls, outward):
+    def face(self, pts, uvs, cls, outward, family=None):
         pts = [_v(p) for p in pts]
         n = np.cross(pts[1] - pts[0], pts[2] - pts[0])
         if len(pts) == 4 and np.linalg.norm(n) < 1e-9:
@@ -74,6 +78,8 @@ class Mesh:
         # A quad with two coincident corners is a triangle.
         keep = [i for i in range(len(pts)) if np.linalg.norm(pts[i] - pts[i - 1]) > 1e-6]
         if len(keep) >= 3:
+            if family is not None:
+                self.family[len(self.faces)] = family
             self.faces.append(([pts[i] for i in keep], [uvs[i] for i in keep], cls))
 
     def triangles(self):
@@ -424,10 +430,53 @@ def cornice_bands(profile, c):
     return bands
 
 
-def build_profile(mesh, planes, profile, roofs=None, gables=False, cornice=0.0):
+def hip_band(outline, dirs, y0, y1, d, end_face=None):
+    """A roof band from the polygon outline [(x, z), ...] at y0 up to y1, each corner moved d
+    metres along its dirs (dx, dz) entry: an edge whose corners both move inward is a roof slope,
+    one whose corners move only along it is a vertical end on the wall's solid band (a gable, a
+    step's side), one whose corners stay is a wall. A ridged roof over wings, or a hipped skirt
+    round a notched plan, which a stack of rectangles cannot hold. end_face(mesh, pts, outward), when given,
+    builds the vertical ends instead."""
+    def build(mesh, planes):
+        n = len(outline)
+        turn = 1 if sum(outline[i][0] * outline[(i + 1) % n][1] - outline[(i + 1) % n][0] * outline[i][1]
+                        for i in range(n)) > 0 else -1
+        q = [(x + d * a, z + d * b) for (x, z), (a, b) in zip(outline, dirs)]
+        v0 = (round(y0 / FLOOR) * FLOOR - SOLID) / TW
+        for i in range(n):
+            j = (i + 1) % n
+            (x0, z0), (x1, z1) = outline[i], outline[j]
+            out = _v((z1 - z0, 0.0, x0 - x1)) * turn
+            out /= np.linalg.norm(out)
+            axis = 0 if abs(x1 - x0) < 1e-6 else 2
+            k = 0 if axis == 0 else 1
+            coord, sign = outline[i][k], int(round(out[axis]))
+            pts = [(x0, y0, z0), (x1, y0, z1), (q[j][0], y1, q[j][1]), (q[i][0], y1, q[i][1])]
+            if q[i] == outline[i] and q[j] == outline[j]:
+                s = sorted((z0, z1) if axis == 0 else (x0, x1))
+                wall(mesh, planes, (axis, coord, sign, s[0], s[1]), y0, y1)
+            elif abs(q[i][k] - coord) < 1e-6 and abs(q[j][k] - coord) < 1e-6 and end_face:
+                end_face(mesh, pts, out)
+            elif abs(q[i][k] - coord) < 1e-6 and abs(q[j][k] - coord) < 1e-6:
+                uvs = [(planes.u(axis, coord, sign, _v(p)), v0 + (p[1] - y0) / (y1 - y0) * 2 * SOLID / TW) for p in pts]
+                mesh.face(pts, uvs, WALL, out)
+            else:
+                edge = _v(pts[1]) - _v(pts[0])
+                el = np.linalg.norm(edge)
+                uvs = []
+                for p in pts:
+                    r = _v(p) - _v(pts[0])
+                    along = float(np.dot(r, edge / el))
+                    uvs.append((along / TW, float(np.linalg.norm(r - edge / el * along)) / TW))
+                mesh.face(pts, uvs, ROOF, out + _v((0, 1, 0)))
+    return build
+
+
+def build_profile(mesh, planes, profile, roofs=None, gables=False, cornice=0.0, bands=None):
     """Walls, slopes and caps of a profile, with a cornice line cornice metres tall when given.
     Every flat roof is reported to roofs as (y, lower footprint, upper footprint or None) for
-    parapets and dressing."""
+    parapets and dressing. A band that is neither a prism nor a one-rectangle slope is built by
+    bands[its foot's y](mesh, planes)."""
     if cornice:
         mesh.cornice = cornice_bands(profile, cornice)
     pieces = []
@@ -444,6 +493,8 @@ def build_profile(mesh, planes, profile, roofs=None, gables=False, cornice=0.0):
                 wall(mesh, planes, run, ya, yb, collect=pieces)
         elif len(ra) == 1 and len(rb) == 1:
             slope(mesh, ra[0], ya, rb[0], yb, planes if gables else None)
+        elif bands and ya in bands:
+            bands[ya](mesh, planes)
         else:
             raise ValueError("profile band %.2f..%.2f is neither a prism nor a slope" % (ya, yb))
     flush_walls(mesh, planes, pieces)
@@ -556,16 +607,17 @@ def dress_roof(mesh, rect, y, kit, rng, blocked=()):
 
 # ---- variants
 
-def far_model(profile, family, gables=False, cornice=0.0):
+def far_model(profile, family, gables=False, cornice=0.0, bands=None):
     mesh = Mesh()
-    build_profile(mesh, planes_for(profile, family), profile, gables=gables, cornice=cornice)
+    build_profile(mesh, planes_for(profile, family), profile, gables=gables, cornice=cornice, bands=bands)
     return mesh
 
 
-def near_model(profile, family, near, rng, gables=False, cornice=0.0):
+def near_model(profile, family, near, rng, gables=False, cornice=0.0, bands=None):
     """A near model: the hull profile, or the variant's own profile of the same hull, with the
     variant's edits, parapets on every flat roof edge that is open to the sky, and the variant's
-    dressing kit on the top roof."""
+    dressing kit on the top roof. A variant's own bands replace the hull's."""
+    bands = near.get("bands", bands)
     planes = planes_for(profile, family)
     prof = list(near.get("profile", profile))
     if near.get("notch"):
@@ -578,7 +630,7 @@ def near_model(profile, family, near, rng, gables=False, cornice=0.0):
         prof = prof[:-1] + near["crown"]
     mesh = Mesh()
     roofs = []
-    build_profile(mesh, planes, prof, roofs, gables, cornice)
+    build_profile(mesh, planes, prof, roofs, gables, cornice, bands)
     for y, lower, upper in roofs:
         top = upper is None
         h = near.get("parapet", 1.0) if top else near.get("ledge", 0.6)
@@ -666,7 +718,8 @@ def to_object(name, mesh, family, mat):
     bm = bmesh.new()
     uv0 = bm.loops.layers.uv.new("UV0")
     uv1 = bm.loops.layers.uv.new("UV1")
-    for pts, uvs, cls in mesh.faces:
+    for n, (pts, uvs, cls) in enumerate(mesh.faces):
+        fam = mesh.family.get(n, family)
         # gamez (X, Y, Z) is glTF's frame; Blender is Z up, so (X, -Z, Y), which the exporter undoes.
         vs = [bm.verts.new((p[0], -p[2], p[1])) for p in pts]
         f = bm.faces.new(vs)
@@ -674,7 +727,7 @@ def to_object(name, mesh, family, mat):
         for loop, uv in zip(f.loops, uvs):
             # The exporter writes v as 1 - v.
             loop[uv0].uv = (uv[0], 1.0 - uv[1])
-            loop[uv1].uv = (float(family), 1.0 - float(cls))
+            loop[uv1].uv = (float(fam), 1.0 - float(cls))
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()

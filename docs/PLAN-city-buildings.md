@@ -83,6 +83,9 @@ objected to; reopen any of them by asking.
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
+| 44 | Pitched tower roofs of `cblock5` and `cblock6` (C21) | The original's hip and pyramid roofs on `cb18`, `cb19b` and `cb20` read dark red at night; the new ones follow each building's tint. **"Keep as shown"**. |
+| 43 | `cb17a`'s gable ends (C21) | The original's gables are orange-red brick against pale walls; the first build painted them in the wall's colour. **"Red brick gables"**. |
+| 42 | Roof billboards of `cb22` and `cb23` (C21) | The originals show a lit poster; the first build drew blank pale boards. **"Own painted posters"**, then on the wording: "Perhaps you can get some plane,parts manufactures or fictional companies from the game files." Shown ten designs (Blake, Tornado, Achilles Armor, Hughes, Wright, Bristol, Ford, Colt, and the words EAT and INN on the narrow board), five of them names of real firms the game names as makers: **"Land it"**. |
 | 41 | Windows on corners (C21) | The user: "some windows are right on corners". A family's four facade rows shared no bay grid but the 8 m tile, so no mesh fit suits all four. Shown the options, the user chose **"Common grid, all buildings"**: the eight walk-up rows with 3 bays take 4 and the three tower rows with 5 take 4, which changes approved facades. Of the result, with a pier of 0.4 to 0.5 m on each side of a corner: **"Land it"**. |
 | 40 | The option's label (C22) | **"3D Scenery"** replaces "3D Vegetation" on the VIDEO page. The stored key and values stay. |
 
@@ -949,9 +952,35 @@ of the first tranche's closed block: "The top of the original cb07b is either a 
 still under construction, the newly generated nearly black tops dont match that." It is slabs at
 68.6 and 73.39 m on four light metal corner posts on the far box and one near variant, and a
 landing deck with edge rails on the other. `measure.ps1` gains `C5-cb4`, over the `cblock4` cells
-round (-4600, -5600). The model files hold 14,422 near and 1,104 far triangles. Remaining:
-`cblock5` and `cblock6` (`cb17` to `cb24`, 2,496 buildings, none placed 1,000 times), then the 16
-`det` shapes.
+round (-4600, -5600).
+
+The third tranche dresses `cblock5` and `cblock6`: 16 kinds in 13 shapes, `cb17` to `cb24`, each
+turned 45 degrees in its mesh frame and each placed under 1,000 times, so two near variants each.
+`cb21` is `cb13`'s block turned and `cb24a` and `cb24b` are `cb15a` and `cb15b` turned a quarter;
+they take those shapes' massings, `cb21a` and `cb21b` a different pair each. A band that a stack
+of rectangles cannot hold is built by a hull's `bands` entry: `city_blender.hip_band` builds
+`cb17a`'s ridged wings with gable ends, mitred at the corners (a near variant cuts the ridges to a
+flat walk), and `cb19b`'s hipped skirt round its notched plan; `c5.py`'s `pyramids` builds
+`cb20b`'s twin pyramids, whose apexes stand off centre as measured. `cb17b` keeps its corner stair
+tower and pyramid, `cb18` its low pyramid, `cb19a` its notches and set-in top floor, `cb20a` its
+stepped podium. `cb19a`'s roof stands at 24.8 m (measured 25.22) so the far box's walls are not
+split, and its notch backs stand 4 cm inside its top floor's wall so they keep their windows. The
+walk-ups under tile roofs (`cb21` to `cb24`) wear the cornice line; the towers do not, and their
+pitched roofs follow each building's tint (Decision 44). `measure.ps1` gains `C5-cb5` and
+`C5-cb6`. The model files hold 20,728 near and 1,812 far triangles. Remaining: the 16 `det`
+shapes.
+
+The billboards of `cb22` and `cb23` show posters of our own (Decision 42) at their measured places
+on the far box and both near variants, on the face the original's poster faces (both faces on
+`cb23`'s single board), the other face a plain plank back. The boards are surface class 4, which
+samples the atlas's free strips ungraded: six landscape and four portrait designs, one picked per
+building from its seed so the near model and the far box agree, each a name the game's own text
+gives (Blake Aviation, the Tornado engines, the Achilles Armor Company, and the makers Hughes,
+Wright, Bristol, Ford and Colt) or a plain word, in block lettering over plain shapes of our own.
+`CityModels.PosterGain` (1.25, an albedo gain) lifts a poster toward the original's lit poster on
+a night frame. `cb17a`'s gable ends are red brick (Decision 43), a board cell at the original
+gable texture's unlit mean colour; the brick family's band under the kind's grade came out about
+2.5 times too dark. The atlas's existing cells and window ids are byte-identical.
 
 The walk-up districts under tile roofs vary in colour (Decision 35). The shader picks each tile
 roof's colour from the building's seed out of `CityModels.Roofs`: weathered brown 30 %, terracotta
@@ -1050,13 +1079,38 @@ in the same places. `CityModelsTests`, the five targeted engine suites and `-Qui
 orchestrator read the atlas and doc diff and the montages and sent them to the user. Not checked:
 the dormers in game at close range, the cost.
 
+The third tranche is verified by its agent. Every near and far mesh of the 55 models is inside the
+margin: at most 2.83 m in, 3.69 m above, nothing sideways on the new ones; each new far box is
+under its original's triangle count (`cb19b` 84 of 96). `corners.py` reads 0 cut windows over all
+55 models. The 39 model files that existed before are byte-identical, as are the window ids and
+the atlas's 36 existing cells. The log reads 73 kinds with a hull, 3,852 near nodes, and 12,569
+solid stamps in 23 kinds still drawing their original, the `det` halves. In one interleaved batch,
+n=3, over nine views, taken before the posters and gables, the city adds at most 0.665 ms GPU
+(`C5-cb1`, near) and 0.116 ms CPU (`C5-cb23`, extreme). `C5-alt` draws 1,626.1 at near and 1,777.1
+at Extreme against 1,775.5 with the city off. A poster on a night frame reads a mean raw luma of
+80 against the original's 97 at the same pose, peaking at 169 against the new lit windows' 158;
+the plank back reads 46.8 against the original's 46.7. On pinned 8-frame bursts at about 300 m a
+board changes by 0.47 levels frame to frame (the original's board 0.56) and no pixel pair by more
+than 16. `CityModelsTests`, the six targeted engine suites and `-Quick` (1,584 units, 13 engine
+suites) pass. Of 41 goldens only `c5-city-night-enhanced` moved; it is re-pinned to 193f972e,
+pixel-identical on re-render, and the golden stage reads 41 of 41 after the pin. The orchestrator
+read the shader, generator and doc diff and the montages and sent them to the user; `c5.py`'s
+specs were not read line by line, the margin and corner scripts and the sheets stand for them. Not
+measured: the cost of the boards and gables (the display had changed to 1920x1080 and another
+session's run overlapped the batch), which C24's rerun covers.
+
 **Open so far.** The 2.5 m sides of light wells and notches are plain wall, and the paired row's
 dormer window sits off centre. Lit windows in the pinned frames rose by 4 to 7 % over the walk-ups
 and fell by 6 to 7 % over the towers with the re-spaced rows; `LitShareMin/Max` are not retuned.
-Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
-tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
-dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
-the new walls. `cb12b`'s chimney wears the roof cell where the original's is
+Extreme's distant draws at `C5-alt` are 1.6 over the city off (3.4 after the second tranche, 33
+after the first, one with the prototype); Decision 33 puts the excess to the user in C24. The
+`det` dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes
+stand on the new walls. The solid strips include `cb19a`'s 3.22 m notch sides and the sides of the
+light wells and notches of `cb21a`, `cb22`, `cb23` and `cb24b`. `cb18b`'s arched windows are not
+drawn. Five of the ten posters carry names of real firms the game names as makers (Hughes, Wright,
+Bristol, Ford, Colt), each one cell of `paint_posters`. `cb17a`'s gable reads about 1.75 times
+brighter than the original's on a night frame, as the walls do, and a poster's cream peaks about
+7 % above a lit window. The cost of the boards and gables is unmeasured. `cb12b`'s chimney wears the roof cell where the original's is
 orange-red brick, and `cb03a` and `cb08a` show a reddish band on the top roof edge that is not
 traced to a texture. The new walk-ups wear brighter, more tinted walls than the originals' dark
 ones, which the user keeps (Decision 38). A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`

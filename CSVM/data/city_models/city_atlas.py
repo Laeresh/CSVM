@@ -388,7 +388,237 @@ def paint(seed=11):
     metal_rng = np.random.default_rng(seed + 1)
     for f in range(len(FAMILIES)):
         _place(atlas, paint_metal(metal_rng), f, METAL_COL)
+    assert paint_boards(atlas, seed) == POSTERS
     return np.round(atlas * 255).astype(np.uint8), ids, means
+
+
+# ---- the board strips: roof billboards, a board's back and a red brick gable, drawn by surface class 4
+# (city_blender.BOARD) ungraded. They fill the free strips under the families and right of the metal
+# cells, so every cell above keeps its texels. Rows top down (image order), unlike the facade tiles.
+# Landscape posters (12 x 6 m boards) stand along the bottom strip, LAND_TILE in LAND_CELL cells; the
+# portrait posters (5.9 x 8.86 m), then the back and the gable, down the right strip in PORT_CELL cells.
+STRIP_GUTTER = 8
+LAND_TILE, PORT_TILE = (96, 48), (48, 72)
+LAND_CELL = (LAND_TILE[0] + 2 * STRIP_GUTTER, LAND_TILE[1] + 2 * STRIP_GUTTER)
+PORT_CELL = (PORT_TILE[0] + 2 * STRIP_GUTTER, PORT_TILE[1] + 2 * STRIP_GUTTER)
+LAND_Y = len(FAMILIES) * CELL
+PORT_X = (METAL_COL + 1) * CELL
+# The board class's formats, TEXCOORD_1.x on its faces: a landscape poster or a portrait one picked by the
+# building's seed, the plank back, the brick gable. The back and the gable tile at PX_M.
+LANDSCAPE, PORTRAIT, BACK, GABLE = 0, 1, 2, 3
+
+# A 5 x 7 block letter per character the posters spell, rows top down.
+GLYPHS = {
+    "A": (".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "B": ("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."),
+    "K": ("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+    "M": ("#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"),
+    "U": ("#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "C": (".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."),
+    "D": ("####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."),
+    "E": ("#####", "#....", "#....", "####.", "#....", "#....", "#####"),
+    "F": ("#####", "#....", "#....", "####.", "#....", "#....", "#...."),
+    "G": (".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+    "H": ("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "I": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"),
+    "L": ("#....", "#....", "#....", "#....", "#....", "#....", "#####"),
+    "N": ("#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"),
+    "O": (".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "R": ("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
+    "S": (".####", "#....", "#....", ".###.", "....#", "....#", "####."),
+    "T": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
+    "W": ("#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"),
+    "Y": ("#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."),
+}
+CREAM, RED, NAVY = (0.92, 0.85, 0.66), (0.72, 0.16, 0.12), (0.10, 0.15, 0.32)
+MUSTARD, TEAL, INK, ORANGE = (0.88, 0.62, 0.14), (0.10, 0.42, 0.44), (0.08, 0.07, 0.07), (0.90, 0.42, 0.12)
+
+
+def _text(img, word, y, col, kx, ky, gap=None, cx=None):
+    """Block letters kx by ky texels per glyph cell, gap texels apart (kx when not given), centred
+    on column cx (img's middle when not given) with top row y."""
+    gap = kx if gap is None else gap
+    adv = [4 * kx if ch == " " else 5 * kx + gap for ch in word]
+    x = (img.shape[1] if cx is None else 2 * cx) // 2 - (sum(adv) - gap) // 2
+    for ch, a in zip(word, adv):
+        for r, line in enumerate(GLYPHS.get(ch, ())):
+            for c, on in enumerate(line):
+                if on == "#":
+                    img[y + r * ky:y + (r + 1) * ky, x + c * kx:x + (c + 1) * kx] = col
+        x += a
+
+
+def _sunburst(img, cx, cy, rays, a, b):
+    yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]]
+    k = np.floor((np.arctan2(yy - cy, xx - cx) / (2 * math.pi) + 0.5) * rays).astype(int) % 2
+    img[:] = np.where(k[..., None] == 0, np.array(a), np.array(b))
+
+
+def _plane(img, cx, cy, span, deg, col):
+    """A plain monoplane seen from below: a wing, a fuselage and a tailplane, turned deg from level."""
+    yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(float)
+    t = math.radians(deg)
+    u = (xx - cx) * math.cos(t) - (yy - cy) * math.sin(t)
+    v = (xx - cx) * math.sin(t) + (yy - cy) * math.cos(t)
+    wing = (abs(u) < span / 2) & (abs(v) < span * 0.07) & (abs(u) < span / 2 - abs(v) * 2)
+    body = (v > -span * 0.32) & (v < span * 0.40) & (abs(u) < span * 0.07 * (1 - v / span * 0.6))
+    tail = (abs(u) < span * 0.18) & (abs(v - span * 0.36) < span * 0.04)
+    img[wing | body | tail] = col
+
+
+def _skyline(img, base, rng, col):
+    """Towers standing on row base, a stepped top on some."""
+    x = 0
+    while x < img.shape[1]:
+        w, h = int(rng.integers(4, 10)), int(rng.integers(10, 34))
+        img[base - h:base, x:x + w] = col
+        if rng.uniform() < 0.4:
+            img[base - h - 3:base - h, x + w // 3:x + w - w // 3] = col
+        x += w + int(rng.integers(0, 3))
+
+
+def _frame(img):
+    img[:2], img[-2:], img[:, :2], img[:, -2:] = CREAM, CREAM, CREAM, CREAM
+    return img
+
+
+def _canvas(size, col):
+    return np.ones((size[1], size[0], 3)) * np.array(col)
+
+
+def _propeller(img, cx, cy, r, col, hub):
+    """A three-bladed propeller of our own drawing: tapered blades round a hub."""
+    yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(float)
+    a, d = np.arctan2(yy - cy, xx - cx), np.hypot(xx - cx, yy - cy)
+    blade = np.cos(3 * (a - 0.4)) > 1 - 0.55 * (1 - d / r)
+    img[blade & (d < r)] = col
+    img[d < r * 0.22] = hub
+
+
+def _shield(img, cx, top, w, h, col, band):
+    """A plain heater shield with a band across it."""
+    yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(float)
+    t = (yy - top) / h
+    half = np.where(t < 0.55, w / 2, w / 2 * np.sqrt(np.clip(1 - (t - 0.55) / 0.45, 0, 1)))
+    s = (t >= 0) & (t <= 1) & (abs(xx - cx) <= half)
+    img[s] = col
+    img[s & (abs(t - 0.4) < 0.1)] = band
+
+
+# The names come from the game's own text (ui_strings.json from langui.dll): Blake Aviation (3427), the Tornado
+# engines (3130), the Achilles Armor Company (1155), and the makers it names for planes and engines (Hughes
+# Aviation 3043, Wright 3142, Bristol 3112, Ford 3100, Colt Industries 3313). Lettering and shapes are our own.
+def _air(word, bg, ray, band, ink):
+    """A plane maker: our plane over a sunburst, the name on a band."""
+    p = _canvas(LAND_TILE, bg)
+    _sunburst(p, 84, 48, 18, bg, ray)
+    _plane(p, 62, 15, 32, -12, CREAM)
+    p[28:46] = band
+    _text(p, word, 30, ink, 2, 2)
+    return p
+
+
+def _engine(word, bg, ray, band, ink):
+    """An engine maker: a propeller over rays, the name on a band across the top."""
+    p = _canvas(LAND_TILE, bg)
+    _sunburst(p, 48, 56, 22, bg, ray)
+    _propeller(p, 48, 34, 14, CREAM, band)
+    p[3:21] = band
+    _text(p, word, 5, ink, 2, 2)
+    return p
+
+
+def paint_posters(rng):
+    """The landscape and portrait posters: a company of the game's world in block letters with a bold flat
+    shape of our own, or a plain word; our own art."""
+    land = [_air("BLAKE", NAVY, (0.16, 0.24, 0.46), RED, CREAM),
+            _engine("TORNADO", INK, MUSTARD, NAVY, CREAM)]
+    p = _canvas(LAND_TILE, TEAL)
+    _shield(p, 16, 22, 18, 22, CREAM, RED)
+    _text(p, "ACHILLES", 5, CREAM, 2, 2, 1)
+    _text(p, "ARMOR", 23, MUSTARD, 2, 3, cx=58)
+    land.append(p)
+    land.append(_air("HUGHES", RED, ORANGE, NAVY, CREAM))
+    land.append(_engine("WRIGHT", NAVY, (0.16, 0.24, 0.46), RED, CREAM))
+    p = _canvas(LAND_TILE, CREAM)
+    p[:, (np.arange(LAND_TILE[0]) // 6) % 2 == 0] = RED
+    p[9:39, 4:92] = NAVY
+    _text(p, "BRISTOL", 14, CREAM, 2, 3)
+    land.append(p)
+    port = []
+    p = _canvas(PORT_TILE, NAVY)
+    _sunburst(p, 24, 80, 14, NAVY, (0.16, 0.24, 0.46))
+    _propeller(p, 24, 30, 16, CREAM, RED)
+    p[52:70] = RED
+    _text(p, "FORD", 55, MUSTARD, 2, 2, 1)
+    port.append(p)
+    p = _canvas(PORT_TILE, CREAM)
+    p[:, (np.arange(PORT_TILE[0]) // 6) % 2 == 0] = NAVY
+    p[34:66, 2:46] = RED
+    _text(p, "COLT", 40, MUSTARD, 2, 3, 1)
+    port.append(p)
+    p = _canvas(PORT_TILE, MUSTARD)
+    p[2:14:4] = RED
+    p[3:14:4] = RED
+    yy, xx = np.mgrid[0:PORT_TILE[1], 0:PORT_TILE[0]]
+    p[(xx - 24) ** 2 + (yy - 58) ** 2 < 100] = CREAM
+    _text(p, "EAT", 18, INK, 2, 4)
+    port.append(p)
+    p = _canvas(PORT_TILE, TEAL)
+    _skyline(p, 70, rng, INK)
+    _text(p, "INN", 8, CREAM, 2, 3)
+    port.append(p)
+    return [np.clip(_frame(t), 0, 1) for t in land], [np.clip(_frame(t), 0, 1) for t in port]
+
+
+def paint_back(rng):
+    """A board's back: weathered vertical planks 6 texels wide, seamless, at a mean that reads like
+    the original's plank back on a night frame at the same pose."""
+    h, w = PORT_TILE[1], PORT_TILE[0]
+    shade = 1 + 0.08 * _blur(rng.standard_normal((h, w)), 2) * 2 + rng.uniform(-0.08, 0.08, (1, w // 6)).repeat(6, 1)
+    shade = np.where(np.arange(w)[None, :] % 6 == 0, shade * 0.7, shade)
+    return np.clip(np.ones((h, w, 3)) * np.array((74, 52, 44)) / 255 * shade[..., None], 0, 1)
+
+
+def paint_gable(rng):
+    """Red brick for a gable end, seamless, at the original gable texture's mean of its unlit texels,
+    (99, 60, 35), as analysis/city-hulls/census.py's rule measures it."""
+    h, w = PORT_TILE[1], PORT_TILE[0]
+    y, x = np.mgrid[0:h, 0:w]
+    row = y // 2
+    sx = x + (row % 2) * 2
+    shade = 1 + rng.uniform(-0.09, 0.09, (h // 2, w // 4))[row, (sx // 4) % (w // 4)]
+    shade = np.where(y % 2 == 0, shade * 0.85, shade)
+    img = np.ones((h, w, 3)) * shade[..., None]
+    target = np.array((99, 60, 35)) / 255
+    return np.clip(img * target / img.reshape(-1, 3).mean(0), 0, 1)
+
+
+def paint_boards(atlas, seed):
+    """The board strips into the atlas (sRGB 0..1, rows top down). Posters' gutters repeat their edge, so
+    a mip never reads a neighbour; the back's and the gable's wrap, since they tile."""
+    rng = np.random.default_rng(seed + 2)
+    land, port = paint_posters(rng)
+    g = STRIP_GUTTER
+    for i, t in enumerate(land):
+        x = i * LAND_CELL[0]
+        atlas[LAND_Y:LAND_Y + LAND_CELL[1], x:x + LAND_CELL[0]] = np.pad(t, ((g, g), (g, g), (0, 0)), mode="edge")
+    for i, (t, mode) in enumerate([(t, "edge") for t in port] + [(paint_back(rng), "wrap"), (paint_gable(rng), "wrap")]):
+        y = i * PORT_CELL[1]
+        atlas[y:y + PORT_CELL[1], PORT_X:PORT_X + PORT_CELL[0]] = np.pad(t, ((g, g), (g, g), (0, 0)), mode=mode)
+    return len(land), len(port)
+
+
+def board_origin(fmt, index):
+    """The top-left texel (x, y) of a board cell's tile: a poster's by its design index, else the format's own."""
+    if fmt == LANDSCAPE:
+        return index * LAND_CELL[0] + STRIP_GUTTER, LAND_Y + STRIP_GUTTER
+    k = index if fmt == PORTRAIT else POSTERS[1] + fmt - BACK
+    return PORT_X + STRIP_GUTTER, k * PORT_CELL[1] + STRIP_GUTTER
+
+
+# The poster designs per format (landscape, portrait); CityModels.cs mirrors the strip layout.
+POSTERS = (6, 4)
 
 
 def _place(dst, tile, row, col):
