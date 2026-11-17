@@ -39,6 +39,20 @@ public sealed class CityModelsTests
         Assert.InRange(ones, 150, 250);
     }
 
+    /// <summary>The city hands over across the vegetation band of each word but Extreme, which it holds at Very Far's.</summary>
+    [Theory]
+    [InlineData(Utils.VegetationModelsSetting.Off)]
+    [InlineData(Utils.VegetationModelsSetting.Near)]
+    [InlineData(Utils.VegetationModelsSetting.Far)]
+    [InlineData(Utils.VegetationModelsSetting.VeryFar)]
+    [InlineData(Utils.VegetationModelsSetting.Extreme)]
+    public void TheCityBandStopsAtVeryFar(string word)
+    {
+        var veryFar = VegetationModels.BandFor(Utils.VegetationModelsSetting.VeryFar);
+        Assert.Equal(word == Utils.VegetationModelsSetting.Extreme ? veryFar : VegetationModels.BandFor(word), CityModels.BandFor(word));
+        Assert.True(CityModels.BandFor(word).Y <= veryFar.Y);
+    }
+
     /// <summary>Only the slow mode's look reads the shader clock, so the fixed modes' frames pin; the scatter mode
     /// lights no whole floor. The <c>city-buildings</c> suite checks that both materials carry the one look.</summary>
     [Theory]

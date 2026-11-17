@@ -784,9 +784,9 @@ public sealed class ClutterBuilder
             // The word's band on the card and its model, zero for Off so the card draws at every distance.
             (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
             (kind.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
-            // A building's box and near model hand over across the same band.
-            (kind.City?.BoxMaterial as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
-            (kind.City?.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+            // A building's box and near model hand over across the city's band, which stops at Very Far's.
+            (kind.City?.BoxMaterial as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, CityModels.Band);
+            (kind.City?.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, CityModels.Band);
             if (kind.Near != null)
             {
                 (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);

@@ -66,7 +66,7 @@ objected to; reopen any of them by asking.
 | 20 | How per-building values travel | **A seed hashed on the CPU from the stamped point, in the solid stamps' custom data `w`, which no solid shader reads; the shader expands it.** The near model, the far box and the map edge's copies then agree exactly, and the buffer layout does not change. A hash recomputed in the shader from the instance origin would differ between tiers by float rounding. (A3) |
 | 21 | Where window and floor ids live | **A second RGBA8 texture laid out like the facade atlas, sampled nearest with no mipmaps; the atlas stays opaque.** (A3) |
 | 22 | Lighting path | **The clutter's Enhanced lit arm (world light, ambient fill, terrain shadow, night darkening through `FOG`), in a standalone shader with no instance uniforms.** C5's night key and the city darkening hold, and thousands of near cells do not exhaust the instance-uniform buffer. The unlit vegetation look is the wrong template. (A3) |
-| 23 | Fade and hand-over | **The vegetation band and dither split as they are (`VegetationModels.Band`, `ModelShare`), with the far box in the card's role. The box keeps the kind's own fade and cells; near cells are 512 m (TUNE, measured in B14).** (A3) |
+| 23 | Fade and hand-over | **The vegetation band and dither split as they are (`VegetationModels.Band`, `ModelShare`), with the far box in the card's role. The box keeps the kind's own fade and cells; near cells are 2048 m (`CityModels.CellM`, TUNE), and the city's band stops at Very Far's, so Extreme hands the city over where Very Far does (`CityModels.BandFor`).** Both are B14's measurement: 512 m cells cost process time per node, and Extreme's own band raised the distant draw count over the original city's. (A3, B14) |
 | 24 | Where the original is suppressed | **`ClutterInstances`' layout choice while the city is on. The original MultiMesh and all collision stay built, so a live switch needs no rebuild. A model pack's replacement for a kind keeps that kind off the city.** (A3) |
 | 25 | Does the city follow Vegetation Quality as well as the scenery option? | **Yes: it draws only at Rich with the option on.** The integrated-GPU fallback that Decision 8 relies on sits on Vegetation Quality, not on the option. Decided by the orchestrator from Decision 8, not asked. |
 | 26 | What the city copied past the map edge draws | **The far box at every distance, no near models.** Decided by the orchestrator as the cheapest reading, not asked. |
@@ -88,7 +88,7 @@ the clutter census were not re-read. Confirm each before building on it.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | B12, B13 | A3's wiring contract names the functions. The custom-data, build-loop and layout claims it rests on were re-read; confirm the rest as you go. |
-| **Direction sound, magnitude a judgement call** | A2, B11, B14, C24 | The budget and the draw-call limit rest on measurements; the C5 view poses, the near triangle allowance and the 512 m near cell are TUNE. |
+| **Direction sound, magnitude a judgement call** | A2, B11, B14, C24 | The budget and the draw-call limit rest on measurements; the C5 view poses, the near triangle allowance and the 2048 m near cell are TUNE. |
 | **Leads only, no mechanism yet** | B15, C21, C22, C23 | Budget for investigation. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
@@ -402,7 +402,7 @@ It reads a building's hull file, builds its box and near materials, and owns the
 the variant hash. `ClutterBuilder.Build` gives each solid kind with a hull a
 `ClutterInstances.City`, and `ClutterInstances` draws it as a third layout beside the Original and
 Rich ones. The box stands over the kind's own cells in place of the original mesh, the further
-meshes of the building are hidden, and the near variants stand in 512 m cells keyed by variant.
+meshes of the building are hidden, and the near variants stand in `CellM` cells keyed by variant.
 The original MultiMesh, its collision, the activation, the crater cull and the map edge's
 colliders stay as built. Each solid stamp carries a seed hashed on the CPU from its stamped point
 in the custom data's `w`. The far tier draws one MultiMesh per dressed kind per kind cell where
@@ -564,7 +564,7 @@ solid shader reads `w`. `ClutterBuilder.Build` gives each solid kind with a hull
 `ClutterInstances.City`. A kind whose mesh a model pack replaced gets none. A further mesh of a
 dressed building gets a `City` with no box, which hides its node while the city is drawn.
 `ClutterInstances` draws the box as a third layout in the kind's own cells. The near variants
-stand in 512 m cells keyed by cell and variant under `ModelRoot`, on the models' layer, with
+stand in `CellM` cells keyed by cell and variant under `ModelRoot`, on the models' layer, with
 shadows off. The original layouts and every collider stay built, so a live move swaps nodes. The
 city draws only while Rich and a 3D Vegetation word other than Off stand. The city shader is the
 clutter's Enhanced lit arm on the flat grade, with no instance uniform. The box fades out across
@@ -782,9 +782,19 @@ distant draw count at `C5-alt` from 1,776 to 1,709 at near, 1,711 at far and 1,7
 cost the same within 0.02 ms. The city adds about 290 ms to the world build and 5,452 nodes, which
 cost 0.04 to 0.10 ms of `proc_ms` at every view, also out of range. Scaled to the whole city by
 building count (an estimate), the near nodes reach about 23,500 and the CPU cost at near
-approaches 0.5 ms. `CityModels.CellM` and a cap on the city's near reach are the levers, and C21
-does not start before one of them is measured. `analysis/veg-budget/FINDINGS.md` holds the tables.
-The Deck is unmeasured.
+approaches 0.5 ms. Those figures are the prototype with 512 m near cells and the vegetation band
+at every word.
+
+The follow-up measured both levers and set them: **`CityModels.CellM` is 2048 m and the city's
+band stops at Very Far's under Extreme** (`CityModels.BandFor`, on both hull materials, the live
+switch in `Recut` and the near cells' range). The near nodes fall from 5,438 to 768, the mean
+`proc_ms` added from 0.059 to 0.013 ms, the worst added CPU from 0.25 to 0.05 ms and the world
+build's cost from 240 to 48 ms. Every word holds the draw rule at `C5-alt`: 1,709.5 at near and
+1,738.5 at Very Far and Extreme, against 1,775.5 with the city off. No cell size alone held it at
+Extreme (1,777.7 at 1024 m, 1,776.5 at 2048 m), so the cap is needed. The larger cell submits more
+off-band stamps (primitives +27 to 52 % at Very Far), which costs up to 0.06 ms GPU at `C5-street`.
+The whole-city estimate falls to about 3,300 near nodes and 0.1 ms CPU.
+`analysis/veg-budget/FINDINGS.md` holds the tables. The Deck is unmeasured.
 
 **Verified.** By the item's agent. Every comparison is interleaved inside one batch, with 3
 launches per case, 5 at `C5-cb1` and `C5-street` for the window modes, where the street view's
@@ -795,9 +805,23 @@ reads `drawn` with 5,438 near nodes in every on mode and `not drawn` with 0 in b
 other Godot process ran during the batches and no log carries `camera state 3`. The orchestrator
 read the script diff and the tables; it ran no launch.
 
-**Open after this item.** Whether the `proc_ms` rise is the node count is inferred, not measured
-both ways. At `C5-cb1` extreme costs less GPU than near while drawing more, unexplained. Only
-static poses are measured, with no aircraft, AI or mission.
+The follow-up is verified by its agent in one interleaved batch of 150 launches (three cell sizes,
+three words and off, five views, n=3) and two smaller ones. `proc_ms` follows the node count,
+measured both ways: with the nodes varied and the frames pixel-identical it reads +0.059, +0.026
+and +0.013 ms at 5,438, 1,877 and 768 nodes, and with the nodes fixed a band that draws no near
+model and one that draws every near model add the same. Extreme's lower GPU at `C5-cb1` is the
+dither band's double draw, about 0.32 ms at near, which covers less of the frame at Extreme. The
+cell size moves no hand-over: frames at `C5-cb1` and `C5-street` are pixel-identical across the
+three sizes, and elsewhere at most 596 pixels shift, on the harbour crane. The final build reads
+Extreme and Very Far alike at `C5-alt` (1,738.5 draws, 847,162 primitives). The orchestrator read
+the diff.
+
+**Open after this item.** `c5-city-night-enhanced` renders 10251f0f with the 2048 m cells (2 px of
+delta 1 against B13's frame) and stays unpinned until B15. Which part of Godot's process step
+walks the static nodes is not identified. Whether the 37-draw margin at `C5-alt` holds for the
+whole city is unmeasured, as is the Deck's vertex cost for the stamps a large cell submits. No
+suite switches to Extreme live; the unit test and the pinned launches cover the cap. Only static
+poses are measured, with no aircraft, AI or mission.
 
 **Original approach (kept for reference).**
 

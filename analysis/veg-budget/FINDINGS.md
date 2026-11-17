@@ -97,7 +97,9 @@ defaults), so the baseline's `enhanced` mode is now the city at near. `nomodels`
 (`--vegetation-models=off`) and `original` (`--vegetation-quality=original`) are the city off and
 reproduce the baseline's counts exactly. Each cell is the median of the launch medians and their
 range. The delta is against `nomodels` in the same batch. The CPU delta is `render_cpu_ms` plus
-`proc_ms`; `setup_ms` reads 0.05 to 0.06 in every case and does not move.
+`proc_ms`; `setup_ms` reads 0.05 to 0.06 in every case and does not move. This table is the
+prototype with 512 m near cells and the vegetation band at every word; "The near cell size and
+the Extreme cap" below holds the cell size and band the build uses.
 
 | View | Mode | n | gpu_ms | delta | CPU delta | draws | prims |
 |---|---|---|---|---|---|---:|---:|
@@ -136,9 +138,8 @@ the far tier lowers it to 1,709 at near.
 The city adds 5,452 nodes at every view, its 5,438 near nodes among them, whether or not any is in
 range. `proc_ms` rises 0.04 to 0.10 ms at every view, also where no near model is in range (C5-cb7,
 C5-cm23). `render_cpu_ms` rises with the near models on screen, 0.02 to 0.06 ms at near and far and
-up to 0.195 ms at extreme. That the `proc_ms` rise is the node count is an inference; the node
-count was not varied on its own. At C5-cb1 extreme costs less GPU than near while drawing more,
-which is unexplained.
+up to 0.195 ms at extreme. At C5-cb1 extreme costs less GPU than near while drawing more. The
+section below measures the node count on its own and explains the extreme figure.
 
 **The three window modes cost the same.** At C5-cb1 and C5-street (n=5) scatter, slow and floors
 differ by at most 0.02 ms of GPU, inside the launch ranges, with identical counts and CPU terms.
@@ -147,8 +148,8 @@ differ by at most 0.02 ms of GPU, inside the launch ranges, with identical count
 8,044 ms at near (clutter +78 ms, bind +165 ms; the loaded-chapter line +210 ms). The near tier
 is built whatever the reach, so far and extreme build alike.
 
-**Whole city, an estimate.** The 14 dressed kinds place 12,529 of the 54,194 buildings (23 %,
-`../city-hulls/FINDINGS.md`). Scaled by buildings, the whole city would hold about 23,500 near
+**Whole city at 512 m cells, an estimate.** The 14 dressed kinds place 12,529 of the 54,194
+buildings (23 %, `../city-hulls/FINDINGS.md`). Scaled by buildings, the whole city would hold about 23,500 near
 nodes, and the node-driven `proc_ms` rise would reach about 0.2 to 0.4 ms at every view, so the
 CPU cost at near would sit close to the 0.5 ms line and extreme would likely pass it. GPU is set
 by the dressed share of the screen, not by the city's size, and stays near the C5-cb1 figure if
@@ -157,7 +158,48 @@ distant draws, while the near tier's draws at C5-alt grow with every dressed kin
 veryfar's margin of 35 draws is likely to close. The near cell size (`CityModels.CellM`) and a cap
 on the city's near reach are the levers.
 
-The Steam Deck is unmeasured.
+### The near cell size and the Extreme cap
+
+`CityModels.CellM` was measured at 512, 1024 and 2048 m. Each value's near, veryfar and extreme
+cases were interleaved with the city off in one batch of 150 launches at the five C5 views, n=3.
+The cell size is a constant; the batch set it per launch through a temporary hook that the build
+does not carry. The near node count is 5,438, 1,877 and 768. Frames at C5-cb1 and C5-street are
+pixel-identical across the three, because the shader hands over per building and a cell's
+visibility range is the band's far edge plus its radius. At C5-alt, C5-cm23 and C5-cb7 a few
+pixels shift (at most 596 at 2048 m, largest delta 12, on the harbour crane's truss), and the
+golden pose `c5-city-night-enhanced` moves by 2 px of delta 1.
+
+| CellM | near nodes | mean `proc_ms` added | worst `render_cpu_ms` added (C5-cb1, extreme) | C5-alt draws near / veryfar / extreme (off 1,775.5) | prims at C5-cb1 veryfar | startup added |
+|---|---:|---|---|---|---:|---|
+| 512 | 5,438 | +0.059 | +0.17 | 1,708.7 / 1,740.7 / 1,829.7 | 767k | +240 ms |
+| 1024 | 1,877 | +0.026 | +0.09 | 1,708.7 / 1,761.7 / 1,777.7 | 832k | +111 ms |
+| 2048 | 768 | +0.013 | +0.035 | 1,709.5 / 1,738.5 / 1,776.5 | 1,167k | +48 ms |
+
+**`proc_ms` follows the near node count, not what is drawn**, about 0.006 ms plus 0.0098 ms per
+1,000 near nodes. With the node count fixed at 5,438, a band that draws no near model and one that
+draws every near model add the same `proc_ms` (+0.04 to +0.09 ms) while `render_cpu_ms` moves by
+0.69 ms. Which part of Godot's process step walks the static nodes is not identified.
+
+No cell size alone holds the draw rule at extreme. **The city's band stops at veryfar's**
+(`CityModels.BandFor`), and with 2048 m cells every word holds the rule at C5-alt: 1,709.5,
+1,738.5 and 1,738.5, the capped extreme reading veryfar's draws and primitives exactly. Larger
+cells submit more off-band stamps (prims +27 to 52 % at veryfar), which costs up to 0.06 ms GPU at
+C5-street and nothing measurable at C5-cb1. At 1024 m with the cap both rules also hold, with
+fewer added prims (+8 to 14 %), twice the CPU and a veryfar margin of 14 draws against 37.
+
+**Extreme is cheaper than near at C5-cb1 because of the dither band.** At C5-cb1 the GPU added
+reads -0.16 ms with boxes only, -0.07 with a hard hand-over at 400 m, +0.25 with the 400 to 600 m
+band, +0.11 at uncapped extreme and +0.225 with near models only. Inside the band the box and the
+near model both draw each building, each discarding half, so the band at near costs about 0.32 ms.
+At extreme the band covers less of the frame. A narrower band is the GPU lever and makes the
+hand-over pop more.
+
+**Whole city at 2048 m cells with the cap, an estimate.** Scaled by buildings: at most about 3,300
+near nodes, about 0.04 ms `proc_ms`, and about 0.1 ms of CPU at a dressed view. Whether the 37-draw
+margin at C5-alt holds for the whole city is unmeasured.
+
+The Steam Deck, and the vertex cost there of the off-band stamps a large cell submits, are
+unmeasured.
 
 ## Reproducing
 

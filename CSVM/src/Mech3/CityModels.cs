@@ -18,8 +18,10 @@ public static class CityModels
     /// <summary>The folder the shipped hull files stand in, one subfolder per chapter.</summary>
     public const string ShippedRoot = "res://data/city_models";
 
-    /// <summary>TUNE. The edge of the square cells the near variants are cut into, each cell one node per variant.</summary>
-    public const float CellM = 512f;
+    /// <summary>TUNE. The edge of the square cells the near variants are cut into, each cell one node per variant.
+    /// Every node costs process time whether drawn or not, so the cells are large. The shader hands over per building,
+    /// so the edge moves no hand-over, only how many off-band stamps a drawn cell submits.</summary>
+    public const float CellM = 2048f;
 
     // The facade atlas's layout, city_atlas.py's. Each family is a row of cells, its facade rows then its roof. A cell
     // is a tile inside a wrapped gutter, and a tile is two floors and about eight windows wide.
@@ -85,6 +87,9 @@ public static class CityModels
     /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Vegetation word other than Off.</summary>
     public static bool On => VegetationQualitySetting.RichOn && VegetationModels.On;
 
+    /// <summary>The band the city hands over across under the standing 3D Vegetation word.</summary>
+    public static Vector2 Band => BandFor(VegetationModelsSetting.Word);
+
     /// <summary>Gets or sets the folder <see cref="For"/> reads, <see cref="ShippedRoot"/> outside a suite. A suite's
     /// fixture hulls stand in its scratch folder. Setting it forgets every hull and facade read.</summary>
     internal static string Root
@@ -108,6 +113,11 @@ public static class CityModels
         h ^= h >> 15;
         return h >> 8;
     }
+
+    /// <summary>The band of one <see cref="VegetationModelsSetting"/> word for the city: the vegetation band, with
+    /// Extreme held at Very Far's. Extreme's near cells raised the distant draw count over the original city's.</summary>
+    public static Vector2 BandFor(string word) =>
+        VegetationModels.BandFor(word == VegetationModelsSetting.Extreme ? VegetationModelsSetting.VeryFar : word);
 
     /// <summary>Which of <paramref name="count"/> near variants the building of <paramref name="seed"/> draws.</summary>
     public static int VariantOf(float seed, int count) => count > 1 ? (int)((uint)seed % (uint)count) : 0;
@@ -360,7 +370,7 @@ public static class CityModels
             Shaders[(near, Windows)] = shader = new Shader { Code = ShaderCode(near, Windows) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("grade", new Vector3(grade.R, grade.G, grade.B));
-        material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+        material.SetShaderParameter(VegetationModels.BandParam, Band);
         if (facade != null)
         {
             material.SetShaderParameter("facade_tex", facade.Albedo);
