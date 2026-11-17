@@ -10,7 +10,7 @@ namespace CSVM.Mech3;
 /// The Enhanced city: a building model's script-built look-alikes, read from
 /// <c>data/city_models/&lt;chapter&gt;/&lt;model&gt;.glb.bin</c>. A hull file holds a far box and the near variants of
 /// one building model. The kind's own cells draw the box in place of the original mesh (<see cref="ClutterInstances"/>).
-/// Inside the 3D Vegetation band a near variant takes over, by the vegetation models' dither. The original mesh keeps
+/// Inside the 3D Scenery band a near variant takes over, by the vegetation models' dither. The original mesh keeps
 /// its collision, and the stamp's custom data w carries the building's seed (Mech3.md).
 /// </summary>
 public static class CityModels
@@ -91,7 +91,7 @@ public static class CityModels
     private static readonly Dictionary<bool, Shader> Shaders = new();
     private static string _root = ShippedRoot;
 
-    /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Vegetation word other than Off.</summary>
+    /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Scenery word other than Off.</summary>
     public static bool On => VegetationQualitySetting.RichOn && VegetationModels.On;
 
     /// <summary>Gets or sets the folder <see cref="For"/> reads, <see cref="ShippedRoot"/> outside a suite. A suite's

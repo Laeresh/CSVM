@@ -392,9 +392,9 @@ How far the Rich vegetation draws its near 3D models (`Mech3/VegetationModels.cs
 `veryfar` and `extreme` also push the Rich cards' fade, their cells' ranges, the clump handover and C3's crown models out 1.5x or 2x
 (`VegetationModels.Reach`), so the models stand where cards still draw; other clutter keeps the View Distance fade. It resolves as `VegetationQualitySetting` does: `--vegetation-models=`,
 the saved `vegetationModels` word, the `graphics.vegetationModels` key, then `near` on every machine and under `--det`, the Steam Deck
-included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the
-clutter with no rebuild: the model cells drop or stand and take the word's range, the cards and models take its band. The VIDEO page
-shows it as the 3D Vegetation dropdown under Vegetation.
+included. A live change runs `EnhancedLook.ApplyVegetationModels`, which recuts the clutter with no rebuild: the model cells drop
+or stand and take the word's range, the cards and models take its band. The VIDEO page shows it as the 3D Scenery dropdown under
+Vegetation, since a word other than `off` also draws C5's script-built city (`Mech3/CityModels.cs`).
 
 ## src/Utils/CloudShadowSetting.cs
 Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `on`. It resolves as `GroundCoverSetting` does:
@@ -449,7 +449,7 @@ How the Rich vegetation draws grass and crops near the camera: `off`, `shells` (
 `groundCover` word, the `graphics.groundCover` key, then `cards` under `--det` and otherwise `FallbackFor(integrated)`: `off` on an
 integrated GPU (the Steam Deck) under `default_integrated_gpu`, `cards` otherwise, whatever the OS. A live change reaches
 `Launch/VegetationStage.cs`'s `Follow`, which builds the word's cover and drops the other with no
-other rebuild. The VIDEO page shows it as the Ground Cover dropdown under 3D Vegetation.
+other rebuild. The VIDEO page shows it as the Ground Cover dropdown under 3D Scenery.
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports

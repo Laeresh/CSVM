@@ -3715,7 +3715,7 @@ internal static class GraphicsSwitchSuites
         Step(rig);
     }
 
-    // A 3D Vegetation apply as the Options accept makes it, then the steps a reading waits for.
+    // A 3D Scenery apply as the Options accept makes it, then the steps a reading waits for.
     private static void Models(Rig rig, string word)
     {
         VegetationModelsSetting.Resolve(word, null, null);

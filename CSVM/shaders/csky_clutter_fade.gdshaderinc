@@ -31,7 +31,7 @@ float csky_clutter_fade_alpha_reach(vec3 origin, vec3 camera, vec4 fade, float r
 }
 
 // The same fade under the global scale alone. The Rich vegetation passes its own reach_sq (under 1
-// pushes the fade out) to the variant above, so a far 3D Vegetation word moves no other clutter.
+// pushes the fade out) to the variant above, so a far 3D Scenery word moves no other clutter.
 float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
     return csky_clutter_fade_alpha_reach(origin, camera, fade, 1.0);
 }

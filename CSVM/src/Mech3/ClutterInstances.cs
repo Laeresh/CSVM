@@ -274,7 +274,7 @@ public sealed class ClutterInstances
     private Layout CellsAt(float fadeScaleSq, bool nodes = false)
     {
         var proto = _proto!;
-        // The Rich cards fade out further under a far 3D Vegetation word (VegetationModels.Reach), so their cells range further.
+        // The Rich cards fade out further under a far 3D Scenery word (VegetationModels.Reach), so their cells range further.
         if (_rich)
             fadeScaleSq *= VegetationModels.ReachSq;
         bool box = CityWanted && _city!.Box != null;

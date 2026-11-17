@@ -51,7 +51,7 @@ internal sealed class VegetationStage
     public Mech3.GroundCover.Field? GroundCoverCards { get; private set; }
 
     /// <summary>Cuts the clutter cells again and draws the map edge's copies and the clumps after
-    /// it. The live View Distance, Vegetation Quality, 3D Vegetation and Ground Cover words and the
+    /// it. The live View Distance, Vegetation Quality, 3D Scenery and Ground Cover words and the
     /// graphics switch all land here. The cells' size and range come from the fade scale the
     /// launcher just wrote.</summary>
     public void Follow()
@@ -115,7 +115,7 @@ internal sealed class VegetationStage
             _edgeExtender?.SetClumps(null);
             Mech3.CanopyClumps.Handover(Clutter?.ExportedKinds, false);
         }
-        // The crown models over painted canopy follow the 3D Vegetation word on standing clumps, with no rebuild.
+        // The crown models over painted canopy follow the 3D Scenery word on standing clumps, with no rebuild.
         CanopyClumpField?.FollowModels();
         if (CanopyClumpField is { HandsOver: true })
             Mech3.CanopyClumps.Handover(Clutter?.ExportedKinds, true);

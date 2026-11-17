@@ -83,6 +83,7 @@ objected to; reopen any of them by asking.
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
+| 40 | The option's label (C22) | **"3D Scenery"** replaces "3D Vegetation" on the VIDEO page. The stored key and values stay. |
 
 ## ⚠ Read this before implementing anything
 
@@ -266,7 +267,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, the rest of the city
 
 21. ◐ Generate the remaining hulls
-22. ☐ Relabel the 3D Vegetation option to cover scenery
+22. ☑ Relabel the 3D Vegetation option to cover scenery
 23. ☐ Engine checks and golden frames for the new city
 24. ☐ Closing measurement, the integrated-GPU default, and follow-up issues
 
@@ -1040,7 +1041,30 @@ cut that puts a shape among the common ones is a judgement; state the counts and
 added variant moves which variant a building draws (`VariantOf` takes the count), so the look of
 the prototype's buildings changes with it.
 
-## C22 ☐ Relabel the 3D Vegetation option to cover scenery
+## C22 ☑ Relabel the 3D Vegetation option to cover scenery
+
+**Landed.** The VIDEO option behind `VegetationModelsSetting` reads "3D Scenery" (Decision 40,
+`OriginalVideoPage.cs`), and its description is "Rich vegetation only: trees, crowns and city
+buildings in 3D." It is one sentence because the page draws only a description's first. Off's
+Original-world line says the original world keeps its tree cards and buildings. The stored key
+`graphics.vegetationModels`, the saved field `vegetationModels`, the words, the
+`--vegetation-models` flag and every identifier are unchanged. Every live doc and comment that
+named the option by its label says 3D Scenery, and the setting's architecture entry and the menu
+inventory's Video row say that the option gates C5's script-built city. Release notes keep the
+old label.
+
+**Verified.** By the item's agent. `VegetationModelsSettingTests` reads a literal options file,
+`{"version":1,"vegetationModels":"veryfar"}`, back as `veryfar`. The targeted run passes 121 of
+121 units and the `menu-original-tracer-core`, `menu-original-tracer`, `vegetation-models` and
+`city-buildings` suites, and `-Quick` passes 1,584 units and 13 engine suites. A 1920x1080
+capture of the VIDEO page with the row on the window's bottom line shows the label inside its
+title box and the two-line description clear of the row below. No golden shows the VIDEO page.
+The orchestrator read the diff and the capture and sent the capture to the user.
+
+**Open.** `docs/cli.md`'s `--vegetation-models` entry does not mention the city. The headset's
+VIDEO page, the Deck's 1280x800 and the Original-world description are not captured.
+
+**Original approach (kept for reference).**
 
 **Goal.** The VIDEO option that drives the vegetation models and the city buildings has a label
 that says so, and its stored key is unchanged.

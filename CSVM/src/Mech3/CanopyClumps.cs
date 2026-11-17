@@ -116,10 +116,10 @@ public static class CanopyClumps
     private static Shader? _shader;
 
     /// <summary>The crown models' band: alone inside its near edge, dithered over to the clumps out to its far one.
-    /// A far 3D Vegetation word pushes it out by <see cref="VegetationModels.Reach"/>.</summary>
+    /// A far 3D Scenery word pushes it out by <see cref="VegetationModels.Reach"/>.</summary>
     public static Vector2 ModelBand => new Vector2(ModelNearM, ModelFarM) * VegetationModels.Reach;
 
-    /// <summary>The handover band under the standing 3D Vegetation word: <see cref="HandoverNearM"/> to
+    /// <summary>The handover band under the standing 3D Scenery word: <see cref="HandoverNearM"/> to
     /// <see cref="HandoverFarM"/>, pushed out by <see cref="VegetationModels.Reach"/> as the cards' fade is.</summary>
     public static Vector2 HandoverBand => new Vector2(HandoverNearM, HandoverFarM) * VegetationModels.Reach;
 
@@ -766,7 +766,7 @@ public static class CanopyClumps
             return list.Count > 0 ? Draw(list, mirror, CopyName, _edgeMaterial) : null;
         }
 
-        /// <summary>The crown models and the clumps' band follow the 3D Vegetation word, with no rebuild. Off hides
+        /// <summary>The crown models and the clumps' band follow the 3D Scenery word, with no rebuild. Off hides
         /// the models and zeroes the band, so the clumps draw up to the eye. Near and Far both draw over
         /// <see cref="ModelBand"/>. Every word holds the clumps at their full height (<see cref="HeldParam"/>).
         /// Risen over their own band, Off would draw only painted ground inside it.</summary>

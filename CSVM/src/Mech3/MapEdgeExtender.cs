@@ -517,7 +517,7 @@ public sealed partial class MapEdgeExtender : Node3D
     internal string? WriteCensus(string? chapter) => BuildCensusReport(chapter);
 
     /// <summary>Every live clutter card copy node's visibility range end, 0 where it has none. Read by
-    /// the suites. A near model's copy is left out: it ranges by the 3D Vegetation word, not the View Distance.</summary>
+    /// the suites. A near model's copy is left out: it ranges by the 3D Scenery word, not the View Distance.</summary>
     internal IEnumerable<float> ClutterRanges()
     {
         foreach (var draws in _draws.Values)

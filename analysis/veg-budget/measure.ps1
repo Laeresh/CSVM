@@ -20,7 +20,7 @@ The hidden desktop presents at the display's refresh even with max_fps=0, so fra
 
 C5 has seven city views, run by name with the city modes: enhanced (View Distance at its default,
 Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline. C5 refuses
-every vegetation entry, so there the 3D Vegetation word reaches only the new city (CityModels.On,
+every vegetation entry, so there the 3D Scenery word reaches only the new city (CityModels.On,
 Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
 (Vegetation Quality Original) a second off. A --det enhanced launch draws the city at near.
 Each case also reports the startup line's build times and the city models log line.

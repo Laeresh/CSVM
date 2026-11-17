@@ -92,7 +92,7 @@ about 1 km². A pose over the city is valid only when its log carries no `camera
 
 The `cblock1` prototype of the Enhanced city (14 building kinds, `CityModels`) measured against the
 same build with the city off, interleaved in one batch per comparison, on the PC. A `--det` launch
-with plain `--graphics=enhanced` draws the city at near (Rich and the 3D Vegetation word near, the
+with plain `--graphics=enhanced` draws the city at near (Rich and the 3D Scenery word near, the
 defaults), so the baseline's `enhanced` mode is now the city at near. `nomodels`
 (`--vegetation-models=off`) and `original` (`--vegetation-quality=original`) are the city off and
 reproduce the baseline's counts exactly. Each cell is the median of the launch medians and their
