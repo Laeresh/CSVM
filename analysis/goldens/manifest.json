@@ -184,7 +184,7 @@
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "5e14e4166c3b451772f63dc8f78eda42",
+      "hash": "e1cebdb0cece39d46382531683bcf94c",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
