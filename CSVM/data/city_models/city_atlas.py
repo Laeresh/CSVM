@@ -2,13 +2,14 @@
 and check scripts under analysis/city-hulls import the layout from here.
 
 Nothing here reads an original texture: the families are drawn after what the original facades
-show (grey stone walk-ups, brick tenements, warm and dark office towers), and each family is
-normalised to one mean brightness so a hull's grade (its material's baseColorFactor) holds for
-every row the shader picks.
+show (grey stone walk-ups, brick tenements, warm and dark office towers, the walk-ups again under
+tile roofs), and each family is normalised to one mean brightness so a hull's grade (its
+material's baseColorFactor) holds for every row the shader picks.
 
 Layout (ATLAS x ATLAS, image row 0 at the top, as glTF and Godot read a texture):
 - A grid of CELL x CELL cells. Atlas row f is facade family f; columns 0 to VARIANTS - 1 are its
-  facade rows (variants), column ROOF_COL is its roof. Free cells are left for more families.
+  facade rows (variants), column ROOF_COL is its roof and METAL_COL its light metal (posts, rails,
+  slab edges), which the shader takes ungraded.
 - A cell is a TILE x TILE tile with a GUTTER of wrapped copies on every side, so bilinear
   filtering and the first mip levels never read a neighbour.
 - A tile is TILE_M x TILE_M metres: FLOORS floors of FLOOR_M, its bays across. Within
@@ -19,7 +20,7 @@ Layout (ATLAS x ATLAS, image row 0 at the top, as glTF and Godot read a texture)
 
 The ids texture has the same layout: R the window id within the tile (1..N, 0 is wall), G the
 floor index within the tile (0 the lower floor), B the glass weight (0 none, BLIND where a blind
-covers the glass, 255 clear glass), A 255. Roof cells and gutters of free cells are all zero.
+covers the glass, 255 clear glass), A 255. Roof and metal cells and free cells are all zero.
 """
 
 import numpy as np
@@ -30,6 +31,7 @@ GUTTER = 16
 CELL = TILE + 2 * GUTTER
 VARIANTS = 4
 ROOF_COL = VARIANTS
+METAL_COL = VARIANTS + 1
 TILE_M = 8.0
 FLOOR_M = 4.0
 FLOORS = int(TILE_M / FLOOR_M)
@@ -37,12 +39,14 @@ PX_M = TILE / TILE_M
 SOLID_M = 0.8
 BLIND = 140
 
-FAMILY_NAMES = ("grey stone walk-up", "brick tenement", "warm office tower", "dark steel office tower")
+FAMILY_NAMES = ("grey stone walk-up", "brick tenement", "warm office tower", "dark steel office tower",
+                "grey stone walk-up, tile roof", "brick tenement, tile roof")
 
 # Per family: the mean Rec. 601 luma (0..255, over sRGB texels) every tile of the family is scaled
 # to, and the roof's. Bright enough that every hull's grade down to its original stays at most 1.
-WALL_LUMA = (118.0, 104.0, 124.0, 100.0)
-ROOF_LUMA = (82.0, 76.0, 86.0, 78.0)
+# The tile roofs stand brighter than the tar ones, as the original's roof02 (L56) does beside roof01 (L38).
+WALL_LUMA = (118.0, 104.0, 124.0, 100.0, 118.0, 104.0)
+ROOF_LUMA = (82.0, 76.0, 86.0, 78.0, 100.0, 100.0)
 
 # One facade row per entry. Colours are sRGB 0..1. bays: windows groups per tile width; pair: two
 # windows per bay; win: (width, height, sill) in metres, the sill above the floor line.
@@ -88,7 +92,16 @@ FAMILIES = (
              muntins="2x2", sill=(0.60, 0.58, 0.55)),
     ),
 )
-ROOFS = ((0.30, 0.30, 0.31), (0.33, 0.29, 0.26), (0.36, 0.34, 0.31), (0.29, 0.30, 0.32))
+# 4 and 5, the walk-ups of cblock4 and cblock7 under a brown tile roof (the original's roof02): the
+# stone and brick facade rows again (painted after the first four families, so those stay as they
+# were), with a tile roof.
+FAMILIES = FAMILIES + (FAMILIES[0], FAMILIES[1])
+ROOFS = ((0.30, 0.30, 0.31), (0.33, 0.29, 0.26), (0.36, 0.34, 0.31), (0.29, 0.30, 0.32), (0.42, 0.27, 0.19),
+         (0.42, 0.27, 0.19))
+TILE_ROOF = (False, False, False, False, True, True)
+# The light metal, a step darker than the mean of the original's aluminium trim (census.py's 149,
+# 149, 151): at that mean the posts read twice as bright as the original's in C5's night light.
+METAL = np.array((110, 110, 113)) / 255.0
 GLASS = np.array((0.075, 0.085, 0.105))
 BLIND_COL = np.array((0.17, 0.16, 0.14))
 
@@ -283,6 +296,36 @@ def paint_roof(col, rng):
     return np.clip(np.ones((n, n, 3)) * np.array(col) * shade[..., None], 0, 1)
 
 
+def paint_tile_roof(col, rng):
+    """A clay tile roof: courses 0.5 m high, tiles 0.5 m wide in half bond, each course lit at its
+    head and shaded at its lap, a little colour spread per tile; seamless."""
+    n = TILE
+    course, tw = int(0.5 * PX_M), int(0.5 * PX_M)
+    y = np.arange(n)[:, None]
+    x = np.arange(n)[None, :]
+    row = y // course
+    sx = x + (row % 2) * (tw // 2)
+    jit = rng.uniform(-0.10, 0.10, (n // course, n // tw))
+    shade = 1 + jit[row, (sx // tw) % (n // tw)]
+    shade = shade * (0.78 + 0.32 * (y % course) / (course - 1))
+    shade = np.where(sx % tw == 0, shade * 0.75, shade)
+    shade = shade + 0.06 * _blur(rng.standard_normal((n, n)), 4) * 4
+    warm = rng.uniform(-0.04, 0.04, (n // course, n // tw))[row, (sx // tw) % (n // tw)]
+    img = np.ones((n, n, 3)) * np.array(col) * shade[..., None]
+    img[..., 0] += warm
+    return np.clip(img, 0, 1)
+
+
+def paint_metal(rng):
+    """Light painted metal: faint vertical brushing and a few darker seams; seamless."""
+    n = TILE
+    streak = _blur(rng.standard_normal((1, n)), 1)[0] * 0.03
+    shade = 1 + streak[None, :] + 0.02 * _blur(rng.standard_normal((n, n)), 2) * 2
+    shade = np.where(np.arange(n)[None, :] % int(2 * PX_M) == 0, shade * 0.85, shade)
+    shade = np.broadcast_to(shade, (n, n))
+    return np.clip(np.ones((n, n, 3)) * METAL * shade[..., None], 0, 1)
+
+
 def _scale_to(img, target):
     """Scales a tile so its mean luma over sRGB 0..255 texels is target."""
     m = luma(img * 255).mean()
@@ -305,9 +348,13 @@ def paint(seed=11):
             walls.append(img)
             _place(atlas, img, f, c)
             _place(ids, idt, f, c)
-        roof = _scale_to(paint_roof(ROOFS[f], rng), ROOF_LUMA[f])
+        roof = _scale_to((paint_tile_roof if TILE_ROOF[f] else paint_roof)(ROOFS[f], rng), ROOF_LUMA[f])
         _place(atlas, roof, f, ROOF_COL)
         means.append((np.mean([w.reshape(-1, 3).mean(0) for w in walls], axis=0) * 255, roof.reshape(-1, 3).mean(0) * 255))
+    # A stream of its own, so the cells above paint as they did before the metal joined.
+    metal_rng = np.random.default_rng(seed + 1)
+    for f in range(len(FAMILIES)):
+        _place(atlas, paint_metal(metal_rng), f, METAL_COL)
     return np.round(atlas * 255).astype(np.uint8), ids, means
 
 

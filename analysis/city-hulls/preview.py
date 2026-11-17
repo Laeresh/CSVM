@@ -17,7 +17,9 @@ Writes into <out dir>, which must be outside the repo (compare.png holds origina
     py -I analysis/city-hulls/preview.py <out dir> cb00a cb06a ...
 
 With shapes named, it writes only compare-<shapes>.png: each named shape's original beside every
-near variant and the far box in its model file, one shape per row.
+near variant and the far box in its model file, one shape per row. --exposure=K multiplies the
+linear light of originals and models alike, so dark massing reads; --scale=S sets px per metre
+(4 by default).
 """
 import io
 import math
@@ -63,7 +65,7 @@ IDS = load_png("facade_ids.png.bin")
 
 def texel(u, v, fam, cls, row):
     """Nearest texel (x, y) of the atlas for facade tile coordinates, as the shader would fetch."""
-    col = np.where(cls > 0.5, A.ROOF_COL, row)
+    col = np.where(cls > 1.5, A.METAL_COL, np.where(cls > 0.5, A.ROOF_COL, row))
     fu, fv = u - np.floor(u), v - np.floor(v)
     x = col * A.CELL + A.GUTTER + np.minimum(np.floor(fu * A.TILE), A.TILE - 1)
     y = np.round(fam).astype(int) * A.CELL + A.GUTTER + np.minimum(np.floor((1 - fv) * A.TILE), A.TILE - 1)
@@ -115,24 +117,26 @@ def raster(P, attrs, scale, colour, az=35.0, el=22.0, pad=6, bg=R.BG, light=None
 
 def model_tris(meshes, name, offset=(0, 0, 0)):
     pos, uv0, uv1, tri = meshes[name]
-    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0}, "TEXCOORD_1.y is not a surface class"
+    assert set(np.unique(uv1[:, 1])) <= {0.0, 1.0, 2.0}, "TEXCOORD_1.y is not a surface class"
     P = pos[tri] + np.array(offset)
     attrs = np.concatenate([uv0, uv1], axis=1)[tri]
     return P, attrs
 
 
-def flat_colour(factor, row):
-    """render.py's flat key: albedo times 0.55 + 0.45 |n.L|, in sRGB space as render.py shades."""
+def flat_colour(factor, row, exposure=1.0):
+    """render.py's flat key: albedo times 0.55 + 0.45 |n.L|, in sRGB space as render.py shades,
+    times exposure (linear). Light metal (class 2) takes no grade, as in the shader."""
     def colour(i, vals, n):
         x, y = texel(vals[:, 0], vals[:, 1], vals[:, 2], vals[:, 3], row)
-        alb = srgb_to_lin(ATLAS[y, x, :3] / 255.0) * np.array(factor)
+        grade = np.where((vals[:, 3] > 1.5)[:, None], 1.0, np.array(factor)[None, :])
+        alb = srgb_to_lin(ATLAS[y, x, :3] / 255.0) * grade
         shade = 0.55 + 0.45 * abs(float(n @ R.LIGHT))
-        return srgb_to_lin(lin_to_srgb(alb) * shade)
+        return srgb_to_lin(lin_to_srgb(alb) * shade) * exposure
     return colour
 
 
 def compare(out, shapes=SHAPES, per_row=2, name="compare.png", scale=5.0,
-            title="cblock1 shapes: original | near0 | near1 | far"):
+            title="cblock1 shapes: original | near0 | near1 | far", exposure=1.0):
     """Each shape's original beside every node of its model file, near0 first and far last."""
     ch = C.Chapter()
     lines = []
@@ -142,17 +146,23 @@ def compare(out, shapes=SHAPES, per_row=2, name="compare.png", scale=5.0,
             node = next(i for i in ch.by_name[m + ".flt"] if ch.parts(i))
             tris = ch.geometry(node)
             r = R.render(tris, scale)
+            if exposure != 1.0:
+                a = np.asarray(r.convert("RGB")).astype(float)
+                bg = np.all(a == np.array(R.BG), axis=-1)
+                lit = np.round(lin_to_srgb(srgb_to_lin(a / 255.0) * exposure) * 255)
+                r = Image.fromarray(np.where(bg[..., None], a, lit).astype(np.uint8))
             row.append(R.label(r, ["%s original" % m, "%d tri" % len(tris)]))
             meshes, factor = M.read_glb(os.path.join(M.MODELS, "C5", m + ".glb.bin"))
             fam = int(meshes["far"][2][0, 0])
             for facade, node_name in enumerate(sorted(meshes, key=lambda n: (n == "far", n))):
                 P, attrs = model_tris(meshes, node_name)
-                im = raster(P, attrs, scale, flat_colour(factor, facade % A.VARIANTS))
+                im = raster(P, attrs, scale, flat_colour(factor, facade % A.VARIANTS, exposure))
                 row.append(R.label(im, ["%s %s" % (m, "far box" if node_name == "far" else "near variant " + node_name[4:]),
                                         "%d tri, %s row %d" % (len(P), A.FAMILY_NAMES[fam], facade % A.VARIANTS)]))
         lines.append(row)
-    img = R.sheet(lines, "%s, %.0f px/m, flat key light; each model graded by its baseColorFactor, each node "
-                         "wearing the next facade row of its family" % (title, scale))
+    lift = "" if exposure == 1.0 else ", exposure raised %.0fx (linear) on originals and models alike" % exposure
+    img = R.sheet(lines, "%s, %.0f px/m, flat key light%s; each model graded by its baseColorFactor, each node "
+                         "wearing the next facade row of its family" % (title, scale, lift))
     R.fit(img).save(os.path.join(out, name))
 
 
@@ -279,10 +289,13 @@ def main():
     if os.path.abspath(out).lower().startswith(os.path.abspath(C.REPO).lower()):
         raise SystemExit("write the previews outside the repo: compare.png holds original pixels")
     os.makedirs(out, exist_ok=True)
-    if len(sys.argv) > 2:
+    shapes = [a for a in sys.argv[2:] if not a.startswith("--")]
+    exposure = float(next((a[11:] for a in sys.argv[2:] if a.startswith("--exposure=")), 1.0))
+    scale = float(next((a[8:] for a in sys.argv[2:] if a.startswith("--scale=")), 4.0))
+    if shapes:
         # Named shapes: one sheet, a shape per row.
-        compare(out, sys.argv[2:], 1, "compare-%s.png" % "-".join(sys.argv[2:]), 4.0,
-                "original | each near variant | far box")
+        compare(out, shapes, 1, "compare-%s.png" % "-".join(shapes), scale,
+                "original | each near variant | far box", exposure)
         return
     atlas_views(out)
     night(out)

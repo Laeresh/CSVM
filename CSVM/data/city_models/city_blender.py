@@ -21,8 +21,11 @@ What a model file holds (docs/tooling.md, "City models"):
   whose top or foot falls inside a floor's glass band is mapped onto the solid band round a floor
   line instead, so no window is cut. On a roof, slope or dressing, (u, v) is a planar map in
   tile units.
-- TEXCOORD_1: (family index, surface class), class 0 wall and 1 roof. city_atlas.py holds the
-  atlas layout the two index.
+- TEXCOORD_1: (family index, surface class), class 0 wall, 1 roof and 2 light metal (posts, rails,
+  slab edges; the look shader takes it ungraded, so it stays pale on a dark building).
+  city_atlas.py holds the atlas layout the two index.
+- A hull with gables (gables=True) maps a slope's vertical faces, its gable ends, onto the wall's
+  solid band, so they wear the facade's wall and take no window.
 """
 
 import math
@@ -42,7 +45,7 @@ import veg_blender as vb  # noqa: E402
 TW = A.TILE_M
 FLOOR = A.FLOOR_M
 SOLID = A.SOLID_M
-WALL, ROOF = 0, 1
+WALL, ROOF, METAL = 0, 1, 2
 EPS = 0.01
 
 
@@ -287,8 +290,9 @@ def cap(mesh, rects, y):
         mesh.face(pts, [(p[0] / TW, p[2] / TW) for p in pts], ROOF, (0, 1, 0))
 
 
-def slope(mesh, ra, ya, rb, yb):
-    """The four faces between rectangle ra at ya and rb at yb (rb may be a point)."""
+def slope(mesh, ra, ya, rb, yb, gable_planes=None):
+    """The four faces between rectangle ra at ya and rb at yb (rb may be a point). With
+    gable_planes, a vertical face (a gable end) is a wall on the solid band round ya's floor line."""
     ca = [(ra[0], ra[2]), (ra[1], ra[2]), (ra[1], ra[3]), (ra[0], ra[3])]
     cb = [(rb[0], rb[2]), (rb[1], rb[2]), (rb[1], rb[3]), (rb[0], rb[3])]
     centre = _v(((ra[0] + ra[1]) / 2, (ya + yb) / 2, (ra[2] + ra[3]) / 2))
@@ -296,6 +300,15 @@ def slope(mesh, ra, ya, rb, yb):
         j = (i + 1) % 4
         pts = [(ca[i][0], ya, ca[i][1]), (ca[j][0], ya, ca[j][1]), (cb[j][0], yb, cb[j][1]), (cb[i][0], yb, cb[i][1])]
         mid = np.mean([_v(p) for p in pts], axis=0)
+        n = np.cross(_v(pts[1]) - _v(pts[0]), _v(pts[3]) - _v(pts[0]))
+        if gable_planes is not None and np.linalg.norm(n) > 1e-9 and abs(n[1]) < 1e-6 * np.linalg.norm(n):
+            axis = 0 if abs(pts[0][0] - pts[1][0]) < 1e-6 else 2
+            sign = 1 if mid[axis] > centre[axis] else -1
+            v0 = (round(ya / FLOOR) * FLOOR - SOLID) / TW
+            uvs = [(gable_planes.u(axis, pts[0][axis], sign, _v(p)), v0 + (p[1] - ya) / (yb - ya) * 2 * SOLID / TW)
+                   for p in pts]
+            mesh.face(pts, uvs, WALL, mid - centre)
+            continue
         edge = _v(pts[1]) - _v(pts[0])
         el = np.linalg.norm(edge)
         # u along the eave, v up the slant, both in tile units.
@@ -327,7 +340,7 @@ def _degenerate(rects):
     return all(r[1] - r[0] < 1e-6 and r[3] - r[2] < 1e-6 for r in rects)
 
 
-def build_profile(mesh, planes, profile, roofs=None):
+def build_profile(mesh, planes, profile, roofs=None, gables=False):
     """Walls, slopes and caps of a profile. Every flat roof is reported to roofs as
     (y, lower footprint, upper footprint or None) for parapets and dressing."""
     pieces = []
@@ -343,7 +356,7 @@ def build_profile(mesh, planes, profile, roofs=None):
             for run in outline(ra):
                 wall(mesh, planes, run, ya, yb, collect=pieces)
         elif len(ra) == 1 and len(rb) == 1:
-            slope(mesh, ra[0], ya, rb[0], yb)
+            slope(mesh, ra[0], ya, rb[0], yb, planes if gables else None)
         else:
             raise ValueError("profile band %.2f..%.2f is neither a prism nor a slope" % (ya, yb))
     flush_walls(mesh, planes, pieces)
@@ -354,8 +367,8 @@ def build_profile(mesh, planes, profile, roofs=None):
             roofs.append((y, top, None))
 
 
-def box(mesh, x0, x1, z0, z1, y0, y1, top=True):
-    """A closed box without a bottom, roof class, planar mapped."""
+def box(mesh, x0, x1, z0, z1, y0, y1, top=True, cls=ROOF):
+    """A closed box without a bottom, roof class unless given, planar mapped."""
     for axis, sign in ((0, -1), (0, 1), (2, -1), (2, 1)):
         if axis == 0:
             c = x0 if sign < 0 else x1
@@ -364,7 +377,7 @@ def box(mesh, x0, x1, z0, z1, y0, y1, top=True):
             c = z0 if sign < 0 else z1
             pts = _run_points(2, c, x0, x1, y0, y1)
         r = _right(axis, sign)
-        mesh.face(pts, [(float(np.dot(r, p)) / TW, p[1] / TW) for p in pts], ROOF, _normal(axis, sign))
+        mesh.face(pts, [(float(np.dot(r, p)) / TW, p[1] / TW) for p in pts], cls, _normal(axis, sign))
     if top:
         cap(mesh, [(x0, x1, z0, z1)], y1)
 
@@ -456,17 +469,18 @@ def dress_roof(mesh, rect, y, kit, rng, blocked=()):
 
 # ---- variants
 
-def far_model(profile):
+def far_model(profile, gables=False):
     mesh = Mesh()
-    build_profile(mesh, planes_for(profile), profile)
+    build_profile(mesh, planes_for(profile), profile, gables=gables)
     return mesh
 
 
-def near_model(profile, near, rng):
-    """A near model: the hull profile with the variant's edits, parapets on every flat roof edge
-    that is open to the sky, and the variant's dressing kit on the top roof."""
+def near_model(profile, near, rng, gables=False):
+    """A near model: the hull profile, or the variant's own profile of the same hull, with the
+    variant's edits, parapets on every flat roof edge that is open to the sky, and the variant's
+    dressing kit on the top roof."""
     planes = planes_for(profile)
-    prof = list(profile)
+    prof = list(near.get("profile", profile))
     if near.get("notch"):
         prof = _notch(prof, near["notch"])
     if near.get("setback"):
@@ -477,7 +491,7 @@ def near_model(profile, near, rng):
         prof = prof[:-1] + near["crown"]
     mesh = Mesh()
     roofs = []
-    build_profile(mesh, planes, prof, roofs)
+    build_profile(mesh, planes, prof, roofs, gables)
     for y, lower, upper in roofs:
         top = upper is None
         h = near.get("parapet", 1.0) if top else near.get("ledge", 0.6)

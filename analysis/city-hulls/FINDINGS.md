@@ -128,7 +128,24 @@ Estimated buildings per template, from each source's own count divided by its ow
 Every `cblock2` and `cblock3` building (`cb06` to `cb11`) stands turned 45 degrees in its own mesh
 frame: `cb06` is `cb00`'s 40 x 24 m slab, `cb08` is `cb03`'s notched tower, and the others are
 32 m squares, so their 45.3 m boxes are a square's diagonal. `tiers.py --turn=45` measures them
-turned back.
+turned back. The `cblock4` and `cblock7` buildings (`cb12` to `cb16`) stand square in their frames.
+
+The `cblock4` and `cblock7` shapes, from their sections (all meshes of the chain):
+
+- `cb12a` and `cb12b`: 20 x 12 m, walls to 12 m and a 2 m cornice band that leans 0.42 m out on
+  the long sides to a flat tile roof at 14 m; a street awning on each long side, 2 m out, from 4 m
+  at the wall to 2 m at its edge (`cb12b` 1.6 m higher). `cb12b` adds a 2 m square chimney at
+  x 4 to 6, z -0.58 to 1.42, up to 22 m, which is its box's height.
+- `cb13a` (= `cb13b`): 12 x 20 m, walls to 24 m, the same cornice to 26 m, awnings on the long sides.
+- `cb14a` and `cb14b`: one geometry (they differ in triangulation only): 16 x 12 m, walls to 12 m,
+  a hipped roof rising to a point at 17 m. `cb14c`: the same block under a gable along its length,
+  ridge at 17 m.
+- `cb15a`: 56 x 24 m, walls to 24 m, a cornice to 26 m flaring 0.55 m out, a flat roof with a
+  pyramid roof light (8 m square, apex 30.83 m). `cb15b`: 56 x 24 m to a cornice at 22 m, with a
+  20 m wide middle (x -8 to 12) to 24 m, and 1 m brackets on the long walls.
+- `cb16a` and `cb16b`: 24 x 56 m, walls to 20 m, a cornice to 22 m, a hipped roof to a point at
+  30 m (`cb16a`) or 26 m (`cb16b`); awnings on the long walls (and, on `cb16b`, two on the ends)
+  over spans a half turn apart.
 
 ## Variants
 
@@ -138,6 +155,12 @@ fourth. The cut sits in the largest gap of the dressed shapes' counts (1,166 to 
 
 | Shape | Placed | Near variants |
 |---|---:|---:|
+| `cb12b` | 6,201 | 4 |
+| `cb12a` | 6,065 | 4 |
+| `cb13` (`cb13a`, `cb13b`) | 5,523 | 4 |
+| `cb14c` | 5,059 | 4 |
+| `cb14b` | 5,046 | 4 |
+| `cb14a` | 5,013 | 4 |
 | `cb00` (`cb00a`, `cb00b`) | 3,121 | 4 |
 | `cb11` (`cb11a`, `cb11b`, `cb11c`) | 1,613 | 3 |
 | `cb06` (`cb06a`, `cb06b`, `cb06c`) | 1,371 | 3 |
@@ -146,9 +169,11 @@ fourth. The cut sits in the largest gap of the dressed shapes' counts (1,166 to 
 | `cb02a` | 1,166 | 3 |
 | `cb04a`, `cb03b`, `cb05a`, `cb05b`, `cb03a`, `cb04b` | 805 to 766 each | 2 |
 | `cb01c`, `cb01d`, `cb08` (`a` and `b`), `cb09` (`a` and `b`), `cb07a`, `cb07b`, `cb10b`, `cb10a` | 577 to 218 each | 2 |
+| `cb16a`, `cb15a`, `cb15b`, `cb16b` | 330 to 325 each | 2 |
 
-The shapes not dressed yet that pass the cut for four are `cb12a` (6,065), `cb12b` (6,201), `cb13`
-(5,523), `cb14a` (5,013), `cb14b` (5,046) and `cb14c` (5,059).
+`cb14a` and `cb14b` share one geometry and draw two different sets of four, sharing two (the flat
+walk with a tank and the set-back top floor), so that lot shows six massings. No shape left to
+dress passes the cut: the `cblock5` and `cblock6` shapes are placed 39 to 336 times each.
 
 ## Caveats (measured / inferred / assumed)
 

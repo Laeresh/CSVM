@@ -927,7 +927,23 @@ two. New near shapes are `cb07b`'s open frame crown along either axis, a mast or
 on `cb09`'s pyramid, and four floors stepping up under `cb10a`'s shed roof. The model files hold
 10,582 near and 840 far triangles (4,092 and 410 before). The `city models:` log line counts the
 solid stamps that still draw their original mesh. `measure.ps1` gains `C5-cb23`, 65 m over the
-`cblock2` cells. Remaining: `cblock4` and `cblock7`, then `cblock5` and `cblock6`, then the 16
+`cblock2` cells.
+
+The second tranche dresses `cblock4` and `cblock7`: 11 kinds in 10 shapes, `cb12` to `cb16`, none
+turned. `cb12a`, `cb12b`, `cb13`, `cb14a`, `cb14b` and `cb14c` are each placed over 5,000 times
+and take four near variants; `cb15` and `cb16` take two. `cb14a` and `cb14b` are one geometry and
+draw two sets that share two variants. The new massings are street awnings, light wells above the
+awning floor, a low end or a central attic, chimneys and dormers through hipped roofs, a hip or
+gable cut to a flat walk, and gable ends that wear the wall (`gables`). The atlas gains two
+families, the stone and brick walk-ups under a brown tile roof, painted after the first four so
+their cells do not change. It also gains a light metal cell per family, surface class 2, which the
+shader takes ungraded. `cb07b`'s top is rebuilt as the original's open frame, after the user said
+of the first tranche's closed block: "The top of the original cb07b is either a landing site or
+still under construction, the newly generated nearly black tops dont match that." It is slabs at
+68.6 and 73.39 m on four light metal corner posts on the far box and one near variant, and a
+landing deck with edge rails on the other. `measure.ps1` gains `C5-cb4`, over the `cblock4` cells
+round (-4600, -5600). The model files hold 14,422 near and 1,104 far triangles. Remaining:
+`cblock5` and `cblock6` (`cb17` to `cb24`, 2,496 buildings, none placed 1,000 times), then the 16
 `det` shapes.
 
 **Verified so far.** By the tranche's agent. Every near and far mesh is inside the margin
@@ -942,12 +958,29 @@ units, 13 engine suites) pass. Of 41 goldens only `c5-city-night-enhanced` moved
 to 144dee34, pixel-identical on re-render. The orchestrator read the C# and script diff, looked at
 the district and variant montages and sent them to the user.
 
-**Open so far.** Extreme's distant draws at `C5-alt` are 33 over the city off, where the prototype
-read one over; Decision 33 puts the excess to the user in C24, and it is likely to grow with
-`cblock4` and `cblock7`. The `det` dressing on `cb06`, `cb08` and `cb11` still draws its
-originals, so original fire escapes stand on the new walls. `cb07b`'s crown is an open aluminium
-frame in the original; the new one wears the roof texture and its far box is a closed block. From
-altitude the new towers read warmer than the original's blue-white ones. `city-buildings` checks
+The second tranche is verified by its agent. Every new near and far mesh is inside the margin: at
+most 3.0 m in (the light wells), 3.70 m above, nothing sideways. The existing atlas cells and
+every model file but `cb07b`'s are byte-identical. The log reads 52 kinds with a hull, 3,339 near
+nodes, and 15,065 solid stamps in 44 kinds still drawing their original (12,569 `det` halves and
+2,496 `cblock5`/`cblock6` buildings). In one interleaved batch, n=3, over seven views the city
+adds at most 0.585 ms GPU (`C5-cb1`, near) and 0.16 ms CPU (`C5-cb1`, extreme). `C5-alt` draws
+1,649.9 at near and 1,778.9 at Extreme against 1,775.5 with the city off: a dressed kind's distant
+cells draw one box where the original drew its mesh chain, so the excess fell. The targeted
+suites, `CityModelsTests` and `-Quick` (1,584 units, 13 engine suites) pass. Of 41 goldens only
+`c5-city-night-enhanced` moved; it is re-pinned to 2a653847, pixel-identical on re-render, and the
+golden stage reads 41 of 41 after the pin. The orchestrator read the C# diff, looked at the
+`cblock7` district montage and the `cb07b` night crop, and sent the montages to the user.
+
+**Open so far.** Extreme's distant draws at `C5-alt` are 3.4 over the city off (33 after the first
+tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
+dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
+the new walls. The originals' pale dentil cornice on `cb12`, `cb13`, `cb15` and `cb16` reads as a
+plain wall band on the new models, `cb12b`'s chimney wears the roof cell where the original's is
+orange-red brick, and `cb03a` and `cb08a` show a reddish band on the top roof edge that is not
+traced to a texture. The new walk-ups wear brighter, more tinted walls than the originals' dark
+ones. A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
+and `cb14b` are one hipped geometry. From altitude the new towers read warmer than the original's
+blue-white ones. `city-buildings` checks
 fixture hulls, not the shipped geometry; the margin script is the geometry check. The Deck is
 unmeasured.
 

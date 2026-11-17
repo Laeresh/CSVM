@@ -23,8 +23,8 @@ public static class CityModels
     /// so the edge moves no hand-over, only how many off-band stamps a drawn cell submits.</summary>
     public const float CellM = 2048f;
 
-    // The facade atlas's layout, city_atlas.py's. Each family is a row of cells, its facade rows then its roof. A cell
-    // is a tile inside a wrapped gutter, and a tile is two floors and about eight windows wide.
+    // The facade atlas's layout, city_atlas.py's. Each family is a row of cells: its facade rows, its roof, its metal.
+    // A cell is a tile inside a wrapped gutter, and a tile is two floors and about eight windows wide.
     private const int Atlas = 1024, Cell = 160, Gutter = 16, Tile = 128, Variants = 4, Floors = 2, WindowsPerTile = 8;
 
     // TUNE. The share of its windows a building lights, rolled per building between the two.
@@ -179,7 +179,9 @@ public static class CityModels
                 float row = floor(csky_city_rand(s + 1u) * {{Variants}}.0);
                 float family = floor(uv2.x + 0.5);
                 bool roof = uv2.y > 0.5;
-                vec2 cell = vec2(roof ? {{Variants}}.0 : row, family) * {{Cell}}.0 + {{Gutter}}.0;
+                // Class 2 is light metal, the cell after the roof, ungraded so a frame stays pale on a dark building.
+                bool metal = uv2.y > 1.5;
+                vec2 cell = vec2(roof ? {{Variants}}.0 + float(metal) : row, family) * {{Cell}}.0 + {{Gutter}}.0;
                 vec2 st = (cell + vec2(fract(uv.x), 1.0 - fract(uv.y)) * {{Tile}}.0) / {{Atlas}}.0;
                 vec2 k = vec2({{Tile}}.0, -{{Tile}}.0) / {{Atlas}}.0;
                 vec2 du = dFdx(uv), dv = dFdy(uv);
@@ -211,7 +213,7 @@ public static class CityModels
                     near /= float(taps * taps);
                     glow = mix(far * {{F(FarPointGain)}}, near, detail) * {{F(WindowGain)}};
                 }
-                return grade_rgb * albedo * gain * vec3(1.0 + lean, 1.0, 1.0 - lean);
+                return (metal ? vec3(1.0) : grade_rgb) * albedo * gain * vec3(1.0 + lean, 1.0, 1.0 - lean);
             }
             """;
     }

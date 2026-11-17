@@ -838,11 +838,14 @@ painter and its layout (numpy only, so the analysis scripts import it).
   mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. A building that stands
   turned in its mesh frame (the `cblock2` and `cblock3` kinds, at 45 degrees) is measured turned
   back (`tiers.py --turn=45`), built in its own frame and turned again on export. The far box is
-  that profile alone. Each near variant adds parapets, a set-back top floor, light wells, a crown
-  stepped in or reshaped, and roof dressing (water tanks, bulkheads, machine rooms, vents,
-  chimneys), inside the plan's margin: at most about 3 m in from the original's surface, at most
-  about 4 m above it, nothing past it sideways. `analysis/city-hulls/margin.py` measures the three
-  per mesh.
+  that profile alone, plus any measured part a profile cannot hold (a chimney, a roof light,
+  `cb07b`'s open frame). A near variant is the profile or its own profile of the same hull, with
+  parapets, a set-back top floor, light wells, a crown stepped in or reshaped, a pitched roof cut
+  to a flat walk, dormers, street awnings, and roof dressing (water tanks, bulkheads, machine
+  rooms, vents, chimneys), inside the plan's margin: at most about 3 m in from the original's
+  surface, at most about 4 m above it, nothing past it sideways. `analysis/city-hulls/margin.py`
+  measures the three per mesh; it reads the original as a height field, so an awning counts as
+  solid to the ground and a light well cut beside one reads deeper than it is.
 - The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0` to
   `near3`, two to four by how often the shape is placed, and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
   original's mean unlit colour, its painted lit windows left out because the engine lights the
@@ -853,7 +856,10 @@ painter and its layout (numpy only, so the analysis scripts import it).
 - `TEXCOORD_0` is facade tile coordinates (8 m tiles, two 4 m floors): on a wall u runs left to
   right along the wall plane with a whole-number offset per plane, so every window column of a
   building has its own integer u, and v is height over 8 m. `TEXCOORD_1` is (family, surface class:
-  0 wall, 1 roof). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
+  0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
+  dark building). A gabled kind maps its gable ends onto the wall's solid band. The six families
+  are grey stone and brick walk-ups, warm and dark office towers, and the two walk-ups again under
+  a brown tile roof. `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
 - Nothing from the original's textures goes into a model or the atlas: the facade families are
   drawn after what the originals show, and each kind's grade is a number set from the original's
   mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures
@@ -865,7 +871,8 @@ is `.scratch/vegetation/c5.log`. With `CSVM_DATA_ROOT` naming a checkout that ho
 `py -I analysis/city-hulls/margin.py` prints the margin per mesh and
 `py -I analysis/city-hulls/preview.py <dir outside the repo>` draws the originals beside the
 models, the atlas and a night mock; with model names after the folder it draws only those shapes,
-each original beside every near variant and its far box. The previews hold original pixels and are
+each original beside every near variant and its far box (`--exposure=K` lifts the light on both so
+dark massing reads, `--scale=S` sets pixels per metre). The previews hold original pixels and are
 never committed.
 
 ## `tools/` (git-ignored)
