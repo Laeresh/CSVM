@@ -21,9 +21,8 @@ The hidden desktop presents at the display's refresh even with max_fps=0, so fra
 C5 has five city views, run by name with the city modes: enhanced (View Distance at its default,
 Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline. C5 refuses
 every vegetation entry, so there the 3D Vegetation word reaches only the new city (CityModels.On,
-Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, original
-(Vegetation Quality Original) a second off, and winslow and winfloors the near city with the other
-two --city-windows modes (near is scatter). A --det enhanced launch draws the city at near.
+Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
+(Vegetation Quality Original) a second off. A --det enhanced launch draws the city at near.
 Each case also reports the startup line's build times and the city models log line.
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
@@ -86,8 +85,6 @@ $modeArgs = @{
     "near"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near")
     "veryfar"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=veryfar")
     "extreme"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=extreme")
-    "winslow"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near", "--city-windows=slow")
-    "winfloors" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near", "--city-windows=floors")
     # Enhanced at each View Distance; on C5 these draw the city at near.
     "enhanced"    = @("--graphics=enhanced")
     "vdnormal"    = @("--graphics=enhanced", "--view-distance=normal")

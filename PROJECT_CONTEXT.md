@@ -249,7 +249,7 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 **Where the project is.** Milestones 1 through 6 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plans:** [`docs/PLAN-city-buildings.md`](docs/PLAN-city-buildings.md), Wave B open; next B15, the user's verdict.
+**Active plans:** [`docs/PLAN-city-buildings.md`](docs/PLAN-city-buildings.md), Wave C open; next C21, the remaining building shapes.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\scripts\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

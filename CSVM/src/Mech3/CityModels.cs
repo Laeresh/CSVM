@@ -37,7 +37,7 @@ public static class CityModels
     // TUNE. How far a building's brightness strays from its grade, rolled within plus or minus this share.
     private const float BrightnessSpread = 0.20f;
 
-    // TUNE. Under the floors and slow modes, the share of a building's floors lit whole, over its single windows.
+    // TUNE. The share of a building's floors lit whole, over its single windows.
     private const float LitFloorShare = 0.12f;
 
     // TUNE. The emission of clear lit glass, before its light colour. FOG darkens it with the rest of the building.
@@ -57,8 +57,8 @@ public static class CityModels
     // they carry their whole mean glow, so a lower hand-over brightens the far towers toward the beige wash.
     private const float HandOverPx = 0.75f;
 
-    // TUNE. Under the slow mode, the seconds between a window's chances to change, and a floor's. Each divides
-    // ShaderTime.RolloverSecs, so the clock's wrap changes nothing.
+    // TUNE. The seconds between a window's chances to change, and a floor's. Each divides ShaderTime.RolloverSecs,
+    // so the clock's wrap changes nothing.
     private const int WindowPeriodS = 300, FloorPeriodS = 360;
 
     // TUNE. The lights a lit window takes, linear, each with its share of the windows: warm yellow mostly.
@@ -72,32 +72,11 @@ public static class CityModels
 
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Facade?> Facades = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<(bool Near, WindowMode Mode), Shader> Shaders = new();
+    private static readonly Dictionary<bool, Shader> Shaders = new();
     private static string _root = ShippedRoot;
-
-    /// <summary>How a building's lit windows behave, <c>--city-windows</c>. Each building rolls its lit share, and
-    /// each window rolls against it.</summary>
-    public enum WindowMode
-    {
-        /// <summary>Each window lit or dark by its roll against the building's lit share, fixed.</summary>
-        Scatter,
-
-        /// <summary>The floors mode, each window and floor rolling again every few minutes on the shader clock.</summary>
-        Slow,
-
-        /// <summary>Single lit windows and whole lit floors, fixed.</summary>
-        Floors,
-    }
-
-    /// <summary>Gets or sets the window mode, a prototype switch. The launcher sets it once from the spec, before
-    /// the first hull is read.</summary>
-    public static WindowMode Windows { get; set; }
 
     /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Vegetation word other than Off.</summary>
     public static bool On => VegetationQualitySetting.RichOn && VegetationModels.On;
-
-    /// <summary>The band the city hands over across under the standing 3D Vegetation word.</summary>
-    public static Vector2 Band => BandFor(VegetationModelsSetting.Word);
 
     /// <summary>Gets or sets the folder <see cref="For"/> reads, <see cref="ShippedRoot"/> outside a suite. A suite's
     /// fixture hulls stand in its scratch folder. Setting it forgets every hull and facade read.</summary>
@@ -123,11 +102,6 @@ public static class CityModels
         return h >> 8;
     }
 
-    /// <summary>The band of one <see cref="VegetationModelsSetting"/> word for the city: the vegetation band, with
-    /// Extreme held at Very Far's. Extreme's near cells raised the distant draw count over the original city's.</summary>
-    public static Vector2 BandFor(string word) =>
-        VegetationModels.BandFor(word == VegetationModelsSetting.Extreme ? VegetationModelsSetting.VeryFar : word);
-
     /// <summary>Which of <paramref name="count"/> near variants the building of <paramref name="seed"/> draws.</summary>
     public static int VariantOf(float seed, int count) => count > 1 ? (int)((uint)seed % (uint)count) : 0;
 
@@ -147,8 +121,8 @@ public static class CityModels
     }
 
     /// <summary>The GLSL that expands a building's seed into its look. The box and the near model share it word for
-    /// word, so neither changes at the hand-over. <paramref name="mode"/> picks the window lines.</summary>
-    internal static string LookCode(WindowMode mode)
+    /// word, so neither changes at the hand-over.</summary>
+    internal static string LookCode()
     {
         var pick = new System.Text.StringBuilder();
         float upTo = 0f;
@@ -157,17 +131,6 @@ public static class CityModels
             upTo += share;
             pick.Append(CultureInfo.InvariantCulture, $"    if (p < {upTo:0.0###}) {{ return {Vec(rgb)}; }}\n");
         }
-        string on = mode switch
-        {
-            WindowMode.Scatter => "float on = step(csky_city_rand(win), share);",
-            WindowMode.Floors => "float on = max(step(csky_city_rand(win), share), step(csky_city_rand(level_key), LIT_FLOORS));",
-            _ => $$"""
-                uint win_epoch = uint(floor(csky_time / {{WindowPeriodS}}.0 + csky_city_rand(win + 3u))) % {{(int)ShaderTime.RolloverSecs / WindowPeriodS}}u;
-                    uint floor_epoch = uint(floor(csky_time / {{FloorPeriodS}}.0 + csky_city_rand(level_key + 3u))) % {{(int)ShaderTime.RolloverSecs / FloorPeriodS}}u;
-                    float on = max(step(csky_city_rand(win ^ csky_city_hash(win_epoch)), share),
-                        step(csky_city_rand(level_key ^ csky_city_hash(floor_epoch + 977u)), LIT_FLOORS));
-                """,
-        };
         return $$"""
             const float LIT_FLOORS = {{F(LitFloorShare)}};
 
@@ -202,7 +165,11 @@ public static class CityModels
                 uint level = uint(int(floor(uv.y)) * {{Floors}} + int(ids.g * 255.0 + 0.5));
                 uint level_key = csky_city_hash(salt ^ (level + 0x9e3779b9u));
                 uint win = csky_city_hash(salt ^ csky_city_hash(uint(int(floor(uv.x))) ^ csky_city_hash(uint(ids.r * 255.0 + 0.5) ^ (level << 8u))));
-                {{on}}
+                // Each window and each floor rolls again once a period on the clock, at an offset of its own.
+                uint win_epoch = uint(floor(csky_time / {{WindowPeriodS}}.0 + csky_city_rand(win + 3u))) % {{(int)ShaderTime.RolloverSecs / WindowPeriodS}}u;
+                uint floor_epoch = uint(floor(csky_time / {{FloorPeriodS}}.0 + csky_city_rand(level_key + 3u))) % {{(int)ShaderTime.RolloverSecs / FloorPeriodS}}u;
+                float on = max(step(csky_city_rand(win ^ csky_city_hash(win_epoch)), share),
+                    step(csky_city_rand(level_key ^ csky_city_hash(floor_epoch + 977u)), LIT_FLOORS));
                 return csky_city_light(csky_city_rand(win + 1u)) * (0.7 + 0.6 * csky_city_rand(win + 2u)) * ids.b * on;
             }
 
@@ -253,7 +220,7 @@ public static class CityModels
     // the night darkening through FOG. FOG darkens the lit windows too. The box fades out over the band by
     // ModelShare, and the near model keeps exactly the dither cells the box gives up. Both keep the kind's far fade.
     // ⚠ Never include csky_instance_uniforms: every near cell would take 16 slots of Godot's global buffer.
-    internal static string ShaderCode(bool near, WindowMode mode)
+    internal static string ShaderCode(bool near)
     {
         bool shadow = ShadowQualitySetting.TerrainShadows;
         string keep = near ? "step(0.004, v_far - v_box)" : "step(0.004, v_box)";
@@ -267,7 +234,7 @@ public static class CityModels
             {{SceneBuilder.AtmosphereInclude}}
             {{SceneBuilder.ClutterFadeInclude}}
             {{(shadow ? SceneBuilder.TerrainShadowInclude + "\nvarying vec3 v_terrain_pos;" : "")}}
-            {{(mode == WindowMode.Slow ? SceneBuilder.TimeInclude : "")}}
+            {{SceneBuilder.TimeInclude}}
 
             uniform vec3 grade = vec3(1.0);
             uniform vec2 {{VegetationModels.BandParam}};
@@ -278,7 +245,7 @@ public static class CityModels
             varying flat float v_dark;
             varying flat uint v_seed;
 
-            {{LookCode(mode)}}
+            {{LookCode()}}
 
             void vertex() {
                 vec3 origin = MODEL_MATRIX[3].xyz;
@@ -392,11 +359,11 @@ public static class CityModels
     // no window lights.
     private static ShaderMaterial Material(bool near, Color grade, Facade? facade)
     {
-        if (!Shaders.TryGetValue((near, Windows), out var shader))
-            Shaders[(near, Windows)] = shader = new Shader { Code = ShaderCode(near, Windows) };
+        if (!Shaders.TryGetValue(near, out var shader))
+            Shaders[near] = shader = new Shader { Code = ShaderCode(near) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("grade", new Vector3(grade.R, grade.G, grade.B));
-        material.SetShaderParameter(VegetationModels.BandParam, Band);
+        material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
         if (facade != null)
         {
             material.SetShaderParameter("facade_tex", facade.Albedo);

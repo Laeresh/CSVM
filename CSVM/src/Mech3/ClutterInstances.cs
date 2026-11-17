@@ -338,7 +338,7 @@ public sealed class ClutterInstances
         };
         _nearCells ??= Layout.Cut(_nearProto, (city ? _proto.Original : _richVariant!) with { Material = _near.Material },
             city ? CityModels.CellM : VegetationModels.CellM, near: _near);
-        _nearCells.RangeTo(city ? CityModels.Band.Y : VegetationModels.Band.Y);
+        _nearCells.RangeTo(VegetationModels.Band.Y);
         _nearCells.CatchUp(_moved, AuthoredList);
         if (_nearCells.Node == null)
             _near.Root.AddChild(_nearCells.Attach(_nearProto));

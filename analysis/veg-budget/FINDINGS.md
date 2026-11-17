@@ -141,7 +141,8 @@ C5-cm23). `render_cpu_ms` rises with the near models on screen, 0.02 to 0.06 ms 
 up to 0.195 ms at extreme. At C5-cb1 extreme costs less GPU than near while drawing more. The
 section below measures the node count on its own and explains the extreme figure.
 
-**The three window modes cost the same.** At C5-cb1 and C5-street (n=5) scatter, slow and floors
+**The prototype's three window modes cost the same.** The build keeps only the rolling one. At
+C5-cb1 and C5-street (n=5) the fixed single windows, the fixed whole floors and the rolling mix
 differ by at most 0.02 ms of GPU, inside the launch ranges, with identical counts and CPU terms.
 
 **World build.** Over 15 launches per mode the startup total reads 7,757 ms with the city off and
@@ -180,9 +181,11 @@ golden pose `c5-city-night-enhanced` moves by 2 px of delta 1.
 draws every near model add the same `proc_ms` (+0.04 to +0.09 ms) while `render_cpu_ms` moves by
 0.69 ms. Which part of Godot's process step walks the static nodes is not identified.
 
-No cell size alone holds the draw rule at extreme. **The city's band stops at veryfar's**
-(`CityModels.BandFor`), and with 2048 m cells every word holds the rule at C5-alt: 1,709.5,
-1,738.5 and 1,738.5, the capped extreme reading veryfar's draws and primitives exactly. Larger
+No cell size alone holds the draw rule at extreme. With the city's band stopped at veryfar's and
+2048 m cells every word holds the rule at C5-alt: 1,709.5, 1,738.5 and 1,738.5, the capped extreme
+reading veryfar's draws and primitives exactly. **The build does not carry that cap**: the user
+chose Extreme's own reach, so extreme draws 1,776.5 at C5-alt, one over the city off, until the
+whole city is measured. Larger
 cells submit more off-band stamps (prims +27 to 52 % at veryfar), which costs up to 0.06 ms GPU at
 C5-street and nothing measurable at C5-cb1. At 1024 m with the cap both rules also hold, with
 fewer added prims (+8 to 14 %), twice the CPU and a veryfar margin of 14 draws against 37.
@@ -213,7 +216,6 @@ unmeasured.
     $env:CSVM_DATA_ROOT = "Z:\CSVM"
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb7,C5-cb1,C5-alt,C5-cm23 -Modes enhanced,vdnormal,vdunlimited -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7 -Modes nomodels,near,far,extreme,original -Launches 3
-    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street -Modes nomodels,near,winslow,winfloors -Launches 5
     .\analysis\veg-budget\measure.ps1 -Chapters C5-alt,C5-cm23 -Modes nomodels,far,veryfar,extreme -Launches 3
 
 From PowerShell 7 the comma lists go through `powershell -NoProfile -Command "& '<path>' ..."`.

@@ -1284,13 +1284,12 @@ internal static class GraphicsSwitchSuites
                         && !nearCode.Contains("csky_instance_uniforms", StringComparison.Ordinal) && boxCode.Contains("v_box *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
                         && nearCode.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_box)", StringComparison.Ordinal),
                     $"neither city shader declares an instance uniform, the box fades by the band's share and the near model keeps the cells it gives up");
-                string look = CityModels.LookCode(CityModels.Windows);
+                string look = CityModels.LookCode();
                 ctx.Check(boxCode.Contains(look, StringComparison.Ordinal) && nearCode.Contains(look, StringComparison.Ordinal)
                         && boxCode.Contains("v_seed = uint(INSTANCE_CUSTOM.w + 0.5);", StringComparison.Ordinal)
                         && nearCode.Contains("ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);", StringComparison.Ordinal)
-                        && !boxCode.Contains("csky_time", StringComparison.Ordinal) && !nearCode.Contains("csky_time", StringComparison.Ordinal)
-                        && CityModels.ShaderCode(true, CityModels.WindowMode.Slow).Contains("csky_time", StringComparison.Ordinal),
-                    $"the box and the near model expand the stamp's seed by one look ({CityModels.Windows}), and only the slow mode reads the shader clock");
+                        && boxCode.Contains(Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal) && nearCode.Contains(Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal),
+                    $"the box and the near model expand the stamp's seed by one look, on the shader clock");
 
                 ctx.Check(on.Collision == b.Collision && on.Bodies == b.Bodies && on.Colliders == b.Colliders,
                     $"collision equals the bare build's ({on.Collision}; {on.Bodies.Length} body chars)");

@@ -39,32 +39,17 @@ public sealed class CityModelsTests
         Assert.InRange(ones, 150, 250);
     }
 
-    /// <summary>The city hands over across the vegetation band of each word but Extreme, which it holds at Very Far's.</summary>
-    [Theory]
-    [InlineData(Utils.VegetationModelsSetting.Off)]
-    [InlineData(Utils.VegetationModelsSetting.Near)]
-    [InlineData(Utils.VegetationModelsSetting.Far)]
-    [InlineData(Utils.VegetationModelsSetting.VeryFar)]
-    [InlineData(Utils.VegetationModelsSetting.Extreme)]
-    public void TheCityBandStopsAtVeryFar(string word)
+    /// <summary>The look rolls single windows and whole floors on the shader clock, never Godot's TIME, so a fixed
+    /// step pins its frame. Its text is the same at every call, and the <c>city-buildings</c> suite checks that both
+    /// materials carry it.</summary>
+    [Fact]
+    public void TheLookRollsWindowsAndFloorsOnTheShaderClock()
     {
-        var veryFar = VegetationModels.BandFor(Utils.VegetationModelsSetting.VeryFar);
-        Assert.Equal(word == Utils.VegetationModelsSetting.Extreme ? veryFar : VegetationModels.BandFor(word), CityModels.BandFor(word));
-        Assert.True(CityModels.BandFor(word).Y <= veryFar.Y);
-    }
-
-    /// <summary>Only the slow mode's look reads the shader clock, so the fixed modes' frames pin; the scatter mode
-    /// lights no whole floor. The <c>city-buildings</c> suite checks that both materials carry the one look.</summary>
-    [Theory]
-    [InlineData(CityModels.WindowMode.Scatter)]
-    [InlineData(CityModels.WindowMode.Slow)]
-    [InlineData(CityModels.WindowMode.Floors)]
-    public void OnlyTheSlowModeReadsTheClock(CityModels.WindowMode mode)
-    {
-        string look = CityModels.LookCode(mode);
+        string look = CityModels.LookCode();
         Assert.Contains("csky_city_look(uint seed", look, System.StringComparison.Ordinal);
-        Assert.Equal(mode == CityModels.WindowMode.Slow, look.Contains("csky_time", System.StringComparison.Ordinal));
-        Assert.Equal(mode != CityModels.WindowMode.Scatter, look.Contains("LIT_FLOORS)", System.StringComparison.Ordinal));
-        Assert.Equal(look, CityModels.LookCode(mode));
+        Assert.Contains("csky_time", look, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("TIME", look, System.StringComparison.Ordinal);
+        Assert.Contains("LIT_FLOORS)", look, System.StringComparison.Ordinal);
+        Assert.Equal(look, CityModels.LookCode());
     }
 }

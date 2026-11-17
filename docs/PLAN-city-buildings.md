@@ -47,7 +47,7 @@ objected to; reopen any of them by asking.
 | 1 | Reskin, reshuffle or rebuild the city? | **Reskin only.** Lot, footprint, height and collision stay original, so the skyline's heights stay as authored. |
 | 2 | Do originals stay in the near mix? | **No, look-alikes replace every original building look near the camera.** One quality level, and an authored facade atlas means the window positions are known. |
 | 3 | What stands in at distance? | **A script-built plain box per hull, wearing the same facade, tint and windows.** The original mesh is never drawn in the Enhanced city; only its collision remains. A building that changed at the hand-over, and a distant city as repetitive as today, were the reasons against the original mesh. |
-| 4 | Window lights | **Decided by the user's eyes in the prototype**, between three modes behind a debug switch (see B13). The atlas carries a window id and a floor id from the start. |
+| 4 | Window lights | **Slow: single lit windows and whole lit floors, each rolling again every few minutes on its own offset.** The user flew the three modes of the prototype and said "Slow looks good" (B15). The fixed scatter and floors modes and their switch are removed. The atlas carries a window id and a floor id. |
 | 5 | Scope | **Buildings only.** Ground paint, lamps and cars wait for the prototype verdict. |
 | 6 | Style | **Look-alikes**: facade families taken from what the originals show, each variant graded to its original's average colour and brightness, so C5's fog and lighting tuning stays valid. |
 | 7 | How far may a model leave its collision hull? | **About 3 m carved inward and about 4 m of non-solid roof dressing above** (water tanks, vents, parapets). Tall spires and deep setbacks only where the original hull has them. Both numbers are TUNE. |
@@ -66,10 +66,18 @@ objected to; reopen any of them by asking.
 | 20 | How per-building values travel | **A seed hashed on the CPU from the stamped point, in the solid stamps' custom data `w`, which no solid shader reads; the shader expands it.** The near model, the far box and the map edge's copies then agree exactly, and the buffer layout does not change. A hash recomputed in the shader from the instance origin would differ between tiers by float rounding. (A3) |
 | 21 | Where window and floor ids live | **A second RGBA8 texture laid out like the facade atlas, sampled nearest with no mipmaps; the atlas stays opaque.** (A3) |
 | 22 | Lighting path | **The clutter's Enhanced lit arm (world light, ambient fill, terrain shadow, night darkening through `FOG`), in a standalone shader with no instance uniforms.** C5's night key and the city darkening hold, and thousands of near cells do not exhaust the instance-uniform buffer. The unlit vegetation look is the wrong template. (A3) |
-| 23 | Fade and hand-over | **The vegetation band and dither split as they are (`VegetationModels.Band`, `ModelShare`), with the far box in the card's role. The box keeps the kind's own fade and cells; near cells are 2048 m (`CityModels.CellM`, TUNE), and the city's band stops at Very Far's, so Extreme hands the city over where Very Far does (`CityModels.BandFor`).** Both are B14's measurement: 512 m cells cost process time per node, and Extreme's own band raised the distant draw count over the original city's. (A3, B14) |
+| 23 | Fade and hand-over | **The vegetation band and dither split as they are (`VegetationModels.Band`, `ModelShare`), with the far box in the card's role. The box keeps the kind's own fade and cells; near cells are 2048 m (`CityModels.CellM`, TUNE).** 512 m cells cost process time per node (B14). The city follows the vegetation band at every word, Extreme included (Decision 33). (A3, B14) |
 | 24 | Where the original is suppressed | **`ClutterInstances`' layout choice while the city is on. The original MultiMesh and all collision stay built, so a live switch needs no rebuild. A model pack's replacement for a kind keeps that kind off the city.** (A3) |
 | 25 | Does the city follow Vegetation Quality as well as the scenery option? | **Yes: it draws only at Rich with the option on.** The integrated-GPU fallback that Decision 8 relies on sits on Vegetation Quality, not on the option. Decided by the orchestrator from Decision 8, not asked. |
 | 26 | What the city copied past the map edge draws | **The far box at every distance, no near models.** Decided by the orchestrator as the cheapest reading, not asked. |
+| 27 | Small windows under TAA (B15) | **Windows under 4 px average nine taps.** The user reported "some buildings that flimmer at certain distances" and said of the filtered look "works for me". |
+| 28 | Glow strength (B15) | **Right as it is** (`WindowGain`, `FarPointGain`). |
+| 29 | Tint and brightness spread (B15) | **Right as it is** (10 percent tint, 20 percent brightness). |
+| 30 | Wall brightness (B15) | **Right as it is**, with the even ambient on every face: "the rest is tuning in the lighting lab". |
+| 31 | Near variants per shape (B15) | **"More for common shapes"**: two for a rare shape, a third or fourth for the shapes placed most often. C21 picks the shapes by A1's placement counts. |
+| 32 | The `det` dressing models (B15) | **"Rebuild them too"**: each dressing piece gets a model in the new towers' style, and its original is not drawn in the Enhanced city. Done in C21. |
+| 33 | Extreme's reach for the city (B15) | **"Full reach, re-measure later."** Extreme hands the city over across its own band. With 2048 m cells the prototype draws 1,776.5 at `C5-alt` against 1,775.5 with the city off, one draw over Decision 8's rule, which the user accepts until C24 measures the whole city; the reach is shortened then if the excess has grown past a figure the user accepts. |
+| 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. A follow-up issue filed in C24, outside this plan (Decision 5). |
 
 ## ⚠ Read this before implementing anything
 
@@ -246,11 +254,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Draw the near model and the far box on the building stamps
 13. ☑ Per-building facade, tint and the three window modes in the shader
 14. ☑ Measure the prototype against the budget
-15. ☐ The user's verdict on the prototype
+15. ☑ The user's verdict on the prototype
 
-The complete battery on the branch after B14: 8,506 unit tests pass, 681 engine suites pass with 2
-skipped and engine errors clean, and of 41 goldens only `c5-city-night-enhanced` moves, held red
-until B15 settles the look.
+`c5-city-night-enhanced` is re-pinned to the slow look with the window filter (a918f6f3).
 
 ### Wave C, the rest of the city
 
@@ -684,10 +690,11 @@ lit window's share of a pixel a little and a grazing face keeps its floors. Betw
 0.75 px a window (`HandOverPx`) the wall hands over to far points: square cells of 1 m doubled per level in the building's tile coordinates, sized
 from the pixel's footprint to stay about 1.5 px wide, with two levels blended so a change fades.
 Each cell lights by a roll against the building's lit share times `FarPointShare`. The far points
-show no whole lit floors and do not follow the clock. `--city-windows=scatter|slow|floors` picks
-single windows, single windows with whole lit floors, or that mix rolling again every 300 s
-(windows) and 360 s (floors) of `csky_time`, each window and floor on its own offset. Only the
-slow mode includes the clock. A hull folder without the facade files warns and draws the flat
+show no whole lit floors and do not follow the clock. The item landed three window modes behind
+`--city-windows`: single windows, single windows with whole lit floors, and that mix rolling again
+every 300 s (windows) and 360 s (floors) of `csky_time`, each window and floor on its own offset.
+B15 kept the last as the only look and removed the other two with the flag. `csky_time` is the
+session clock, which steps a fixed amount per frame under `--det`, so a pinned frame holds. A hull folder without the facade files warns and draws the flat
 grade. The grade targets the original's unlit wall: `census.py` measures each texture's mean at
 or below luma 90, `c5.py` takes those values, and the models are regenerated (the atlas files are
 byte for byte the same). The tunables are named constants in `CityModels.cs`.
@@ -786,8 +793,8 @@ option.
 
 **Landed.** `analysis/veg-budget/measure.ps1` measures the city by its 3D Vegetation word on C5,
 where the word reaches only the city: `nomodels` (off), `near`, `far`, `veryfar`, `extreme`,
-`original` (Vegetation Quality Original, a second off) and `winslow`/`winfloors` (the near city
-with the other window modes), at a fifth view, `C5-street`, 45 m over the `cblock1` street grid.
+`original` (Vegetation Quality Original, a second off) and, until B15 removed the window modes,
+`winslow`/`winfloors`, at a fifth view, `C5-street`, 45 m over the `cblock1` street grid.
 It also reports scene nodes, the startup line's build times and each mode's `city models:` line.
 A `--det` launch with plain `--graphics=enhanced` draws the city at near. On the PC the prototype
 adds at most 0.27 ms GPU (`C5-cb1`, near) and 0.29 ms CPU (`C5-street`, extreme), and lowers the
@@ -800,15 +807,17 @@ approaches 0.5 ms. Those figures are the prototype with 512 m near cells and the
 at every word.
 
 The follow-up measured both levers and set them: **`CityModels.CellM` is 2048 m and the city's
-band stops at Very Far's under Extreme** (`CityModels.BandFor`, on both hull materials, the live
-switch in `Recut` and the near cells' range). The near nodes fall from 5,438 to 768, the mean
+band stops at Very Far's under Extreme** (on both hull materials, the live switch in `Recut` and
+the near cells' range). The near nodes fall from 5,438 to 768, the mean
 `proc_ms` added from 0.059 to 0.013 ms, the worst added CPU from 0.25 to 0.05 ms and the world
 build's cost from 240 to 48 ms. Every word holds the draw rule at `C5-alt`: 1,709.5 at near and
 1,738.5 at Very Far and Extreme, against 1,775.5 with the city off. No cell size alone held it at
 Extreme (1,777.7 at 1024 m, 1,776.5 at 2048 m), so the cap is needed. The larger cell submits more
 off-band stamps (primitives +27 to 52 % at Very Far), which costs up to 0.06 ms GPU at `C5-street`.
 The whole-city estimate falls to about 3,300 near nodes and 0.1 ms CPU.
-`analysis/veg-budget/FINDINGS.md` holds the tables. The Deck is unmeasured.
+`analysis/veg-budget/FINDINGS.md` holds the tables. The Deck is unmeasured. B15 then lifted the
+cap (Decision 33): the build keeps the 2048 m cells and hands the city over across Extreme's own
+band, at 1,776.5 draws at `C5-alt`.
 
 **Verified.** By the item's agent. Every comparison is interleaved inside one batch, with 3
 launches per case, 5 at `C5-cb1` and `C5-street` for the window modes, where the street view's
@@ -859,7 +868,24 @@ nothing. Measure a cause both ways before asserting it. Two batches of the same 
 to 0.6 ms of GPU, a quarter of the budget, so the off and on cases are interleaved in one batch
 and A2's table is never subtracted from a later one.
 
-## B15 ☐ The user's verdict on the prototype
+## B15 ☑ The user's verdict on the prototype
+
+**Landed.** The user flew the prototype in the three window modes and answered the look questions
+one at a time; Decisions 4 and 27 to 34 hold the answers. The prototype stays and Wave C goes
+ahead. Slow is the window mode, and the scatter and floors modes are removed with
+`--city-windows`. Glow, tint spread and wall brightness stay as they are, with further tuning left
+to the lighting lab. Common shapes get more than two near variants, the `det` dressing is rebuilt
+in the towers' style, and Extreme gets its own reach back, which removes B14's cap and is measured
+again in C24. The ground now looks wrong beside the buildings and becomes a follow-up issue in
+C24. The flight also found the small-window flicker that B13 records as fixed.
+
+**Verified.** The answers are the user's, given through the question dialog after their flight of
+the worktree build. No instrument closed this item.
+
+**Open after this item.** The verdict is on the `cblock1` towers only. The user has not seen the
+walk-up districts dressed, the rebuilt dressing, or a third variant.
+
+**Original approach (kept for reference).**
 
 **Goal.** The user has judged the prototype from montages and at the controls, and has chosen the
 window mode, the tint spread and the number of variants per hull, or has stopped the plan.
@@ -896,7 +922,10 @@ hull and tint spread are B15's.
 
 **Approach.** Extend B11's per-hull specs to the remaining 33 shapes, district by district:
 `cblock2` and `cblock3` (the rest of the towers, up to 108 m), then `cblock4` and `cblock7` (the
-walk-ups, more than half of the placed buildings), then `cblock5` and `cblock6`.
+walk-ups, more than half of the placed buildings), then `cblock5` and `cblock6`. A shape placed
+often gets a third or fourth near variant and a rare one keeps two (Decision 31), by A1's
+placement counts, the `cblock1` shapes included. Each of the 16 `det` dressing shapes gets a model
+in the towers' style, and its original is not drawn in the Enhanced city (Decision 32).
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
@@ -905,10 +934,11 @@ stamps still drawing an original mesh under Enhanced reads zero on C5. A montage
 the user.
 
 **⚠ Traps.** The `hotelsign0/1/2` blocks are placed by no template; they need no model. The 16
-`det` shapes are not hulls. Whether a near model draws its own dressing and the original `det`
-model is suppressed, or the `det` models keep drawing as they are, is undecided and is put to the
-user before C21 starts, with the prototype's towers in front of them, where the original `det`
-models still draw over the new near models.
+`det` shapes are not hulls: they are separate decorations with their own stamps, so how a rebuilt
+dressing piece is drawn and its original suppressed is traced in the code before it is built. The
+cut that puts a shape among the common ones is a judgement; state the counts and the cut. Every
+added variant moves which variant a building draws (`VariantOf` takes the count), so the look of
+the prototype's buildings changes with it.
 
 ## C22 ☐ Relabel the 3D Vegetation option to cover scenery
 
@@ -948,7 +978,9 @@ launch, so it is not a golden pose until that flip is found.
 off.
 
 **⚠ Traps.** A golden that flips under external GPU load is a determinism defect, not a tolerance
-to widen. If the changing window mode was chosen, its clock is frozen in every pinned frame.
+to widen. The windows roll on `csky_time`, which steps a fixed amount per frame under `--det`, so
+a pinned frame holds; a frame pinned past 300 s of session time would show rolled windows and is
+not covered by `c5-city-night-enhanced`, which captures at frame 120.
 
 ## C24 ☐ Closing measurement, the integrated-GPU default, and follow-up issues
 
@@ -960,8 +992,10 @@ and anything the user's eyes asked for outside this plan's scope is filed.
 **Approach.** Rerun A2's instrument on all C5 views on the PC. An integrated GPU defaults to the
 original city at one pane (Decision 8), and at two or more panes the existing fallback already
 shows it. File an issue for the Deck one-pane measurement that would lift that default.
-File follow-up issues for the ground paint, the lamps or the layout pattern only where B15 or a
-later look asked for them.
+File the follow-up issue for the ground paint, which B15 asked for ("Ground looks wrong",
+Decision 34), with the user's own description of what is wrong; file one for the lamps or the
+layout pattern only if a later look asks for it. Measure Extreme's distant draws at `C5-alt` with
+every hull dressed and put the excess over the original city to the user (Decision 33).
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
