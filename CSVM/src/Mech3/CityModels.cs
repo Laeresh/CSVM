@@ -48,6 +48,15 @@ public static class CityModels
     // An even mean glow there read as a beige wash, since night exposure pushes a resolved window into the tonemap.
     private const float FarPointPx = 1.5f, FarPointShare = 0.05f, FarPointGain = 0.4f;
 
+    // TUNE. Under FilterPx pixels a window, the single windows average FilterTaps by FilterTaps taps across the pixel.
+    // A nearest window id is a step, and under TAA's jitter a step a few pixels wide flickers.
+    private const float FilterPx = 4f;
+    private const int FilterTaps = 3;
+
+    // TUNE. The single windows fade to the far points from HandOverPx + 1 pixels a window down to HandOverPx. Filtered,
+    // they carry their whole mean glow, so a lower hand-over brightens the far towers toward the beige wash.
+    private const float HandOverPx = 0.75f;
+
     // TUNE. Under the slow mode, the seconds between a window's chances to change, and a floor's. Each divides
     // ShaderTime.RolloverSecs, so the clock's wrap changes nothing.
     private const int WindowPeriodS = 300, FloorPeriodS = 360;
@@ -187,6 +196,16 @@ public static class CityModels
                 return step(csky_city_rand(h), share * {{F(FarPointShare)}}) * csky_city_light(csky_city_rand(h + 1u));
             }
 
+            // The single windows at one point of a facade cell: the window under it, lit or dark by its roll.
+            vec3 csky_city_window(vec2 uv, vec2 cell, uint salt, float share) {
+                vec4 ids = textureLod(facade_ids, (cell + vec2(fract(uv.x), 1.0 - fract(uv.y)) * {{Tile}}.0) / {{Atlas}}.0, 0.0);
+                uint level = uint(int(floor(uv.y)) * {{Floors}} + int(ids.g * 255.0 + 0.5));
+                uint level_key = csky_city_hash(salt ^ (level + 0x9e3779b9u));
+                uint win = csky_city_hash(salt ^ csky_city_hash(uint(int(floor(uv.x))) ^ csky_city_hash(uint(ids.r * 255.0 + 0.5) ^ (level << 8u))));
+                {{on}}
+                return csky_city_light(csky_city_rand(win + 1u)) * (0.7 + 0.6 * csky_city_rand(win + 2u)) * ids.b * on;
+            }
+
             // The building's facade from the atlas (city_atlas.py's layout) and its lit glass, from the seed.
             vec3 csky_city_look(uint seed, vec2 uv, vec2 uv2, vec3 grade_rgb, out vec3 glow) {
                 uint s = seed * 8u;
@@ -196,26 +215,33 @@ public static class CityModels
                 vec2 cell = vec2(roof ? {{Variants}}.0 : row, family) * {{Cell}}.0 + {{Gutter}}.0;
                 vec2 st = (cell + vec2(fract(uv.x), 1.0 - fract(uv.y)) * {{Tile}}.0) / {{Atlas}}.0;
                 vec2 k = vec2({{Tile}}.0, -{{Tile}}.0) / {{Atlas}}.0;
-                vec3 albedo = textureGrad(facade_tex, st, dFdx(uv) * k, dFdy(uv) * k).rgb;
+                vec2 du = dFdx(uv), dv = dFdy(uv);
+                vec3 albedo = textureGrad(facade_tex, st, du * k, dv * k).rgb;
                 float lean = {{F(TintSpread)}} * (2.0 * csky_city_rand(s + 2u) - 1.0);
                 float gain = 1.0 + {{F(BrightnessSpread)}} * (2.0 * csky_city_rand(s + 3u) - 1.0);
                 glow = vec3(0.0);
                 if (!roof) {
-                    vec4 ids = texture(facade_ids, st);
                     float share = mix({{F(LitShareMin)}}, {{F(LitShareMax)}}, csky_city_rand(s + 4u));
                     uint salt = csky_city_hash(s + 5u);
-                    uint level = uint(int(floor(uv.y)) * {{Floors}} + int(ids.g * 255.0 + 0.5));
-                    uint level_key = csky_city_hash(salt ^ (level + 0x9e3779b9u));
-                    uint win = csky_city_hash(salt ^ csky_city_hash(uint(int(floor(uv.x))) ^ csky_city_hash(uint(ids.r * 255.0 + 0.5) ^ (level << 8u))));
-                    {{on}}
                     // Below about a pixel a window's roll would sparkle, so the wall hands over to the far points.
                     // Two levels blend by the pixel's footprint, so a level change fades instead of popping.
-                    float footprint = max(max(length(dFdx(uv)), length(dFdy(uv))), 1e-6);
-                    float detail = smoothstep(0.5, 1.5, {{F(1f / WindowsPerTile)}} / footprint);
+                    float footprint = max(max(length(du), length(dv)), 1e-6);
+                    float px = {{F(1f / WindowsPerTile)}} / footprint;
+                    float detail = smoothstep({{F(HandOverPx)}}, {{F(HandOverPx + 1f)}}, px);
+                    int taps = px < {{F(FilterPx)}} ? {{FilterTaps}} : 1;
                     float far_level = clamp(log2({{F(FarPointPx * WindowsPerTile)}} * footprint), 0.0, 3.0);
                     float base = floor(far_level);
                     vec3 far = mix(csky_city_points(uv, base, salt, share), csky_city_points(uv, base + 1.0, salt, share), far_level - base);
-                    vec3 near = csky_city_light(csky_city_rand(win + 1u)) * (0.7 + 0.6 * csky_city_rand(win + 2u)) * ids.b * on;
+                    // A window a few pixels wide averages a grid of taps across the pixel. The frame's jitter then
+                    // moves a lit window's share of the pixel a little, not all or nothing.
+                    vec3 near = vec3(0.0);
+                    for (int j = 0; j < taps && detail > 0.0; j++) {
+                        for (int i = 0; i < taps; i++) {
+                            vec2 o = (vec2(float(i), float(j)) + 0.5) / float(taps) - 0.5;
+                            near += csky_city_window(uv + du * o.x + dv * o.y, cell, salt, share);
+                        }
+                    }
+                    near /= float(taps * taps);
                     glow = mix(far * {{F(FarPointGain)}}, near, detail) * {{F(WindowGain)}};
                 }
                 return grade_rgb * albedo * gain * vec3(1.0 + lean, 1.0, 1.0 - lean);

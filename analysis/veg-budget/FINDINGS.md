@@ -198,6 +198,13 @@ hand-over pop more.
 near nodes, about 0.04 ms `proc_ms`, and about 0.1 ms of CPU at a dressed view. Whether the 37-draw
 margin at C5-alt holds for the whole city is unmeasured.
 
+### The window filter
+
+Windows under 4 px average nine taps of the window ids (`FilterPx`, `FilterTaps`), which removes
+their flicker under TAA. Interleaved with the unfiltered look in one batch, n=3: the near city
+adds 0.51 ms GPU at C5-cb1 (0.25 unfiltered) and 0.165 ms at C5-street (0.075 unfiltered). The
+GPU figures in the tables above are the unfiltered look.
+
 The Steam Deck, and the vertex cost there of the off-band stamps a large cell submits, are
 unmeasured.
 

@@ -678,8 +678,10 @@ atlas is sampled sRGB and mipmapped with `textureGrad` on the unwrapped tile coo
 window ids are read nearest without mipmaps. Both load once per chapter folder, with each facade
 row's mean glass weight. A window is (`floor(u)`, its id, its floor) hashed with the salt. A lit
 one emits through its glass weight in one of four light colours, mostly warm yellow, and the night
-fog darkens it with its building. Where single windows fall under a pixel, the wall lights far
-points instead: square cells of 1 m doubled per level in the building's tile coordinates, sized
+fog darkens it with its building. Under 4 px a window (`FilterPx`) the single windows average a 3
+by 3 grid of taps across the pixel along both screen derivatives, so the frame's jitter moves a
+lit window's share of a pixel a little and a grazing face keeps its floors. Between 1.75 and
+0.75 px a window (`HandOverPx`) the wall hands over to far points: square cells of 1 m doubled per level in the building's tile coordinates, sized
 from the pixel's footprint to stay about 1.5 px wide, with two levels blended so a change fades.
 Each cell lights by a roll against the building's lit share times `FarPointShare`. The far points
 show no whole lit floors and do not follow the clock. `--city-windows=scatter|slow|floors` picks
@@ -714,10 +716,22 @@ far band. Over 4 m camera steps 75 to 85 percent of lit far pixels stay within o
 19 suites, the 64 unit tests and `-Quick` pass again, two `--det` launches are identical in
 scatter and in floors, and `c5-city-night-enhanced` now renders 9d63838a, stable on re-render.
 
+The user's flight found the flicker this item left open: "Slow looks good but i got some buildings
+that flimmer at certain distances." With the camera still, single windows of 0.5 to 4 px changed
+from frame to frame under TAA's jitter, because a nearest window id with a hashed roll is a step.
+Measured in the user's view over 8 frames, the share of band pixels whose luma span passes 16 of
+255 reads 4.27 percent, 0.000 with TAA off, 0.06 with the single windows off and 6.63 with only
+them. The tap filter brings it to 0.10 percent in scatter, 0.14 in slow and 0.12 in floors. The far
+band at the golden pose reads 0.00516 against 0.00536 before, so the wash does not return; with
+the old hand-over at 0.5 to 1.5 px the filter read 0.00702, which is why the hand-over moved up.
+Windows of 4 px and more take one tap and are unchanged. The near city now adds 0.51 ms GPU at
+`C5-cb1` (0.25 before) and 0.165 ms at `C5-street` (0.075 before). Two `--det` launches stay
+identical in scatter and floors, and the targeted run and `-Quick` pass.
+
 **Open after this item.** The golden `c5-city-night-enhanced` is not re-pinned until the look is
-settled in B15, so the goldens stage is red on the branch for that one frame. Motion (shimmer of
-the nearest-sampled ids at one to two pixels, the far points under TAA, the slow mode's pace) is
-judged in B15 at the controls. The original lights each face differently, many of them black,
+settled in B15, so the goldens stage is red on the branch for that one frame. The filter is
+measured at static poses only; motion, the step from nine taps to one at 4 px, the far points
+under TAA and the slow mode's pace are judged in B15 at the controls. The original lights each face differently, many of them black,
 where the new walls take an even ambient on every face, so the new far walls stay a little lighter
 (median 0.0031 against 0.0018). At 1280x720 the converted towers are darker overall than the
 original, which paints every window lit (towers view 0.0133 against 0.0228). The floors and slow
