@@ -78,7 +78,11 @@ objected to; reopen any of them by asking.
 | 32 | The `det` dressing models (B15) | **"Rebuild them too"**: each dressing piece gets a model in the new towers' style, and its original is not drawn in the Enhanced city. Done in C21. |
 | 33 | Extreme's reach for the city (B15) | **"Full reach, re-measure later."** Extreme hands the city over across its own band. With 2048 m cells the prototype draws 1,776.5 at `C5-alt` against 1,775.5 with the city off, one draw over Decision 8's rule, which the user accepts until C24 measures the whole city; the reach is shortened then if the excess has grown past a figure the user accepts. |
 | 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. A follow-up issue filed in C24, outside this plan (Decision 5). |
-| 35 | Walk-up colour variety (C21) | Of the dressed `cblock4` the user said: "The cblock4 could use more color variation at least the roofs", and of the other walk-up district: "cblock7 looks good". Each tile roof takes one of six colours and the walls under tile roofs four per family; shown both districts before and after, the user chose **"Land it as shown"**, so the variety reaches `cblock7` too. |
+| 35 | Walk-up colour variety (C21) | Of the dressed `cblock4` the user said: "The cblock4 could use more color variation at least the roofs", and of the other walk-up district: "cblock7 looks good". Each tile roof takes one of six colours and the walls under tile roofs four per family; shown both districts before and after, the user chose **"Land it as shown"**, so the variety reaches `cblock7` too. At the controls afterwards: "works for me". |
+| 36 | `cb07b`'s two tops (C21) | **"Keep both"**: the open frame with two slabs on one near variant and the far box, the landing deck with edge rails on the other. |
+| 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. |
+| 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
+| 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
 
 ## ⚠ Read this before implementing anything
 
@@ -999,12 +1003,12 @@ was not measured (one roll and one multiply on roof pixels).
 tranche, one with the prototype); Decision 33 puts the excess to the user in C24. The `det`
 dressing on `cb06`, `cb08` and `cb11` still draws its originals, so original fire escapes stand on
 the new walls. The originals' pale dentil cornice on `cb12`, `cb13`, `cb15` and `cb16` reads as a
-plain wall band on the new models, `cb12b`'s chimney wears the roof cell where the original's is
+plain wall band on the new models until Decision 37's band is built. `cb12b`'s chimney wears the roof cell where the original's is
 orange-red brick, and `cb03a` and `cb08a` show a reddish band on the top roof edge that is not
 traced to a texture. The new walk-ups wear brighter, more tinted walls than the originals' dark
-ones. The roof and wall colour variety is judged from pinned montages, not yet at the controls. A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
+ones, which the user keeps (Decision 38). A1's "hipped, lower hipped and gabled" for `cb14a`, `cb14b` and `cb14c` is wrong: `cb14a`
 and `cb14b` are one hipped geometry. From altitude the new towers read warmer than the original's
-blue-white ones. `city-buildings` checks
+blue-white ones, which the user keeps (Decision 39). `city-buildings` checks
 fixture hulls, not the shipped geometry; the margin script is the geometry check. The Deck is
 unmeasured.
 
