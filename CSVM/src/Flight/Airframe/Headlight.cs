@@ -13,13 +13,13 @@ namespace CSVM.Flight.Airframe;
 public sealed class Headlight
 {
     /// <summary>The beam's reach in metres. TUNE: judged at the controls.</summary>
-    public const float Range = 250f;
+    public const float Range = 400f;
 
     /// <summary>The cone's half-angle in degrees. TUNE.</summary>
     public const float ConeDegrees = 20f;
 
     /// <summary>The beam's energy. TUNE.</summary>
-    public const float Energy = 3f;
+    public const float Energy = 4.5f;
 
     /// <summary>How far ahead of the hull's front the light sits, in metres. ⚠ Keep it outside the
     /// hull: a light inside the nose has its whole beam shadowed by the airframe.</summary>
@@ -29,7 +29,7 @@ public sealed class Headlight
     public const float BareNoseDistance = 5f;
 
     /// <summary>The shadow's depth bias, over Godot's spot default 0.03. ⚠ Keep it raised: across a
-    /// 250 m range the default leaves a building or rock face shadowing itself in broad stripes.</summary>
+    /// beam this long the default leaves a building or rock face shadowing itself in broad stripes.</summary>
     public const float ShadowBias = 0.1f;
 
     /// <summary>The shadow's normal bias, over Godot's default 1.0, for the same stripes. TUNE.</summary>
