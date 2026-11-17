@@ -300,6 +300,11 @@ WAV it replaces, with an optional override of the Enhanced Sound values. Heard u
 alone.
 _Avoid_: sound mod, HD sound (for the mode)
 
+**Headlight**:
+The forward light a human pilot switches on at the aircraft's nose, drawn under Enhanced graphics
+alone. A remake-only rule: the original has no such light on any aircraft.
+_Avoid_: spotlight, landing light, searchlight
+
 ## Air race courses
 
 **Course**:

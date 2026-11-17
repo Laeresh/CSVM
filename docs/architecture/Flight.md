@@ -1353,6 +1353,14 @@ injector, and the `...ThisTick` edges are what `FlightController.AdvanceNitro` t
 kick, the two defs and the keyed `snd_nitro` loop. `RestoreCharge` puts back a stunt tap return's
 snapshot after `Reset`. Decode: [../org/flightModel.md](../org/flightModel.md).
 
+## src/Flight/Airframe/Headlight.cs
+The headlight, a remake-only forward spotlight a human pilot switches, drawn under Enhanced graphics
+alone. `On` is the switch: off with a new aircraft, never reset by a respawn, and a remote seat's
+comes from its owner's `AircraftStateMessage`. `Read` splits one control the view cycle and the
+switch both hold by hold length (`TapHoldButton`), which is how the pad's d-pad down carries both.
+`Show` builds the `SpotLight3D` ahead of the hull's front on its first lit frame and keeps its shadow
+on Shadow Quality. `FlightController.StepHeadlight` is the one caller. Read `SeatControls.cs` next.
+
 ## src/Flight/Ai/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher
 picks between the two before any flight law runs, so nothing here is a steering input. Pure state

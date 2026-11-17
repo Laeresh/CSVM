@@ -396,6 +396,10 @@ public partial class FlightController : Node3D
     /// AI maneuver arm, the tank and the animation edges run from <see cref="SimStep"/>.</summary>
     public NitroSystem Nitro = new();
 
+    /// <summary>The Enhanced-only headlight. Only a seat flown here switches it from its controls; a
+    /// remote seat's switch arrives in its samples, and an AI never touches it.</summary>
+    public Headlight Headlight = new();
+
     /// <summary>The flown tank, burned by <see cref="ReadKeyboard"/> and refilled at every spawn.
     /// Only the human lever path touches it, which is the original's player-only gate; a pilot-flown
     /// aircraft leaves it full. Nitro burns nothing here: the burn reads the lever, not the boost
@@ -594,6 +598,7 @@ public partial class FlightController : Node3D
     private bool _hudModePrev;                   // previous frame's CycleHudMode state (edge detection)
     private bool _hudEditPrev;                   // previous frame's EditHudLayout state (edge detection)
     private bool _recenterPrev;                  // previous frame's RecenterHeadset state (edge detection)
+    private bool _headlightPrev;                 // previous frame's headlight switch (edge detection)
     private XrChase? _headset;                   // Headset's backing field, handed to each camera Setup builds
     // The built parent, pose and visibility of every node the death defs play on, captured before
     // the first crash. That covers the airframe, the wreck and the adopted eject pilot. A
@@ -2527,6 +2532,7 @@ public partial class FlightController : Node3D
         // Nothing left to draw, animate, interpolate or point a camera at while inert.
         if (Inert)
             return;
+        var (cycleKey, cyclePad) = StepHeadlight((float)delta, halted);
 
         // ⚠ A halt does NOT orbit: a board's cursor keys ARE the orbit keys, so the free look
         // lives behind its Photo Mode row instead (BL-429, docs/architecture.md). The weapon lab's
@@ -2591,8 +2597,7 @@ public partial class FlightController : Node3D
         else
         {
             if (!Pause.SheetOverFlight)
-                _cam.StepViewKeys(_controls.KeyHalf.Held(InputAction.CycleCockpitViews),
-                    _controls.KeyHalf.Held(InputAction.SelectChaseView), _controls.PadHalf.Held(InputAction.CycleCockpitViews),
+                _cam.StepViewKeys(cycleKey, _controls.KeyHalf.Held(InputAction.SelectChaseView), cyclePad,
                     _controls.PadHalf.Held(InputAction.SelectChaseView), FlybyDown());
             // The zoom pair (BL-433), never while orbiting: the weapon lab's held orbit reads the
             // same two actions for its dolly (SeatControls.Orbit).
@@ -3678,6 +3683,7 @@ public partial class FlightController : Node3D
         // aeroplane is not flying where its nose points, and the owner already measured that.
         _model.SetVelocity(pose.Velocity);
         _model.Boosting = pose.Nitro;
+        Headlight.On = pose.Headlight;
         _lastInput = new FlightInput
         {
             Roll = pose.Aileron,
@@ -3818,6 +3824,32 @@ public partial class FlightController : Node3D
             ToggleGraphicsMode!();
         _graphicsTogglePrev = down;
     }
+
+    // The headlight's switch, read beside the view cycle it shares the pad button with, then its beam.
+    // Only a seat flown here switches; a remote seat's comes in its samples. Silent over a halt and
+    // wherever photo mode or the options leaf own the keyboard. Answers the two cycle levels.
+    private (bool CycleKey, bool CyclePad) StepHeadlight(float dt, bool halted)
+    {
+        var keys = _controls.KeyHalf;
+        var pad = _controls.PadHalf;
+        var read = Headlight.Read(keys.Held(InputAction.CycleCockpitViews), keys.Held(InputAction.Headlight),
+            pad.Held(InputAction.CycleCockpitViews), pad.Held(InputAction.Headlight), dt);
+        bool flips = read.Switch && IsHumanPiloted && !RemoteOwned && !halted && !Pause.SheetOverFlight && !Pause.Silenced;
+        if (flips && !_headlightPrev)
+        {
+            Headlight.On = !Headlight.On;
+            Log.Debug("flight", $"headlight P{PlayerIndex + 1} {(Headlight.On ? "on" : "off")}");
+        }
+
+        _headlightPrev = flips;
+        Headlight.Show(this, PlaneModel, Headlight.On && GraphicsMode.Enhanced && !Crashed);
+        return (read.CycleKey, read.CyclePad);
+    }
+
+#pragma warning disable SA1202
+    // One rendered frame of the headlight as a suite drives it, after the device sides are supplied.
+    internal (bool CycleKey, bool CyclePad) StepHeadlightForTest(float dt) => StepHeadlight(dt, false);
+#pragma warning restore SA1202
 
     // The HUD mode step's and layout editor's edges, polled beside the graphics switch. Silent where
     // photo mode, the options leaf or the editor own the keyboard. Every frame the pane then takes the

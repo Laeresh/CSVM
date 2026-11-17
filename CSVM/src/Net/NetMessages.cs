@@ -482,6 +482,7 @@ public readonly record struct NetSeatEntry(
 /// is quantised to the smallest form that still reads right at the controls, and
 /// <see cref="NetMessage.AircraftStateBudget"/> is the ceiling a layout change may not pass.
 /// The sequence number wraps; a sample older than the newest seen is dropped, not applied.
+/// <paramref name="Nitro"/> and <paramref name="Headlight"/> share one flags byte, bits 0 and 1.
 /// </summary>
 public readonly record struct AircraftStateMessage(
     byte Seat,
@@ -493,7 +494,8 @@ public readonly record struct AircraftStateMessage(
     float Aileron,
     float Elevator,
     float Rudder,
-    bool Nitro) : INetMessage<AircraftStateMessage>
+    bool Nitro,
+    bool Headlight = false) : INetMessage<AircraftStateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = 44;
@@ -525,7 +527,7 @@ public readonly record struct AircraftStateMessage(
         float rudder = reader.ReadSByte() / 127f;
         message = new AircraftStateMessage(
             seat, sequence, position, attitude, velocity,
-            throttle, aileron, elevator, rudder, (flags & 1) != 0);
+            throttle, aileron, elevator, rudder, (flags & 1) != 0, (flags & 2) != 0);
         return reader.Valid;
     }
 
@@ -534,7 +536,7 @@ public readonly record struct AircraftStateMessage(
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Seat);
-        writer.WriteByte((byte)(Nitro ? 1 : 0));
+        writer.WriteByte((byte)((Nitro ? 1 : 0) | (Headlight ? 2 : 0)));
         writer.WriteUInt16(Sequence);
         writer.WriteSingle(Position.X);
         writer.WriteSingle(Position.Y);

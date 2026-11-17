@@ -287,6 +287,8 @@
     "hangar-door-wake": 2.993,
     "hd-model-mesh-import": 0.15,
     "hd-model-swap": 0.3,
+    "headlight-respawn-remote": 0.38,
+    "headlight-switch": 0.03,
     "heat-shimmer": 0.044,
     "hostile-marker-hud": 0.453,
     "hud-auto-dock-line": 0.008,
