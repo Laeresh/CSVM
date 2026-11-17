@@ -610,6 +610,56 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a damage stage replayed inside a death ends with its host ---------------------------------
+
+    // CM08's engine pod: the killing hit replays the last damage stage inside the death burst, so
+    // `sputter_fire` starts on its library copy. The death then switches `healthy` off.
+    // ⚠ Assert the copy-started instance, not only the stage hit's. The stage hit anchors on
+    // `healthy` itself and ends either way; only the kill's copy needs the call site as INPUT_NODE.
+    [Suite("death-stage-sputter-ends",
+        "C1B/M03's engine pod killed after its last damage stage: the sputter fire its death replays stops with the `healthy` node the death switches off, instead of looping on where the engine was")]
+    internal static void DeathStageSputterEnds(TestContext ctx)
+    {
+        var emitters = new CountingEmitterFactory();
+        ctx.EmitterFactory = emitters;
+        ctx.WithWorld("C1B", collision: false, mission: "M03", world =>
+        {
+            var runtime = world.Runtime;
+            var zep = runtime.FindNodes("piratezep").FirstOrDefault();
+            var pod = zep == null ? null : runtime.FindNodes("leng11", zep).FirstOrDefault();
+            var healthy = pod == null ? null : runtime.FindNodes("healthy", pod).FirstOrDefault();
+            var inst = runtime.Destructibles.Resolve(healthy) ?? runtime.Destructibles.Resolve(pod);
+            ctx.Check(inst != null && healthy != null,
+                $"C1B/M03's piratezep carries engine pod leng11 with its destroy pool def={inst?.Def.AnimName ?? "-"}");
+            if (inst == null || healthy == null)
+            {
+                return;
+            }
+
+            void Step(float seconds)
+            {
+                for (int i = 0, n = Mathf.RoundToInt(seconds * 60f); i < n; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+            }
+
+            // Down to the last stage (HP 10 and under calls damage1 and its sputter_fire), then dead.
+            runtime.DamageAt(inst.Anchor, inst.MaxHealth - 5f);
+            Step(2f);
+            ctx.Same(2, runtime.AnimStateOf("sputter_fire"), $"the last damage stage starts the sputter");
+            runtime.DamageAt(inst.Anchor, inst.MaxHealth + 1f);
+            Step(3f);
+            ctx.Check(inst.Status == DestructibleRegistry.State.Destroyed && !healthy.Visible,
+                $"the pod dies and its death switches healthy off status={inst.Status} healthy.visible={healthy.Visible}");
+            ctx.Check(runtime.AnimStateOf("sputter_fire") != 2,
+                $"no sputter loops on past its host state={runtime.AnimStateOf("sputter_fire")}");
+            var burning = emitters.Built.Where(e => e.Key == "fire_smoke" && e.Sustaining).ToList();
+            ctx.Check(burning.Count == 0,
+                $"no fire_smoke emitter is left burning: {string.Join(" ", burning.Select(e => $"({e.LastPos.X:0},{e.LastPos.Y:0},{e.LastPos.Z:0})"))}");
+        });
+    }
+
     // ---- a def's own death choreography is never a revival --------------------------------------
 
     // The Barracuda (`sub_destruction`, C3/M03) switches its `dbase` node off as an ordinary step of
