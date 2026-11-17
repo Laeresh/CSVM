@@ -28,6 +28,13 @@ public sealed class Headlight
     /// <summary>Where the light sits on an aircraft with no model to measure, metres ahead of its origin.</summary>
     public const float BareNoseDistance = 5f;
 
+    /// <summary>The shadow's depth bias, over Godot's spot default 0.03. ⚠ Keep it raised: across a
+    /// 250 m range the default leaves a building or rock face shadowing itself in broad stripes.</summary>
+    public const float ShadowBias = 0.1f;
+
+    /// <summary>The shadow's normal bias, over Godot's default 1.0, for the same stripes. TUNE.</summary>
+    public const float ShadowNormalBias = 3f;
+
     /// <summary>The beam's warm white. TUNE.</summary>
     public static readonly Color WarmWhite = new(1f, 0.9f, 0.75f);
 
@@ -89,6 +96,8 @@ public sealed class Headlight
             // ⚠ Keep Godot's inverse-distance term off. At its default the beam is energy/d, gone by 60 m in daylight.
             SpotAttenuation = WorldLights.OmniAttenuation,
             SpotAngle = ConeDegrees,
+            ShadowBias = ShadowBias,
+            ShadowNormalBias = ShadowNormalBias,
             LightEnergy = Energy,
             LightColor = WarmWhite,
         };
