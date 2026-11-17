@@ -229,6 +229,8 @@ them, and a shape that resolves nowhere is left out.
 Each build logs `vegetation model <file>: <n> triangles, grade r g b, band 400-600 m` (the band standing) for each
 species it reads, the quickest check that a key was read.
 
+A pack's file for a building decoration (`C5/cb00a.glb`) also keeps that building off the Enhanced city: its stamps draw the pack's mesh at every distance, never the remake's look-alike (`Mech3/CityModels.cs`).
+
 ## Reader rules and edge cases
 
 ### Never replaced

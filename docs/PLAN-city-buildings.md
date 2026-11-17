@@ -27,7 +27,7 @@ still open.
   same hull.
 - A building looks the same near and far, and two buildings of the same hull differ in facade,
   tint and brightness, roof dressing and lit windows.
-- Not every window is lit. The window behaviour is the one the user chose in the `cblock7`
+- Not every window is lit. The window behaviour is the one the user chose in the `cblock1`
   prototype.
 - The city is identical on every launch and on every multiplayer client, with nothing synchronised.
 - The added cost stays inside the vegetation budget on the PC, the distant draw-call count on C5
@@ -53,7 +53,7 @@ objected to; reopen any of them by asking.
 | 7 | How far may a model leave its collision hull? | **About 3 m carved inward and about 4 m of non-solid roof dressing above** (water tanks, vents, parapets). Tall spires and deep setbacks only where the original hull has them. Both numbers are TUNE. |
 | 8 | Budget | **The vegetation budget**: at most 2.0 ms GPU and 0.5 ms CPU added at fixed PC views, with C5 views added to that instrument, plus the C5 rule that the distant draw-call count does not rise. The Deck follows the existing vegetation fallback at two or more panes. No Deck is available to measure on, so its one-pane cost is unmeasured and the new city is off by default on an integrated GPU until it is measured. |
 | 9 | Menu option | **The existing 3D Vegetation option, relabelled to cover scenery.** Off is the original city; its other four words (Near, Far, Very Far, Extreme) set the hand-over distance. The stored key stays. |
-| 10 | Rollout | **A `cblock7` prototype first**, then the remaining hulls after the user's verdict. |
+| 10 | Rollout | **A prototype on the `cblock1` tower district first**, then the remaining hulls after the user's verdict. The user first chose `cblock7` on the planner's recommendation and moved the prototype when A2 showed that district lies under the street fog; the tower district shows the repetition and the all-lit windows plainly, and whole lit floors only read on towers. The `det` dressing models on the `cblock1` buildings keep drawing as they are for the prototype. |
 | 11 | Authoring | **Python generators through headless Blender**, as the vegetation models are built. Blender MCP is not part of the pipeline. |
 | 12 | Faithful look | Untouched. |
 | 13 | Mirroring or turning a building | None. A turned model no longer matches its collision. |
@@ -79,6 +79,7 @@ objected to; reopen any of them by asking.
 | 2 | "67,836 buildings are placed." | The engine's C5 load log reads 66,763 3D decorations, and that count includes the `det` halves: 54,194 buildings and 12,569 `det` halves. |
 | 3 | "A template's building count is its number of buildings" (28, 24, 27, 17, 23, 25, 25). | Those count decorations. A `det` half is a separate decoration at its building's origin, so the tiles hold 16, 16, 17, 17, 17, 19 and 25 buildings. |
 | 4 | "A `det` half is half of the building's volume." | It is exterior dressing (rails, fire escapes, scaffolding, roof boxes) on its own independent roll, with its own collision shape, fading at 75 to 250 m. |
+| 5 | "`cblock7` is where the repetition is worst for a player, because it has the most buildings from the fewest shapes." | Its large district lies inside the fog volumes `fvol6` and `fvol31` to `fvol34` (up to y = 183): a low camera there sees about ten buildings in near-black, and from above it is seen through the cloud field. In the clear it stands only in two patches of about 1 km² (A2). |
 
 "What the data actually ships" comes from one read-only survey of the docs, the code and the local
 extraction, corrected by A1's census where the two disagreed. The survey's code references outside
@@ -138,6 +139,29 @@ trims 16x16.
 `cb12b` (20 x 16 x 22 m, with a chimney); `cb13a` and `cb13b`, one shape (16 x 20 x 26 m);
 `cb14a`, `cb14b` and `cb14c`, one box (16 x 12 x 17 m) with a hipped, a lower hipped and a gabled
 roof. None has a `det` model. `cb12a` and `cb13a` carry the ground-floor awning.
+
+**The `cblock1` hulls, the prototype's.** Fourteen models in twelve shapes, 16 buildings per tile
+and about 12,700 placed:
+
+| Shape | Models | Box (m) | Triangles | Facade texture | Lots per tile |
+|---|---|---|---|---|---|
+| `cb00a` | `cb00a`, `cb00b` | 40 x 24 x 16 | 14 | `smbldg1`, `smbldg2` | 4 |
+| `cb01a` | `cb01a`, `cb01b` | 32 x 32 x 24 | 16 | `smbldg1`, `smbldg2` | 3 |
+| `cb01c` | `cb01c` | 32 x 32 x 24 | 16 | `smbldg3` | roll |
+| `cb01d` | `cb01d` | 32 x 32 x 24 | 22 | `smbldg4` | roll |
+| `cb02a` | `cb02a` | 31.8 x 31.8 x 65.2 | 50 | `bldg3` | 3 |
+| `cb02b` | `cb02b` | 32 x 32 x 64 | 54 | `bldg4` | roll |
+| `cb03a` | `cb03a` | 32 x 32 x 64 | 107 | `bldg1` | 2 |
+| `cb03b` | `cb03b` | 32 x 32 x 64 | 112 | `bldg2` | roll |
+| `cb04a` | `cb04a` | 32 x 32 x 80 | 72 | `bldg2`, the clock and a motif | 2 |
+| `cb04b` | `cb04b` | 32 x 32 x 80 | 50 | `bldg3` | roll |
+| `cb05a` | `cb05a` | 23.7 x 23.7 x 58.9 | 19 | `bldg4`, a teal crown | 2 |
+| `cb05b` | `cb05b` | 24 x 24 x 92 | 31 | `bldg1` | roll |
+
+`cb04a` carries a further mesh, its upper setback with the clock (20 to 69 m). The towers' boxes
+hide setbacks; a near model follows its hull's measured tiers, not its box. `cb00` to `cb03` stand
+with `det` dressing models (`cb00det01` to `03`, `cb01det01` and `02`, `cb02det01` and `02`,
+`cb03det01` and `02`).
 
 **Placement.** One stamp per integer repeat of the ground texture's UV across each triangle
 (`docs/org/clutter.md:196-206`). No position, rotation or orientation variation is authored in any
@@ -216,10 +240,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ C5 views in the budget instrument, with a baseline
 3. ☑ The per-building selection seam, decided from the code
 
-### Wave B, the `cblock7` prototype
+### Wave B, the `cblock1` prototype
 
-11. ☐ Building generator, facade atlas, near models and far boxes for the `cblock7` hulls
-12. ☐ Draw the near model and the far box on the building stamps
+11. ☑ Building generator, facade atlas, near models and far boxes for the `cblock1` hulls
+12. ☑ Draw the near model and the far box on the building stamps
 13. ☐ Per-building facade, tint and the three window modes in the shader
 14. ☐ Measure the prototype against the budget
 15. ☐ The user's verdict on the prototype
@@ -428,13 +452,60 @@ keeps geometry variants to about two per hull and limits them to the near tier.
 
 ---
 
-# Wave B, the `cblock7` prototype
+# Wave B, the `cblock1` prototype
 
-## B11 ☐ Building generator, facade atlas, near models and far boxes for the `cblock7` hulls
+## B11 ☑ Building generator, facade atlas, near models and far boxes for the `cblock1` hulls
 
-**Goal.** For each of the six shapes `cblock7` places (`cb12a`, `cb12b`, `cb13a` with `cb13b`,
-`cb14a`, `cb14b`, `cb14c`): about two near models and one far box, built by script, sharing one C5
-facade atlas. The four boxes are 20 x 16 x 14 m, 20 x 16 x 22 m, 16 x 20 x 26 m and 16 x 12 x 17 m.
+**Landed.** `CSVM/data/city_models/` builds C5's city models headless in Blender through
+`MakeVegetationModel.ps1 -Folder city_models -Species c5`. `c5.py` holds each `cblock1` kind's
+hull, measured by `analysis/city-hulls/tiers.py` as horizontal sections from the base up, with its
+family and its original's mean colour. `city_blender.py` turns a hull into a far box that is
+exactly that profile, and into two near variants with parapets, a set-back top floor or a reshaped
+crown, and roof dressing. `city_atlas.py` paints the atlas: four families (grey stone walk-up,
+brick tenement, warm office tower, dark steel office tower), each with four facade rows and a
+roof, no lit window painted in, and the ids texture holding window id, floor and glass weight.
+Each of the fourteen kinds has a `<kind>.glb.bin` with nodes `near0`, `near1` and `far`, beside
+`facade.png.bin` and `facade_ids.png.bin`, 860 KB in all. The near models hold 22 to 340
+triangles. The far boxes hold 10 to 74; `cb02a`, `cb02b`, `cb03a`, `cb03b`, `cb04a` and `cb04b`
+are above 30 because their notches and stepped setbacks need the faces, and each stays at or below
+its original's count. A rerun writes every file byte for byte the same, and the export's
+`data/*.bin` filter packs them.
+
+**What the shader reads**, as built:
+
+- **Atlas.** 1024 x 1024, cells of 160 px (a 128 px tile and a 16 px wrapped gutter on every
+  side). Atlas row f is family f (0 grey stone, 1 brick, 2 warm tower, 3 dark steel tower);
+  columns 0 to 3 are the family's facade rows and column 4 its roof. A tile is 8 x 8 m, two floors
+  of 4 m. The lookup is `(col*160 + 16 + fract(u)*128, f*160 + 16 + (1 - fract(v))*128) / 1024`
+  with `textureGrad` on the unwrapped coordinates.
+- **`TEXCOORD_1`** is (family, class: 0 wall, 1 roof). **`TEXCOORD_0`** u carries a whole-number
+  base per wall plane, the same on near and far, so every window column of a building has its own
+  `floor(u)`. A window's identity is (`floor(u)`, R, `floor(v)*2 + G`). A wall end that would cut a
+  window is mapped onto the solid band round a floor line.
+- **Ids texture.** R the window id within the tile, 1 to at most 24, 0 for wall; G the floor
+  within the tile, 0 lower and 1 upper; B the glass weight, 0 for frames, 140 behind a drawn
+  blind, 255 for clear glass, meant to multiply the emission; A 255.
+- **Grade.** Each kind's `baseColorFactor` puts its far box's mean atlas colour on its original's
+  mean colour. That mean includes the original's painted lit windows, so the unlit walls sit
+  brighter than the original's walls; the game's lighting shows whether that needs a correction.
+
+**Verified.** `analysis/city-hulls/margin.py` compares each mesh's height field with the
+original's, all meshes of the chain included. Every near and far mesh is inside the margin: at
+most 2.0 m inward (a set-back top floor), at most 3.69 m above the hull (a water tank), and no
+sideways overhang; each far box reads 0, 0, 0. Parsing the files back shows `TEXCOORD_1` as
+(family, class) and a single-sided material carrying the grade. The orchestrator looked at the
+three images and sent them to the user: each original beside its near models and far box, the
+atlas, and an offline night mock that lights windows from the ids texture alone. The user's
+answer to "is this facade and model direction right to build the in-game shader on?" was "Yes,
+build on it". The scripts were run by the item's agent and not re-run. Not in the models: the
+clock top on `cb04a`, the teal crown on `cb05a` and the tile slopes on `cb04b` keep their shape
+and lose their decoration, and no ground-floor shopfront row exists.
+
+**Original approach (kept for reference).**
+
+**Goal.** For each of the twelve shapes `cblock1` places (the table in "What the data actually
+ships"): about two near models and one far box, built by script, sharing one C5 facade atlas with
+the walk-up and office-tower families.
 
 **Evidence (confidence: lead-only).** The pipeline and its rules are in `docs/tooling.md:746-828`
 and `CSVM/data/vegetation_models/veg_blender.py`. `read_card` there reads an original card's size
@@ -449,10 +520,10 @@ from `analysis/city-hulls/FINDINGS.md`. Outputs go to `CSVM/data/city_models/C5/
 Decision 7's margin: at most about 3 m carved inward, at most about 4 m of non-solid roof
 dressing. What the files hold, from A3:
 
-- **One `<model>.glb.bin` per kind name**, substitutes included (`cb12a`, `cb12b`, `cb13a`,
-  `cb13b`, `cb14a`, `cb14b`, `cb14c`), named as the decoration without `.flt`. Mesh nodes `near0`,
+- **One `<model>.glb.bin` per kind name**, substitutes included (`cb00a`, `cb00b`, `cb01a` to
+  `cb01d`, `cb02a` to `cb05b`), named as the decoration without `.flt`. Mesh nodes `near0`,
   `near1` and `far`. Metres, Y up, in the drawn gamez mesh's own frame, covering the main mesh and
-  every further mesh of the building (the awning on `cb12a` and `cb13a`). Opaque, outward winding
+  every further mesh of the building (the clock setback on `cb04a`). Opaque, outward winding
   and normals, no bottom face on `far`, and `far` at about the original's triangle count (at most
   30).
 - **`TEXCOORD_0`** is facade tile coordinates: u along each wall from the footprint corner in tile
@@ -478,9 +549,56 @@ and average colours are measurements. Generators run through `MakeVegetationMode
 sibling in headless Blender, never through Blender MCP. Facade families come from A1's montage, so
 B11 does not start before the user has seen it.
 
-## B12 ☐ Draw the near model and the far box on the building stamps
+## B12 ☑ Draw the near model and the far box on the building stamps
 
-**Goal.** Under Enhanced with the option on, a `cblock7` building draws its near model inside the
+**Landed.** `Mech3/CityModels.cs` reads a building model's hull from
+`data/city_models/<CHAPTER>/<model>.glb.bin`: the `far` node as the box, `near0`, `near1` and so on
+as the near variants, and the far material's `baseColorFactor` as a linear grade. A file without
+`far`, or with a moved node, is warned and skipped. Each solid stamp's custom data `w` carries
+`CityModels.Seed` of its stamped point, a 24-bit integer; cards keep their fog-volume row, and no
+solid shader reads `w`. `ClutterBuilder.Build` gives each solid kind with a hull a
+`ClutterInstances.City`. A kind whose mesh a model pack replaced gets none. A further mesh of a
+dressed building gets a `City` with no box, which hides its node while the city is drawn.
+`ClutterInstances` draws the box as a third layout in the kind's own cells. The near variants
+stand in 512 m cells keyed by cell and variant under `ModelRoot`, on the models' layer, with
+shadows off. The original layouts and every collider stay built, so a live move swaps nodes. The
+city draws only while Rich and a 3D Vegetation word other than Off stand. The city shader is the
+clutter's Enhanced lit arm on the flat grade, with no instance uniform. The box fades out across
+the band by `ModelShare` and the near variant keeps the dither cells the box gives up. The map
+edge's copies draw the box whole, under an unbanded copy of its material. The engine suite
+`city-buildings` (in `GraphicsSwitchSuites.cs`) and the unit tests `CityModelsTests` pin it.
+
+**Where it differs from the contract below.** `Hull.Box` is not nullable: a file with no `far`
+node is a bad file, since a hull with no box would draw nothing at distance. `CityModels.Root` is
+an internal seam so a suite reads fixture hulls from its scratch folder. Every chapter passes its
+name to the builder, and a chapter with no vegetation entry gains its model root only when a
+building takes a hull. The map edge swaps a copy's mesh and material in place on a live move,
+because rebuilding the copies would attach their collision twice.
+
+**Verified.** By the item's agent, on the targeted runs and `-Quick`; the complete battery is the
+merge gate and is not run yet. `city-buildings` passes on fixture hulls for 13 dressed kinds: a
+pack's `cb00b` stays original; collision shapes, attachments, region bodies and slots equal a
+build with no hull; visible clutter nodes go from 3,189 to 3,178 (the `cb04a` setback hidden). It
+was seen to fail with the city forced off. Against B11's files every check but the fixture's own
+grade passes, and the log reads `city models: 13 kind(s) with a hull (drawn), 199 far node(s),
+4991 near node(s), 1 further mesh(es) it hides`. `CityModelsTests` 2 of 2; `clutter-cells`,
+`clutter-activation`, `clutter-determinism`, `clutter-rich-variation`, `vegetation-models`,
+`vegetation-added-stamps` and `hd-model-swap` green; `-Quick` passes with 1,583 unit tests and 13
+engine suites. Of 41 goldens only `c5-city-night-enhanced` moved (52d84488 to abebc4a1, stable on
+re-render); it is not re-pinned until B13 has given the buildings their facades. The orchestrator
+read the source diff and `CityModels.cs`, and looked at the capture at A2's `C5-cb1` view: the
+towers stand as flat-graded look-alikes with setbacks and roof dressing, the `det` dressing still
+draws its originals, and the flat grade reads far lighter than the original's dark walls.
+
+**Open after this item.** The near tier adds about 5,400 nodes over the whole map, as many as C5
+draws today; B14 measures what culling them costs. The suites that open C5 under Enhanced outside
+the targeted list were not run. Map-edge box copies keep a `node_bias` instance parameter their
+shader does not declare; whether Godot still gives them an instance-uniform block is unverified.
+`city-buildings` is listed as headless-only-failing without a headless run that proves it.
+
+**Original approach (kept for reference).**
+
+**Goal.** Under Enhanced with the option on, a `cblock1` building draws its near model inside the
 hand-over distance and its far box beyond it, its original mesh is not drawn, and its collision is
 unchanged. With the option off, or under Faithful, the city is exactly today's.
 
@@ -489,7 +607,8 @@ and 600 to 900 m (Far), by dither. Building far fades reach 700 to 900 m for tow
 Enhanced stretch. The seam is whatever A3 decides.
 
 **Approach.** Implement Decisions 18 to 26 for the hulls B11 produces. Hulls without a file keep
-their original mesh, so the prototype runs with only `cblock7` dressed. The contract from A3, in
+their original mesh, so the prototype runs with only `cblock1` dressed, and the `det` dressing
+kinds keep drawing their original meshes (Decision 10). The contract from A3, in
 order:
 
 1. **`CSVM/src/Mech3/CityModels.cs`** (new, static): `ShippedRoot` (`res://data/city_models`),
@@ -531,7 +650,7 @@ build's count; live moves to Off, back to Near and to Faithful swap the layouts;
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
-**Verify.** A capture low over a `cblock7` district with the option off, near and far. The
+**Verify.** A capture at A2's `C5-cb1` view with the option off, near and far. The
 collision overlay shows the same shapes in all three. The 8-chapter `--freecam` regression is clean
 and the other chapters' mesh and node counts are unchanged. <TODO: the exact capture commands.>
 
@@ -581,7 +700,8 @@ question for B15.
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
-**Verify.** A montage of one `cblock7` district in each mode, near and from altitude, sent to the
+**Verify.** A montage of the `cblock1` district in each mode, at A2's `C5-cb1` and `C5-alt` views,
+sent to the
 user. Two launches produce identical frames in modes 1 and 3. In mode 2 a floor and a single
 window are each seen to switch during one flight.
 
@@ -599,7 +719,7 @@ Deck the 3D vegetation models cost 1.9 to 2.1 ms on C3.
 
 **Approach.** Run A2's instrument on the C5 views with the option off, near and far, on the PC.
 Compare draw calls at the altitude view against the baseline. Scale the
-`cblock7` result to the full city by hull count from A1 and state the estimate as an estimate.
+`cblock1` result to the full city by hull count from A1 and state the estimate as an estimate.
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
@@ -646,9 +766,9 @@ building in the Enhanced city draws an original mesh.
 **Evidence (confidence: lead-only).** The hull count is A1's. The facade families, variants per
 hull and tint spread are B15's.
 
-**Approach.** Extend B11's per-hull specs to the remaining hulls, district by district, starting
-with `cblock1` (the second largest area). The tower hulls up to 108 m are where the original's own
-setbacks and tops must be measured and kept. <TODO: the per-district order after `cblock1`.>
+**Approach.** Extend B11's per-hull specs to the remaining 33 shapes, district by district:
+`cblock2` and `cblock3` (the rest of the towers, up to 108 m), then `cblock4` and `cblock7` (the
+walk-ups, more than half of the placed buildings), then `cblock5` and `cblock6`.
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 
@@ -659,7 +779,8 @@ the user.
 **⚠ Traps.** The `hotelsign0/1/2` blocks are placed by no template; they need no model. The 16
 `det` shapes are not hulls. Whether a near model draws its own dressing and the original `det`
 model is suppressed, or the `det` models keep drawing as they are, is undecided and is put to the
-user before C21 starts; `cblock7` has no `det` model, so the prototype does not depend on it.
+user before C21 starts, with the prototype's towers in front of them, where the original `det`
+models still draw over the new near models.
 
 ## C22 ☐ Relabel the 3D Vegetation option to cover scenery
 
@@ -689,7 +810,9 @@ existing C5 check and stays true. <TODO: which golden frames show C5 under Enhan
 move.>
 
 **Approach.** Add the check beside the existing graphics-switch checks. Re-pin the C5 Enhanced
-goldens that move, and add one frame low over `cblock7`.
+goldens that move, and add one frame at A2's `C5-cb1` view. A frame over `cblock7` is valid only
+outside the fog volumes, and A2's `C5-cb7` pose takes one of two pixel hashes from launch to
+launch, so it is not a golden pose until that flip is found.
 
 **Model recommendation.** <TODO: not settled in the planning session.>
 

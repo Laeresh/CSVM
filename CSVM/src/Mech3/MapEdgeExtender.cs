@@ -94,6 +94,9 @@ public sealed partial class MapEdgeExtender : Node3D
     // Each live cell's clutter nodes with what their visibility range is cut from.
     private readonly Dictionary<(int, int), List<EdgeDraw>> _draws = new();
 
+    // Per kind with a hull, its box material with no band: no near model stands past the edge.
+    private readonly Dictionary<int, Material> _edgeBoxes = new();
+
     // The focus cells the current window was built around, one per player (splitscreen serves
     // every pane from one window). Empty until the first Update.
     private readonly List<(int, int)> _centerCells = new();
@@ -115,6 +118,9 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // Whether the live copies draw the Rich variant, so a live Vegetation Quality move rebuilds them.
     private bool _rich = VegetationQualitySetting.RichOn;
+
+    // Whether the copies of a building with a hull draw its far box, so a live move swaps them back.
+    private bool _city = CityModels.On;
     private bool _tinted;
     // Starts true so the FIRST window build is timed too: it builds the whole window from nothing,
     // which is the same work an F15 fold change costs. That makes the hitch a measured number in
@@ -410,10 +416,16 @@ public sealed partial class MapEdgeExtender : Node3D
             _rich = VegetationQualitySetting.RichOn;
             RedrawRichCopies();
         }
+        bool city = _city != CityModels.On;
+        _city = CityModels.On;
         foreach (var draws in _draws.Values)
         {
             foreach (var draw in draws)
+            {
+                if (city)
+                    DrawCity(draw.Node, draw.Kind);
                 draw.ApplyRange();
+            }
         }
     }
 
@@ -733,6 +745,7 @@ public sealed partial class MapEdgeExtender : Node3D
             var mmi = Copies(kind.Mesh, rich?.Material ?? kind.Material, $"clutter_{kindIndex}", bodyRid, firstSlot);
             if (kind.Solid)
                 mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
+            DrawCity(mmi, kindIndex);
             var draw = EdgeDraw.Of(mmi, kindIndex, kind.Mesh.GetAabb(), placements) with { Rich = rich != null };
             draw.ApplyRange();
             draws.Add(draw);
@@ -784,6 +797,25 @@ public sealed partial class MapEdgeExtender : Node3D
             }
         }
         return copies;
+    }
+
+    // While the city is drawn, a copy of a building with a hull draws its far box whole at every distance. A further
+    // mesh of it draws nothing then. The original mesh comes back otherwise. Its collision stays either way.
+    private void DrawCity(MultiMeshInstance3D copy, int kindIndex)
+    {
+        var kind = _clutter![kindIndex];
+        if (kind.City is not { } city)
+            return;
+        bool box = _city && city.Box != null;
+        copy.Visible = !_city || city.Box != null;
+        copy.Multimesh.Mesh = box ? city.Box : kind.Mesh;
+        if (box && !_edgeBoxes.ContainsKey(kindIndex))
+        {
+            var unbanded = (ShaderMaterial)city.BoxMaterial!.Duplicate();
+            unbanded.SetShaderParameter(VegetationModels.BandParam, Vector2.Zero);
+            _edgeBoxes[kindIndex] = unbanded;
+        }
+        copy.MaterialOverride = box ? _edgeBoxes[kindIndex] : kind.Material;
     }
 
     // Every live copy re-reads its source stamp, once per change the activation reports. Copies

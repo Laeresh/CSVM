@@ -64,6 +64,9 @@ public sealed class ClutterBuilder
     // vertical and calls nothing from it.
     private const string FacadeInclude = "#include \"res://shaders/csky_facade.gdshaderinc\"";
 
+    // The node the near models of the vegetation and the city stand under (ModelRoot).
+    private const string ModelRootName = "vegetation_models";
+
     // The cutout the scissor variant applies, at Godot's own default threshold. ⚠ Emit it only when
     // the archive calls the card's alpha hard: a cut through soft ink both erases what sits under
     // the threshold and solidifies what sits above it, and the original cuts nothing at all.
@@ -163,7 +166,7 @@ public sealed class ClutterBuilder
     /// and <c>far_fade_range</c>. Null builds every decoration at its authored model and size, never fading.</param>
     /// <param name="fogVolumes">The chapter's armed fog volumes (<see cref="FogVolumeRow"/>).</param>
     /// <param name="vegetation">The chapter's vegetation entry; its listed kinds get a Rich variant that <paramref name="mask"/> thins.</param>
-    /// <param name="modelChapter">The chapter folder the near models are read under; null draws none.</param>
+    /// <param name="modelChapter">The chapter folder the near models and the city's hulls are read under; null draws none.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
         ClutterTemplateSpec? props = null, IReadOnlyList<FogVolumeBox>? fogVolumes = null,
         VegetationEntry? vegetation = null, VegetationMask? mask = null, string? modelChapter = null)
@@ -302,7 +305,8 @@ public sealed class ClutterBuilder
     public int SolidCollisionInstances { get; private set; }
 
     /// <summary>The node the near models stand under, beside the clutter root and never inside it. A crater or a
-    /// census walking the clutter then reads each stamp once. Null without a model chapter; the caller parents it.</summary>
+    /// census walking the clutter then reads each stamp once. Null with neither a vegetation entry nor a building's
+    /// hull; the caller parents it.</summary>
     public Node3D? ModelRoot { get; private set; }
 
 
@@ -552,7 +556,8 @@ public sealed class ClutterBuilder
         BakeRich();
 
         var root = new Node3D { Name = "clutter" };
-        ModelRoot = _modelChapter != null ? new Node3D { Name = "vegetation_models" } : null;
+        // A chapter with no vegetation entry gains one only when a building takes a hull (CityOf).
+        ModelRoot = _modelChapter != null && _vegetation != null ? new Node3D { Name = ModelRootName } : null;
         var parts = new List<string>();
         var exported = new List<KindExport>();
         var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
@@ -569,6 +574,7 @@ public sealed class ClutterBuilder
         {
             if (kind.Instances.Count == 0)
                 continue;
+            int replaced = _scene?.ReplacedMeshCount ?? 0;
             var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
             if (mmi == null)
                 continue;
@@ -576,11 +582,14 @@ public sealed class ClutterBuilder
             var material = mmi.MaterialOverride;
             var rich = RichVariantOf(kind);
             var near = NearOf(kind, rich, ModelRoot);
-            var drawn = ClutterInstances.Draw(root, mmi, kind.Instances, kind.Fades, rich, near);
+            // A model pack's file for the building wins over its hull.
+            var city = kind.Solid && _scene?.ReplacedMeshCount == replaced ? CityOf(kind) : null;
+            var drawn = ClutterInstances.Draw(root, mmi, kind.Instances, kind.Fades, rich, near, city);
             exported.Add(new KindExport
             {
                 Rich = rich,
                 Near = near,
+                City = city,
                 Model = kind.Model,
                 Texture = kind.Label,
                 Mesh = mesh,
@@ -611,9 +620,11 @@ public sealed class ClutterBuilder
                         continue;
                     var partMesh = (ArrayMesh)partMmi.Multimesh!.Mesh;
                     var partMaterial = partMmi.MaterialOverride;
-                    var partDrawn = Drawn(root, partMmi, placements, kind.Fades);
+                    var partCity = city != null ? new ClutterInstances.City(null, null, null) : null;
+                    var partDrawn = ClutterInstances.Draw(root, partMmi, placements, kind.Fades, city: partCity);
                     exported.Add(new KindExport
                     {
+                        City = partCity,
                         Texture = kind.Label,
                         Mesh = partMesh,
                         Material = partMaterial,
@@ -667,6 +678,9 @@ public sealed class ClutterBuilder
         var modelled = exported.Where(k => k.Near != null).ToList();
         if (modelled.Count > 0)
             Log.Info("world", $"vegetation models: {modelled.Sum(k => k.Instances?.ModelCellCount ?? 0)} node(s) over {modelled.Count} kind(s), {string.Join(", ", modelled.Select(k => $"{k.Model}{(k.Added ? " added" : "")} {k.Instances?.ModelCellCount ?? 0}"))}");
+        var hulls = exported.Where(k => k.City?.Box != null).ToList();
+        if (hulls.Count > 0)
+            Log.Info("world", $"city models: {hulls.Count} kind(s) with a hull ({(CityModels.On ? "drawn" : "not drawn")}), {hulls.Sum(k => k.Instances?.CellCount ?? 0)} far node(s), {hulls.Sum(k => k.Instances?.ModelCellCount ?? 0)} near node(s), {exported.Count(k => k.City is { Box: null })} further mesh(es) it hides; models {string.Join(", ", hulls.Select(k => Extraction.HdModels.NodeKey(k.Model)).Distinct())}");
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 
@@ -770,6 +784,9 @@ public sealed class ClutterBuilder
             // The word's band on the card and its model, zero for Off so the card draws at every distance.
             (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
             (kind.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.ReachParam, VegetationModels.ReachSq);
+            // A building's box and near model hand over across the same band.
+            (kind.City?.BoxMaterial as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+            (kind.City?.Near?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
             if (kind.Near != null)
             {
                 (kind.Rich?.Material as ShaderMaterial)?.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
@@ -820,12 +837,6 @@ public sealed class ClutterBuilder
         Collect(world);
         return built;
     }
-
-    // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
-    // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.
-    private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
-        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades) =>
-        ClutterInstances.Draw(root, whole, placements, fades);
 
     // The kind's Rich variant, null for a kind the entry does not list. Its material is made on first
     // use, so a session that never lists the kind compiles no Rich card shader for it.
@@ -920,7 +931,9 @@ public sealed class ClutterBuilder
                         // and leaving the substitute/scale draws alone keeps a fade A/B fade-only.
                         var fade = ClutterKindProps.FadeThresholds(
                             kind.FarFadeMin, kind.FarFadeMax, (float)fadeRng.NextDouble());
-                        target.Fades.Add(new Color(fade.X, fade.Y, fade.Z, FogVolumeRow(fogVolumes, p)));
+                        // w: a card's fog-volume row, a building's seed (CityModels). No solid shader reads w.
+                        float w = target.Solid ? CityModels.Seed(p) : FogVolumeRow(fogVolumes, p);
+                        target.Fades.Add(new Color(fade.X, fade.Y, fade.Z, w));
 
                         // A sprite drops its basis and authored Y, since the shader re-faces it and
                         // its mesh carries the card's extent; a 3D decoration keeps both.
@@ -1326,6 +1339,20 @@ public sealed class ClutterBuilder
             kind.ModelMaterial = material;
         }
         return new ClutterInstances.Near(parent, model.Mesh, kind.ModelMaterial);
+    }
+
+    // The building's look-alike under the city, null for a model with no hull. Each stamp's near variant reads its seed.
+    private ClutterInstances.City? CityOf(Kind kind)
+    {
+        if (_modelChapter == null || CityModels.For(_modelChapter, Extraction.HdModels.NodeKey(kind.Model)) is not { } hull)
+            return null;
+        ModelRoot ??= new Node3D { Name = ModelRootName };
+        var near = hull.Near.Count == 0 ? null : new ClutterInstances.Near(ModelRoot, hull.Near[0], hull.NearMaterial)
+        {
+            Variants = hull.Near,
+            VariantOf = kind.Fades.Select(f => CityModels.VariantOf(f.A, hull.Near.Count)).ToArray(),
+        };
+        return new ClutterInstances.City(hull.Box, hull.BoxMaterial, near);
     }
 
     // The lab's edits: the Rich variant baked again and handed to each kind's drawn instances, then recut.
@@ -2037,6 +2064,9 @@ public sealed class ClutterBuilder
 
         // The near model drawn over the Rich stamps, null for a card with none. The map edge copies it too.
         public ClutterInstances.Near? Near;
+
+        // A building's look-alike under the city, null without a hull; a further mesh's has no box and hides.
+        public ClutterInstances.City? City;
 
         // Stamps the remake added on a picked texture, drawn under Rich alone. Their Placements
         // are the unvaried points, which nothing draws.

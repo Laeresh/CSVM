@@ -70,7 +70,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/MapEdgeExtender.cs`, rolling window of repeated border tiles and clutter continuing the world past the map edge, one per session.
 - `src/Mech3/Clutter.cs`, stamps the boot-script clutter templates onto matching-textured terrain at the polygon's own UV lattice.
 - `src/Mech3/ClutterActivation.cs`, draws each clutter stamp only while the world node it was stamped from is visible.
-- `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell, and under Rich its near model's cells.
+- `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell, and under Rich its near model's cells or a building's city box and near variants.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/VegetationSidecar.cs`, the shipped per-chapter vegetation list in `CSVM/data/vegetation.json`: the Rich variation per listed model, the sets the texture picks stamp and the textures that grow ground cover, read with warnings, one chapter's entry written by the vegetation lab.
 - `src/Mech3/VegetationMask.cs`, a chapter's vegetation brush mask over the world area, raw bytes beside the sidecar: sampled per listed stamp, painted by the lab's brush, and the density rule that keeps or drops a stamp under Rich.
@@ -81,6 +81,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ClumpTile.cs`, a species' clump tiles and their sidecar, read from a model pack before the ones shipped beside the vegetation model, else none.
 - `src/Mech3/GroundCover.cs`, the Ground Cover word's `cards`, the default under Rich: new-art grass tufts and crop rows on the sidecar's cover textures near the camera, placed on the ground's texture lattice, coloured and lit as the ground under them, built per 64 m cell as the cameras come near.
 - `src/Mech3/VegetationModels.cs`, a listed card species' 3D look-alike under Rich, drawn on the card's own stamps near the camera and dithered over to the card across the 3D Vegetation word's band, in the card's unlit shading graded to its colour; read from a model pack before the shipped GLB.
+- `src/Mech3/CityModels.cs`, the Enhanced city under Rich: a building model's script-built hull file (a far box and near variants) read from `data/city_models/`, drawn over the building's stamps in place of its original mesh, which keeps its collision; the building seed in the stamp's custom data and the variant it picks.
 - `src/Mech3/VegetationVariation.cs`, one listed stamp's Rich variation: a texture-space jitter clamped into its triangle, a card mirror for the yaw, an instance-colour tint, on its own fixed stream.
 - `src/Mech3/VegetationScatter.cs`, the remake's added stamps on a picked texture under Rich: a set's fixed scatter laid once per texture repeat on the triangle's own UV lattice, its count from the set's density a hectare, kept or dropped by the brush mask.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
