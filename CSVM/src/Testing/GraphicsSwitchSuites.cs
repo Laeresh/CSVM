@@ -1631,6 +1631,9 @@ internal static class GraphicsSwitchSuites
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
                 Ring(ctx, freshEnhanced, enhanced: true, "an Enhanced C1B build");
                 HideReadsTheMask(ctx, enhanced, builtFresh);
+                var grids = builtFresh?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new();
+                ctx.Check(grids.Count > 0 && grids.All(g => g.GIMode == GeometryInstance3D.GIModeEnum.Disabled),
+                    $"the ocean's grids stay out of SDFGI's voxels, which blot the water dark next to the camera (#341; {string.Join(", ", grids.Select(g => $"{g.Name}={g.GIMode}"))})");
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,

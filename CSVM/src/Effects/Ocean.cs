@@ -163,6 +163,8 @@ public sealed partial class Ocean : Node3D
                 Name = z == 0 ? "OceanGrid" : $"OceanGrid{z}",
                 Mesh = mesh,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // Voxelised into SDFGI, the swell occludes the probes beside it and blots the water dark (#341).
+                GIMode = GeometryInstance3D.GIModeEnum.Disabled,
                 // The grid follows every camera in its vertex stage, so it must never be culled.
                 CustomAabb = new Aabb(new Vector3(-80000f, -50f, -80000f), new Vector3(160000f, 100f, 160000f)),
             };
