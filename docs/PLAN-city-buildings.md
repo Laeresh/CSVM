@@ -245,7 +245,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Building generator, facade atlas, near models and far boxes for the `cblock1` hulls
 12. ☑ Draw the near model and the far box on the building stamps
 13. ☑ Per-building facade, tint and the three window modes in the shader
-14. ☐ Measure the prototype against the budget
+14. ☑ Measure the prototype against the budget
 15. ☐ The user's verdict on the prototype
 
 ### Wave C, the rest of the city
@@ -764,7 +764,38 @@ window are each seen to switch during one flight.
 hash moves between runs. Whichever mode loses is removed with its switch, not left behind an
 option.
 
-## B14 ☐ Measure the prototype against the budget
+## B14 ☑ Measure the prototype against the budget
+
+**Landed.** `analysis/veg-budget/measure.ps1` measures the city by its 3D Vegetation word on C5,
+where the word reaches only the city: `nomodels` (off), `near`, `far`, `veryfar`, `extreme`,
+`original` (Vegetation Quality Original, a second off) and `winslow`/`winfloors` (the near city
+with the other window modes), at a fifth view, `C5-street`, 45 m over the `cblock1` street grid.
+It also reports scene nodes, the startup line's build times and each mode's `city models:` line.
+A `--det` launch with plain `--graphics=enhanced` draws the city at near. On the PC the prototype
+adds at most 0.27 ms GPU (`C5-cb1`, near) and 0.29 ms CPU (`C5-street`, extreme), and lowers the
+distant draw count at `C5-alt` from 1,776 to 1,709 at near, 1,711 at far and 1,741 at veryfar.
+**Extreme raises it to 1,830, which fails Decision 8's draw-call rule.** The three window modes
+cost the same within 0.02 ms. The city adds about 290 ms to the world build and 5,452 nodes, which
+cost 0.04 to 0.10 ms of `proc_ms` at every view, also out of range. Scaled to the whole city by
+building count (an estimate), the near nodes reach about 23,500 and the CPU cost at near
+approaches 0.5 ms. `CityModels.CellM` and a cap on the city's near reach are the levers, and C21
+does not start before one of them is measured. `analysis/veg-budget/FINDINGS.md` holds the tables.
+The Deck is unmeasured.
+
+**Verified.** By the item's agent. Every comparison is interleaved inside one batch, with 3
+launches per case, 5 at `C5-cb1` and `C5-street` for the window modes, where the street view's
+near delta resolved. The draw and primitive counts repeat exactly in every launch; the extreme
+count at `C5-alt` repeats in two batches, and the near cost at `C5-cb1` reads 0.265 and 0.26 ms in
+two batches. `nomodels` and `original` reproduce A2's counts exactly, and the `city models:` line
+reads `drawn` with 5,438 near nodes in every on mode and `not drawn` with 0 in both off modes. No
+other Godot process ran during the batches and no log carries `camera state 3`. The orchestrator
+read the script diff and the tables; it ran no launch.
+
+**Open after this item.** Whether the `proc_ms` rise is the node count is inferred, not measured
+both ways. At `C5-cb1` extreme costs less GPU than near while drawing more, unexplained. Only
+static poses are measured, with no aircraft, AI or mission.
+
+**Original approach (kept for reference).**
 
 **Goal.** A recorded verdict on whether the prototype holds Decision 8, with the numbers.
 

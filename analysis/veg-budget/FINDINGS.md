@@ -88,10 +88,86 @@ fog (50 to 250 m) and the near-black whiteout, and sees about ten buildings. Out
 `cblock7` is unflagged only in small patches: round (-3328, -3072) and round (-8960, -1792), each
 about 1 km². A pose over the city is valid only when its log carries no `camera state 3` line.
 
+## The city-buildings prototype against the budget
+
+The `cblock1` prototype of the Enhanced city (14 building kinds, `CityModels`) measured against the
+same build with the city off, interleaved in one batch per comparison, on the PC. A `--det` launch
+with plain `--graphics=enhanced` draws the city at near (Rich and the 3D Vegetation word near, the
+defaults), so the baseline's `enhanced` mode is now the city at near. `nomodels`
+(`--vegetation-models=off`) and `original` (`--vegetation-quality=original`) are the city off and
+reproduce the baseline's counts exactly. Each cell is the median of the launch medians and their
+range. The delta is against `nomodels` in the same batch. The CPU delta is `render_cpu_ms` plus
+`proc_ms`; `setup_ms` reads 0.05 to 0.06 in every case and does not move.
+
+| View | Mode | n | gpu_ms | delta | CPU delta | draws | prims |
+|---|---|---|---|---|---|---:|---:|
+| C5-cb1 | off | 3 | 4.80 (4.80-4.80) | | | 893 | 770,150 |
+| C5-cb1 | near | 3 | 5.065 (5.055-5.07) | +0.265 | +0.13 | 880 | 711,975 |
+| C5-cb1 | far | 3 | 4.975 (4.975-4.98) | +0.175 | +0.16 | 928 | 733,457 |
+| C5-cb1 | extreme | 3 | 4.91 (4.90-4.93) | +0.11 | +0.25 | 1,173 | 821,399 |
+| C5-street | off | 5 | 5.945 (5.94-5.95) | | | 744 | 695,703 |
+| C5-street | near | 5 | 6.00 (5.99-6.13) | +0.055 | +0.12 | 743 | 659,425 |
+| C5-street | far | 3 | 5.985 (5.98-5.99) | +0.035 | +0.155 | 785 | 677,225 |
+| C5-street | extreme | 3 | 5.95 (5.95-5.96) | 0.00 | +0.29 | 1,011 | 764,215 |
+| C5-alt | off | 3 | 3.435 (3.43-3.44) | | | 1,776 | 774,563 |
+| C5-alt | near | 3 | 3.38 (3.38-3.385) | -0.055 | +0.06 | 1,709 | 693,194 |
+| C5-alt | far | 3 | 3.39 (3.38-3.39) | -0.045 | +0.06 | 1,711 | 693,646 |
+| C5-alt | veryfar | 3 | 3.40 (3.39-3.40) | -0.04 | +0.09 | 1,741 | 708,974 |
+| C5-alt | extreme | 3 | 3.48 (3.48-3.48) | +0.045 | +0.14 | 1,830 | 743,038 |
+| C5-cm23 | off | 3 | 3.79 (3.785-3.79) | | | 1,160 | 580,292 |
+| C5-cm23 | near | 3 | 3.77 (3.765-3.78) | -0.02 | +0.025 | 1,102 | 532,963 |
+| C5-cm23 | veryfar | 3 | 3.78 (3.78-3.785) | -0.015 | +0.055 | 1,118 | 542,001 |
+| C5-cm23 | extreme | 3 | 3.835 (3.83-3.84) | +0.045 | +0.085 | 1,154 | 558,895 |
+| C5-cb7 | off | 3 | 5.99 (5.985-5.995) | | | 945 | 612,851 |
+| C5-cb7 | near | 3 | 5.98 (5.965-5.98) | -0.01 | +0.085 | 929 | 611,243 |
+
+The street near row is from the window batch (n=5), where its delta is resolved; at n=3 it was
+not. The veryfar rows are from a third batch whose off and far cases agree with the first to
+0.01 ms. C5-street is `--pos=-7306,50,-11700 --lookat=-7306,40,-12600`, 45 m over the `cblock1`
+street grid. C5-cb7 is not a pure control: distant `cblock1` far boxes stand in its frame, so it
+draws 16 fewer calls; its GPU does not move.
+
+**The prototype holds the GPU and CPU budget at every view and every reach.** The largest added
+GPU is 0.27 ms at C5-cb1 at near, repeated across two batches. The largest added CPU is 0.29 ms
+at C5-street at extreme. **The distant draw-call rule holds at near, far and veryfar and fails at
+extreme**: C5-alt draws 1,830 at extreme against 1,776 with the city off, in two batches, while
+the far tier lowers it to 1,709 at near.
+
+The city adds 5,452 nodes at every view, its 5,438 near nodes among them, whether or not any is in
+range. `proc_ms` rises 0.04 to 0.10 ms at every view, also where no near model is in range (C5-cb7,
+C5-cm23). `render_cpu_ms` rises with the near models on screen, 0.02 to 0.06 ms at near and far and
+up to 0.195 ms at extreme. That the `proc_ms` rise is the node count is an inference; the node
+count was not varied on its own. At C5-cb1 extreme costs less GPU than near while drawing more,
+which is unexplained.
+
+**The three window modes cost the same.** At C5-cb1 and C5-street (n=5) scatter, slow and floors
+differ by at most 0.02 ms of GPU, inside the launch ranges, with identical counts and CPU terms.
+
+**World build.** Over 15 launches per mode the startup total reads 7,757 ms with the city off and
+8,044 ms at near (clutter +78 ms, bind +165 ms; the loaded-chapter line +210 ms). The near tier
+is built whatever the reach, so far and extreme build alike.
+
+**Whole city, an estimate.** The 14 dressed kinds place 12,529 of the 54,194 buildings (23 %,
+`../city-hulls/FINDINGS.md`). Scaled by buildings, the whole city would hold about 23,500 near
+nodes, and the node-driven `proc_ms` rise would reach about 0.2 to 0.4 ms at every view, so the
+CPU cost at near would sit close to the 0.5 ms line and extreme would likely pass it. GPU is set
+by the dressed share of the screen, not by the city's size, and stays near the C5-cb1 figure if
+the small-building districts cost alike per pixel, which is unmeasured. The far tier lowers the
+distant draws, while the near tier's draws at C5-alt grow with every dressed kind in range, so
+veryfar's margin of 35 draws is likely to close. The near cell size (`CityModels.CellM`) and a cap
+on the city's near reach are the levers.
+
+The Steam Deck is unmeasured.
+
 ## Reproducing
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb7,C5-cb1,C5-alt,C5-cm23 -Modes enhanced,vdnormal,vdunlimited -Launches 3
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7 -Modes nomodels,near,far,extreme,original -Launches 3
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street -Modes nomodels,near,winslow,winfloors -Launches 5
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-alt,C5-cm23 -Modes nomodels,far,veryfar,extreme -Launches 3
+
+From PowerShell 7 the comma lists go through `powershell -NoProfile -Command "& '<path>' ..."`.
 
 Each launch keeps its windows after the first two (the shader compiles); nothing else prints
 inside them, so the log level does not touch the times. Before reading a batch, check for other

@@ -18,11 +18,17 @@ the range of its launches.
 The hidden desktop presents at the display's refresh even with max_fps=0, so frame_ms floors at
 8.33 ms on a 120 Hz display; read gpu_ms, render_cpu_ms, setup_ms and proc_ms, and the counts.
 
-C5 has four city views, run by name with the city modes: enhanced (View Distance at its default,
-Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline.
+C5 has five city views, run by name with the city modes: enhanced (View Distance at its default,
+Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline. C5 refuses
+every vegetation entry, so there the 3D Vegetation word reaches only the new city (CityModels.On,
+Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, original
+(Vegetation Quality Original) a second off, and winslow and winfloors the near city with the other
+two --city-windows modes (near is scatter). A --det enhanced launch draws the city at near.
+Each case also reports the startup line's build times and the city models log line.
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
     .\analysis\veg-budget\measure.ps1 -Chapters C5-cb7,C5-cb1,C5-alt,C5-cm23 -Modes enhanced,vdnormal
+    .\analysis\veg-budget\measure.ps1 -Chapters C5-cb1,C5-street,C5-alt,C5-cm23,C5-cb7 -Modes nomodels,near,far,extreme,original
 #>
 param(
     [string[]]$Chapters = @("C1", "C1B", "C2", "C3", "C4"),
@@ -66,6 +72,8 @@ $views = @{
     "C5-cb1"  = @("--pos=-7124,165,-11732", "--lookat=-7424,5,-12032")
     "C5-alt"  = @("--pos=-5000,450,-7000", "--lookat=-9000,250,-11000")
     "C5-cm23" = @("--pos=-11061,400,-8370", "--lookat=-11061,400,-8371")
+    # street: 45 m over the cblock1 street grid, looking 900 m down it at the near city.
+    "C5-street" = @("--pos=-7306,50,-11700", "--lookat=-7306,40,-12600")
 }
 $modeArgs = @{
     "faithful" = @("--graphics=original")
@@ -75,7 +83,12 @@ $modeArgs = @{
     "nomodels" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=off")
     "nocover"  = @("--graphics=enhanced", "--vegetation-quality=rich", "--ground-cover=off")
     "far"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=far")
-    # C5 refuses every vegetation entry, so its city modes are Enhanced at each View Distance.
+    "near"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near")
+    "veryfar"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=veryfar")
+    "extreme"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=extreme")
+    "winslow"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near", "--city-windows=slow")
+    "winfloors" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near", "--city-windows=floors")
+    # Enhanced at each View Distance; on C5 these draw the city at near.
     "enhanced"    = @("--graphics=enhanced")
     "vdnormal"    = @("--graphics=enhanced", "--view-distance=normal")
     "vdunlimited" = @("--graphics=enhanced", "--view-distance=unlimited")
@@ -113,8 +126,20 @@ function Get-Median($xs) {
     return ($s[$s.Count / 2 - 1] + $s[$s.Count / 2]) / 2
 }
 
-$terms = "gpu_ms", "render_cpu_ms", "setup_ms", "proc_ms", "draws", "prims"
-"{0,-7} {1,-11} {2,3} " -f "ch", "mode", "n" + (($terms | ForEach-Object { "{0,24}" -f $_ }) -join "")
+function Get-Fields($text) {
+    $w = @{}
+    foreach ($tok in ($text -split '\s+')) {
+        if ($tok -match '^([a-z0-9_]+)=([-\d.]+)$') { $w[$matches[1]] = [double]$matches[2] }
+    }
+    return $w
+}
+
+# Window terms, then the startup line's build times (one value per launch, not windowed).
+$windowTerms = "gpu_ms", "render_cpu_ms", "setup_ms", "proc_ms", "draws", "prims", "nodes"
+$startTerms = "total", "world", "clutter", "bind", "rest"
+$terms = $windowTerms + $startTerms
+$cityLines = @{}
+"{0,-10} {1,-11} {2,3} " -f "ch", "mode", "n" + (($terms | ForEach-Object { "{0,24}" -f $_ }) -join "")
 foreach ($ch in $Chapters) {
     foreach ($mode in $Modes) {
         $perLaunch = @{}
@@ -122,18 +147,18 @@ foreach ($ch in $Chapters) {
         $n = 0
         foreach ($log in Get-ChildItem $scratch -Filter "$Tag$ch-$mode-*.log" | Sort-Object Name) {
             $rows = @()
+            $start = $null
             foreach ($line in Get-Content $log.FullName) {
+                if ($line -match '\[world\] (city models: .+)$') { $cityLines[$mode] = $matches[1] }
+                if ($line -match '\[perf\] startup (.+)$') { $start = Get-Fields $matches[1] }
                 if ($line -notmatch '\[perf\] window (.+)$') { continue }
-                $w = @{}
-                foreach ($tok in ($matches[1] -split '\s+')) {
-                    if ($tok -match '^([a-z0-9_]+)=([-\d.]+)$') { $w[$matches[1]] = [double]$matches[2] }
-                }
-                $rows += $w
+                $rows += Get-Fields $matches[1]
             }
             $rows = @($rows | Select-Object -Skip $Skip)
             if ($rows.Count -eq 0) { continue }
             $n++
-            foreach ($t in $terms) { $perLaunch[$t] += Get-Median ($rows | ForEach-Object { $_[$t] }) }
+            foreach ($t in $windowTerms) { $perLaunch[$t] += Get-Median ($rows | ForEach-Object { $_[$t] }) }
+            if ($start) { foreach ($t in $startTerms) { $perLaunch[$t] += $start[$t] } }
         }
         # Each cell: the median of the launch medians, then their range.
         $cells = $terms | ForEach-Object {
@@ -142,6 +167,7 @@ foreach ($ch in $Chapters) {
             $hi = ($v | Measure-Object -Maximum).Maximum
             "{0,24}" -f ("{0:0.###} ({1:0.###}-{2:0.###})" -f (Get-Median $v), $lo, $hi)
         }
-        ("{0,-7} {1,-11} {2,3} " -f $ch, $mode, $n) + ($cells -join "")
+        ("{0,-10} {1,-11} {2,3} " -f $ch, $mode, $n) + ($cells -join "")
     }
 }
+foreach ($mode in $Modes) { if ($cityLines[$mode]) { "{0,-11} {1}" -f $mode, $cityLines[$mode] } }
