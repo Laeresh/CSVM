@@ -43,6 +43,11 @@ public sealed class WorldLights : IDisposable
     private const string DataParam = "csky_light_data";
     private const string CountParam = "csky_light_count";
 
+    // The Enhanced aircraft's own set (ForAircraft): the shaded arm reads it alone, since the world
+    // set's lamps already reach a plane as omnis there.
+    private const string AircraftDataParam = "csky_aircraft_light_data";
+    private const string AircraftCountParam = "csky_aircraft_light_count";
+
     // 4 floats per texel, 2 texels per light.
     private const int FloatsPerLight = 8;
 
@@ -134,6 +139,10 @@ public sealed class WorldLights : IDisposable
     // The most omnis the Enhanced pool lights at once, never below MaxActive.
     private readonly int _omniBudget;
 
+    // The global shader parameters this set packs into: the world's, or the aircraft's.
+    private readonly string _dataParam = DataParam;
+    private readonly string _countParam = CountParam;
+
     private ImageTexture? _texture;
     private int _lastCount = -1;
     private int _loggedSubmitted = -1;
@@ -151,6 +160,13 @@ public sealed class WorldLights : IDisposable
     {
         _omniParent = parent;
         _omniBudget = Math.Max(MaxActive, omniBudget ?? OmniBudget(Config.GetString(EffectsLevel.Key, EffectsLevel.Default)));
+    }
+
+    private WorldLights(string dataParam, string countParam)
+        : this()
+    {
+        _dataParam = dataParam;
+        _countParam = countParam;
     }
 
     /// <summary>Highest simultaneous count seen, reported so the MaxActive bound can be
@@ -175,6 +191,11 @@ public sealed class WorldLights : IDisposable
     /// </summary>
     public int OmniCount { get; private set; }
 
+    /// <summary>A set the Enhanced aircraft arm reads as its per-vertex point term, and nothing else
+    /// does. It holds no world lamp and spawns no omni. A light submitted here reaches a plane the
+    /// original's way, with no N.L (docs/org/vertexLighting.md, "Point lights").</summary>
+    public static WorldLights ForAircraft() => new(AircraftDataParam, AircraftCountParam);
+
     /// <summary>Registers the global shader parameters the world shader references. Called once
     /// per process, before any material using them is built, the defaults (no texture, count 0)
     /// are a no-op, so a session that never animates a light renders exactly as before.</summary>
@@ -183,6 +204,10 @@ public sealed class WorldLights : IDisposable
         RenderingServer.GlobalShaderParameterAdd(DataParam,
             RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         RenderingServer.GlobalShaderParameterAdd(CountParam,
+            RenderingServer.GlobalShaderParameterType.Int, 0);
+        RenderingServer.GlobalShaderParameterAdd(AircraftDataParam,
+            RenderingServer.GlobalShaderParameterType.Sampler2D, default);
+        RenderingServer.GlobalShaderParameterAdd(AircraftCountParam,
             RenderingServer.GlobalShaderParameterType.Int, 0);
     }
 
@@ -325,7 +350,7 @@ public sealed class WorldLights : IDisposable
             // Nothing lit: leave the texture alone and zero the count, which short-circuits the
             // shader loop entirely.
             if (_lastCount != 0)
-                RenderingServer.GlobalShaderParameterSet(CountParam, 0);
+                RenderingServer.GlobalShaderParameterSet(_countParam, 0);
             _lastCount = 0;
             return;
         }
@@ -344,14 +369,14 @@ public sealed class WorldLights : IDisposable
         if (_texture == null)
         {
             _texture = TextureUpload.Create(2, MaxActive, Image.Format.Rgbaf, _buffer);
-            RenderingServer.GlobalShaderParameterSet(DataParam, _texture);
+            RenderingServer.GlobalShaderParameterSet(_dataParam, _texture);
         }
         else
         {
             TextureUpload.Replace(_texture, 2, MaxActive, Image.Format.Rgbaf, _buffer);
         }
         if (_lastCount != n)
-            RenderingServer.GlobalShaderParameterSet(CountParam, n);
+            RenderingServer.GlobalShaderParameterSet(_countParam, n);
         _lastCount = n;
     }
 
@@ -379,7 +404,7 @@ public sealed class WorldLights : IDisposable
         _sources.Clear();
         _committedPositions.Clear();
         _committedFactors.Clear();
-        RenderingServer.GlobalShaderParameterSet(CountParam, 0);
+        RenderingServer.GlobalShaderParameterSet(_countParam, 0);
         _lastCount = 0;
         OmniCount = 0;
         _texture = null;

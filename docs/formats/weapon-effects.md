@@ -47,9 +47,19 @@ already-live gate would drop every ejection but one per 2 s window):
 - **Muzzle smoke**, the `muzzlepuffer` values (aft 20 m/s in the muzzle frame, ±0.8 random,
   size 0.3–0.6 m, life 0.1–0.2 s, deviation 0.05 m, `smoke101`) as oriented sprites on the
   pool's sprite path; the per-shot count glosses the authored 0.05 s × 0.3 s emission window.
-- **Muzzle light**, a pooled `OmniLight3D` per shot using the `3rdperson_lts` 3-way
-  `RANDOM_WEIGHT` variants' range/colour verbatim (1–2 / 1.25–3.25 / 2–3.75 m; 0.88–0.93,
-  0.78, 0.36); the def deactivates it on the next event tick, rendered as a ~2-frame flash.
+- **Muzzle light**, one per shot from the `3rdperson_lts` 3-way `RANDOM_WEIGHT` variants, each a
+  near/far pair taken whole (1/2, 1.25/3.25 and 2/3.75 m; colours (0.88, 0.78, 0.36) and twice
+  (0.93, 0.78, 0.36)). A `LIGHT_STATE` `RANGE` is a falloff, so the far value is never rolled
+  inside the pair. The def deactivates it on the next event tick, so it lives one drawn frame. It
+  is a per-vertex point light with no N·L, the original's term (`docs/org/vertexLighting.md` "Point
+  lights"), never a Godot omni while a point set is bound: an omni's N·L leaves a plane whose guns
+  sit behind edge-on surfaces unlit, the Warhawk's wing-leading-edge guns being the measured case.
+  In original mode it joins the session's `WorldLights` set. In Enhanced mode it joins the pool's
+  own `WorldLights.ForAircraft` set, which only the Enhanced aircraft arm reads, as emission, since
+  the world set's lamps already reach a plane there as omnis. Guns that sit about 1.2 m or more
+  clear of the hull (the Peacemaker's 40, the Kestrel's and Hellhound's nose guns) light little of
+  their own aircraft in either model, as in the original. A pool with no set bound falls back to
+  an omni.
   The `PLAYER_1ST_PERSON` branch is the `bigmuzzle_lt`/`muzzle_lt` pair at `AT_NODE` (±11, −1, −5)
   (near/far 13.5/21.25 and 12.9/18.25 m, colours (0.88, 0.78, 0.36) and (0.93, 0.78, 0.36), no
   ambient or diffuse so the scalar is 1), lit while a pilot holds a first-person view. In original

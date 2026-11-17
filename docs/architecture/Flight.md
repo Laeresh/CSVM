@@ -450,8 +450,8 @@ the two fuses and the three end conditions), the swept hit ray over world and ai
 impact that follows, the struck material's `IMPACT` row for a ray hit and the `default` row for a
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
-muzzle light (the first-person pair joins the `WorldLights` point term in original mode via
-`BindPointLights`), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
+muzzle light (via `BindPointLights`, original mode puts both branches into the `WorldLights` point term, and Enhanced
+the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
