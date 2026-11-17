@@ -542,10 +542,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // constructor over the registry above.
     private readonly DestructibleDamage _damage;
 
-    // The call-site node a PlayEffectAt instance was invoked WITH, the callee's INPUT_NODE. The
-    // local CALL_ANIMATION path expresses this by anchoring the callee on the site node; the
-    // external path anchors on the staged template root instead, so the sentinel's referent is
-    // carried here, keyed by the instance identity. Cleared with the instance.
+    // The call-site node an input-governed instance was invoked WITH, the callee's INPUT_NODE.
+    // Only a copy-anchored instance needs one: PlayEffectAt's staged root, or a local call's
+    // library or repeat copy. A site-anchored call falls back to its anchor, which is the site.
+    // Keyed by instance identity, cleared with the instance.
     private readonly Dictionary<(AnimDefinition Def, Node3D? Anchor), Node3D> _inputNodes = new();
 
     // Which defs condition on their own INPUT_NODE's active state (a NodeActive sentinel in any
@@ -3226,6 +3226,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             }
                             if (!instant && _rangePasses.Count > 0)
                                 ClaimRangePass(def, anchor, target);
+                            // ⚠ A copy is not the site, so an input-governed callee gets the site as
+                            // INPUT_NODE; its NodeActive loop otherwise reads the always-on copy.
+                            // Others keep emitting on the copy, where the pre-warm built them.
+                            if (ownCopy != null && siteNode != null && DefConditionsOnInputNode(target))
+                                _inputNodes[(target, ownCopy)] = siteNode;
+                            else if (ownCopy != null)
+                                _inputNodes.Remove((target, ownCopy));
                             Start(target, startAnchor);
                             if (InstanceOf(def, anchor) is { } caller
                                 && InstanceOf(target, startAnchor) is { } callee
