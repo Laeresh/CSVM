@@ -1,0 +1,18 @@
+{
+  "about": "C5 block floor variants per combination of visible paint and standing set, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12). Each file is a 512 x 512 sRGB PNG covering one 256 m tile in the template's UV, +U right, +V down; street and lot texels are don't-care. Beside each <name>.png.bin is <name>.json, its layout.",
+  "luma": 20.0,
+  "combinations": {
+    "cblock7-cblock7": {
+      "paint": "cblock7",
+      "set": "cblock7",
+      "variants": 4,
+      "files": ["cblock7-cblock7-0.png.bin", "cblock7-cblock7-1.png.bin", "cblock7-cblock7-2.png.bin", "cblock7-cblock7-3.png.bin"]
+    },
+    "cblock7-cblock4": {
+      "paint": "cblock7",
+      "set": "cblock4",
+      "variants": 2,
+      "files": ["cblock7-cblock4-0.png.bin", "cblock7-cblock4-1.png.bin"]
+    }
+  }
+}
