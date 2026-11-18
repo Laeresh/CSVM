@@ -49,8 +49,9 @@ OUT = os.path.join(HERE, "C5", "ground")
 SIZE = 512
 TILE_M = 256.0
 PX = SIZE / TILE_M
-# Decision 3: the free floor's mean Rec. 601 luma on sRGB texels. TUNE at the controls (B15).
-LUMA = 20.0
+# The free floor's mean Rec. 601 luma on sRGB texels: set at the controls under C5's lighting, where
+# 20 left the paving's structure unreadable.
+LUMA = 35.0
 # (visible paint, standing set, variants). Decision 4: 2 to 4 per combination.
 COMBOS = (("cblock7", "cblock7", 4), ("cblock7", "cblock4", 2))
 
