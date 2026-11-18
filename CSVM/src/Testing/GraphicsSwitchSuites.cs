@@ -1176,7 +1176,7 @@ internal static class GraphicsSwitchSuites
         + "C5/cb00b.glb keeps that kind off the city; the hull's grade is its baseColorFactor; live moves to Off, original "
         + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
         + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
-        + "the shipped hulls carry the facade atlas and the window ids")]
+        + "the shipped hulls carry the facade atlas, the window ids and the facade's poster counts")]
     internal static void CityBuildings(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1332,6 +1332,11 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(atlas != null && ids != null && atlas.GetImage().HasMipmaps() && !ids.GetImage().HasMipmaps()
                         && atlas.GetWidth() == 1024 && ids.GetWidth() == 1024 && shipped!.BoxMaterial.GetShaderParameter("facade_ids").As<Texture2D>() == ids,
                     $"a shipped hull's materials carry the facade atlas with mipmaps and the window ids without");
+                // Unset, the uniform keeps its default and the chapter's own posters are never drawn.
+                var counts = shipped?.NearMaterial.GetShaderParameter("poster_counts");
+                ctx.Check(counts?.VariantType == Variant.Type.Vector2 && counts.Value.AsVector2().X >= 6f && counts.Value.AsVector2().Y >= 4f
+                        && shipped!.BoxMaterial.GetShaderParameter("poster_counts").VariantType == Variant.Type.Vector2,
+                    $"a shipped hull's materials carry the facade's poster counts ({counts})");
             }
             finally
             {

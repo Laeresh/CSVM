@@ -1348,7 +1348,7 @@ public sealed class ClutterBuilder
     // The building's look-alike under the city, null for a model with no hull. Each stamp's near variant reads its seed.
     private ClutterInstances.City? CityOf(Kind kind)
     {
-        if (_modelChapter == null || CityModels.For(_modelChapter, Extraction.HdModels.NodeKey(kind.Model)) is not { } hull)
+        if (_modelChapter == null || CityModels.For(_modelChapter, Extraction.HdModels.NodeKey(kind.Model), name => _textures.FindImage(name)) is not { } hull)
             return null;
         ModelRoot ??= new Node3D { Name = ModelRootName };
         var near = hull.Near.Count == 0 ? null : new ClutterInstances.Near(ModelRoot, hull.Near[0], hull.NearMaterial)

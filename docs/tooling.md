@@ -889,7 +889,10 @@ painter and its layout (numpy only, so the analysis scripts import it).
   The posters are ours: block lettering and plain shapes (a plane, a propeller, a shield, rays,
   stripes, a skyline) over companies the game's own text names (`ui_strings.json`: Blake
   Aviation, the Tornado engines, the Achilles Armor Company, and the plane and engine makers
-  Hughes, Wright, Bristol, Ford and Colt) and two plain words. `CityModels.PosterGain` lifts a
+  Hughes, Wright, Bristol, Ford and Colt) and two plain words. At run time the chapter's own
+  posters (`poster02` and `poster04` landscape, `poster03` portrait) join the draw with an equal
+  chance: `CityModels` copies them from the textures the game loads into empty strip cells of
+  the atlas image, so the committed atlas holds none of them. `CityModels.PosterGain` lifts a
   poster to the original's lit poster on a night frame. `cb17a`'s gable ends take the brick cell
   at the original gable texture's unlit mean colour, since another family's solid band under the
   kind's grade came out about 2.5 times too dark.

@@ -322,6 +322,48 @@ Every view holds the budget: at most 0.665 ms GPU (C5-cb1, near) and 0.116 ms CP
 extreme). **Extreme draws 1,777.1 at C5-alt against 1,775.5 with the city off, 1.6 over** (3.4
 before these kinds); near draws 1,626.1. The scene gains 3,925 nodes.
 
+### Posters, gables and the `det` dressing
+
+The city with the boards' posters (the chapter's own three among them), `cb17a`'s gables and the
+`det` dressing (96 kinds with a hull, 4,433 near nodes, no stamp still drawing its original)
+against the city off, one interleaved batch, n=3, the same nine views, rendered at 5120x1421.
+Another session's windowed Godot ran beside C5-cb1's first three launches; each C5-cb1 median sits
+on its two clean launches, and every other view's range is within 0.25 ms.
+
+| View | Mode | GPU (ms) | GPU added | CPU added | Draws | Primitives |
+|---|---|---:|---:|---:|---:|---:|
+| C5-cb1 | off | 4.82 | | | 893 | 770,150 |
+| C5-cb1 | near | 5.40 | +0.58 | +0.102 | 736 | 1,008,599 |
+| C5-cb1 | extreme | 5.365 | +0.545 | +0.153 | 841 | 1,382,713 |
+| C5-street | off | 6.00 | | | 744 | 695,703 |
+| C5-street | near | 6.03 | +0.03 | +0.113 | 566 | 930,539 |
+| C5-street | extreme | 6.045 | +0.045 | +0.124 | 706 | 1,257,871 |
+| C5-alt | off | 3.44 | | | 1,775.5 | 774,563 |
+| C5-alt | near | 3.61 | +0.17 | -0.037 | 1,574.6 | 756,196 |
+| C5-alt | extreme | 4.02 | +0.58 | +0.114 | 1,761.6 | 1,231,122 |
+| C5-cm23 | off | 3.80 | | | 1,160 | 580,292 |
+| C5-cm23 | near | 3.89 | +0.09 | +0.012 | 933 | 544,492 |
+| C5-cm23 | extreme | 4.065 | +0.265 | +0.051 | 1,072 | 771,870 |
+| C5-cb7 | off | 5.95 | | | 945 | 612,851 |
+| C5-cb7 | near | 6.07 | +0.12 | +0.066 | 878 | 659,415 |
+| C5-cb7 | extreme | 6.09 | +0.14 | +0.111 | 951 | 1,059,027 |
+| C5-cb23 | off | 4.50 | | | 2,098.6 | 805,449 |
+| C5-cb23 | near | 4.505 | +0.005 | +0.054 | 1,913.6 | 912,262 |
+| C5-cb23 | extreme | 4.48 | -0.02 | +0.142 | 2,079.6 | 1,409,554 |
+| C5-cb4 | off | 6.19 | | | 1,090.3 | 505,288 |
+| C5-cb4 | near | 6.20 | +0.01 | +0.028 | 909.3 | 621,724 |
+| C5-cb4 | extreme | 6.21 | +0.02 | +0.099 | 1,059.3 | 797,736 |
+| C5-cb5 | off | 4.805 | | | 717.1 | 530,331 |
+| C5-cb5 | near | 4.92 | +0.115 | +0.068 | 556.1 | 745,167 |
+| C5-cb5 | extreme | 4.845 | +0.04 | +0.129 | 698.1 | 857,485 |
+| C5-cb6 | off | 5.15 | | | 918.1 | 562,168 |
+| C5-cb6 | near | 5.17 | +0.02 | -0.054 | 630.1 | 648,418 |
+| C5-cb6 | extreme | 5.10 | -0.05 | -0.015 | 713.1 | 714,972 |
+
+Every view holds the budget: at most 0.58 ms GPU (C5-cb1 near, C5-alt extreme) and 0.153 ms CPU
+(C5-cb1, extreme). With the dressing's originals hidden, **extreme draws 1,761.6 at C5-alt against
+1,775.5 with the city off, 13.9 under**; near draws 1,574.6. The scene gains 4,529 nodes.
+
 ## Reproducing
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"

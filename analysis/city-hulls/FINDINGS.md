@@ -248,10 +248,11 @@ roof surface, as the original's are; its lattice bands and rails, and the mast, 
 the board format 4, our own truss of light metal bars on black, which the cut-out shader discards.
 Awnings and the ledge ring's edge are light metal, roof boxes, vents and the ring's top the roof
 surface. Every node stays within its original's box grown by 0.05 m (`margin.py`, at most
-0.006 m past it). The roof boxes and vents stand where the original's do: on `cb00`'s fourth
-near variant a tank of its own reaches into the `det02` and `det03` roof box (box overlap
-0.62 m³), on `cb02b`'s first a vent stands inside the `det01` roof box (1.67 m³), and on `cb01d`
-the box pierces the hipped roof as the original's does.
+0.006 m past it). The roof boxes and vents stand where the original's do, and no building's own
+roof dressing meets them: `cb00`'s fourth near variant keeps its tank in the roof's far corner, and
+`cb02b`'s first keeps only its machine room, clear of the `det01` and `det02` roof boxes and the
+mast. Of the 117 dressing, building and variant pairings, the four on `cb01d` overlap, where the
+box pierces the hipped roof as the original's does.
 
 ## Variants
 

@@ -52,6 +52,10 @@ public static class CityModels
     private const int StripY = 960, StripX = 960, StripGutter = 8, LandW = 96, LandH = 48, PortW = 48, PortH = 72;
     private const int LandPosters = 6, PortPosters = 4;
 
+    // The chapter's own posters, copied at run time from the textures the game loads into empty strip cells. The
+    // landscape ones follow ours; the portrait one stands at PortExtra, after the back, gable and lattice.
+    private const int PortExtra = PortPosters + 3;
+
     // TUNE. The albedo gain of a poster, class 4's formats 0 and 1. Its raw luma on a night frame matches the
     // original's lit poster at the same pose. Like CorniceGain it emits nothing.
     private const float PosterGain = 1.25f;
@@ -79,6 +83,9 @@ public static class CityModels
 
     // TUNE. A lattice texel darker than this linear luma is a hole: half the light metal bars city_atlas.py paints on black.
     private const float CutLuma = 0.075f;
+
+    // The chapter's own posters by texture name, landscape and portrait, in the order their cells take them.
+    private static readonly string[] LandOriginals = { "poster02", "poster04" }, PortOriginals = { "poster03" };
 
     // TUNE. The lights a lit window takes, linear, each with its share of the windows: warm yellow mostly.
     private static readonly (Vector3 Rgb, float Share)[] Lights =
@@ -138,15 +145,16 @@ public static class CityModels
     public static int VariantOf(float seed, int count) => count > 1 ? (int)((uint)seed % (uint)count) : 0;
 
     /// <summary>The hull of <paramref name="model"/> (the decoration's name without <c>.flt</c>) on
-    /// <paramref name="chapter"/>, read once. No file gives null; a file that is not a hull is warned and gives null.</summary>
-    public static Hull? For(string chapter, string model)
+    /// <paramref name="chapter"/>, read once. No file gives null; a file that is not a hull is warned and gives null.
+    /// The chapter's texture lookup <paramref name="textures"/> lends the facade its own posters.</summary>
+    public static Hull? For(string chapter, string model, Func<string, Image?>? textures = null)
     {
         string folder = $"{_root}/{chapter.ToUpperInvariant()}";
         string key = $"{folder}/{model}";
         if (!Hulls.TryGetValue(key, out var hull))
         {
             if (!Facades.TryGetValue(folder, out var facade) && FileAccess.FileExists($"{key}.glb.bin"))
-                Facades[folder] = facade = LoadFacade(folder);
+                Facades[folder] = facade = LoadFacade(folder, textures);
             Hulls[key] = hull = Load($"{key}.glb.bin", facade);
         }
         return hull;
@@ -221,8 +229,11 @@ public static class CityModels
                 // Class 4 is a board, its format in TEXCOORD_1.x. Formats 0 and 1 are a poster the seed picks, shown
                 // whole; 2 a board's back and 3 a brick gable, tiled. Ungraded, it keeps its colour on any building.
                 if (uv2.y > 3.5) {
-                    float design = floor(csky_city_rand(s + 7u) * (family < 0.5 ? {{LandPosters}}.0 : {{PortPosters}}.0));
-                    float index = family < 1.5 ? design : {{PortPosters}}.0 + family - 2.0;
+                    float design = floor(csky_city_rand(s + 7u) * (family < 0.5 ? poster_counts.x : poster_counts.y));
+                    // A portrait design past ours is the chapter's own poster, in its cell after the lattice.
+                    float index = family < 1.5
+                        ? (family > 0.5 && design > {{PortPosters}}.0 - 0.5 ? {{PortExtra}}.0 : design)
+                        : {{PortPosters}}.0 + family - 2.0;
                     vec2 size = family < 0.5 ? vec2({{LandW}}.0, {{LandH}}.0) : vec2({{PortW}}.0, {{PortH}}.0);
                     vec2 origin = family < 0.5
                         ? vec2(index * {{LandW + 2 * StripGutter}}.0 + {{StripGutter}}.0, {{StripY + StripGutter}}.0)
@@ -296,6 +307,7 @@ public static class CityModels
             uniform vec2 {{VegetationModels.BandParam}};
             uniform sampler2D facade_tex : source_color, filter_linear_mipmap, repeat_enable;
             uniform sampler2D facade_ids : hint_default_black, filter_nearest, repeat_enable;
+            uniform vec2 poster_counts = vec2({{LandPosters}}.0, {{PortPosters}}.0);
             varying flat float v_far;
             varying flat float v_box;
             varying flat float v_dark;
@@ -358,8 +370,9 @@ public static class CityModels
     }
 
     // A chapter folder's facade atlas (sRGB, mipmapped) and its window ids (linear, no mipmaps). Null, warned, where
-    // either file is missing.
-    private static Facade? LoadFacade(string folder)
+    // either file is missing. The chapter's own posters are copied into the atlas image before its mipmaps, never into
+    // a file. A poster the lookup does not give is left out of the draw.
+    private static Facade? LoadFacade(string folder, Func<string, Image?>? textures)
     {
         var atlas = new Image();
         var ids = new Image();
@@ -370,10 +383,39 @@ public static class CityModels
             Log.Warn("world", $"city facade {folder}: no readable facade.png.bin and facade_ids.png.bin, the buildings draw their flat grade");
             return null;
         }
+        int land = 0, port = 0;
+        foreach (string name in textures == null ? Array.Empty<string>() : LandOriginals)
+        {
+            if (Paste(atlas, textures!(name), (LandPosters + land) * (LandW + 2 * StripGutter), StripY, LandW, LandH))
+                land++;
+        }
+        foreach (string name in textures == null ? Array.Empty<string>() : PortOriginals)
+        {
+            if (Paste(atlas, textures!(name), StripX, (PortExtra + port) * (PortH + 2 * StripGutter), PortW, PortH))
+                port++;
+        }
         atlas.GenerateMipmaps();
         ids.Convert(Image.Format.Rgba8);
-        Log.Info("world", $"city facade {folder}: atlas {atlas.GetWidth()}x{atlas.GetHeight()}, ids {ids.GetWidth()}x{ids.GetHeight()}");
-        return new Facade(TextureUpload.Create(atlas), TextureUpload.Create(ids));
+        Log.Info("world", $"city facade {folder}: atlas {atlas.GetWidth()}x{atlas.GetHeight()}, ids {ids.GetWidth()}x{ids.GetHeight()}, {land + port} of the chapter's own poster(s)");
+        return new Facade(TextureUpload.Create(atlas), TextureUpload.Create(ids), new Vector2(LandPosters + land, PortPosters + port));
+    }
+
+    // A poster stretched to a strip cell's w x h tile at (x, y), its edge texels repeated into the gutter as ours are.
+    private static bool Paste(Image atlas, Image? poster, int x, int y, int w, int h)
+    {
+        if (poster == null || poster.IsEmpty())
+            return false;
+        poster.Decompress();
+        poster.ClearMipmaps();
+        poster.Convert(atlas.GetFormat());
+        poster.Resize(w, h, Image.Interpolation.Bilinear);
+        int g = StripGutter;
+        for (int dy = -g; dy < h + g; dy++)
+        {
+            for (int dx = -g; dx < w + g; dx++)
+                atlas.SetPixel(x + g + dx, y + g + dy, poster.GetPixel(Math.Clamp(dx, 0, w - 1), Math.Clamp(dy, 0, h - 1)));
+        }
+        return true;
     }
 
     // The mesh nodes `far` and `near0`, `near1`... by node name, each unmoved. The far mesh's baseColorFactor is the
@@ -443,6 +485,7 @@ public static class CityModels
         {
             material.SetShaderParameter("facade_tex", facade.Albedo);
             material.SetShaderParameter("facade_ids", facade.Ids);
+            material.SetShaderParameter("poster_counts", facade.PosterCounts);
         }
         return material;
     }
@@ -452,5 +495,5 @@ public static class CityModels
     public sealed record Hull(ArrayMesh Box, IReadOnlyList<ArrayMesh> Near, ShaderMaterial BoxMaterial, ShaderMaterial NearMaterial);
 
     // A chapter's facade textures.
-    private sealed record Facade(Texture2D Albedo, Texture2D Ids);
+    private sealed record Facade(Texture2D Albedo, Texture2D Ids, Vector2 PosterCounts);
 }

@@ -44,7 +44,7 @@ WALKUP = (
     dict(parapet=0.7, raised=1.0, kit=[("bulkhead", (0.2, 0.3)), ("vent",), ("vent",), ("vent",)]),
     dict(setback=1.5, parapet=0.9, ledge=0.5, kit=[("tank", (0.5, 0.5)), ("vent",), ("vent",)]),
     dict(notch=[("z-", 8.0, 2.5), ("z+", 8.0, 2.5)], parapet=1.2,
-         kit=[("bulkhead", (0.2, 0.5)), ("tank", (0.8, 0.5)), ("vent",), ("vent",)]),
+         kit=[("bulkhead", (0.2, 0.5)), ("tank", (0.15, 0.1)), ("vent",), ("vent",)]),
 )
 TENEMENT = (
     dict(parapet=1.0, kit=[("chimney", (0.05, 0.5)), ("chimney", (0.95, 0.5)), ("tank", (0.6, 0.65)), ("bulkhead", (0.2, 0.2))]),
@@ -530,6 +530,8 @@ LONG24B = (
 L02 = -15.89 + 5 * 31.78 / 8
 # Its set-back and stepped tops stand in less, so they stay inside the margin with the step's 1.33 m.
 TOWER02A = (TOWER[0], dict(TOWER[1], setback=1.5), dict(TOWER[2], steps=[(8.0, 0.75), (4.0, 1.5)]))
+# cb02b's first variant keeps only its machine room, off the det01 and det02 roof boxes and mast.
+TOWER02B = (dict(TOWER[0], kit=[("machine", (0.9, 0.2))]), TOWER[1], TOWER[2])
 P_CB00 = [(0, [(-20, 20, -12, 12)]), (16, [(-20, 20, -12, 12)])]
 P_CB01 = [(0, sq(16)), (24, sq(16))]
 P_CB03 = [
@@ -560,7 +562,7 @@ HULLS = {
         (40, [(-15.89, L02, -15.89, L02), (-L02, 15.89, L02, 15.89), (L02, 15.89, -L02, L02)]),
         (44.99, [(-15.89, L02, -15.89, L02), (-L02, 15.89, L02, 15.89), (L02, 15.89, -L02, L02)]),
         (44.99, [(-15.89, L02, -15.89, L02)]), (65.18, [(-15.89, L02, -15.89, L02)])]),
-    "cb02b": dict(family=WARM, rgb=(36, 32, 27), near=TOWER, profile=[               # bldg4
+    "cb02b": dict(family=WARM, rgb=(36, 32, 27), near=TOWER02B, profile=[            # bldg4
         (0, sq(16)), (36, sq(16)),
         (36, [(-16, 16, -16, 4), (-4, 16, 4, 16)]), (40, [(-16, 16, -16, 4), (-4, 16, 4, 16)]),
         (40, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]), (44, [(-16, 4, -16, 4), (-4, 16, 4, 16), (4, 16, -4, 4)]),

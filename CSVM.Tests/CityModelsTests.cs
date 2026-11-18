@@ -58,6 +58,10 @@ public sealed class CityModelsTests
         Assert.True(look.IndexOf("if (uv2.y > 3.5) {", System.StringComparison.Ordinal)
             < look.IndexOf("if (uv2.y > 2.5) {", System.StringComparison.Ordinal));
         Assert.Contains("floor(csky_city_rand(s + 7u) * (family < 0.5 ?", look, System.StringComparison.Ordinal);
+        // The poster counts are the facade's: ours alone, or ours and the chapter's own where the game lent them.
+        // The portrait original takes its own cell after the lattice.
+        Assert.Contains("(family < 0.5 ? poster_counts.x : poster_counts.y)", look, System.StringComparison.Ordinal);
+        Assert.Contains("design > 4.0 - 0.5 ? 7.0 : design", look, System.StringComparison.Ordinal);
         Assert.Equal(look, CityModels.LookCode());
     }
 
