@@ -53,6 +53,7 @@ Scenery off draw the original ground.
 | 11 | First prototype | **`cblock7`** with its own walk-ups, judged at the controls and on montages before the other combinations. |
 | 12 | Character | **Mostly paved, some green**: back courts, alleys and service yards (asphalt, gravel, flagstone, fences, sheds, parked cars, ash cans), about a quarter of the free area as small gardens with trees, open blocks as parks or parking lots. |
 | 13 | What counts as street | **The whole street, kerb to kerb, lit or unlit.** The author, on A3's montages: "The yellow marks of the street don't include the unlit streets between them. They should not get objects." The street mask is geometric (kerbs, the building-free corridors), never a luma threshold, which finds only the lamp pools. No floor change and no dressing on any street. |
+| 14 | Which trees (B14) | **A new deciduous city tree** (plane tree or elm style) built with the vegetation generator pipeline, plus the existing bushes for hedges. No existing vegetation model is a city deciduous tree. The author chose "New deciduous model". |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
