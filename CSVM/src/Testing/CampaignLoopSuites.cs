@@ -565,8 +565,12 @@ internal static class CampaignLoopSuites
                 continue;
             }
 
-            report.AppendLine($"OBJECTIVE{def.Number} '{def.CompletedSoundGroup}' -> {music.Current}");
+            report.AppendLine($"OBJECTIVE{def.Number} '{def.CompletedSoundGroup}' -> {music.Current} loop={music.Looping}");
             ctx.Check(true, $"a track the mission data cues is playing: '{def.CompletedSoundGroup}' -> {music.Current}");
+            if (string.Equals(def.CompletedSoundGroup, "music_prebattle_sg", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Check(music.Looping, $"a mission's own prebattle cue loops loop={music.Looping}");
+            }
             return;
         }
 
