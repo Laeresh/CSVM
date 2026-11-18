@@ -214,21 +214,25 @@
       "grade_saturation": 0.98,
       "shadow_strength": 0.25,
       "gi": {
-        "sun_energy": 1.96,
-        "ambient_energy": 2,
+        "sun_energy": 0.71,
+        "ambient_energy": 0.52,
         "ambient_r": 0.86,
         "ambient_g": 0.87,
         "sky_r": 1.39,
         "sky_g": 1.39,
         "sky_b": 1.39,
-        "grade_contrast": 1.04,
+        "grade_agx_contrast": 1.27,
+        "grade_contrast": 1.09,
         "shadow_distance": 1.05,
         "split2": 0.125,
         "fade_start": 0.81,
         "shadow_strength": 0.1,
-        "sdfgi_energy": 0.73
+        "self_lit_emission": 0.8,
+        "sdfgi_energy": 0.72
       },
       "clouds": {
+        "sun_energy": 0.59,
+        "ambient_energy": 0.45,
         "god_rays": 0
       }
     }
