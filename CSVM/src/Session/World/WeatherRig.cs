@@ -1067,9 +1067,9 @@ public sealed class WeatherRig
             // built dome keeps it at every state rather than render no sky at all
             // (docs/org/weather.md).
             bool gateDomes = !_spec.NoZoneCull && rig.HorizonDomes.Count > 1;
-            // Held under the volumetric clouds, the sky is the upper zone's dome. The slab stands in for
-            // the overcast, and its rifts open onto that sky. The cull mask draws both band zones.
-            int domeGate = HoldZone && gateDomes ? rig.HorizonDomes.Max(d => d.ZoneId) : gate;
+            // Held under the volumetric clouds, the sky is the upper band zone's dome. The slab stands in
+            // for the overcast, and its rifts open onto that sky. The cull mask draws both band zones.
+            int domeGate = HoldZone && gateDomes ? ZoneGate.HeldDomeZone(rig.HorizonDomes.Select(d => d.ZoneId), gate) : gate;
             foreach (var dome in rig.HorizonDomes)
                 dome.Node.Visible = !gateDomes || ZoneGate.Draws(dome.ZoneId, domeGate);
         }

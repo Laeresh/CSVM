@@ -139,6 +139,16 @@ public class ZoneGateTests
     }
 
     [Fact]
+    public void TheHeldSkyIsTheUpperBandDomeAndNeverTheVolumeInterior()
+    {
+        // The deck chapters show zone 2's dome under the slab. C5 ships zone1 + zone3, and zone 3
+        // is the fog volumes' grey interior: held, it must still show the zone-1 night sky.
+        Assert.Equal(2, ZoneGate.HeldDomeZone(new[] { 2, 1 }, 1));
+        Assert.Equal(1, ZoneGate.HeldDomeZone(new[] { 3, 1 }, 1));
+        Assert.Equal(3, ZoneGate.HeldDomeZone(new[] { 3 }, 3));
+    }
+
+    [Fact]
     public void SkyZoneNamesResolveToTheStateTheyForce()
     {
         // An explicit --sky-zone drives the gate as well as the fog, or an inspection
