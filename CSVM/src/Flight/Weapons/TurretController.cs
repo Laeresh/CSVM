@@ -83,6 +83,11 @@ public sealed class TurretController
     /// <c>0x004ac7c2</c>. The range gate reads the true distance first (docs/org/targeting.md "The picker's cost").</summary>
     public const float TurretDistanceTerm = 37.5f;
 
+    /// <summary>A human-flown plane's gunner weighs an emplacement or structure at this while an enemy
+    /// aircraft is in reach. That is 300 m behind a weight-1.0 aeroplane, not withdrawn. A remake-only
+    /// rule (docs/org/targeting.md "What a turret's candidate set holds").</summary>
+    public const float HumanGunnerStructureClassWeight = 1.25f;
+
     // WorldBlocksEmplacementLine's ray and its empty exclusion, shared by every emplacement.
     private static PhysicsRayQueryParameters3D? _emplacementRay;
     private static Godot.Collections.Array<Rid>? _noExclude; // never mutated
@@ -807,16 +812,20 @@ public sealed class TurretController
         }
 
         // The aircraft-first preference, the same remake-only rule the aeroplane picker takes, so a
-        // zeppelin's guns and the wingmen beside them go after the same enemies.
-        if (!(AiTargetRanking.AircraftFirst && aircraftInReach))
+        // zeppelin's guns and the wingmen beside them go after the same enemies. A player's own
+        // gunner keeps both classes, or it never shoots an objective in a dogfight.
+        bool preferAircraft = AiTargetRanking.AircraftFirst && aircraftInReach;
+        bool humanHost = _host is { IsHumanPiloted: true };
+        if (!preferAircraft || humanHost)
         {
             // The emplacements, then the structures. The picker's second argument is 0.0 for a gun,
             // so neither pass adds a bias. No carried gun is an emplacement: the original keeps it off
             // this pass (docs/org/targeting.md "What a turret's candidate set holds").
+            float weight = preferAircraft && humanHost ? HumanGunnerStructureClassWeight : 1f;
             _pool.CollectTurretEmplacements(_scan, _team);
-            OfferPass(_scan.Turrets, here, 1f, TurretDistanceTerm, ref pick);
+            OfferPass(_scan.Turrets, here, weight, TurretDistanceTerm, ref pick);
             _pool.CollectTurretStructures(_scan, _team);
-            OfferPass(_scan.Structures, here, 1f, 0f, ref pick);
+            OfferPass(_scan.Structures, here, weight, 0f, ref pick);
         }
 
         // A TARGETABLE round, last. It is no structure, so the aircraft-first preference leaves it in.

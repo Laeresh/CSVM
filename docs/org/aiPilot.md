@@ -657,7 +657,9 @@ CSVM then departs from the original deliberately. `AiTargetRanking.AircraftFirst
 settled once per launch from `--ai-targeting=` ([`../cli.md`](../cli.md)), withdraws every turret and
 structure candidate while any aircraft still ranks, in `GunnerAcquisition` and
 `TurretController.AcquireTarget` both, so a wingman and the guns of the airship beside it go after
-the same enemies and an ally fights a structure only with no aeroplane in reach. The same preference
+the same enemies and an ally fights a structure only with no aeroplane in reach. A gunner carried by
+a human-flown plane is the exception: it keeps both classes at a weight of 1.25
+([`targeting.md`](targeting.md)), so a player's rear gunner still shoots an objective in a dogfight. The same preference
 runs inside the hold through `AiTargetRanking.KeepsStandingTarget`, so an enemy aeroplane coming
 into reach takes an ally off a camp building at once rather than at the hold's end. A hull is neither
 class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back and
