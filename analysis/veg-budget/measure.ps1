@@ -22,7 +22,8 @@ C5 has nine city views, run by name with the city modes: enhanced (View Distance
 Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseline. C5 refuses
 every vegetation entry, so there the 3D Scenery word reaches only the new city (CityModels.On,
 Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
-(Vegetation Quality Original) a second off. A --det enhanced launch draws the city at near.
+(Vegetation Quality Original) a second off; noground and xnoground are near and extreme with no block
+floor and so no dressing. A --det enhanced launch draws the city at near.
 Each case also reports the startup line's build times and the city models log line.
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
@@ -48,7 +49,7 @@ $ErrorActionPreference = "Continue"  # native stderr lines must not abort the ru
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scratch = Join-Path $repoRoot ".scratch\veg-budget"
 $probe = Join-Path $repoRoot "scripts\RunProbe.ps1"
-New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+New-Item -ItemType Directory -Force -Path $scratch, "$scratch\no-floor" | Out-Null
 
 # Low over each chapter's densest listed vegetation, looking at it from 300 m off on both axes and
 # 80 m up: C1's fir forest, C1B's bushes on its rock top, C2's palms and brush beside a suburb,
@@ -95,6 +96,9 @@ $modeArgs = @{
     "near"      = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near")
     "veryfar"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=veryfar")
     "extreme"   = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=extreme")
+    # C5's city with no block floor, so no dressing either (PLAN-c5-ground C24): an empty floor folder.
+    "noground"  = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=near", "--city-ground=$scratch\no-floor")
+    "xnoground" = @("--graphics=enhanced", "--vegetation-quality=rich", "--vegetation-models=extreme", "--city-ground=$scratch\no-floor")
     # Enhanced at each View Distance; on C5 these draw the city at near.
     "enhanced"    = @("--graphics=enhanced")
     "vdnormal"    = @("--graphics=enhanced", "--view-distance=normal")
@@ -142,7 +146,7 @@ function Get-Fields($text) {
 }
 
 # Window terms, then the startup line's build times (one value per launch, not windowed).
-$windowTerms = "gpu_ms", "render_cpu_ms", "setup_ms", "proc_ms", "draws", "prims", "nodes"
+$windowTerms = "frame_ms", "fps", "gpu_ms", "render_cpu_ms", "setup_ms", "proc_ms", "draws", "prims", "nodes"
 $startTerms = "total", "world", "clutter", "bind", "rest"
 $terms = $windowTerms + $startTerms
 $cityLines = @{}

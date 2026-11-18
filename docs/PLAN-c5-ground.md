@@ -64,6 +64,8 @@ Scenery off draw the original ground.
 | 22 | The `cblock1` floors, from captures (C21) | **Kept as generated**: about 10 % green on the tower blocks ("10 % is right"); the walk-ups on `cblock1` paint read as inner city, not as `cblock7`'s gardens ("Inner city"); asphalt is neither capped nor lightened ("Leave it"); the parking stalls stay subtle ("Keep subtle"). |
 | 23 | The diagonal floors, from captures (C22) | **Kept as generated**: the `cblock5`/`cblock6` walk-ups under diagonal paint read as inner city ("Inner-city walk-ups"), and the cross alleys stay ("Keep them"). Whether the 362 m repeat along a strip shows in flight is owed to the closing flight. |
 | 24 | The open ground, from captures (C23) | **Kept as generated**: about a third green on average with a park and a parking lot on every block ("Right as is"), and half the parks fenced ("Keep half fenced"). Whether the plazas read as plazas at night is owed to the closing flight. |
+| 25 | The Deck's cost (C24) | **Kept as is**: the one-pane default holds at 60 fps or more on every view (lowest `C5-cb1`, 67.4 fps), and the Deck's overruns of the ms budget (GPU at two views, CPU at seven) and its +1.32 GB resident and about +410 MB video memory are accepted. The author chose "Keep as is". |
+| 26 | Distant draws at Extreme (C24) | **Accepted**: `C5-alt` draws 1,878.95 at Extreme against the original's 1,775.5. Extreme is opt-in, and the draw rule holds at Near (1,616.85). The author chose "Accept it". |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -202,7 +204,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ The square districts' other combinations
 22. ☑ The diagonal districts
 23. ☑ Open ground on the bare flagged blocks
-24. ☐ Measure the cost on the PC and the Deck
+24. ☑ Measure the cost on the PC and the Deck
 25. ☐ Checks: suite and goldens
 
 ## Dependency and parallelism notes
@@ -696,7 +698,30 @@ per paint; its clusters are in `analysis/c5-ground/FINDINGS.md` (A2).
 
 **⚠ Traps.** No collider stands there, so nothing drawn may look like one.
 
-## C24 ☐ Measure the cost on the PC and the Deck
+## C24 ☑ Measure the cost on the PC and the Deck
+
+**Landed.** No game code change. `analysis/veg-budget/measure.ps1` gains the modes `noground` and
+`xnoground`: Near and Extreme with `--city-ground` pointing at an empty folder, so no block floor
+and no dressing. Its summary also reports `frame_ms` and `fps`. The PC holds Decision 10 at every
+view. The Deck holds the 60 fps rule but overruns the ms budget; the author keeps it as is
+(Decision 25) and accepts the Extreme draw rise at `C5-alt` (Decision 26).
+
+**Verified.**
+
+- RTX 5080, 5120x1440, nine views, five modes interleaved, n=3, 135 launches with no other Godot
+  running. Ground and dressing add at most +0.70 ms GPU (`C5-cb7` Extreme) and +0.25 ms CPU over
+  the buildings. With the buildings, at most +0.92 ms GPU (`C5-cb1` Extreme) and +0.30 ms CPU
+  (`C5-cb23` Extreme) over the original city. `C5-alt` draws 1,616.85 at Near and 1,878.95 at
+  Extreme, against the original's 1,775.5.
+- Steam Deck OLED, Game Mode, 1280x800, on battery, nine views, n=3, 54 launches. Ground and
+  dressing add +0.54 to +2.07 ms GPU and +0.23 to +1.47 ms CPU over the buildings. The lowest view
+  is `C5-cb1` at 67.4 fps. With the buildings, GPU is over +2.0 ms at `C5-cb1` (+3.00) and `C5-cb7`
+  (+2.63), and CPU over +0.5 ms at seven views. `C5-alt` draws 1,189.1 against the original's
+  1,341.7. Memory: about +410 MB video (buffers +256 MB, textures +51 MB) and +1.32 GB resident.
+  The dressing places in 1.47 s and builds in 0.97 s; startup grows by 3.4 s.
+- No launch switch separates the floor from the dressing, so their shares are not measured apart.
+
+**Original approach (kept for reference).**
 
 **Goal.** Decision 10's budget holds for buildings, ground and dressing together.
 
