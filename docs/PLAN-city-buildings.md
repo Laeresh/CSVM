@@ -83,6 +83,7 @@ objected to; reopen any of them by asking.
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
 | 38 | Walk-up wall brightness (C21) | **"Keep as it is"**: the walk-ups keep their lit brick and stone against the originals' near-black walls. |
 | 39 | Tower warmth from altitude (C21) | **"Keep the warm look"**: the window light mix of B15 stays, against the original's cool grey-white skyline. |
+| 47 | The city on an integrated GPU at one pane (C24), amends Decision 8 | Measured on a Steam Deck (OLED, Game Mode, 1280x800, one pane): every C5 view holds 71 fps or more with the city on; `C5-cb1` is over the budget (+2.16 ms GPU, +0.75 ms CPU, 84 to 71 fps) and `C5-cb23` on CPU (+0.56 ms); seven views are inside it. **"On at one pane"**: the city is on by default there, as the code has it; at two or more panes the original city draws. |
 | 46 | The `det` dressing's fire escapes and look (C21) | Shown three ways to build a fire escape: **"B: see-through lattice"**, one flat panel per flight with a lattice of our own drawing, cut out so the wall shows through. Shown the build, with roof boxes paler than the original's and one zigzag per lattice band against the original's finer diamonds: **"Land as shown"**. |
 | 45 | Original posters on the new boards (C21) | The user: "could we place the original posters on the new buildings boards, mixed with the new ones?" The three C5 posters (`poster02`, `poster03`, `poster04`) are copied from the game's loaded textures into the atlas in memory, never into the repo; `poster03` joins the tall designs, `poster02` and `poster04` the wide ones. **"Equal chance"**: each original is one more design in the seed's draw. Shown one original among eleven boards and each original forced onto a new board: **"Land it"**. |
 | 44 | Pitched tower roofs of `cblock5` and `cblock6` (C21) | The original's hip and pyramid roofs on `cb18`, `cb19b` and `cb20` read dark red at night; the new ones follow each building's tint. **"Keep as shown"**. |
@@ -275,7 +276,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Generate the remaining hulls
 22. ☑ Relabel the 3D Vegetation option to cover scenery
 23. ☑ Engine checks and golden frames for the new city
-24. ☐ Closing measurement, the integrated-GPU default, and follow-up issues
+24. ☑ Closing measurement, the integrated-GPU default, and follow-up issues
 
 ## Dependency and parallelism notes
 
@@ -1284,7 +1285,33 @@ to widen. The windows roll on `csky_time`, which steps a fixed amount per frame 
 a pinned frame holds; a frame pinned past 300 s of session time would show rolled windows and is
 not covered by `c5-city-night-enhanced`, which captures at frame 120.
 
-## C24 ☐ Closing measurement, the integrated-GPU default, and follow-up issues
+## C24 ☑ Closing measurement, the integrated-GPU default, and follow-up issues
+
+**Landed.** The closing PC measurement is the nine-view batch taken with the posters,
+gables and dressing in (C21's Verified); nothing drawn has changed since. Extreme at `C5-alt`
+draws 13.9 under the city off, so Decision 33 leaves nothing to put to the user. The ground
+follow-up is #357. At one pane an integrated GPU runs Rich and Near and draws the new city
+(`VegetationModelsSetting.Default`, `VegetationQualitySetting.FallbackFor`, `CityModels.On`); at
+two or more panes Vegetation Quality falls to Original and the original city draws. Decision 8
+had the city off at one pane until measured. Measured on a Steam Deck (OLED, Game Mode, one pane,
+1280x800), the city adds at most 2.16 ms GPU and 0.75 ms CPU (`C5-cb1`, 84 to 71 fps) and
+0.56 ms CPU at `C5-cb23`; the other seven views hold the budget, and the city draws fewer calls
+than the original at every view. The user keeps the city on at one pane (Decision 47), so no code
+changes.
+
+**Verified.** By the item's agent. The Deck table is in `analysis/veg-budget/FINDINGS.md`: a Linux
+export of the C23 commit in a scratch install, `--det` with the Deck's own setting words passed by
+hand, city off against the default, interleaved, n=3 over the nine views, ranges within 0.15 ms
+but for one launch the median sets aside. Off `--det`, the Deck's logs show the city drawn at one
+pane and, at two panes, Vegetation Quality `original` from `default_integrated_gpu_panes` and the
+city not drawn. Not checked on the Deck: two-pane cost, Desktop Mode, a docked display, a flown
+session, battery and thermal states. The 8-chapter `--freecam` regression (C1, C1B, C1C, C2,
+C2B, C3, C4, C5, frame 120, Original and Enhanced) against the branch's merge-base with main:
+15 of 16 screenshots are pixel-identical and C5 under Enhanced differs, which is the new city; the
+logs differ only in the startup hitch's frame time and C5's `city models:` line, with no new
+warning or error.
+
+**Original approach (kept for reference).**
 
 **Goal.** The full city is measured against Decision 8, the option's default per GPU class is set,
 and anything the user's eyes asked for outside this plan's scope is filed.

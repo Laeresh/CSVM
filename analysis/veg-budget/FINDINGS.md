@@ -364,6 +364,47 @@ Every view holds the budget: at most 0.58 ms GPU (C5-cb1 near, C5-alt extreme) a
 (C5-cb1, extreme). With the dressing's originals hidden, **extreme draws 1,761.6 at C5-alt against
 1,775.5 with the city off, 13.9 under**; near draws 1,574.6. The scene gains 4,529 nodes.
 
+## The city on the Steam Deck
+
+The same city (build 047774452, Linux export) on a Steam Deck with the OLED panel (RADV VANGOGH,
+Vulkan 1.4.350, 89.9 Hz) in Game Mode, one pane, 1280x800 `--fullscreen`, render scale 100, TAA.
+Each launch is measure.ps1's: `--freecam` at the view's pose, `--det --perf --no-vsync --mute
+--frames=600`, with the Deck's own words that `--det` drops passed by hand (`--shadow-quality=high
+--water-quality=flat --ground-cover=off --global-illumination=off`). The city off is
+`--vegetation-models=off` against the default `near`, interleaved, n=3, the same nine views, summed
+as measure.ps1 sums (the first two windows dropped, the median of the launch medians). Every range
+is within 0.15 ms but one C5-cb1 off launch, 1.9 ms high. CPU is `render_cpu_ms` plus `proc_ms`. The
+frame is GPU-bound at every view: `frame_ms` sits within 0.75 ms of `gpu_ms`.
+
+| View | Frame off (ms) | Frame on (ms) | fps off | fps on | GPU off | GPU on | GPU added | CPU added | Draws off | Draws on |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| C5-cb1 | 11.84 | 14.05 | 84.5 | 71.2 | 11.74 | 13.90 | +2.16 | +0.75 | 550 | 433 |
+| C5-street | 12.72 | 13.24 | 78.6 | 75.5 | 12.63 | 13.15 | +0.52 | +0.29 | 500 | 389 |
+| C5-alt | 11.21 | 11.12 | 89.2 | 89.9 | 10.50 | 10.46 | -0.04 | -0.09 | 1,341.7 | 1,165.1 |
+| C5-cm23 | 9.12 | 8.98 | 109.6 | 111.4 | 8.61 | 8.52 | -0.09 | -0.12 | 688 | 495 |
+| C5-cb7 | 10.38 | 10.91 | 96.3 | 91.7 | 10.26 | 10.82 | +0.56 | +0.11 | 723 | 660 |
+| C5-cb23 | 11.30 | 12.12 | 88.5 | 82.5 | 10.74 | 11.76 | +1.02 | +0.56 | 1,495.1 | 1,392.1 |
+| C5-cb4 | 10.00 | 10.54 | 100.0 | 94.9 | 9.70 | 10.32 | +0.62 | +0.18 | 811.1 | 644.1 |
+| C5-cb5 | 9.83 | 10.56 | 101.7 | 94.7 | 9.73 | 10.42 | +0.69 | +0.11 | 423.1 | 277.1 |
+| C5-cb6 | 10.81 | 11.18 | 92.5 | 89.4 | 10.68 | 11.09 | +0.41 | -0.03 | 770.1 | 499.1 |
+
+Against Decision 8's budget (2.0 ms GPU and 0.5 ms CPU added), C5-cb1 is over on both (+2.16 ms
+GPU, +0.75 ms CPU) and C5-cb23 on CPU (+0.56 ms); the other seven views hold it. The city draws
+fewer calls than the original at every view, 176.6 fewer at C5-alt. The panel refreshes at 89.9 Hz,
+so a synced frame shows at most 90 fps: C5-cb1 falls from 84 to 71 fps, C5-cb23 from 88 to 82 and
+C5-street from 79 to 76, and the other views stay at or near the panel's rate.
+
+Off `--det`, with no saved options, the Deck resolves its own words: at one pane Vegetation
+Quality is `rich` and 3D Scenery `near` (both `default`), and the city draws; at two panes
+(`--fly --players=2`) Vegetation Quality falls to `original` (`default_integrated_gpu_panes`) and
+the original city draws.
+
+For reference, the 3D trees on the earlier Deck (the LCD model, PLAN-enhanced-vegetation D36, at
+the 150 to 250 m band, `gpu_ms` no models against Rich): +0.38 ms at C1, +1.81 at C1's crop field,
++0.65 at C2, +1.87 at C3, +2.08 at C3's palm transitions, +0.54 at C4. At the 400 to 600 m Near band
+that ships (D32) its worst `--det` view was C1's crop field at 16.41 ms (61 fps), 14.08 ms (71 fps)
+with the ground cover off as the Deck defaults it.
+
 ## Reproducing
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"
@@ -383,7 +424,8 @@ session's windowed run read 2 to 5 ms high and is dropped.
 ## Limits
 
 - One PC: RTX 5080 on Vulkan, 7800X3D, 120 Hz display, hidden desktop at 5120x1440. The Deck is
-  unmeasured.
+  measured at one pane on the nine C5 views alone; its two-pane cost is not measured, since the
+  original city draws there.
 - Static poses with no aircraft, AI or missions; CM23's flown cost is in
   `../cm23-host-perf/FINDINGS.md`.
 - C5-cb7's frame takes one of two pixel hashes from launch to launch at every View Distance, while
