@@ -57,6 +57,24 @@ public sealed class CityDressingTests
         }
     }
 
+    /// <summary>Open ground stands no building, so its dressing holds nothing that reads as one: no wall and no shed. Its
+    /// parks stand trees and benches, and its parking lots cars.</summary>
+    [Fact]
+    public void OpenGroundStandsNothingBuildingLike()
+    {
+        var files = Directory.GetFiles(Path.Combine(Folder, "ground"), "cblock*-none-*.json");
+        Assert.Equal(12, files.Length);
+        var paints = CityGround.Layout.Parse(GroundJson).Paints;
+        foreach (string file in files)
+        {
+            var layout = CityDressing.ParseVariant(File.ReadAllText(file));
+            var kinds = CityDressing.Slots(layout, CityDressing.Lots(GroundJson, "none"), paints[Path.GetFileName(file).Split('-')[0]])
+                .Select(s => s.Kind).ToHashSet();
+            Assert.False(kinds.Contains("gd_wall") || kinds.Contains("gd_shed"), $"{file}: kinds {string.Join(", ", kinds)}");
+            Assert.True(new[] { CityDressing.Tree, "gd_bench", "gd_sedan" }.All(kinds.Contains), $"{file}: kinds {string.Join(", ", kinds)}");
+        }
+    }
+
     /// <summary>On a polygon over many blocks, at an offset UV, each instance carries the variant the shader's pick gives
     /// the cell under it. Every block stands only its own variant's slot.</summary>
     [Fact]

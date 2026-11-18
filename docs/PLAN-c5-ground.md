@@ -63,6 +63,7 @@ Scenery off draw the original ground.
 | 21 | The kerb and the dressing's reach, flown (B15) | **Both fixed**: the soft kerb with whole lamp pools, and the dressing fading with the walk-up blocks. The author chose "Both fixed". |
 | 22 | The `cblock1` floors, from captures (C21) | **Kept as generated**: about 10 % green on the tower blocks ("10 % is right"); the walk-ups on `cblock1` paint read as inner city, not as `cblock7`'s gardens ("Inner city"); asphalt is neither capped nor lightened ("Leave it"); the parking stalls stay subtle ("Keep subtle"). |
 | 23 | The diagonal floors, from captures (C22) | **Kept as generated**: the `cblock5`/`cblock6` walk-ups under diagonal paint read as inner city ("Inner-city walk-ups"), and the cross alleys stay ("Keep them"). Whether the 362 m repeat along a strip shows in flight is owed to the closing flight. |
+| 24 | The open ground, from captures (C23) | **Kept as generated**: about a third green on average with a park and a parking lot on every block ("Right as is"), and half the parks fenced ("Keep half fenced"). Whether the plazas read as plazas at night is owed to the closing flight. |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -200,7 +201,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ The square districts' other combinations
 22. ☑ The diagonal districts
-23. ☐ Open ground on the bare flagged blocks
+23. ☑ Open ground on the bare flagged blocks
 24. ☐ Measure the cost on the PC and the Deck
 25. ☐ Checks: suite and goldens
 
@@ -657,7 +658,29 @@ u ± v = 0.5 + k, the strip index floor(u ± v − 0.5) repeats with the tile. 0
 
 **⚠ Traps.** The buildings here stand turned 45° in their own frames (`docs/tooling.md:850-852`).
 
-## C23 ☐ Open ground on the bare flagged blocks
+## C23 ☑ Open ground on the bare flagged blocks
+
+**Landed.** `c5_ground.py`'s `open_layout` lays out flagged ground with no layer beneath (Decision
+8): inside the sidewalk verge, the largest use is a park (a lawn with paved cross paths meeting at
+a paved round with a flower bed, fenced on half the blocks), the next a parking lot with painted
+stalls, and the rest roll among parks, parking lots, plazas (flagstone round a planted square) and
+fenced gravel or dirt vacant lots. The street stays per paint: the square cross, or the 45° strip
+in C22's frame. It writes 3 variants each of `cblock7-none`, `cblock1-none`, `cblock2-none` and
+`cblock3-none` at texture luma 35, green 0.16 to 0.52. It emits no wall line and no yard region, so
+the dressing stands no wall or shed there. `CityGround` and `CityDressing` pick the floors up with
+no code change (set `none` has no lots). C5 floors 1,969 polygons and keeps the paint only on the
+31 polygons in another frame; the dressing is 1,076,522 instances in 128.0 MB of buffers, walls and
+sheds unchanged. The `city ground:` line's `kept` counts a polygon in both `other_frame` and
+`two_frames` twice (it reads -13); the count is wrong, the flooring is not. Verdicts: Decision 24.
+
+**Verified.** Every earlier floor output is byte-identical, and a rerun is byte-identical.
+`OpenGroundStandsNothingBuildingLike` checks all 12 open layouts place trees, benches and sedans and
+no wall or shed; `ShippedSlotsStandOnFreeGround` passes on every layout. Captured at two of A2's
+bare-flagged clusters and a low oblique over an open `cblock1` block, with and without the HD pack:
+parks, parking and lots where the black paint was. `city-ground`, `city-dressing` and
+`city-buildings` pass with the unit tests (8,527).
+
+**Original approach (kept for reference).**
 
 **Goal.** Flagged ground with no base beneath shows parks, plazas, parking lots and vacant lots
 (Decision 8), no building-like shape.

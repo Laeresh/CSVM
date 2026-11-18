@@ -115,11 +115,17 @@ DOWNTOWN = dict(
 # share, with the walk-ups' back-yard strips and narrow lots kept.
 INNER_WALKUP = dict(DOWNTOWN, core=(("strips", 0.30), ("service", 0.30), ("parking", 0.15), ("court", 0.25)),
                     apron=2.5, lot_w=(8.0, 14.0))
+# Decision 8: flagged ground with no layer beneath stands no building. It is the city's open ground:
+# a park on every block, the rest parks, parking lots, plazas and fenced vacant lots. parcel: the
+# longest side a use keeps before it is cut again.
+OPEN = dict(open=True, parcel=(80.0, 150.0), uses=(("park", 0.3), ("parking", 0.3), ("plaza", 0.2), ("vacant", 0.2)))
 # (visible paint, standing set, variants, character). Decision 4: 2 to 4 per combination.
 COMBOS = (("cblock7", "cblock7", 4, WALKUP), ("cblock7", "cblock4", 2, WALKUP),
           ("cblock1", "cblock1", 4, DOWNTOWN), ("cblock1", "cblock4", 3, INNER_WALKUP),
           ("cblock2", "cblock2", 3, DOWNTOWN), ("cblock2", "cblock5", 3, INNER_WALKUP),
-          ("cblock3", "cblock3", 2, DOWNTOWN), ("cblock3", "cblock6", 3, INNER_WALKUP))
+          ("cblock3", "cblock3", 2, DOWNTOWN), ("cblock3", "cblock6", 3, INNER_WALKUP),
+          ("cblock7", "none", 3, OPEN), ("cblock1", "none", 3, OPEN), ("cblock2", "none", 3, OPEN),
+          ("cblock3", "none", 3, OPEN))
 
 
 def _pick(rng, table):
@@ -434,6 +440,75 @@ def layout(block, lots, rng, ch, strip=False):
     return L, yards, cores
 
 
+def open_layout(block, rng, ch, strip=False):
+    """A block with no building beneath its paint (Decision 8): the sidewalk verge, then the ground
+    cut into a few open uses, the largest a park. Nothing stands up from it but fences, hedges,
+    trees, benches, cans and parked cars: no wall, no shed, since no collider stands there."""
+    A0, B0, A1, B1 = block
+    W = SIDEWALK_M
+    L = Layout()
+    L.cell("sidewalk", (A0, B0, A1, B0 + W), "verge")
+    L.cell("sidewalk", (A0, B1 - W, A1, B1), "verge")
+    if not strip:
+        L.cell("sidewalk", (A0, B0 + W, A0 + W, B1 - W), "verge")
+        L.cell("sidewalk", (A1 - W, B0 + W, A1, B1 - W), "verge")
+    rects = []
+
+    def cut(r):
+        a0, b0, a1, b1 = r
+        w, h = a1 - a0, b1 - b0
+        if max(w, h) <= rng.uniform(*ch["parcel"]) or max(w, h) < 60.0:
+            rects.append(r)
+            return
+        t = rng.uniform(0.35, 0.65)
+        if w >= h:
+            cut((a0, b0, a0 + t * w, b1))
+            cut((a0 + t * w, b0, a1, b1))
+        else:
+            cut((a0, b0, a1, b0 + t * h))
+            cut((a0, b0 + t * h, a1, b1))
+
+    cut((A0 if strip else A0 + W, B0 + W, A1 if strip else A1 - W, B1 - W))
+    # The largest use is a park and the next a parking lot, so every block keeps green and paving.
+    order = sorted(range(len(rects)), key=lambda i: -(rects[i][2] - rects[i][0]) * (rects[i][3] - rects[i][1]))
+    for i, r in enumerate(rects):
+        use = "park" if i == order[0] else "parking" if len(order) > 1 and i == order[1] else _pick(rng, ch["uses"])
+        a0, b0, a1, b1 = r
+        ca, cb = (a0 + a1) / 2, (b0 + b1) / 2
+        if use == "park":
+            # A lawn crossed by two paved paths meeting at a paved round with a flower bed, fenced or not.
+            L.cell("lawn", r, "core")
+            L.cell("flagstone", (ca - 1.5, b0, ca + 1.5, b1), "core")
+            L.cell("flagstone", (a0, cb - 1.5, a1, cb + 1.5), "core")
+            s = rng.uniform(5.0, 8.0)
+            L.cell("flagstone", (ca - s, cb - s, ca + s, cb + s), "core")
+            L.cell("bed", (ca - 2.0, cb - 2.0, ca + 2.0, cb + 2.0), "bed")
+            if rng.random() < 0.5:
+                for e in ((a0, b0, a1, b0), (a0, b1, a1, b1), (a0, b0, a0, b1), (a1, b0, a1, b1)):
+                    L.line("fence", *e)
+        elif use == "plaza":
+            # Paving round a planted square.
+            L.cell("flagstone", r, "core")
+            s = 0.2 * min(a1 - a0, b1 - b0)
+            L.cell("lawn", (ca - s, cb - s, ca + s, cb + s), "core")
+            L.cell("bed", (ca - 2.0, cb - 2.0, ca + 2.0, cb + 2.0), "bed")
+        elif use == "parking":
+            c = L.cell("asphalt", r, "core")
+            if c:
+                c["stalls"] = True
+            if a1 - a0 >= b1 - b0:
+                L.cell("concrete", (a0, b0, a1, b0 + 3.0) if rng.random() < 0.5 else (a0, b1 - 3.0, a1, b1), "core")
+            else:
+                L.cell("concrete", (a0, b0, a0 + 3.0, b1) if rng.random() < 0.5 else (a1 - 3.0, b0, a1, b1), "core")
+        else:
+            # A vacant lot: gravel or dirt behind a fence, a worn path across it.
+            L.cell("dirt" if rng.random() < 0.5 else "gravel", r, "core")
+            for e in ((a0, b0, a1, b0), (a0, b1, a1, b1), (a0, b0, a0, b1), (a1, b0, a1, b1)):
+                L.line("fence", *e)
+            L.paths.append([(a0, b0), (ca + rng.uniform(-5, 5), cb + rng.uniform(-5, 5)), (a1, b1)])
+    return L
+
+
 def _gardens(L, yards, cores, free_px, rng, ch):
     """Turns yards and core cells to lawn or garden, in a seeded order, until the character's share
     of the free floor is green; a garden gets beds along two edges and a path, a lawn a worn path."""
@@ -712,7 +787,7 @@ def generate(layout_doc, paint, bset, n, luma, ch):
     streets = pdoc["streets"]
     fam = {s["family"]: s for s in streets}
     assert set(fam) == {"u", "v"}, "only the square districts (Wave C adds the diagonal ones)"
-    lots = layout_doc["templates"][bset]["lots"]
+    lots = layout_doc["templates"].get(bset, {"lots": []})["lots"]  # none: flagged ground with no buildings
     shift = (int(round(fam["u"]["centre"] * SIZE)), int(round(fam["v"]["centre"] * SIZE)))
     rng = np.random.default_rng([zlib.crc32(("%s-%s" % (paint, bset)).encode()), n])
 
@@ -724,20 +799,23 @@ def generate(layout_doc, paint, bset, n, luma, ch):
     (A0, A1), (B0, B1) = block_edge(fam["u"], shift[0]), block_edge(fam["v"], shift[1])
     blocked = lot_mask(lots, shift) | street_mask(streets, shift)
     boxes = [_bbox(lot, shift) for lot in lots]
-    flip = rng.random() < 0.5
-    if flip:
-        L, yards, cores = layout((B0, A0, B1, A1), [[r[1], r[0], r[3], r[2]] for r in boxes], rng, ch)
-        L.block = (B0, A0, B1, A1)
+    if ch.get("open"):
+        L, flip = open_layout((A0, B0, A1, B1), rng, ch), False
     else:
-        L, yards, cores = layout((A0, B0, A1, B1), boxes, rng, ch)
-        L.block = (A0, B0, A1, B1)
-    tb = blocked.T if flip else blocked
+        flip = rng.random() < 0.5
+        if flip:
+            L, yards, cores = layout((B0, A0, B1, A1), [[r[1], r[0], r[3], r[2]] for r in boxes], rng, ch)
+            L.block = (B0, A0, B1, A1)
+        else:
+            L, yards, cores = layout((A0, B0, A1, B1), boxes, rng, ch)
+            L.block = (A0, B0, A1, B1)
+        tb = blocked.T if flip else blocked
 
-    def free_px(r):
-        x0, x1, y0, y1 = max(px(r[0]), 0), min(px(r[2]), SIZE), max(px(r[1]), 0), min(px(r[3]), SIZE)
-        return float((~tb[y0:y1, x0:x1]).sum()) if x1 > x0 and y1 > y0 else 0.0
+        def free_px(r):
+            x0, x1, y0, y1 = max(px(r[0]), 0), min(px(r[2]), SIZE), max(px(r[1]), 0), min(px(r[3]), SIZE)
+            return float((~tb[y0:y1, x0:x1]).sum()) if x1 > x0 and y1 > y0 else 0.0
 
-    _gardens(L, yards, cores, free_px, rng, ch)
+        _gardens(L, yards, cores, free_px, rng, ch)
     if flip:
         L.flip()
     rel = paint_floor(L, rng)
@@ -768,7 +846,7 @@ def generate_strip(layout_doc, paint, bset, n, luma, ch):
     st = st[0]
     alpha, beta = FAMILY_AXES[st["family"]]
     centre, half = st["centre"], st["half"]
-    lots = layout_doc["templates"][bset]["lots"]
+    lots = layout_doc["templates"].get(bset, {"lots": []})["lots"]  # none: flagged ground with no buildings
     rng = np.random.default_rng([zlib.crc32(("%s-%s" % (paint, bset)).encode()), n])
     wm = TILE_M / np.sqrt(2.0)  # metres per unit of c or d: the strip's width
     lm = 2 * wm                 # the strip's period along its street
@@ -793,7 +871,7 @@ def generate_strip(layout_doc, paint, bset, n, luma, ch):
         polys.append([[(a + shift_a, b) for a, b in p] for p in ps])
     spans = sorted((min(a for p in ps for a, _ in p), max(a for p in ps for a, _ in p)) for ps in polys)
     gaps = [((spans[i][1], spans[(i + 1) % len(spans)][0] + (lm if i + 1 == len(spans) else 0.0))) for i in range(len(spans))]
-    g0, g1 = max(gaps, key=lambda g: g[1] - g[0])
+    g0, g1 = max(gaps, key=lambda g: g[1] - g[0]) if gaps else (0.0, 0.0)
     t0px = int(round((g0 + g1) / 2 * pxm)) % w
     t0 = t0px / pxm
     boxes, blocked = [], np.zeros((h, w), bool)
@@ -809,14 +887,18 @@ def generate_strip(layout_doc, paint, bset, n, luma, ch):
     rows = (np.arange(h) + 0.5) / pxm
     blocked |= ((rows < half * wm) | (rows > wm - half * wm))[:, None]
     block = (0.0, half * wm, lm, wm - half * wm)
-    L, yards, cores = layout(block, boxes, rng, ch, strip=True)
+    if ch.get("open"):
+        L = open_layout(block, rng, ch, strip=True)
+    else:
+        L, yards, cores = layout(block, boxes, rng, ch, strip=True)
     L.block = block
 
     def free_px(r):
         x0, x1, y0, y1 = max(px(r[0], pxm), 0), min(px(r[2], pxm), w), max(px(r[1], pxm), 0), min(px(r[3], pxm), h)
         return float((~blocked[y0:y1, x0:x1]).sum()) if x1 > x0 and y1 > y0 else 0.0
 
-    _gardens(L, yards, cores, free_px, rng, ch)
+    if not ch.get("open"):
+        _gardens(L, yards, cores, free_px, rng, ch)
     rel = paint_floor(L, rng, (h, w), pxm)
 
     # Every image texel centre's raster corner: c and d times 512 are whole there.
