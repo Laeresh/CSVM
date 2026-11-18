@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the `cblock7` prototype
 
-11. ☐ Export the footprint and street data the generator needs
+11. ☑ Export the footprint and street data the generator needs
 12. ☐ Generate the block floor variants for `cblock7`
 13. ☐ Composite and select the new ground in the engine
 14. ☐ Build and stamp the low block dressing
@@ -320,7 +320,24 @@ instrument, read against `docs/verification.md` first.>
 
 # Wave B, the `cblock7` prototype
 
-## B11 ☐ Export the footprint and street data the generator needs
+## B11 ☑ Export the footprint and street data the generator needs
+
+**Landed.** `analysis/c5-ground/export_layout.py` writes `CSVM/data/city_models/C5/ground_layout.json`
+(41 KB, derived geometry only). Per template: its lots, each the union of every model its
+decorations' substitute rolls can pick with their `det` halves and further meshes, written as
+convex hulls in texture UV (grown 0.5 m, holes filled) with the lot's top height `h` over every
+roll; and its lamp and glow points. Per paint: its streets (family, centreline, half-width), its
+variant cell (origin snapped to 0.5), and the building sets standing on it with their areas. A
+lot's origin is wrapped into [0, 1) and its polygons are not, so a consumer draws each polygon
+again shifted by ±1 in u and v.
+
+**Verified.** Rasterised with the ±1 shifts, the exported footprints cover 1.00000 of `survey.py`'s
+placed footprints on all seven templates within 0.25 m (area 1.01 to 1.25 times the placed set,
+because every rolled substitute and `det` half is included). Every main set has 0.000 of its
+footprint in its paint's streets except `cblock7` (0.003) and `cblock4` on `cblock7` paint
+(0.001), which count as covered by a building. A second run is byte-identical. Confidence: traced.
+
+**Original approach (kept for reference).**
 
 **Goal.** The ground generator reads committed, derived data only: per template, each building
 lot's footprint polygon in texture UV (grown by its awnings and fire escapes), the lamp post
@@ -352,7 +369,16 @@ some green (Decision 12), at a mean texture luma of about 20 with one comparison
 its painted structure exposed and its widest free spot 149 m.
 
 **Approach.** A generator script beside `CSVM/data/city_models/c5.py` and `city_atlas.py`, following
-their pattern. <TODO: the floor's material vocabulary and how gardens are laid out.>
+their pattern, reading only `ground_layout.json`. The floor's materials and garden layout follow
+Decision 12 and are shown to the author on montages before B13 wires them; B15 judges them flown.
+
+**The contract with B13.** The generator writes, per combination of visible paint and standing set
+(`ground_layout.json`'s `paints.<paint>.sets`, `none` included), N variants as
+`CSVM/data/city_models/C5/ground/<paint>-<set>-<n>.png`: 512 × 512, sRGB RGB, covering one 256 m
+tile in the template's own UV (+U right, +V down the image), seamless across the tile edges. Texels
+in a street band or under a lot's footprint are don't-care (the engine draws the original there
+and a building stands on the rest). `ground/index.json` lists each combination's variant count.
+The level-30 comparison set of Decision 3 is written outside the repo, for B15 only.
 
 **Model recommendation.** <TODO>
 
@@ -375,16 +401,26 @@ different materials. The authored levels are installed by `TextureArchive`.
 **Approach.** Composite at load per texture level, the street band from the original's own level
 (`cblock7`, `cblock7_1`) and the floor from the generated image's mip, into a texture array of
 variants; the ground shader picks the layer by a hash of the half-tile cell on world XZ,
-floor(x / 256 + 0.5) and floor(z / 256 + 0.5), never on raw UV (A2).
-<TODO: where the composite runs, how the shader variant joins the material cache key, and what it
-costs at load.>
+floor(x / 256 + 0.5) and floor(z / 256 + 0.5), never on raw UV (A2). The street test is analytic from
+`ground_layout.json`'s streets (|c − centre − k| ≤ half), so its edge is sharp at every distance and
+no mask texture exists. The combination per polygon: clear paint takes its own set; flagged paint
+over a decorating base takes the base's set; flagged paint with none takes `none`. Reads the
+contract in B12. <TODO: how the engine knows a flagged polygon's base set (the clutter pass knows
+which polygons decorate; A1 found the coverage bimodal: 196 polygons wholly over a base, 254 over
+none, 2 partly), where the composite runs, how the shader variant joins the material cache key, a
+dev flag that points the floor at another folder for B15's level-30 comparison, and the load
+cost.>
 
 **Model recommendation.** <TODO>
 
 **Verify.** <TODO: the full 8-chapter `--freecam` regression with unchanged counts outside C5, and a
 C5 capture at a `cblock7` view with the city on and off.>
 
-**⚠ Traps.** Never drop a component of the material cache key (`SceneBuilder.cs:561-566`). The
+**⚠ Traps.** The layout assumes the `U+X V+Z` 256 m frame: ground laid in another frame (0.427 km²
+of clear `cblock7` at 45 m or off-axis, 3.8 % of flagged `cblock1` turned) keeps the original
+paint. So do the two minor combinations whose buildings stand across their paint's street
+(`cblock2`'s set under turned `cblock1`, 0.066 km², and `cblock4`'s set on `cblock2` paint,
+0.131 km²). Never drop a component of the material cache key (`SceneBuilder.cs:561-566`). The
 `no_clutter` bias stays at half a level (`SceneBuilder.cs:486-492`). Original pixels are composited
 at runtime and never written to the repo, a cache or a release.
 
