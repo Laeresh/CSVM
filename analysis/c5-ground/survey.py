@@ -5,9 +5,11 @@ Measures how C5's painted `cblock` ground relates to the building sets that stan
 - per template, each building decoration's top-down triangles mapped into texture UV through the
   template ground quad's own affine XZ->UV, the way `Clutter.ParseTemplate` projects a
   decoration's origin (`CSVM/src/Mech3/Clutter.cs`), rasterised at texel scale;
+- the streets of each paint as UV geometry: building-free corridors of every set standing on the
+  paint, narrowed to the kerb-to-kerb band the paint draws (`find_streets`);
 - the combinations table: per visible paint and standing building set, the built share of the
-  block area, the painted structure the buildings leave uncovered, the free floor's luma and the
-  widest free spot, all per 256 m tile;
+  block area (everything off the streets), the painted structure the buildings leave uncovered,
+  the free floor's luma and the widest free spot, all per 256 m tile;
 - the eight-frame test: the luma inside a template's own footprints under each of the eight
   axis-aligned texture frames;
 - the world census: every `cblock` polygon reached from `world1` (each node once, nearest LOD,
@@ -18,8 +20,8 @@ Measures how C5's painted `cblock` ground relates to the building sets that stan
   base beneath it (no buildings) per paint, with its luma and where it lies.
 
 extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the checkout that does,
-defaulting to this one. Embeds no game data and writes nothing by default. --overlays writes
-texture overlays, which hold original pixels, so it refuses a directory inside the repo.
+defaulting to this one. Embeds no game data and writes nothing by default. --overlays writes a
+street plot per paint, which holds original pixels, so it refuses a directory inside the repo.
 
     set CSVM_DATA_ROOT=Z:\\CSVM
     py -I analysis/c5-ground/survey.py [--overlays <dir outside the repo>]
@@ -42,15 +44,25 @@ import census as C  # noqa: E402
 E = C.E
 OVERLAY = ("cblock1", "cblock2", "cblock3", "cblock7")
 BASE = ("cblock4", "cblock5", "cblock6")
-# The plan's street rule: a texel is street where its 16 m box-filtered luma exceeds this.
-STREET_LUMA = 55
-STREET_BOX_M = 16
+# Street geometry is measured on a 1 m lattice over the 256 m tile, whatever the paint's size.
+GRID = 256
+# A building-free corridor narrower than this is a seam between lots, not a street: the paint
+# runs straight across the tile-edge seams (1 to 7 m) with no kerb, band or lamp.
+STREET_MIN_M = 10
 # Luma at or above which a block texel counts as painted structure (roofs, yards, lit walls).
 STRUCTURE_LUMA = 25
 # The combinations table's rows: visible paint and the template whose buildings stand there.
 COMBOS = [("cblock1", "cblock1"), ("cblock1", "cblock4"), ("cblock2", "cblock2"),
           ("cblock2", "cblock5"), ("cblock3", "cblock3"), ("cblock3", "cblock6"),
           ("cblock7", "cblock7"), ("cblock7", "cblock4"), ("cblock4", "cblock4")]
+# The building sets whose corridors define a paint's streets: those standing on it over more than
+# 1 km2 in the world census (the base paints: their own and the overlays laid over them). The
+# 0.13 km2 of cblock4's set on cblock2 paint and 0.07 km2 of cblock2's under rotated cblock1 are
+# left out; they stand across the paint's streets.
+STANDING = {"cblock1": ("cblock1", "cblock4"), "cblock2": ("cblock2", "cblock5"),
+            "cblock3": ("cblock3", "cblock6"), "cblock7": ("cblock7", "cblock4"),
+            "cblock4": ("cblock4", "cblock1", "cblock7"), "cblock5": ("cblock5", "cblock2"),
+            "cblock6": ("cblock6", "cblock3")}
 
 
 def luma(a):
@@ -91,13 +103,12 @@ def template(ch, t):
     return {"tex": tex.lower().replace(".tif", ""), "aff": aff, "blds": blds}
 
 
-def footprint(blds, w, h, wrap=True):
-    """Texel mask of the non-`det` buildings. A building is drawn in the tile its origin falls in;
-    with `wrap` the parts that cross a tile edge are drawn again on the opposite side, since the
-    texture repeats there."""
+def footprint(blds, w, h):
+    """Texel mask of the non-`det` buildings. A building is drawn in the tile its origin falls in,
+    and the parts that cross a tile edge again on the opposite side, since the texture repeats."""
     im = Image.new("L", (w, h), 0)
     d = ImageDraw.Draw(im)
-    shifts = [(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)] if wrap else [(0, 0)]
+    shifts = [(i, j) for i in (-1, 0, 1) for j in (-1, 0, 1)]
     for b in blds:
         if b["det"]:
             continue
@@ -108,17 +119,82 @@ def footprint(blds, w, h, wrap=True):
     return np.asarray(im) > 0
 
 
-def street_mask(lum):
-    mpt = 256.0 / lum.shape[1]
-    st = ndimage.uniform_filter(lum, size=max(3, int(STREET_BOX_M / mpt)), mode="wrap") > STREET_LUMA
-    return ndimage.binary_opening(st, iterations=1)
+def line_index(fam, w, h, at_uv=False):
+    """Per texel, which line of a family it lies on, on a GRID-texel lattice over the tile. Family
+    'u' holds the lines u = const (streets running along V), 'v' the lines v = const, '+' the
+    diagonals u + v = const and '-' the diagonals u - v = const. With `at_uv` the texel centres of a
+    w x h image are looked up on the GRID lattice instead, so any paint size reads one geometry."""
+    y, x = np.mgrid[0:h, 0:w]
+    if at_uv:
+        x = np.floor((x + 0.5) / w * GRID).astype(int)
+        y = np.floor((y + 0.5) / h * GRID).astype(int)
+    return {"u": x, "v": y, "+": x + y, "-": x - y}[fam] % GRID
 
 
-def floor_stats(lum, built):
+def find_streets(lum, built):
+    """The paint's streets as UV geometry. A corridor is a run of at least STREET_MIN_M of whole
+    lines, wrapping the tile, that no building of any set standing on the paint touches. Its street
+    is the run of lines whose mean luma is at least half the corridor's brightest line, taken around
+    that line: the kerb-to-kerb band the paint draws (its lamp pools, its kerb lines and the asphalt
+    between them), lit or not. Narrower corridors are lot seams with no street painted in them.
+    Returns dicts of family, kerb lines (first, last), corridor lines and the centre and half-width
+    in the family's UV coordinate."""
+    big = np.kron(lum, np.ones((GRID // lum.shape[0], GRID // lum.shape[1])))
+    out = []
+    for fam, step in (("u", 1.0), ("v", 1.0), ("+", math.sqrt(0.5)), ("-", math.sqrt(0.5))):
+        idx = line_index(fam, GRID, GRID)
+        cnt = np.bincount(idx.ravel(), None, GRID)
+        cov = np.bincount(idx.ravel(), built.ravel(), GRID) / cnt
+        mean = np.bincount(idx.ravel(), big.ravel(), GRID) / cnt
+        free = cov == 0
+        if free.all() or not free.any():
+            continue
+        start = int(np.argmin(free))  # a covered line, so no run is cut by the wrap
+        k = 0
+        while k < GRID:
+            i = (start + k) % GRID
+            if not free[i]:
+                k += 1
+                continue
+            run = []
+            while k < GRID and free[(start + k) % GRID]:
+                run.append((start + k) % GRID)
+                k += 1
+            if len(run) * step * 256.0 / GRID < STREET_MIN_M:
+                continue
+            j = int(np.argmax(mean[run]))
+            lo = hi = j
+            half = mean[run[j]] / 2
+            while lo > 0 and mean[run[lo - 1]] >= half:
+                lo -= 1
+            while hi < len(run) - 1 and mean[run[hi + 1]] >= half:
+                hi += 1
+            # A diagonal line k joins texel centres with u + v (or u - v) = (k + 1) / GRID (k / GRID).
+            off = 1.0 if fam == "+" else 0.5 if fam in "uv" else 0.0
+            centre = ((run[lo] + (hi - lo) / 2.0 + off) / GRID) % 1.0
+            out.append({"fam": fam, "kerb": (run[lo], run[hi]), "corridor": (run[0], run[-1]),
+                        "centre": centre, "half": (hi - lo + 1) / 2.0 / GRID,
+                        "width_m": (hi - lo + 1) * step * 256.0 / GRID,
+                        "corridor_m": len(run) * step * 256.0 / GRID,
+                        "luma": float(mean[run[lo:hi + 1]].mean())})
+    return out
+
+
+def street_mask(streets, w, h):
+    """The kerb-to-kerb bands of `streets` on a w x h texel grid."""
+    m = np.zeros((h, w), bool)
+    for s in streets:
+        idx = line_index(s["fam"], w, h, at_uv=True)
+        a, b = s["kerb"]
+        m |= ((idx - a) % GRID) <= ((b - a) % GRID)
+    return m
+
+
+def floor_stats(lum, built, street):
     """Per-tile numbers of one paint under one building mask (None for no buildings)."""
     h, w = lum.shape
     mpt = 256.0 / w
-    blk = ~street_mask(lum)
+    blk = ~street
     m = built if built is not None else np.zeros_like(blk)
     free = blk & ~m
     paint = blk & (lum >= STRUCTURE_LUMA)
@@ -350,10 +426,9 @@ def uv_cover(polys, idxs, w, h):
     return acc
 
 
-def weighted_floor(lum, wgt):
+def weighted_floor(lum, street, wgt):
     """Free-floor luma (no buildings) weighted by how often each texel is laid on the ground."""
-    free = ~street_mask(lum)
-    wv = wgt * free
+    wv = wgt * ~street
     order = np.argsort(lum, axis=None)
     cum = np.cumsum(wv.ravel()[order])
     median = lum.ravel()[order][np.searchsorted(cum, cum[-1] / 2)]
@@ -373,22 +448,36 @@ def main():
     T = {t: template(ch, t) for t in C.TEMPLATES}
     L = {t: tex_luma(T[t]["tex"]) for t in T}
 
-    print("== combinations, per 256 m tile (street: %d m box luma > %d; structure: luma >= %d)"
-          % (STREET_BOX_M, STREET_LUMA, STRUCTURE_LUMA))
-    print("paint    set      street(L)    built uncovered free mean/median dark<=5 widest  | "
-          "unwrapped: built uncovered mean/median dark widest")
+    print("== streets per paint (UV; a family's coordinate is u, v, u + v or u - v; lines on a %d-line "
+          "lattice per tile; corridors of at least %d m free of %s)" % (GRID, STREET_MIN_M, "every standing set"))
+    ST, SM = {}, {}
+    for paint, sets in STANDING.items():
+        built = np.zeros((GRID, GRID), bool)
+        for s in sets:
+            built |= footprint(T[s]["blds"], GRID, GRID)
+        ST[paint] = find_streets(L[paint], built)
+        SM[paint] = street_mask(ST[paint], *L[paint].shape[::-1])
+        for s in ST[paint]:
+            print("  %-8s %s = %.4f +- %.4f (+ k): kerb to kerb %.1f m, mean luma %.0f; building-free corridor "
+                  "%.1f m (lines %d..%d, kerbs on %d..%d)" % (
+                      paint, {"u": "u", "v": "v", "+": "u+v", "-": "u-v"}[s["fam"]], s["centre"], s["half"],
+                      s["width_m"], s["luma"], s["corridor_m"], s["corridor"][0], s["corridor"][1],
+                      s["kerb"][0], s["kerb"][1]))
+        print("  %-8s street share of the tile %.3f, from sets %s" % (paint, SM[paint].mean(), "+".join(sets)))
+
+    print()
+    print("== combinations, per 256 m tile (street: the kerb-to-kerb bands above; structure: luma >= %d)"
+          % STRUCTURE_LUMA)
+    print("paint    set      street(L)    built uncovered free mean/median dark<=5 widest")
     for paint, bset in COMBOS:
         lum = L[paint]
         h, w = lum.shape
-        s = floor_stats(lum, footprint(T[bset]["blds"], w, h))
-        # The unwrapped columns clip a building at the tile edge, as the first scratch survey did.
-        u = floor_stats(lum, footprint(T[bset]["blds"], w, h, wrap=False))
-        print("%-8s %-8s %.2f (L%3.0f)  %.2f  %.2f      %4.1f, %3.0f     %.2f   %3.0f m  |  %.2f %.2f %4.1f, %3.0f %.2f %3.0f m"
+        s = floor_stats(lum, footprint(T[bset]["blds"], w, h), SM[paint])
+        print("%-8s %-8s %.2f (L%3.0f)  %.2f  %.2f      %4.1f, %3.0f     %.2f   %3.0f m"
               % (paint, bset, s["street_share"], s["street_luma"], s["built"], s["uncovered"],
-                 s["free_mean"], s["free_median"], s["free_dark"], s["widest_m"],
-                 u["built"], u["uncovered"], u["free_mean"], u["free_median"], u["free_dark"], u["widest_m"]))
+                 s["free_mean"], s["free_median"], s["free_dark"], s["widest_m"]))
     for paint in OVERLAY:
-        s = floor_stats(L[paint], None)
+        s = floor_stats(L[paint], None, SM[paint])
         print("%-8s none     %.2f (L%3.0f)  0.00  1.00      %4.1f, %3.0f     %.2f   %3.0f m"
               % (paint, s["street_share"], s["street_luma"], s["free_mean"], s["free_median"],
                  s["free_dark"], s["widest_m"]))
@@ -400,7 +489,7 @@ def main():
         lum = L[t]
         m = footprint(T[t]["blds"], *lum.shape[::-1])
         fr = eight_frames(lum, m)
-        blk = ~street_mask(lum)
+        blk = ~SM[t]
         paint = blk & (lum >= STRUCTURE_LUMA)
         outside = [float((paint & ~np.rot90(m, k)[:, ::-1 if f else 1]).sum() / paint.sum())
                    for k in range(4) for f in (False, True)]
@@ -487,9 +576,9 @@ def main():
         weight = {i: a for i, a in bare_of.items()
                   if polys[i]["tex"] == paint and polys[i]["flag"] and a > 0.5 * polys[i]["area"]}
         bare = rows.get((paint, ()), 0.0)
-        s = floor_stats(L[paint], None)
+        s = floor_stats(L[paint], None, SM[paint])
         lum = L[paint]
-        laid = weighted_floor(lum, uv_cover(polys, weight, *lum.shape[::-1]))
+        laid = weighted_floor(lum, SM[paint], uv_cover(polys, weight, *lum.shape[::-1]))
         print("  %s: %.3f km2, %d polygons hold %.3f km2 of it; free floor per tile L mean %.1f, median %.0f, "
               "dark %.2f, widest %.0f m; as laid L mean %.1f, median %.0f, dark %.2f" % (
                   paint, bare / 1e6, len(weight), sum(weight.values()) / 1e6, s["free_mean"],
@@ -499,30 +588,25 @@ def main():
                 b[0], b[2], b[1], b[3], b[4] / 1e6, b[5]))
 
     if args.overlays:
-        write_overlays(T, args.overlays)
+        write_overlays(T, ST, args.overlays)
 
 
-def write_overlays(T, out):
-    """The paint brightened (gamma 0.5, x1.6) with its own footprints in green and, for an
-    overlay paint, the base set beneath it in magenta."""
+def write_overlays(T, streets, out, px=512):
+    """Per paint, two by two tiles at 2 px per metre: the paint brightened (gamma 0.45, x2.2), the
+    kerb-to-kerb streets tinted yellow, the first standing set outlined green, the others magenta,
+    the tile edges red."""
     os.makedirs(out, exist_ok=True)
-    pairs = {"cblock1": "cblock4", "cblock2": "cblock5", "cblock3": "cblock6", "cblock7": "cblock4"}
-    for t, d in T.items():
-        im = Image.open(C.tex_png(d["tex"])).convert("RGB")
-        w, h = im.size
-        k = max(1, 1024 // w)
-        a = np.asarray(im.resize((w * k, h * k), Image.NEAREST), dtype=float) / 255.0
-        big = Image.fromarray((np.clip(a ** 0.5 * 1.6, 0, 1) * 255).astype(np.uint8))
-        for src, col in ((t, (0, 255, 0)), (pairs.get(t), (255, 0, 255))):
-            if src is None:
-                continue
-            m = footprint(T[src]["blds"], w * k, h * k)
-            edge = m & ~ndimage.binary_erosion(m)
-            px = np.asarray(big).copy()
-            px[edge] = col
-            big = Image.fromarray(px)
-        big.save(os.path.join(out, "%s_overlay.png" % t))
-    print("overlays written to %s" % out)
+    for t, sets in STANDING.items():
+        im = Image.open(C.tex_png(T[t]["tex"])).convert("RGB").resize((px, px), Image.NEAREST)
+        a = np.clip((np.asarray(im, dtype=float) / 255.0) ** 0.45 * 2.2, 0, 1)
+        st = street_mask(streets[t], px, px)
+        a[st] = a[st] * 0.5 + np.array([0.5, 0.45, 0.0])
+        for k, s in enumerate(sets):
+            m = footprint(T[s]["blds"], px, px)
+            a[m & ~ndimage.binary_erosion(m)] = (0, 1, 0) if k == 0 else (1, 0, 1)
+        a[0, :] = a[:, 0] = (1, 0, 0)
+        Image.fromarray((np.tile(a, (2, 2, 1)) * 255).astype(np.uint8)).save(os.path.join(out, "street_%s.png" % t))
+    print("street plots written to %s" % out)
 
 
 if __name__ == "__main__":

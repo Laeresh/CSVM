@@ -11,15 +11,18 @@ Asked by PLAN-c5-ground items A1 and A2 (issue #357).
 mapped into texture UV through its template ground quad's own affine XZ to UV, as
 `Clutter.ParseTemplate` projects a decoration's origin (`CSVM/src/Mech3/Clutter.cs:1251-1264`),
 and rasterised at texel scale, a building crossing the tile edge drawn again on the opposite side.
-Per-tile numbers use the plan's rules: a texel is street where its 16 m box-filtered luma exceeds
-55, painted structure is a block texel at luma 25 or more, luma is Rec. 601 on sRGB texels (0 to
-255). The world census walks `world1` as `eligibility.build_transform_cache` does (each node once,
+A paint's streets are geometry in UV (`find_streets`): a corridor is a run of at least 10 m of
+whole lines (columns, rows or 45-degree diagonals on a 1 m lattice, wrapping the tile) that no
+building of any set standing on the paint touches, and its street is the kerb-to-kerb band the
+paint draws inside it, the lines whose mean luma is at least half the corridor's brightest line.
+Lit and unlit stretches of a street count alike; everything off the streets is block. Painted
+structure is a block texel at luma 25 or more, luma is Rec. 601 on sRGB texels (0 to 255). The world census walks `world1` as `eligibility.build_transform_cache` does (each node once,
 nearest LOD, `horizon`, `dzpaths` and `fvol*` skipped) and leaves the template subtrees out. Its
 areas come from an exact planar arrangement of every coplanar `cblock` triangle (triangulated as
 the engine does, fan or strip): each piece of ground is counted once, with the set of polygons
 stacked on it, by convex clipping and no bounding boxes. `diagonal.py` reads the diagonal paints.
-Both scripts take `--overlays` / `--plot` for images, which hold original pixels and are refused
-inside the repo.
+Both scripts take `--overlays` / `--plot` for images (`survey.py` writes a street plot per paint),
+which hold original pixels and are refused inside the repo.
 
 ## Verdict
 
@@ -33,10 +36,16 @@ inside the repo.
 - **No `cblock4` base is exposed.** Every `cblock4`, `cblock5` and `cblock6` polygon is covered by an
   overlay, to the arrangement's precision. `cblock4` is never the visible paint, so the exposed-base
   row of the per-tile table has no ground in the world.
+- **Every paint has one street layout and no alleys.** `cblock1` and `cblock7` draw a cross of two
+  streets on u = 0.5 and v = 0.5, 33 to 36 m kerb to kerb; `cblock2` and `cblock3` one 45-degree
+  street, 23.3 m kerb to kerb. Streets take 24 % (`cblock1`), 26 % (`cblock7`) and 13 % (`cblock2`,
+  `cblock3`) of the tile, lit and unlit stretches alike. The 1 to 7 m building-free seams at the
+  tile edges carry no painted street (section below).
 - **The paint never fitted the buildings.** Under all eight axis-aligned texture frames the texels
   inside a template's own footprints average luma 2.9 to 6.4 on the overlay paints against a
-  texture mean of 8.2 to 16.1, and 67 % to 93 % of the painted structure lies outside them. The
-  base paints show the same: inside 30.8 to 40.7 against a mean of 34.5 to 40.2.
+  texture mean of 8.2 to 16.1, and 63 % to 91 % of the painted structure in the blocks lies outside
+  them. The base paints show the same: inside 30.8 to 40.7 against a mean of 34.5 to 40.2, and 55 %
+  to 77 % outside.
 - **The area discrepancy is an instrument difference, not two readings of the world.**
   `CBLOCK-LOD.md` §2's per-texture table counts models, not placed nodes, and only models of two
   or more polygons (section below). The world census is 51.47 km² of clear `cblock1`.
@@ -57,27 +66,27 @@ arrangement; every other column is per 256 m tile of the paint under the set's f
 
 | Visible paint | Building set | Area (km²) | Built share of block | Structure uncovered | Free floor luma mean, median | Free floor at luma ≤ 5 | Widest free spot |
 |---|---|---|---|---|---|---|---|
-| `cblock1` | `cblock1` (clear) | 51.474 | 0.27 | 0.84 | 8.6, 0 | 0.65 | 72 m |
-| `cblock1` | `cblock4` (flagged) | 9.850 | 0.26 | 0.80 | 8.2, 0 | 0.66 | 160 m |
+| `cblock1` | `cblock1` (clear) | 51.474 | 0.32 | 0.73 | 6.5, 0 | 0.70 | 72 m |
+| `cblock1` | `cblock4` (flagged) | 9.850 | 0.31 | 0.65 | 6.0, 0 | 0.72 | 160 m |
 | `cblock1` | `cblock2` (flagged, over clear `cblock2`) | 0.066 | | | | | |
-| `cblock2` | `cblock2` (clear) | 9.425 | 0.27 | 0.82 | 6.6, 0 | 0.72 | 81 m |
-| `cblock2` | `cblock5` (flagged) | 8.390 | 0.23 | 0.72 | 5.9, 0 | 0.74 | 96 m |
+| `cblock2` | `cblock2` (clear) | 9.425 | 0.30 | 0.80 | 6.6, 0 | 0.72 | 81 m |
+| `cblock2` | `cblock5` (flagged) | 8.390 | 0.26 | 0.68 | 5.9, 0 | 0.74 | 96 m |
 | `cblock2` | `cblock4` (flagged) | 0.131 | | | | | |
-| `cblock3` | `cblock3` (clear) | 4.914 | 0.29 | 0.80 | 5.1, 0 | 0.78 | 75 m |
-| `cblock3` | `cblock6` (flagged) | 6.092 | 0.26 | 0.79 | 4.9, 0 | 0.78 | 74 m |
+| `cblock3` | `cblock3` (clear) | 4.914 | 0.32 | 0.75 | 4.9, 0 | 0.78 | 75 m |
+| `cblock3` | `cblock6` (flagged) | 6.092 | 0.28 | 0.73 | 4.6, 0 | 0.79 | 74 m |
 | `cblock3` or `cblock6` | both (neither flagged) | 0.008 | | | | | |
-| `cblock7` | `cblock7` (clear) | 75.756 | 0.15 | 0.93 | 8.6, 0 | 0.65 | 149 m |
-| `cblock7` | `cblock4` (flagged) | 1.062 | 0.29 | 0.76 | 8.7, 0 | 0.65 | 158 m |
-| `cblock4` | `cblock4` (exposed base) | 0.000 | 0.30 | 0.71 | 28.4, 29 | 0.13 | 96 m |
-| `cblock1` | none (flagged, no base) | 3.906 | 0 | 1.00 | 7.6, 0 | 0.67 | 214 m |
-| `cblock2` | none (flagged, no base) | 3.091 | 0 | 1.00 | 5.9, 0 | 0.74 | 211 m |
-| `cblock3` | none (flagged, no base) | 3.524 | 0 | 1.00 | 4.6, 0 | 0.79 | 211 m |
-| `cblock7` | none (flagged, no base) | 2.423 | 0 | 1.00 | 8.0, 0 | 0.67 | 216 m |
+| `cblock7` | `cblock7` (clear) | 75.756 | 0.18 | 0.87 | 6.3, 0 | 0.71 | 149 m |
+| `cblock7` | `cblock4` (flagged) | 1.062 | 0.35 | 0.54 | 5.8, 0 | 0.72 | 158 m |
+| `cblock4` | `cblock4` (exposed base) | 0.000 | 0.38 | 0.58 | 32.8, 29 | 0.15 | 154 m |
+| `cblock1` | none (flagged, no base) | 3.906 | 0 | 1.00 | 6.0, 0 | 0.72 | 224 m |
+| `cblock2` | none (flagged, no base) | 3.091 | 0 | 1.00 | 5.9, 0 | 0.74 | 158 m |
+| `cblock3` | none (flagged, no base) | 3.524 | 0 | 1.00 | 4.4, 0 | 0.80 | 158 m |
+| `cblock7` | none (flagged, no base) | 2.423 | 0 | 1.00 | 6.0, 0 | 0.72 | 220 m |
 | `cblock1` | none (flagged over flagged `cblock4`) | 0.016 | | | | | |
 
-Streets average luma 83 (`cblock1`), 87 (`cblock2`), 89 (`cblock3`), 82 (`cblock7`) and 79
-(`cblock4`) and take 11 %, 4 %, 4 %, 11 % and 22 % of the tile. A diagonal paint's street mask is
-only its lamp glows: the asphalt between its kerbs is dark (next section).
+Streets average luma 46 (`cblock1`), 35 (`cblock2`), 34 (`cblock3`), 45 (`cblock7`) and 55
+(`cblock4`) and take 24 %, 13 %, 13 %, 26 % and 27 % of the tile. On a diagonal paint the widest
+free spot with no buildings, 158 m, is the strip between two streets: 181.0 m less 23.3 m.
 
 Of the 75.756 km² of `cblock7` with its own set, 0.427 km² is flagged `cblock7` over a clear
 `cblock7` polygon laid in another UV frame (`U-X V-Z` at 45 m per repeat, 0.297 km², and an
@@ -85,10 +94,46 @@ off-axis frame at 128 m, 0.130 km²), whose buildings stamp in that frame. The f
 coverage is bimodal as `CBLOCK-LOD.md` §2 found: 196 flagged polygons (26.330 km²) are wholly over
 a decorating layer, 254 (12.894 km²) have none, and 2 (0.131 km²) are partly over one.
 
-Building a footprint that crosses the tile edge on the opposite side, as here, moves four cells
-against a survey that clipped it at the edge: `cblock7` with `cblock7` uncovered 0.94 to 0.93,
-`cblock7` with `cblock4` uncovered 0.77 to 0.76 and free mean 8.8 to 8.7, and exposed `cblock4`
-free mean and median 28.5, 30 to 28.4, 29. `survey.py` prints both.
+## The streets
+
+Each street is a band in UV: the lines of one family whose coordinate lies within the half-width
+of the centreline, repeating every whole UV (`+ k`). Family u is the street running along V
+(u = const), v the one running along U, u + v and u − v the diagonals. Kerb to kerb is the band;
+the corridor is the run of lines no building of either standing set touches, so the strip between
+the two is building-free verge on the block side of the kerb. `survey.py` prints these figures
+and `find_streets` returns them.
+
+| Paint | Sets read | Street | Centreline ± half-width (UV) | Kerb to kerb | Corridor | Mean luma |
+|---|---|---|---|---|---|---|
+| `cblock1` | `cblock1`, `cblock4` | u | 0.5020 ± 0.0645 | 33.0 m | 37.0 m | 47 |
+| `cblock1` | | v | 0.4980 ± 0.0645 | 33.0 m | 39.0 m | 49 |
+| `cblock2` | `cblock2`, `cblock5` | u + v | 0.5000 ± 0.0645 | 23.3 m | 33.2 m | 35 |
+| `cblock3` | `cblock3`, `cblock6` | u − v | 0.5000 ± 0.0645 | 23.3 m | 33.9 m | 34 |
+| `cblock7` | `cblock7`, `cblock4` | u | 0.5000 ± 0.0703 | 36.0 m | 37.0 m | 46 |
+| `cblock7` | | v | 0.4941 ± 0.0684 | 35.0 m | 39.0 m | 48 |
+| `cblock4` | `cblock4`, `cblock1`, `cblock7` | u | 0.4980 ± 0.0723 | 37.0 m | 37.0 m | 58 |
+| `cblock4` | | v | 0.5020 ± 0.0762 | 39.0 m | 39.0 m | 58 |
+| `cblock5` | `cblock5`, `cblock2` | u + v | 0.5039 ± 0.0918 | 33.2 m | 33.2 m | 47 |
+| `cblock6` | `cblock6`, `cblock3` | u − v | 0.4941 ± 0.0938 | 33.9 m | 33.9 m | 47 |
+
+A diagonal half-width is in its family's coordinate; across the street it is that times
+256 m × √2. The diagonal bands hold the kerb lines `diagonal.py` finds, 22.6 m apart centre to
+centre. On the base paints, which are never visible, the band is the whole corridor: their paint
+is daylit and shows no kerb step inside it.
+
+What is not counted as street, and why:
+
+- **Tile-edge seams.** Every paint has building-free lines along its tile edges that cross the
+  whole tile: `cblock1`, `cblock4` and `cblock7` 2 m along u = 0 and 5 m along v = 0, `cblock2`
+  and `cblock5` 5 m and 4 m, `cblock3` and `cblock6` 1 m and 7 m. The paint runs straight across
+  them with no kerb, band or lamp, so they are the seam between one template's lots and the next
+  repeat's, and stay block. The 10 m corridor floor separates them from every street.
+- **No unlit street and no alley.** No other full-length line of any family is free of both sets.
+  On the diagonal paints the crossing family has at most 3 building-free diagonals for one set alone
+  and none for both.
+- **Minor sets.** The 0.131 km² of `cblock4`'s set on `cblock2` paint and the 0.066 km² of
+  `cblock2`'s set under rotated `cblock1` are left out of the corridors; their buildings stand
+  across the paint's street.
 
 ## The area discrepancy
 
@@ -180,10 +225,10 @@ the per-tile numbers.
 
 | Paint | Area (km²) | Polygons | Free floor luma mean, median (as laid) | At luma ≤ 5 | Widest free spot (tile) |
 |---|---|---|---|---|---|
-| `cblock1` | 3.906 | 66 | 7.6, 0 | 0.67 | 214 m |
-| `cblock2` | 3.091 | 67 | 6.0, 0 | 0.74 | 211 m |
-| `cblock3` | 3.524 | 68 | 4.6, 0 | 0.79 | 211 m |
-| `cblock7` | 2.423 | 55 | 7.9, 0 | 0.67 | 216 m |
+| `cblock1` | 3.906 | 66 | 6.0, 0 | 0.72 | 224 m |
+| `cblock2` | 3.091 | 67 | 5.9, 0 | 0.74 | 158 m |
+| `cblock3` | 3.524 | 68 | 4.3, 0 | 0.80 | 158 m |
+| `cblock7` | 2.423 | 55 | 5.9, 0 | 0.72 | 220 m |
 
 Where it lies, as the largest clusters of touching polygons (world XZ, metres):
 
@@ -210,6 +255,9 @@ The rest are clusters of one to eight polygons, most of one 256 m tile or less.
   kerbs and the footprint tests, all from shipped data.
 - Measured, reproduced: §2's 32,435,893 and 11,281,871 m² and its bimodal 196-polygon,
   26,330,410 m² coverage, as the restrictions above select them.
+- Inferred: the kerb-to-kerb band, read as the corridor lines at half the brightest line's mean
+  luma or more, and checked on the street plots; and that the tile-edge seams are lot seams, read
+  from the paint at the tile corners.
 - Inferred: which layer is visible and which decorates, from `docs/org/clutter.md`'s `no_clutter`
   rule. Two coplanar unflagged polygons of different paint (0.008 km²) have no rule here.
 - Inferred: that the 0.427 km² of clear `cblock7` in the 45 m and 128 m frames stamps its set in

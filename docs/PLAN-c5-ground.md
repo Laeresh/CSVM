@@ -97,26 +97,31 @@ area from an exact planar arrangement of the world's `cblock` polygons, the othe
 
 | Visible paint | Building set | Area (km²) | Built share of block | Painted structure (luma ≥ 25) uncovered | Free floor luma mean, median | Free floor at luma ≤ 5 | Widest free spot |
 |---|---|---|---|---|---|---|---|
-| `cblock7` | `cblock7` (clear) | 75.756 | 0.15 | 0.93 | 8.6, 0 | 0.65 | 149 m |
-| `cblock1` | `cblock1` (clear) | 51.474 | 0.27 | 0.84 | 8.6, 0 | 0.65 | 72 m |
-| `cblock1` | `cblock4` (flagged) | 9.850 | 0.26 | 0.80 | 8.2, 0 | 0.66 | 160 m |
-| `cblock2` | `cblock2` (clear) | 9.425 | 0.27 | 0.82 | 6.6, 0 | 0.72 | 81 m |
-| `cblock2` | `cblock5` (flagged) | 8.390 | 0.23 | 0.72 | 5.9, 0 | 0.74 | 96 m |
-| `cblock3` | `cblock6` (flagged) | 6.092 | 0.26 | 0.79 | 4.9, 0 | 0.78 | 74 m |
-| `cblock3` | `cblock3` (clear) | 4.914 | 0.29 | 0.80 | 5.1, 0 | 0.78 | 75 m |
-| `cblock7` | `cblock4` (flagged) | 1.062 | 0.29 | 0.76 | 8.7, 0 | 0.65 | 158 m |
+| `cblock7` | `cblock7` (clear) | 75.756 | 0.18 | 0.87 | 6.3, 0 | 0.71 | 149 m |
+| `cblock1` | `cblock1` (clear) | 51.474 | 0.32 | 0.73 | 6.5, 0 | 0.70 | 72 m |
+| `cblock1` | `cblock4` (flagged) | 9.850 | 0.31 | 0.65 | 6.0, 0 | 0.72 | 160 m |
+| `cblock2` | `cblock2` (clear) | 9.425 | 0.30 | 0.80 | 6.6, 0 | 0.72 | 81 m |
+| `cblock2` | `cblock5` (flagged) | 8.390 | 0.26 | 0.68 | 5.9, 0 | 0.74 | 96 m |
+| `cblock3` | `cblock6` (flagged) | 6.092 | 0.28 | 0.73 | 4.6, 0 | 0.79 | 74 m |
+| `cblock3` | `cblock3` (clear) | 4.914 | 0.32 | 0.75 | 4.9, 0 | 0.78 | 75 m |
+| `cblock7` | `cblock4` (flagged) | 1.062 | 0.35 | 0.54 | 5.8, 0 | 0.72 | 158 m |
 | `cblock2` | `cblock4` (flagged) | 0.131 | | | | | |
 | `cblock1` | `cblock2` (flagged, over clear `cblock2`) | 0.066 | | | | | |
 | `cblock3` or `cblock6` | both (neither flagged) | 0.008 | | | | | |
-| `cblock1` | none (flagged, no base) | 3.906 | 0 | 1.00 | 7.6, 0 | 0.67 | 214 m |
-| `cblock3` | none | 3.524 | 0 | 1.00 | 4.6, 0 | 0.79 | 211 m |
-| `cblock2` | none | 3.091 | 0 | 1.00 | 5.9, 0 | 0.74 | 211 m |
-| `cblock7` | none | 2.423 | 0 | 1.00 | 8.0, 0 | 0.67 | 216 m |
+| `cblock1` | none (flagged, no base) | 3.906 | 0 | 1.00 | 6.0, 0 | 0.72 | 224 m |
+| `cblock3` | none | 3.524 | 0 | 1.00 | 4.3, 0 | 0.80 | 158 m |
+| `cblock2` | none | 3.091 | 0 | 1.00 | 5.9, 0 | 0.74 | 158 m |
+| `cblock7` | none | 2.423 | 0 | 1.00 | 5.9, 0 | 0.72 | 220 m |
 | `cblock1` | none (flagged over flagged `cblock4`) | 0.016 | | | | | |
 
 The ground totals 180.13 km² under 206.57 km² of polygons. No `cblock4/5/6` base is exposed.
-"Street" is texels whose 16 m box-filtered luma exceeds 55; blocks are everything else. Streets
-average texture luma 82 to 89; the original building textures 40 to 70
+"Street" is the kerb-to-kerb band inside every building-free corridor of at least 10 m across the
+tile (Decision 13, `survey.py`'s `find_streets`); blocks are everything else, the 2 to 5 m verge
+included. The square paints draw a full cross: `cblock1` 33 m wide on u and v = 0.50, `cblock7` 35
+to 36 m on u = 0.500 and v = 0.494 (half-widths 0.0645 and 0.068 to 0.070 of a tile). `cblock2` and
+`cblock3` draw one 23.3 m street on u + v and u − v = 0.5 + k (half-width 0.0645 in that
+coordinate). The 1 to 7 m building-free seams along the tile edges carry no kerb, band or lamp and
+are block. Streets average texture luma 34 to 46 under this mask; the original building textures 40 to 70
 (`analysis/city-hulls/FINDINGS.md`, Hulls table). `cblock7` is `cblock1`'s art at 128²
 (r = 0.983, `CBLOCK-LOD.md` §1a) under small walk-ups, 42 % of the city's ground. Of it, 0.427 km²
 is flagged `cblock7` over clear `cblock7` laid in a 45 m or an off-axis 128 m UV frame, whose
@@ -170,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, survey
 
-1. ◐ Commit the #357 ground survey as `analysis/c5-ground/` (the street mask is being redone from the kerbs, Decision 13)
+1. ☑ Commit the #357 ground survey as `analysis/c5-ground/`
 2. ☑ Measure the diagonal districts' street grid and the bare flagged ground
 3. ☑ Measure the ground's darkness in a rendered C5 frame
 
@@ -212,7 +217,8 @@ paint never fitted the buildings: under all eight frames the texels inside a tem
 footprints average luma 2.9 to 6.4, and 67 % to 93 % of the painted structure lies outside them.
 `CBLOCK-LOD.md` §2's 32.4 km² comes from a probe that skips single-polygon models and counts each
 model once; the world holds 51.47 km² of clear `cblock1`. No `cblock4` base is exposed, and bare
-flagged ground is 7.2 %.
+flagged ground is 7.2 %. The street mask is geometric (Decision 13): the first survey's luma rule
+found only the lamp pools, and the author checked the redone mask's plots ("Yes, use it").
 
 **Verified.** The script reproduces every number of the plan's first table, the eight-frame test
 and the UV-frame census, and §2's 32,435,893 and 11,281,871 m² and its 196-polygon bimodal coverage
