@@ -13,14 +13,18 @@ namespace CSVM.Mech3;
 /// and never solid. Each floor variant's layout gives its slots: walls and fences on its lines, hedges and trees in its
 /// gardens and lawns. Sheds, cars and ash cans stand in its yards, courts and alley, benches in its gardens. A block
 /// stands the slots of the variant the world shader draws there (<see cref="CityGround.Pick"/>), each kept by a roll of
-/// its block. The <c>gd_</c> kinds draw through <see cref="CityModels"/>' near material, the tree through
-/// <see cref="VegetationModels"/>', placed and built on the first follow with the city on (docs/architecture/Mech3.md).
+/// its block. The <c>gd_</c> kinds draw as the blocks do through <see cref="CityModels"/>' materials, the tree through
+/// <see cref="VegetationModels"/>', all built on the first follow with the city on.
 /// </summary>
 public sealed class CityDressing
 {
     /// <summary>TUNE. The edge of the square cells the instances are cut into, one node per cell and mesh. Every node
     /// costs cull time whether drawn or not, and the fades are short, so a cell holds a few blocks.</summary>
     public const float CellM = 512f;
+
+    /// <summary>TUNE. The far meshes' cells: they reach as far as the blocks do, so a cell holds more of them, one node
+    /// per kind.</summary>
+    public const float FarCellM = 1024f;
 
     /// <summary>The tree's species name, read through <see cref="VegetationModels.ForMean"/>.</summary>
     public const string Tree = "citytree";
@@ -43,26 +47,28 @@ public sealed class CityDressing
     // TUNE. A hedge leaves a garden edge that a fence or wall already runs along, or a path crosses.
     private const float HedgeLineM = 1.2f, HedgePathM = 1.0f;
 
-    // TUNE. Each kind: its fade start and end in metres (under the clutter fade scale), and its footprint half extents
-    // for the clearance tests. A line kind adds the run it lays end to end. Every fade ends inside the
-    // Near band, so only near meshes draw; bench and ash cans fade earliest.
+    // TUNE. Each kind: its authored fade start and end in metres, stretched by the clutter fade scale as templates.zrd's
+    // far_fade_range is. Then its footprint half extents for the clearance tests, and for a line kind the run it lays.
+    // The large kinds take the blocks' 200 to 300 m. Bench and ash cans take the det dressing's 100 to 150 m. They draw
+    // no far mesh, since at the default View Distance they fade inside the Near band, a few pixels tall.
     private static readonly Kind[] KindTable =
     {
-        new("gd_wall", 260f, 350f, 4f, 0.3f, 8f),
-        new("gd_fence", 220f, 300f, 4f, 0.15f, 8f),
-        new("gd_hedge", 220f, 300f, 1.5f, 0.4f, 3f),
-        new("gd_shed", 260f, 350f, 1.7f, 1.4f),
-        new("gd_sedan", 220f, 300f, 2.2f, 0.9f),
-        new("gd_truck", 260f, 350f, 2.75f, 1.0f),
-        new("gd_ashcans", 110f, 150f, 0.65f, 0.65f),
-        new("gd_bench", 110f, 150f, 0.95f, 0.4f),
-        new(Tree, 330f, 450f, 0.6f, 0.6f),
+        new("gd_wall", 200f, 300f, 4f, 0.3f, 8f),
+        new("gd_fence", 200f, 300f, 4f, 0.15f, 8f),
+        new("gd_hedge", 200f, 300f, 1.5f, 0.4f, 3f),
+        new("gd_shed", 200f, 300f, 1.7f, 1.4f),
+        new("gd_sedan", 200f, 300f, 2.2f, 0.9f),
+        new("gd_truck", 200f, 300f, 2.75f, 1.0f),
+        new("gd_ashcans", 100f, 150f, 0.65f, 0.65f) { Far = false },
+        new("gd_bench", 100f, 150f, 0.95f, 0.4f) { Far = false },
+        new(Tree, 200f, 300f, 0.6f, 0.6f),
     };
 
     private readonly GameZ _gamez;
     private readonly CityGround _ground;
     private readonly string _chapter;
     private readonly Dictionary<string, Look> _looks;
+    private readonly List<(MultiMeshInstance3D Node, bool Far, float Far2, float Radius)> _ranged = new();
     private bool _built;
 
     private CityDressing(GameZ gamez, CityGround ground, string chapter, Dictionary<string, Look> looks)
@@ -71,10 +77,18 @@ public sealed class CityDressing
         _ground = ground;
         _chapter = chapter;
         _looks = looks;
+        Root.AddChild(NearRoot);
+        Root.AddChild(FarRoot);
     }
 
     /// <summary>The node every dressing cell stands under, shown exactly while <see cref="CityModels.On"/>.</summary>
     public Node3D Root { get; } = new() { Name = "city_dressing", Visible = false };
+
+    /// <summary>The near meshes' cells, drawn inside the 3D Scenery band.</summary>
+    public Node3D NearRoot { get; } = new() { Name = "near" };
+
+    /// <summary>The far meshes' cells, drawn past the band to the kind's fade.</summary>
+    public Node3D FarRoot { get; } = new() { Name = "far" };
 
     /// <summary>The instances placed per kind, empty until the first build.</summary>
     public IReadOnlyDictionary<string, int> Counts { get; private set; } = new Dictionary<string, int>();
@@ -94,11 +108,15 @@ public sealed class CityDressing
             if (kind.Name == Tree)
             {
                 if (VegetationModels.ForMean(chapter, Tree, null) is { } model)
-                    looks[Tree] = new Look(kind, new Mesh[] { model.Mesh }, VegetationModels.Material(model, lit: true, fogged: true, cardWidth: 9f));
+                {
+                    var far = VegetationModels.ForMean(chapter, Tree + "_far", null) is { } stand
+                        ? (stand.Mesh, (Material)VegetationModels.Material(stand, lit: true, fogged: true, cardWidth: 9f, far: true)) : ((Mesh, Material)?)null;
+                    looks[Tree] = new Look(kind, new Mesh[] { model.Mesh }, VegetationModels.Material(model, lit: true, fogged: true, cardWidth: 9f), far);
+                }
             }
             else if (CityModels.For(chapter, kind.Name, textures) is { Near.Count: > 0 } hull)
             {
-                looks[kind.Name] = new Look(kind, hull.Near.Cast<Mesh>().ToArray(), hull.NearMaterial);
+                looks[kind.Name] = new Look(kind, hull.Near.Cast<Mesh>().ToArray(), hull.NearMaterial, kind.Far ? (hull.Box, hull.BoxMaterial) : null);
             }
         }
         if (looks.Count == 0)
@@ -117,12 +135,15 @@ public sealed class CityDressing
         Root.Visible = on;
         foreach (var look in _looks.Values)
         {
-            var material = (ShaderMaterial)look.Material;
-            material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
-            // Plain metres, as the gd_ kinds fade: no 3D Scenery word pushes the tree out.
-            if (look.Kind.Name == Tree)
-                material.SetShaderParameter(VegetationModels.ReachParam, 1f);
+            foreach (var material in new[] { look.Material, look.Far?.Material }.OfType<ShaderMaterial>())
+            {
+                material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
+                // The clutter scale alone, as the gd_ kinds and the blocks fade: no 3D Scenery word pushes the tree out.
+                if (look.Kind.Name == Tree)
+                    material.SetShaderParameter(VegetationModels.ReachParam, 1f);
+            }
         }
+        Range();
     }
 
     /// <summary>The layout of one floor variant, a file beside its image.</summary>
@@ -493,33 +514,41 @@ public sealed class CityDressing
         Placements = placed;
         Counts = placed.GroupBy(p => p.Kind).ToDictionary(g => g.Key, g => g.Count());
         double placing = clock.Elapsed.TotalMilliseconds;
-        int nodes = Draw(placed);
-        Log.Info("world", $"city dressing: {placed.Count} instances ({string.Join(", ", Counts.OrderBy(c => c.Key).Select(c => $"{c.Key} {c.Value}"))}) in {nodes} nodes; flagged ground in {overlay:0} ms, placed in {placing - overlay:0} ms, built in {clock.Elapsed.TotalMilliseconds - placing:0} ms");
+        long bytes = Draw(placed);
+        Log.Info("world", $"city dressing: {placed.Count} instances ({string.Join(", ", Counts.OrderBy(c => c.Key).Select(c => $"{c.Key} {c.Value}"))}) in {NearRoot.GetChildCount()} near and {FarRoot.GetChildCount()} far nodes holding {bytes / 1048576.0:0.0} MB; flagged ground in {overlay:0} ms, placed in {placing - overlay:0} ms, built in {clock.Elapsed.TotalMilliseconds - placing:0} ms");
     }
 
-    // One node per cell and mesh, ranged at the kind's fade past the cell's bounds, on the models' layer, casting nothing.
-    private int Draw(List<Placed> placed)
+    // The near meshes in CellM cells keyed by variant and the far mesh in FarCellM cells, each node on the models' layer
+    // and casting nothing. Follow ranges them. Returns the bytes their instance buffers hold.
+    private long Draw(List<Placed> placed)
     {
-        var bins = new Dictionary<(int, int, string, int), List<(Transform3D Xf, Color Custom)>>();
+        var bins = new Dictionary<(bool Far, int X, int Z, string Kind, int Mesh), List<(Transform3D Xf, Color Custom)>>();
+        void Add((bool, int, int, string, int) key, Transform3D xf, Color custom)
+        {
+            if (!bins.TryGetValue(key, out var list))
+                bins[key] = list = new();
+            list.Add((xf, custom));
+        }
         foreach (var p in placed)
         {
             if (!_looks.TryGetValue(p.Kind, out var look))
                 continue;
             var o = p.Transform.Origin;
             float seed = CityModels.Seed(o);
-            int mesh = CityModels.VariantOf(seed, look.Meshes.Length);
-            var key = ((int)MathF.Floor(o.X / CellM), (int)MathF.Floor(o.Z / CellM), p.Kind, mesh);
-            if (!bins.TryGetValue(key, out var list))
-                bins[key] = list = new();
             // The tree's shader mirrors by the basis' X sign and turns by its origin itself.
             var xf = p.Kind == Tree && ((uint)seed & 1u) == 1u ? new Transform3D(Basis.FromScale(new Vector3(-1f, 1f, 1f)), o) : p.Transform;
-            list.Add((xf, new Color(look.Kind.Fade.X, look.Kind.Fade.Y, look.Kind.Fade.Z, seed)));
+            var custom = new Color(look.Kind.Fade.X, look.Kind.Fade.Y, look.Kind.Fade.Z, seed);
+            Add((false, (int)MathF.Floor(o.X / CellM), (int)MathF.Floor(o.Z / CellM), p.Kind, CityModels.VariantOf(seed, look.Meshes.Length)), xf, custom);
+            if (look.Far != null)
+                Add((true, (int)MathF.Floor(o.X / FarCellM), (int)MathF.Floor(o.Z / FarCellM), p.Kind, 0), xf, custom);
         }
-        foreach (var ((_, _, kind, m), list) in bins)
+        long bytes = 0;
+        foreach (var ((far, _, _, kind, m), list) in bins)
         {
             var look = _looks[kind];
+            var mesh = far ? look.Far!.Value.Mesh : look.Meshes[m];
             // The origins' box grown by the mesh's reach, stretch included, bounds every instance however it turns.
-            var meshBox = look.Meshes[m].GetAabb();
+            var meshBox = mesh.GetAabb();
             float reach = 1.25f * MathF.Max(meshBox.Position.Length(), meshBox.End.Length());
             var bounds = new Aabb(list[0].Xf.Origin, Vector3.Zero);
             foreach (var (xf, _) in list)
@@ -530,7 +559,7 @@ public sealed class CityDressing
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                 UseCustomData = true,
-                Mesh = look.Meshes[m],
+                Mesh = mesh,
                 InstanceCount = list.Count,
             };
             // One upload per node: the basis by rows, each closed by an origin component, then the custom data.
@@ -545,20 +574,36 @@ public sealed class CityDressing
                 (row[12], row[13], row[14], row[15]) = (c.R, c.G, c.B, c.A);
             }
             mm.Buffer = buffer;
-            Root.AddChild(new MultiMeshInstance3D
+            bytes += buffer.Length * sizeof(float);
+            var group = far ? FarRoot : NearRoot;
+            var node = new MultiMeshInstance3D
             {
-                Name = $"{kind}_{m}_{Root.GetChildCount()}",
+                Name = $"{kind}_{m}_{group.GetChildCount()}",
                 Multimesh = mm,
-                MaterialOverride = look.Material,
+                MaterialOverride = far ? look.Far!.Value.Material : look.Material,
                 Position = centre,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Layers = VegetationModels.Layer,
-                VisibilityRangeEnd = look.Kind.FadeFarM + (bounds.Size * 0.5f).Length(),
-            });
+            };
+            group.AddChild(node);
+            _ranged.Add((node, far, look.Kind.Fade.Y, (bounds.Size * 0.5f).Length()));
         }
-        return bins.Count;
+        Range();
+        return bytes;
     }
 
+    // Each node's visibility range lies past its kind's fade at the standing clutter scale, as a building's box cell's
+    // does. A near node's lies past the 3D Scenery band too, where its model has handed over to the far one.
+    private void Range()
+    {
+        float scaleSq = EffectsLevel.RegisteredScaleSq;
+        float band = VegetationModels.Band.Y;
+        foreach (var (node, far, far2, radius) in _ranged)
+        {
+            float faded = ClutterInstances.RangeEnd(true, false, far2, radius, scaleSq);
+            node.VisibilityRangeEnd = far ? faded : faded > 0f ? MathF.Min(faded, band + radius) : band + radius;
+        }
+    }
     /// <summary>A place a kind may stand in a variant's frame, with its yaw and stretch along X. A block draws its roll
     /// against the share of blocks that keep it.</summary>
     internal readonly record struct Slot(string Kind, Vector2 At, float Yaw, float Stretch, int Roll, float Keep)
@@ -578,6 +623,9 @@ public sealed class CityDressing
     {
         /// <summary>The fade as the clutter's custom data takes it: near², far² and their reciprocal span.</summary>
         public Vector3 Fade => ClutterKindProps.FadeThresholds(new Vector2(FadeNearM, FadeFarM), new Vector2(FadeNearM, FadeFarM), 0f);
+
+        /// <summary>Gets a value indicating whether the kind draws its far mesh past the band.</summary>
+        public bool Far { get; init; } = true;
     }
 
     /// <summary>One cell of a variant layout: its surface kind, its region and its rect in the layout's frame.</summary>
@@ -594,7 +642,7 @@ public sealed class CityDressing
     }
 
     // A kind's meshes (its near variants) and the material drawing them.
-    private sealed record Look(Kind Kind, Mesh[] Meshes, Material Material);
+    private sealed record Look(Kind Kind, Mesh[] Meshes, Material Material, (Mesh Mesh, Material Material)? Far);
 
     // The free-ground tests in one variant's frame. Lengths are in layout units.
     private sealed class Ground

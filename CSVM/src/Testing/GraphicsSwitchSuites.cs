@@ -1516,16 +1516,41 @@ internal static class GraphicsSwitchSuites
                 int wrong = placed.Count(p => Mech3.CityGround.CellOf(spec, p.Transform.Origin.X, p.Transform.Origin.Z) != p.Cell
                     || p.Variant != (int)(Mech3.CityGround.Pick(p.Cell.I, p.Cell.J) % (uint)p.Variants));
                 ctx.Check(placed.Count > 0 && wrong == 0, $"each of {placed.Count} instances stands in a block of the variant its cell picks ({wrong} wrong)");
-                var cells = new List<MultiMeshInstance3D>();
-                Walk(dressing.Root, n =>
+                List<MultiMeshInstance3D> CellsOf(Node root)
                 {
-                    if (n is MultiMeshInstance3D m)
-                        cells.Add(m);
-                });
-                ctx.Check(cells.Count > 0 && cells.Sum(c => c.Multimesh.InstanceCount) == placed.Count && !HasCollider(dressing.Root)
+                    var found = new List<MultiMeshInstance3D>();
+                    Walk(root, n =>
+                    {
+                        if (n is MultiMeshInstance3D m)
+                            found.Add(m);
+                    });
+                    return found;
+                }
+                var nearCells = CellsOf(dressing.NearRoot);
+                var farCells = CellsOf(dressing.FarRoot);
+                var cells = nearCells.Concat(farCells).ToList();
+                bool Small(MultiMeshInstance3D c) => c.Name.ToString().StartsWith("gd_bench", StringComparison.Ordinal) || c.Name.ToString().StartsWith("gd_ashcans", StringComparison.Ordinal);
+                int small = dressing.Counts.GetValueOrDefault("gd_bench") + dressing.Counts.GetValueOrDefault("gd_ashcans");
+                ctx.Check(nearCells.Sum(c => c.Multimesh.InstanceCount) == placed.Count && farCells.Sum(c => c.Multimesh.InstanceCount) == placed.Count - small
+                        && !farCells.Any(Small)
+                        && !HasCollider(dressing.Root)
                         && cells.All(c => c.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && c.Layers == Mech3.VegetationModels.Layer && c.VisibilityRangeEnd > 0f),
-                    $"{cells.Count} nodes hold every instance, ranged, on the models' layer with no collider and no shadow");
-                ctx.Note($"C5 dressing: {placed.Count} instances in {cells.Count} nodes; {ground.Floored} floored polygons");
+                    $"{nearCells.Count} near nodes hold every instance and {farCells.Count} far nodes every one but the bench and ash cans, ranged, on the models' layer with no collider and no shadow");
+                // The blocks' fade at the launch scale: a far node reaches as far as a block's box does, a near one to the band.
+                float blocks = Mathf.Sqrt(300f * 300f / EffectsLevel.RegisteredScaleSq);
+                float band = Mech3.VegetationModels.Band.Y;
+                ctx.Check(farCells.All(c => c.VisibilityRangeEnd >= blocks) && nearCells.All(c => c.VisibilityRangeEnd >= Mathf.Min(band, Mathf.Sqrt(150f * 150f / EffectsLevel.RegisteredScaleSq))),
+                    $"the far nodes range past the blocks' {blocks:0} m and the near ones past the band's {band:0} m or their own fade (far from {farCells.Min(c => c.VisibilityRangeEnd):0} m, near from {nearCells.Min(c => c.VisibilityRangeEnd):0} m, scale {EffectsLevel.RegisteredScaleSq})");
+                Models(live, Utils.VegetationModelsSetting.Extreme);
+                float extreme = Mech3.VegetationModels.Band.Y;
+                ctx.Check(nearCells.Where(c => c.Name.ToString().StartsWith("gd_wall", StringComparison.Ordinal)).All(c => c.VisibilityRangeEnd >= Mathf.Min(extreme, blocks)),
+                    $"Extreme ranges the near nodes out with its band ({extreme:0} m), no further than the fade");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                var tree = (ShaderMaterial)farCells.First(c => c.Name.ToString().StartsWith(Mech3.CityDressing.Tree, StringComparison.Ordinal)).MaterialOverride;
+                ctx.Check(tree.Shader.Code.Contains("float keep = live * step(0.004, v_card);", StringComparison.Ordinal)
+                        && tree.Shader.Code.Contains("if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_card)) {", StringComparison.Ordinal),
+                    $"the far tree keeps the dither cells the near tree gives up across the band");
+                ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
 
                 bool Shown() => dressing.Root.IsVisibleInTree();
                 ctx.Check(Shown(), $"the dressing draws with the city");
