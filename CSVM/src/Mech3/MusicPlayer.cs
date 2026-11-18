@@ -154,7 +154,7 @@ public sealed partial class MusicPlayer : Node
             return null;
         }
 
-        string? wav = Cue(CueNameOf(state), rng, LoopsOf(state), ForcedLoopOf(state));
+        string? wav = Cue(CueNameOf(state), rng, LoopsOf(state));
         if (wav != null)
         {
             _state = state;
@@ -169,7 +169,7 @@ public sealed partial class MusicPlayer : Node
     /// ⚠ Do not add the original's 15 s music refusal here. It guards the objectives runtime's
     /// tracked-cue list, which no mission cue reaches, while every mission cue reaches this method
     /// (docs/org/music.md).</summary>
-    public string? Cue(string name, Random rng, int loops = 1, bool forceLoop = false)
+    public string? Cue(string name, Random rng, int loops = 1)
     {
         if (ResolveDef(name, rng) is not { } def)
         {
@@ -184,7 +184,7 @@ public sealed partial class MusicPlayer : Node
             return null;
         }
 
-        bool loopForever = forceLoop || (def.Looped && loops <= 0);
+        bool loopForever = ForcedLoop(name) || (def.Looped && loops <= 0);
         var stream = Loader?.Invoke(def, loopForever);
         if (stream == null)
         {
@@ -265,10 +265,11 @@ public sealed partial class MusicPlayer : Node
 
     private static int LoopsOf(MusicState state) => state == MusicState.Menu ? MenuLoopCount : 1;
 
-    // Prebattle and battle loop for ever because the resolver forces it, not because their
-    // definitions say so: only battle1-6 carry LOOPED in the data.
-    private static bool ForcedLoopOf(MusicState state) =>
-        state is MusicState.Prebattle or MusicState.Battle;
+    // The resolver forces prebattle and battle to loop for ever by cue name, whoever cues them.
+    // Their definitions do not say so: only battle1-6 carry LOOPED (docs/org/music.md).
+    private static bool ForcedLoop(string name) =>
+        name.Equals("music_prebattle_sg", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("music_battle_sg", StringComparison.OrdinalIgnoreCase);
 
     // Index of the stinger family a group name belongs to, or -1. The families are the only
     // groups whose member choice is a counter rather than the group's own weights.
