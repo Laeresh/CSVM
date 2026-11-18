@@ -272,8 +272,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// cabin on its far side. That is the mission end's own door and the book's screenshot aid.
     /// False when the profile cannot be read. True says the profile is seated, not that the book is
     /// showing. The closing cinema plays first after a win on the campaign's last mission, and the
-    /// book arrives when it stops.</summary>
-    public bool ShowScrapbook(string profile, int seq, bool missionWon)
+    /// book arrives when it stops. A <paramref name="skipOffer"/> asks its Yes/No over the lost book
+    /// first, and Yes re-enters the debrief as won, the original's own re-entry.</summary>
+    public bool ShowScrapbook(string profile, int seq, bool missionWon, CampaignMissionResult? skipOffer = null)
     {
         if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
         {
@@ -284,11 +285,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _campaign.OpenDebrief(seq, missionWon);
         if (_campaign.ClosingCinema is { } cinema)
         {
-            PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), NetCoopFilm.Closing, () => 0, () => OpenBook(seq));
+            PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), NetCoopFilm.Closing, () => 0,
+                () => OpenDebriefBook(profile, seq, skipOffer));
             return true;
         }
 
-        OpenBook(seq);
+        OpenDebriefBook(profile, seq, skipOffer);
         return true;
     }
 
@@ -1332,6 +1334,29 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _campaign?.EnterScrapbook(seq);
         _bookReturn = OriginalScreen.CampaignCabin;
         ShowCampaign(OriginalScreen.CampaignScrapbook);
+    }
+
+    // The debrief's book, under the skip offer when the lost result raised it: a query box, the
+    // original's Yes/No MESSAGEBOX (docs/org/debrief.md). Yes re-enters the debrief as won.
+    private void OpenDebriefBook(string profile, int seq, CampaignMissionResult? skipOffer)
+    {
+        OpenBook(seq);
+        if (skipOffer is not { } lost || _campaign == null)
+        {
+            return;
+        }
+
+        _host.RaiseDialog(
+            CampaignProgression.SkipOfferPrompt,
+            DialogIcon.Query,
+            Yes(() =>
+            {
+                if (_campaign.AcceptSkip(lost))
+                {
+                    ShowScrapbook(profile, seq, missionWon: true);
+                }
+            }),
+            No());
     }
 
     // DELETE PLAYER raises the original's question (langui 201) as the two-answer box.

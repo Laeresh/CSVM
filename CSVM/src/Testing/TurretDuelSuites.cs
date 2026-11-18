@@ -144,4 +144,151 @@ internal static class TurretDuelSuites
             textures.Dispose();
         }
     }
+
+    // A Kestrel's rear gunner with an enemy aeroplane in reach. Under a person it weighs the
+    // emplacement and the engine at 1.25 against the aeroplane's 1.0. Under the AI the filter
+    // withdraws both.
+    [Suite("human-gunner-targeting",
+        "a turret carried by a human-flown plane keeps enemy emplacements and zeppelin engines in " +
+        "its ranking while an enemy aeroplane is in reach, 300 m of distance behind the aeroplane; " +
+        "the same gunner under an AI pilot keeps the aircraft-first filter, and under " +
+        "--ai-targeting=decoded neither takes the penalty")]
+    internal static void HumanGunnerTargeting(TestContext ctx)
+    {
+        const string HostPlane = "player_kestrel";
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequirePlane(PlaneNode);
+        ctx.RequirePlane(HostPlane);
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null);
+        var turretDefs = TurretDefs.Load(ctx.Zrdr);
+        var planesGamez = ctx.Planes;
+        var hostStats = PlaneStats.Load(ctx.Zrdr, HostPlane);
+        var aiStats = PlaneStats.LoadForAi(ctx.Zrdr, PlaneNode);
+        var gunDef = turretDefs.All.FirstOrDefault(d => !d.Carried && weapons.Get(d.WeaponName) is { IsGun: true });
+        ctx.Check(gunDef != null, $"a standalone turret entry with a gun exists");
+        if (gunDef == null)
+        {
+            return;
+        }
+
+        var textures = new TextureArchive(texturesPath);
+        bool preferenceWas = AiTargetRanking.AircraftFirst;
+        ProjectilePool? live = null;
+        Node3D? enemySite = null;
+        Node3D? engineNode = null;
+        FlightController? host = null;
+        FlightController? plane = null;
+        try
+        {
+            live = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(live);
+            var registry = new DestructibleRegistry();
+            live.Structures = registry;
+
+            FlightController Rig(string node, PlaneStats st, int shooterId, bool human, int team, Vector3 at)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(node);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = shooterId,
+                    IsHumanPiloted = human,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(st), null, new CamParams(), at, at + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                rig.Held = true;
+                rig.PlaceHeld(at, at + Vector3.Forward);
+                rig.Team = team;
+                return rig;
+            }
+
+            host = Rig(HostPlane, hostStats, 0, human: true, AimAssist.PlayerTeam, GunAt);
+            host.Turrets = TurretController.BuildCarried(turretDefs, hostStats, host.PlaneModel!, weapons, host, live);
+            ctx.Check(host.Turrets.Length == 1, $"the Kestrel's rear mount resolves turrets={host.Turrets.Length}");
+            if (host.Turrets.Length != 1)
+            {
+                return;
+            }
+            var gunner = host.Turrets[0];
+            gunner.Def.DetectionRange = 1200f;
+            var here = gunner.WorldPosition;
+
+            var parked = GunAt + Vector3.Back * 5000f;
+            plane = Rig(PlaneNode, aiStats, FlightRoster.ShooterIdBase, human: false, InstantActionRuntime.EnemyTeam, parked);
+
+            object? Pick(float planeRange, bool aircraftFirst)
+            {
+                AiTargetRanking.AircraftFirst = aircraftFirst;
+                var at = here + Vector3.Left * planeRange;
+                plane.PlaceHeld(at, at + Vector3.Forward);
+                gunner.SimStep(Dt);
+                return gunner.TargetSource;
+            }
+
+            float penalty = (TurretController.HumanGunnerStructureClassWeight - 1f) * AiTargetRanking.WeightScale;
+            ctx.Check(Mathf.IsEqualApprox(penalty, 300f), $"the penalty is 300 m of distance, read {penalty:0.0}");
+
+            // The enemy emplacement first, the turret term on its distance.
+            var enemy = TorpedoInterceptSuites.BuildGun(ctx, turretDefs, gunDef, weapons, live,
+                here + Vector3.Right * EnemyGunRange, out enemySite);
+            if (enemy == null)
+            {
+                return;
+            }
+            enemy.SetTeam(InstantActionRuntime.EnemyTeam);
+            live.RegisterWorldTurrets(new[] { enemy });
+            float gunCost = here.DistanceTo(enemy.WorldPosition) + TurretController.TurretDistanceTerm;
+
+            var penalised = Pick(gunCost + penalty + Straddle, aircraftFirst: true);
+            ctx.Check(ReferenceEquals(penalised, enemy),
+                $"human-flown: the enemy emplacement beats an aeroplane {penalty + Straddle:0} m behind it target={TargetPool.NameOf(penalised)}");
+            var nearer = Pick(gunCost + penalty - Straddle, aircraftFirst: true);
+            ctx.Check(ReferenceEquals(nearer, plane),
+                $"and the aeroplane wins inside the {penalty:0} m penalty target={TargetPool.NameOf(nearer)}");
+            var decoded = Pick(gunCost + Straddle, aircraftFirst: false);
+            ctx.Check(ReferenceEquals(decoded, enemy),
+                $"decoded order: no penalty, the emplacement beats an aeroplane {Straddle:0} m behind it target={TargetPool.NameOf(decoded)}");
+            host.IsHumanPiloted = false;
+            var filtered = Pick(gunCost + penalty + Straddle, aircraftFirst: true);
+            ctx.Check(ReferenceEquals(filtered, plane),
+                $"AI-flown: the aircraft-first filter withdraws the emplacement target={TargetPool.NameOf(filtered)}");
+            host.IsHumanPiloted = true;
+
+            // A zeppelin engine on the enemy team, with the emplacement out of reach.
+            enemySite.Position = here + Vector3.Right * 5000f;
+            engineNode = new Node3D { Name = "leng12", Position = here + Vector3.Right * EnemyGunRange };
+            ctx.Host.AddChild(engineNode);
+            var engine = registry.Register(
+                new AnimDefinition { Name = "leng12", AnimName = "zep_zone_leng12" }, engineNode, 200f);
+            engine.Team = InstantActionRuntime.EnemyTeam;
+            float engineCost = here.DistanceTo(engine.Centre);
+
+            var engineWins = Pick(engineCost + penalty + Straddle, aircraftFirst: true);
+            ctx.Check(ReferenceEquals(engineWins, engine),
+                $"human-flown: the zeppelin engine reaches the player's gunner and beats an aeroplane {penalty + Straddle:0} m behind it target={TargetPool.NameOf(engineWins)}");
+            var planeWins = Pick(engineCost + penalty - Straddle, aircraftFirst: true);
+            ctx.Check(ReferenceEquals(planeWins, plane),
+                $"and the aeroplane wins inside the penalty target={TargetPool.NameOf(planeWins)}");
+        }
+        finally
+        {
+            AiTargetRanking.AircraftFirst = preferenceWas;
+            plane?.Free();
+            host?.Free();
+            enemySite?.Free();
+            engineNode?.Free();
+            live?.Free();
+            textures.Dispose();
+        }
+    }
 }

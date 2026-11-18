@@ -598,6 +598,13 @@ public partial class Launcher : Node3D
         Mech3.CityGround.RegisterGlobal();
         Mech3.CityGround.Folder = _spec.CityGround;
 
+        // After every global: a listed shader reading one compiles against it. A --det run keeps no
+        // list unless --shader-list= names one, so no golden depends on what earlier loads wore.
+        string? shaderList = _spec.ShaderList is { } named ? named : _spec.Det ? null : "user://shader_warm.json";
+        int warming = Mech3.ShaderTwins.WarmAtLaunch(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
+        if (warming > 0)
+            Log.Info("world", $"shader warm-up: {warming} listed shader(s) compiling in the background");
+
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
         // quits with its own verdict, like --run-tests, never a false-clean exit code.
@@ -872,6 +879,7 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        Mech3.ShaderTwins.StopWarm();
         SweepXrShaderCache();
         // ⚠ Do not move this below the teardown calls, nor out of here. The engine disposes the
         // peers a service thread may still poll, and a probe's quit closes no transport itself.
@@ -1930,10 +1938,7 @@ public partial class Launcher : Node3D
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         Log.Info("core", $"campaign: {result.Outcome}, arrived at the debrief with '{profile}'");
-        // A co-op guest has no profile, and its debrief is the one its host shows.
-        ReturnToMenu(profile.Length == 0
-            ? new CoopGuestReturn(result.Attempt)
-            : new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
+        ReturnToMenu(MenuReturnDestination.ForDebrief(profile, result));
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a

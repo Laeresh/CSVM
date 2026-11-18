@@ -54,7 +54,8 @@ internal static class MenuOriginalCampaignSuites
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, a pointer "
         + "press on the book's unselected results tab switches the half the card reads and a press "
         + "on the one it swapped with reads Most Recent again, the cabin "
-        + "return lands on the cabin, ammo selection and plane selection write their picks through "
+        + "return lands on the cabin, the fourth and eighth loss of one mission ask the skip offer "
+        + "over the book where No leaves the position and Yes advances it, ammo selection and plane selection write their picks through "
         + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
@@ -98,7 +99,10 @@ internal static class MenuOriginalCampaignSuites
             Planes = planes,
         });
         var host = new MenuHost(registry, audio, exits.Add);
-        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        // A closing cinema as the launcher wires one, since the debrief opens its book through it.
+        // No mission here earns the film, so it never plays.
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data,
+            closingCinema: new ClosingCinema((_, then, _) => then()));
         host.AddSeat(seat);
         var campaign = host.Features.Get<CampaignFeature>();
         try
@@ -119,6 +123,7 @@ internal static class MenuOriginalCampaignSuites
             Briefing(ctx, host, seat, shell, fit, campaign, audio);
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
             Returns(ctx, host, shell, fit, campaign, store, audio);
+            SkipOffer(ctx, host, shell, campaign, store);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
             Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
@@ -450,6 +455,50 @@ internal static class MenuOriginalCampaignSuites
         host.Show(new CabinReturn(Pilot));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && campaign.Profile?.Name == Pilot,
             $"the cabin return lands on the cabin with the profile seated ({shell.Screen}, {campaign.Profile?.Name})");
+    }
+
+    // Eight losses of one uncompleted mission through the debrief destination a session's end raises.
+    // The skip offer stands over the book on the fourth and eighth alone. No leaves the
+    // loss, and Yes records the win and advances the position.
+    private static void SkipOffer(TestContext ctx, MenuHost host, OriginalShell shell, CampaignFeature campaign, CampaignProfileStore store)
+    {
+        var seat = (ScriptedSeat)host.Seats[0];
+        for (int loss = 1; loss <= 2 * CampaignProgression.SkipOfferAttempts; loss++)
+        {
+            var profile = store.Load(Pilot)!;
+            int position = profile.MissionsCompleted;
+            var attempt = new MissionAttempt(position, 0, 300_000, 50, 10, profile.Planes[0].Airframe, profile.Planes[0].Name);
+            var recorded = CampaignProgression.Record(profile, attempt);
+            store.Save(profile);
+            host.Show(MenuReturnDestination.ForDebrief(Pilot, new CampaignMissionResult(Session.Objectives.MissionOutcome.Lost, attempt, recorded)));
+            host.Tick(Dt);
+            bool asks = loss % CampaignProgression.SkipOfferAttempts == 0;
+            ctx.Check(shell.Screen == OriginalScreen.CampaignScrapbook && (shell.Dialog != null) == asks,
+                $"loss {loss} opens the book {(asks ? "under" : "without")} the skip offer ({shell.Screen}, {shell.Dialog?.Message})");
+            if (!asks)
+            {
+                continue;
+            }
+
+            ctx.Check(shell.Dialog is { Icon: UI.Campaign.DialogIcon.Query, Answers.Count: 2, Message: CampaignProgression.SkipOfferPrompt }
+                && shell.FocusedKey == OriginalShell.DialogYesKey,
+                $"asked in the original's words in the query box, opening on Yes ({shell.Dialog?.Message}, {shell.Dialog?.Icon}, {shell.FocusedKey})");
+            bool yes = loss > CampaignProgression.SkipOfferAttempts;
+            Press(host, seat, yes ? Accept : Back);
+            int after = store.Load(Pilot)!.MissionsCompleted;
+            ctx.Check(shell.Dialog == null && shell.Screen == OriginalScreen.CampaignScrapbook,
+                $"{(yes ? "Yes" : "No")} takes the box down over the book ({shell.Screen})");
+            ctx.Check(after == (yes ? position + 1 : position),
+                $"{(yes ? "Yes advances" : "No leaves")} the saved position ({position} -> {after})");
+            if (yes)
+            {
+                ctx.Check(HasLine(shell.Compose(), "Mission Completed"), $"and the debrief re-entered reads the mission as won");
+                ctx.Check(campaign.NextMissionSeq == position + 1, $"with the cabin's next mission the following one ({campaign.NextMissionSeq})");
+            }
+        }
+
+        // The steps after this one start on the cabin.
+        host.Show(new CabinReturn(Pilot));
     }
 
     // The results card's two tabs under the pointer: the tab the card is not showing draws as a

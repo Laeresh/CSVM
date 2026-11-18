@@ -36,6 +36,15 @@ public abstract record MenuReturnDestination
         LaunchExit { InstantAction: not null } or LaunchExit { Course: not null, Net: null } => InstantAction,
         _ => TopLevel,
     };
+
+    /// <summary>Where a flown campaign mission's end lands <paramref name="profile"/>: a co-op guest,
+    /// which has no profile, on its host's debrief, and anyone else on the book. A result that
+    /// raised the skip offer travels with it, since only it holds the lost world's capture.</summary>
+    public static MenuReturnDestination ForDebrief(string profile, CSVM.Session.Campaign.CampaignMissionResult result) =>
+        profile.Length == 0
+            ? new CoopGuestReturn(result.Attempt)
+            : new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == CSVM.Session.Objectives.MissionOutcome.Won,
+                result.Recorded.SkipOffered ? result : null);
 }
 
 /// <summary>The presentation's own top level. Use <see cref="MenuReturnDestination.TopLevel"/>.</summary>
@@ -60,10 +69,13 @@ public sealed record CabinReturn(string Profile) : MenuReturnDestination;
 
 /// <summary>Back to the campaign's results for one flown mission: the named profile, opened on
 /// the story position just flown, and whether that mission was won. The result travels with the
-/// destination because nothing on the far side can recover it: a lost replay of a mission the
-/// profile has already completed leaves the profile exactly as it found it, and the closing film is
-/// gated on the result (<c>Session/Campaign/ClosingCinema.cs</c>).</summary>
-public sealed record DebriefReturn(string Profile, int MissionSeq, bool MissionWon) : MenuReturnDestination;
+/// destination because nothing on the far side can recover it. A lost replay of a completed
+/// mission leaves the profile as it found it. The closing film is gated on the result
+/// (<c>Session/Campaign/ClosingCinema.cs</c>). <c>SkipOffer</c> carries a lost result that raised
+/// the offer, with its world capture, for the debrief to ask first; null otherwise.</summary>
+public sealed record DebriefReturn(
+    string Profile, int MissionSeq, bool MissionWon,
+    CSVM.Session.Campaign.CampaignMissionResult? SkipOffer = null) : MenuReturnDestination;
 
 /// <summary>A co-op guest back from its host's mission, onto the host's boards again. It carries
 /// the guest's own attempt for the host's debrief, or null when it flew nothing. A guest

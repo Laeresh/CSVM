@@ -906,6 +906,11 @@ public partial class GameSession : Node3D
         if (_spec.ShaderWarmup == "load" || (_spec.ShaderWarmup == "auto" && EnhancedLook.HasSwitched))
             WarmShadersNow();
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
+        if (_sessionTextures?.ReleaseHdAhead() is > 0 and var untaken)
+        {
+            Log.Info("world", $"HD decode ahead: {untaken} untaken by the load, dropped");
+        }
+        Mech3.ShaderTwins.SaveWarmList();
         _startup?.EndBuild();
         InSession = true;
         _wire.HoldStart(_clock);

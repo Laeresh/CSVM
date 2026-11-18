@@ -18,6 +18,7 @@ internal static class MusicSuites
     [Suite("music-states",
         "the state-driven score (D37): each game state cues the track family its data names, "
         + "prebattle and battle loop while the stingers and the success tracks play once, "
+        + "whether a state or a mission's bare group name cues them, "
         + "re-entering the playing state never restarts it, the objective stingers alternate "
         + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
         + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
@@ -44,6 +45,7 @@ internal static class MusicSuites
         try
         {
             CheckStates(ctx, music, rng, report);
+            CheckCuesByName(ctx, music, rng, report);
             CheckStingersAlternate(ctx, music, rng, report);
             CheckBattleHold(ctx, music, rng, report);
             CheckDuck(ctx, music, rng, report);
@@ -91,6 +93,32 @@ internal static class MusicSuites
 
         music.Enter(MusicState.Silent, rng);
         ctx.Check(music.Current.Length == 0, $"Silent leaves the channel empty current={music.Current}");
+    }
+
+    // A mission's sound-group cue reaches the channel as a bare group name, never as a state.
+    // The forced loop has to hold on that path too.
+    private static void CheckCuesByName(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
+    {
+        var expected = new (string Cue, bool Loops)[]
+        {
+            ("music_prebattle_sg", true),
+            ("MUSIC_PREBATTLE_SG", true),
+            ("music_battle_sg", true),
+            ("music_primaryobj_sg", false),
+            ("music_battlesuccess_sg", false),
+            ("music_missionsuccess_sg", false),
+        };
+
+        foreach (var (cue, loops) in expected)
+        {
+            music.Stop();
+            string? wav = music.Cue(cue, rng);
+            report.AppendLine($"cue {cue} -> {wav ?? "(none)"} loop={music.Looping}");
+            ctx.Check(wav != null, $"the cue {cue} plays a track");
+            ctx.Check(music.Looping == loops, $"the cue {cue} loops={loops} actual={music.Looping}");
+        }
+
+        music.Stop();
     }
 
     private static void CheckStingersAlternate(

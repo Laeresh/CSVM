@@ -301,6 +301,7 @@
     "hud-layout-placement": 0.05,
     "hud-mode-cycle-splitscreen": 0.05,
     "hud-mode-parts": 0.05,
+    "human-gunner-targeting": 0.33,
     "impact-building-surface": 2.594,
     "impact-orientation": 0.886,
     "inert-aircraft": 0.386,
