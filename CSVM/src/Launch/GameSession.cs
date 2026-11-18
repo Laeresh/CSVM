@@ -910,6 +910,7 @@ public partial class GameSession : Node3D
         {
             Log.Info("world", $"HD decode ahead: {untaken} untaken by the load, dropped");
         }
+        Mech3.ShaderTwins.SaveWarmList();
         _startup?.EndBuild();
         InSession = true;
         _wire.HoldStart(_clock);

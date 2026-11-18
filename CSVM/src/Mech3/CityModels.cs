@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading.Tasks;
 using CSVM.Utils;
 using Godot;
 
@@ -112,6 +113,9 @@ public static class CityModels
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Facade?> Facades = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(bool Near, bool Cut), Shader> Shaders = new();
+
+    // Hull path -> its bytes reading on the thread pool, taken once by Load.
+    private static readonly Dictionary<string, Task<byte[]>> ReadsAhead = new(StringComparer.OrdinalIgnoreCase);
     private static string _root = ShippedRoot;
 
     /// <summary>Whether the city is drawn: Rich vegetation under Enhanced, and a 3D Scenery word other than Off.</summary>
@@ -127,6 +131,7 @@ public static class CityModels
             _root = value;
             Hulls.Clear();
             Facades.Clear();
+            ReadsAhead.Clear();
         }
     }
 
@@ -154,7 +159,10 @@ public static class CityModels
         if (!Hulls.TryGetValue(key, out var hull))
         {
             if (!Facades.TryGetValue(folder, out var facade) && FileAccess.FileExists($"{key}.glb.bin"))
+            {
+                ReadAhead(folder);
                 Facades[folder] = facade = LoadFacade(folder, textures);
+            }
             Hulls[key] = hull = Load($"{key}.glb.bin", facade);
         }
         return hull;
@@ -418,6 +426,19 @@ public static class CityModels
         return true;
     }
 
+    // Starts reading every hull of a chapter's folder on the thread pool; each file open costs more than its bytes.
+    // ⚠ Plain files only. A folder inside an exported pack is not globalized to one, and reads in Load as before.
+    private static void ReadAhead(string folder)
+    {
+        string disk = ProjectSettings.GlobalizePath(folder);
+        if (!System.IO.Directory.Exists(disk))
+            return;
+        foreach (string file in System.IO.Directory.EnumerateFiles(disk, "*.glb.bin"))
+        {
+            ReadsAhead[$"{folder}/{System.IO.Path.GetFileName(file)}"] = Task.Run(() => System.IO.File.ReadAllBytes(file));
+        }
+    }
+
     // The mesh nodes `far` and `near0`, `near1`... by node name, each unmoved. The far mesh's baseColorFactor is the
     // grade, which Godot's import holds in sRGB. A file without `far` is not a hull.
     private static Hull? Load(string path, Facade? facade)
@@ -429,7 +450,8 @@ public static class CityModels
         var near = new SortedDictionary<int, ArrayMesh>();
         var grade = Colors.White;
         bool cut = false;
-        string? fault = new GltfDocument().AppendFromBuffer(FileAccess.GetFileAsBytes(path), string.Empty, state) != Error.Ok
+        var bytes = ReadsAhead.Remove(path, out var ahead) ? ahead.GetAwaiter().GetResult() : FileAccess.GetFileAsBytes(path);
+        string? fault = new GltfDocument().AppendFromBuffer(bytes, string.Empty, state) != Error.Ok
             ? "not a glTF binary" : null;
         var nodes = state.GetNodes();
         var meshes = state.GetMeshes();

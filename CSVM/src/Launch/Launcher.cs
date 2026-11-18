@@ -595,6 +595,12 @@ public partial class Launcher : Node3D
         Effects.Ocean.RegisterGlobal();
         Effects.TerrainShadow.RegisterGlobals();
         Effects.CloudShadow.RegisterGlobals();
+        // After every global: a listed shader reading one compiles against it. A --det run keeps no
+        // list unless --shader-list= names one, so no golden depends on what earlier loads wore.
+        string? shaderList = _spec.ShaderList is { } named ? named : _spec.Det ? null : "user://shader_warm.json";
+        int warming = Mech3.ShaderTwins.WarmAtLaunch(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
+        if (warming > 0)
+            Log.Info("world", $"shader warm-up: {warming} listed shader(s) compiling in the background");
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
@@ -870,6 +876,7 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        Mech3.ShaderTwins.StopWarm();
         SweepXrShaderCache();
         // ⚠ Do not move this below the teardown calls, nor out of here. The engine disposes the
         // peers a service thread may still poll, and a probe's quit closes no transport itself.

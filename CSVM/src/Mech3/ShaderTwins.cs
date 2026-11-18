@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
 using CSVM.Utils;
 using Godot;
 
@@ -11,12 +15,17 @@ namespace CSVM.Mech3;
 /// them. Godot compiles each <see cref="Shader"/> object on its own, so two cache keys whose texts
 /// agree share one. A material keeps the key it was made for. A live switch moves it onto that key's
 /// shader for the other mode, and no text changes (<see cref="Regenerate"/>).
-/// Main thread only, process-lifetime in the game, like the caches.
+/// Main thread only, but for the launch warm-up's compiles (<see cref="WarmAtLaunch"/>).
+/// Process-lifetime in the game, like the caches.
 /// </summary>
 internal static class ShaderTwins
 {
     /// <summary>The family a fade copy's shader reports.</summary>
     internal const string FadeFamily = "fade-twin";
+
+    /// <summary>How many loads in a row a warm list entry may go unworn before it drops out. A shader
+    /// generator change leaves its old texts unworn, and a chapter not flown lately compiles again.</summary>
+    internal const int WarmListIdleLimit = 20;
 
     // The one shader per text, and its family.
     private static readonly Dictionary<string, Shader> ByText = new(StringComparer.Ordinal);
@@ -43,6 +52,13 @@ internal static class ShaderTwins
 
     // Engine.GetFramesDrawn when the last pin went on.
     private static int _pinnedAt;
+
+    // The warm list's file (null when this process keeps none) and the list as last read or written.
+    // Then the launch warm-up's thread, and the flag that stops it at quit.
+    private static string? _warmListPath;
+    private static List<WarmEntry> _warmList = new();
+    private static Task? _warm;
+    private static volatile bool _stopWarm;
 
     /// <summary>Gets or sets a value indicating whether an Enhanced frame has drawn in this process.
     /// That is when Godot builds the advanced shader variants its passes need.</summary>
@@ -259,6 +275,79 @@ internal static class ShaderTwins
         return $"keys={All.Count} sharing=[{string.Join(" ", byFamily)}] e.g.=[{string.Join(" ", examples)}]";
     }
 
+    /// <summary>Makes every shader the warm list at <paramref name="path"/> names and compiles them
+    /// in list order on one background thread, while the menu stands. A load then finds them made.
+    /// Returns how many it queued. A null path keeps no list.
+    /// ⚠ Keep it one thread. Godot creates one shader at a time whatever the caller count, and
+    /// parallel callers held the main thread's own server calls up for longer.</summary>
+    public static int WarmAtLaunch(string? path)
+    {
+        _warmListPath = path;
+        if (path == null || !File.Exists(path))
+            return 0;
+        try
+        {
+            _warmList = JsonSerializer.Deserialize<List<WarmEntry>>(File.ReadAllText(path)) ?? new();
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+            Log.Warn("world", $"shader warm list {path} unreadable, starting a new one: {e.Message}");
+            return 0;
+        }
+        var shaders = _warmList.Where(e => !ByText.ContainsKey(e.Text)).Select(e => Pooled(e.Text, e.Family)).ToList();
+        long start = Stopwatch.GetTimestamp();
+        _warm = Task.Factory.StartNew(() =>
+        {
+            int done = 0;
+            foreach (var shader in shaders.TakeWhile(_ => !_stopWarm))
+            {
+                shader.GetRid();
+                done++;
+            }
+            Log.Info("world", $"shader warm-up: {done} of {shaders.Count} listed shader(s) compiled in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms");
+        }, TaskCreationOptions.LongRunning);
+        return shaders.Count;
+    }
+
+    /// <summary>Stops the launch warm-up after the compile in hand. ⚠ Call it before the engine tears
+    /// down: a compile still running would reach a freed server.</summary>
+    public static void StopWarm()
+    {
+        _stopWarm = true;
+        _warm?.Wait();
+    }
+
+    /// <summary>Writes the warm list back, as a load finishes. Every text a material wears comes first,
+    /// in the order made. The list's other entries follow one load older, and one unworn for
+    /// <see cref="WarmListIdleLimit"/> loads drops out.</summary>
+    public static void SaveWarmList()
+    {
+        if (_warmListPath == null)
+            return;
+        _warmList = Aged(_warmList, ByText.Where(kv => !Unworn(kv.Value)).Select(kv => kv.Key).ToList());
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_warmListPath)!);
+            File.WriteAllText(_warmListPath, JsonSerializer.Serialize(_warmList));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("world", $"shader warm list {_warmListPath} not written: {e.Message}");
+        }
+    }
+
+    /// <summary>The warm list after a load that wore <paramref name="worn"/>, those first in the order
+    /// made. Then <paramref name="list"/>'s others one load older, any past the limit dropped. A worn
+    /// text the list lacks takes the family its shader was made under.</summary>
+    internal static List<WarmEntry> Aged(IReadOnlyList<WarmEntry> list, IReadOnlyList<string> worn)
+    {
+        var wornSet = worn.ToHashSet(StringComparer.Ordinal);
+        var known = list.ToDictionary(e => e.Text, e => e.Family, StringComparer.Ordinal);
+        return worn.Select(t => new WarmEntry(known.TryGetValue(t, out var f) ? f : FamilyByShader[ByText[t]], t, 0))
+            .Concat(list.Where(e => !wornSet.Contains(e.Text) && e.Idle < WarmListIdleLimit).Select(e => e with { Idle = e.Idle + 1 }))
+            .ToList();
+    }
+
     /// <summary>The one shader with this text, made on first use. For a key's twins, and for a
     /// shader whose text no mode moves, which a caller would otherwise make once per instance.</summary>
     internal static Shader Pooled(string text, string family)
@@ -390,6 +479,10 @@ internal static class ShaderTwins
     /// <summary>What one <see cref="Regenerate"/> did. It names the keys, the tracked materials and
     /// how many moved, the shaders made, the shaders rewritten and the wall time.</summary>
     internal readonly record struct RegenerateStats(int Entries, int Tracked, int Moved, int TwinsMade, int Retexted, double Ms);
+
+    /// <summary>One warm list entry: a shader text, its family, and how many loads in a row have not
+    /// worn it.</summary>
+    internal sealed record WarmEntry(string Family, string Text, int Idle);
 }
 
 /// <summary>
