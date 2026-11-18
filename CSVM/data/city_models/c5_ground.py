@@ -12,7 +12,10 @@ A block is laid out the way a 1930s Manhattan block reads from the air: a sidewa
 kerb, a ring of lots behind it, each building on a lot of its own width with a paved apron and a yard
 behind it, the vacant lots between cut 8 to 14 m wide, lot-line fences and rear walls, and the core
 behind the ring cut into service yards, courts and gardens, with a service alley through or into it
-where no building stands in the way. About a quarter of the free floor is lawn or garden (Decision 12).
+where no building stands in the way. A combination's character (WALKUP, DOWNTOWN, INNER_WALKUP) sets
+the surfaces and the green share: about a quarter of the free floor in the walk-up districts
+(Decision 12), about a tenth in the inner city, which is paved courts, service yards with loading
+docks, plazas and parking (Decision 18).
 
 Every variant keeps the same buildings and streets and rolls its own ring depths, lot cuts, alley,
 core cuts and surfaces from a fixed seed, so a rerun writes the same bytes. The layout is built in a
@@ -52,17 +55,11 @@ PX = SIZE / TILE_M
 # The free floor's mean Rec. 601 luma on sRGB texels: set at the controls under C5's lighting, where
 # 20 left the paving's structure unreadable.
 LUMA = 35.0
-# (visible paint, standing set, variants). Decision 4: 2 to 4 per combination.
-COMBOS = (("cblock7", "cblock7", 4), ("cblock7", "cblock4", 2))
-
 SIDEWALK_M = 3.0
 ALLEY_M = 5.0
-APRON_M = 2.5
 RING_M = (28.0, 40.0)
 YARD_MIN_M = 6.0
-LOT_W_M = (8.0, 14.0)
 CORE_CELL_M = (35.0, 70.0)
-GARDEN_SHARE = 0.25
 
 # Per surface kind: its colour (only the hue counts, each is normalised to luma 1) and its level
 # against the floor's mean. The levels span about 0.75 to 1.25, so at a mean of 20 the surfaces
@@ -83,11 +80,34 @@ KINDS = {
 # The share of each colour's chroma kept: night washes colour out, and a lifted montage shows a
 # fully saturated lawn as a poster green.
 CHROMA = 0.7
-YARD_KINDS = (("concrete", 0.24), ("flagstone", 0.22), ("gravel", 0.22), ("dirt", 0.20), ("asphalt", 0.12))
-# What a cell behind the ring is: back yards carried on from the ring, a service yard, a paved
-# court, an open lot.
-CORE_USES = (("strips", 0.40), ("service", 0.25), ("court", 0.20), ("open", 0.15))
-FENCE, WALL, WALL_SHADOW, PATH = 0.72, 1.26, 0.82, 1.14
+FENCE, WALL, WALL_SHADOW, PATH, STALL = 0.72, 1.26, 0.82, 1.14, 1.10
+
+# A district's character. yard: a ring lot's surface; vacant: a ring lot with no building (None
+# takes yard); core: what a cell behind the ring is (back yards carried on from the ring, a service
+# yard, a parking lot, a paved court, an open lot); green: the free floor's lawn and garden share;
+# apron: the paving behind a building; lot_w: a vacant lot's width; alley: through, dead end, none.
+WALKUP = dict(
+    yard=(("concrete", 0.24), ("flagstone", 0.22), ("gravel", 0.22), ("dirt", 0.20), ("asphalt", 0.12)),
+    vacant=None,
+    core=(("strips", 0.40), ("service", 0.25), ("court", 0.20), ("open", 0.15)),
+    green=0.25, greens=(("garden", 0.4), ("lawn", 0.35), ("allotment", 0.25)),
+    apron=2.5, lot_w=(8.0, 14.0), alley=(("through", 0.5), ("dead", 0.35), ("none", 0.15)))
+# Decision 18, the author after flying the walk-ups: "for the inner city use more pavement less
+# gardens". Paved courts, service yards with loading docks behind the towers, plazas and parking on
+# the vacant frontage, alleys; about a tenth green, as small lawns and planted courts.
+DOWNTOWN = dict(
+    yard=(("concrete", 0.34), ("asphalt", 0.30), ("flagstone", 0.22), ("gravel", 0.14)),
+    vacant=(("flagstone", 0.40), ("asphalt", 0.35), ("concrete", 0.25)),
+    core=(("service", 0.35), ("parking", 0.25), ("court", 0.30), ("strips", 0.10)),
+    green=0.10, greens=(("lawn", 0.55), ("garden", 0.45)),
+    apron=4.0, lot_w=(12.0, 22.0), alley=(("through", 0.6), ("dead", 0.3), ("none", 0.1)))
+# The walk-ups standing on downtown paint lie inside the tower districts: downtown paving and green
+# share, with the walk-ups' back-yard strips and narrow lots kept.
+INNER_WALKUP = dict(DOWNTOWN, core=(("strips", 0.30), ("service", 0.30), ("parking", 0.15), ("court", 0.25)),
+                    apron=2.5, lot_w=(8.0, 14.0))
+# (visible paint, standing set, variants, character). Decision 4: 2 to 4 per combination.
+COMBOS = (("cblock7", "cblock7", 4, WALKUP), ("cblock7", "cblock4", 2, WALKUP),
+          ("cblock1", "cblock1", 4, DOWNTOWN), ("cblock1", "cblock4", 3, INNER_WALKUP))
 
 
 def _pick(rng, table):
@@ -193,15 +213,15 @@ def _side_local(side, block, r):
             "L": (r[1], r[3], r[0] - A0, r[2] - A0), "R": (r[1], r[3], A1 - r[2], A1 - r[0])}[side]
 
 
-def _cuts(rng, s0, s1, fixed):
+def _cuts(rng, s0, s1, fixed, lot_w):
     """Splits [s0, s1] into lots: each fixed interval (a building's width, an alley) stays whole, the
-    gaps are cut 8 to 14 m wide, and a sliver under 4 m joins its neighbour."""
+    gaps are cut lot_w wide, and a sliver under 4 m joins its neighbour."""
     out, pos = [], s0
     for f0, f1, tag in sorted(fixed) + [(s1, s1, None)]:
         f0, f1 = max(f0, s0), min(f1, s1)
         gap = f0 - pos
         if gap >= 4.0:
-            n = max(1, int(round(gap / rng.uniform(*LOT_W_M))))
+            n = max(1, int(round(gap / rng.uniform(*lot_w))))
             w = rng.uniform(0.75, 1.25, n)
             edges = pos + np.concatenate([[0], np.cumsum(w) / w.sum()]) * gap
             out += [(edges[i], edges[i + 1], None) for i in range(n)]
@@ -231,7 +251,7 @@ def _core_cells(rng, rect, out):
         _core_cells(rng, (a0, b0 + t * h, a1, b1), out)
 
 
-def layout(block, lots, rng):
+def layout(block, lots, rng, ch):
     """One variant's block in rolled metres, the alley (if any) running along b. lots are bboxes."""
     A0, B0, A1, B1 = block
     W = SIDEWALK_M
@@ -244,7 +264,7 @@ def layout(block, lots, rng):
         near[i] = min(d, key=d.get)
     depth = {s: rng.uniform(*RING_M) for s in sides}
     for i, s in near.items():
-        need = _side_local(s, block, lots[i])[3] + APRON_M + YARD_MIN_M
+        need = _side_local(s, block, lots[i])[3] + ch["apron"] + YARD_MIN_M
         if need < 60.0:
             depth[s] = max(depth[s], need)
     full = "TB" if rng.random() < 0.5 else "LR"
@@ -269,7 +289,7 @@ def layout(block, lots, rng):
                 break
 
     # The alley runs along b at a, through the core and the T and B rings, where no lot stands.
-    mode = _pick(rng, (("through", 0.5), ("dead", 0.35), ("none", 0.15)))
+    mode = _pick(rng, ch["alley"])
     alley = None
     if mode != "none":
         sideT = rng.random() < 0.5
@@ -307,24 +327,26 @@ def layout(block, lots, rng):
             else:
                 merged.append(f)
         D = depth[s]
-        parts = _cuts(rng, span[s][0], span[s][1], merged)
+        parts = _cuts(rng, span[s][0], span[s][1], merged, ch["lot_w"])
         for k, (al0, al1, tag) in enumerate(parts):
             if tag and tag[0] == "alley":
                 continue
-            kind = _pick(rng, YARD_KINDS)
+            kind = _pick(rng, ch["yard"] if tag or not ch["vacant"] else ch["vacant"])
             parcel = _side_rect(s, block, al0, al1, W, D)
             if tag and tag[0] == "lot":
                 i = tag[1]
                 _, _, d0, d1 = _side_local(s, block, lots[i])
                 L.cell("sidewalk", _side_rect(s, block, al0, al1, W, max(W, d0)), "verge", i)
-                L.cell("concrete", _side_rect(s, block, al0, al1, max(W, d0), min(D, d1 + APRON_M)), "apron", i)
-                y = L.cell(kind, _side_rect(s, block, al0, al1, min(D, d1 + APRON_M), D), "yard", i)
+                L.cell("concrete", _side_rect(s, block, al0, al1, max(W, d0), min(D, d1 + ch["apron"])), "apron", i)
+                y = L.cell(kind, _side_rect(s, block, al0, al1, min(D, d1 + ch["apron"]), D), "yard", i)
                 door = (al0 + al1) / 2, d1
             else:
                 y = L.cell(kind, parcel, "yard")
+                if y and ch["vacant"] and kind == "asphalt":
+                    y["stalls"] = True
                 door = None
             if y:
-                y["side"], y["door"], y["depth"] = s, door, (min(D, (door[1] + APRON_M) if door else W), D)
+                y["side"], y["door"], y["depth"] = s, door, (min(D, (door[1] + ch["apron"]) if door else W), D)
                 y["along"] = (al0, al1)
                 yards.append(y)
             # Lot-line fences between neighbours and along the alley, rear lines toward the core.
@@ -348,7 +370,7 @@ def layout(block, lots, rng):
             _core_cells(rng, h, rects)
     cores = []
     for r in rects:
-        use = _pick(rng, CORE_USES)
+        use = _pick(rng, ch["core"])
         if alley and alley[4] == "dead" and r[0] < alley[2] and r[2] > alley[0] and (
                 (alley[5] and abs(r[1] - core[1]) < 0.01) or (not alley[5] and abs(r[3] - core[3]) < 0.01)):
             use = "service"  # the yard the alley leads to
@@ -357,18 +379,21 @@ def layout(block, lots, rng):
             dist = {"T": r[1] - B0, "B": B1 - r[3], "L": r[0] - A0, "R": A1 - r[2]}
             s = min(dist, key=dist.get)
             al = (r[0], r[2]) if s in "TB" else (r[1], r[3])
-            for k, (s0, s1, _) in enumerate(_cuts(rng, al[0], al[1], [])):
+            for k, (s0, s1, _) in enumerate(_cuts(rng, al[0], al[1], [], ch["lot_w"])):
                 sr = (s0, r[1], s1, r[3]) if s in "TB" else (r[0], s0, r[2], s1)
-                c = L.cell(_pick(rng, YARD_KINDS), sr, "yard")
+                c = L.cell(_pick(rng, ch["yard"]), sr, "yard")
                 if c:
                     cores.append(c)
                 if k > 0 and rng.random() < 0.85:
                     L.line("fence", sr[0], sr[1], sr[0] if s in "TB" else sr[2], sr[3] if s in "TB" else sr[1])
         else:
-            kind = {"service": ("asphalt", "gravel"), "court": ("flagstone", "concrete"), "open": ("dirt", "gravel")}[use]
+            kind = {"service": ("asphalt", "gravel"), "court": ("flagstone", "concrete"), "open": ("dirt", "gravel"),
+                    "parking": ("asphalt", "gravel")}[use]
             c = L.cell(kind[int(rng.random() < 0.4)], r, "core")
-            if c and use != "service":
+            if c and use not in ("service", "parking"):
                 cores.append(c)
+            if c and use == "parking":
+                c["stalls"] = True
             if use == "service":
                 # A concrete loading strip along one side of the yard.
                 e = int(rng.integers(4))
@@ -384,22 +409,22 @@ def layout(block, lots, rng):
     return L, yards, cores
 
 
-def _gardens(L, yards, cores, free_px, rng):
-    """Turns yards and core cells to lawn or garden, in a seeded order, until about a quarter of the
-    free floor is green; a garden gets beds along two edges and a path, a lawn a worn path."""
+def _gardens(L, yards, cores, free_px, rng, ch):
+    """Turns yards and core cells to lawn or garden, in a seeded order, until the character's share
+    of the free floor is green; a garden gets beds along two edges and a path, a lawn a worn path."""
     total = sum(free_px(c["rect"]) for c in L.cells)
     green = 0.0
     pool = yards + cores
     for j in rng.permutation(len(pool)):
         c = pool[j]
         f = free_px(c["rect"])
-        if green >= GARDEN_SHARE * total:
+        if green >= ch["green"] * total:
             break
-        if (green + f) > (GARDEN_SHARE + 0.03) * total or f < 40:
+        if (green + f) > (ch["green"] + 0.03) * total or f < 40:
             continue
         a0, b0, a1, b1 = c["rect"]
         allot = min(a1 - a0, b1 - b0) >= 12.0 and c["region"] == "core"
-        c["kind"] = _pick(rng, (("garden", 0.4), ("lawn", 0.35), ("allotment", 0.25 if allot else 0.0)))
+        c["kind"] = _pick(rng, [(k, w if allot or k != "allotment" else 0.0) for k, w in ch["greens"]])
         green += f
     for c in pool:
         a0, b0, a1, b1 = c["rect"]
@@ -506,6 +531,9 @@ def paint_floor(L, rng):
         if x1 <= x0 or y1 <= y0:
             continue
         img[y0:y1, x0:x1] = _unit(c["kind"]) * _pattern(c["kind"], y1 - y0, x1 - x0, rng)[..., None]
+    for c in L.cells:
+        if c.get("stalls"):
+            _stalls(img, c["rect"])
     for pts in L.paths:
         _stroke(img, pts, 1.0 if len(pts) == 2 else 0.6, PATH)
     for kind, a0, b0, a1, b1 in L.lines:
@@ -523,6 +551,32 @@ def paint_floor(L, rng):
     grime = A._blur(A._blur(rng.standard_normal((SIZE, SIZE)), 6), 6)
     grime = grime / max(grime.std(), 1e-9) * 0.035
     return img * (1 + grime)[..., None]
+
+
+def _stalls(img, rect):
+    """Painted parking stalls along both long sides of a lot: 5 m marks on a 2.6 m pitch. Paint only,
+    never layout lines, which the dressing would stand fences on and keep its cars clear of."""
+    a0, b0, a1, b1 = rect
+    along_a = a1 - a0 >= b1 - b0
+    lo, hi = (a0, a1) if along_a else (b0, b1)
+    for t in np.arange(lo + 2.0, hi - 1.5, 2.6):
+        for e0, e1 in (((b0, b0 + 5.0) if along_a else (a0, a0 + 5.0)), ((b1 - 5.0, b1) if along_a else (a1 - 5.0, a1))):
+            if along_a:
+                img[max(px(e0), 0):min(px(e1), SIZE), px(t) % SIZE] *= STALL
+            else:
+                img[px(t) % SIZE, max(px(e0), 0):min(px(e1), SIZE)] *= STALL
+
+
+def _green_share(L, shift, free):
+    """The share of the free floor (image frame) whose top cell is lawn, garden, allotment or bed."""
+    green = np.zeros((SIZE, SIZE), bool)
+    for c in L.cells:
+        x0, x1, y0, y1 = (max(px(c["rect"][0]), 0), min(px(c["rect"][2]), SIZE), max(px(c["rect"][1]), 0),
+                          min(px(c["rect"][3]), SIZE))
+        if x1 > x0 and y1 > y0:
+            green[y0:y1, x0:x1] = c["kind"] in ("lawn", "garden", "allotment", "bed")
+    green = np.roll(green, (shift[1], shift[0]), axis=(0, 1))
+    return float(green[free].mean())
 
 
 def _stroke(img, pts, half_px, gain):
@@ -617,7 +671,7 @@ def write_layout(path, paint, bset, n, L, shift, blocked):
         f.write(_dump(doc) + "\n")
 
 
-def generate(layout_doc, paint, bset, n, luma):
+def generate(layout_doc, paint, bset, n, luma, ch):
     """One variant: the image (uint8, image frame), its layout, the free-floor mask, the roll."""
     pdoc = layout_doc["paints"][paint]
     streets = pdoc["streets"]
@@ -637,10 +691,10 @@ def generate(layout_doc, paint, bset, n, luma):
     boxes = [_bbox(lot, shift) for lot in lots]
     flip = rng.random() < 0.5
     if flip:
-        L, yards, cores = layout((B0, A0, B1, A1), [[r[1], r[0], r[3], r[2]] for r in boxes], rng)
+        L, yards, cores = layout((B0, A0, B1, A1), [[r[1], r[0], r[3], r[2]] for r in boxes], rng, ch)
         L.block = (B0, A0, B1, A1)
     else:
-        L, yards, cores = layout((A0, B0, A1, B1), boxes, rng)
+        L, yards, cores = layout((A0, B0, A1, B1), boxes, rng, ch)
         L.block = (A0, B0, A1, B1)
     tb = blocked.T if flip else blocked
 
@@ -648,7 +702,7 @@ def generate(layout_doc, paint, bset, n, luma):
         x0, x1, y0, y1 = max(px(r[0]), 0), min(px(r[2]), SIZE), max(px(r[1]), 0), min(px(r[3]), SIZE)
         return float((~tb[y0:y1, x0:x1]).sum()) if x1 > x0 and y1 > y0 else 0.0
 
-    _gardens(L, yards, cores, free_px, rng)
+    _gardens(L, yards, cores, free_px, rng, ch)
     if flip:
         L.flip()
     rel = paint_floor(L, rng)
@@ -672,18 +726,18 @@ def main():
         doc = json.load(f)
     os.makedirs(args.out, exist_ok=True)
     index = {}
-    for paint_name, bset, count in COMBOS:
+    for paint_name, bset, count, ch in COMBOS:
         files = []
         for n in range(count):
-            img, L, shift, blocked, free = generate(doc, paint_name, bset, n, args.luma)
+            img, L, shift, blocked, free = generate(doc, paint_name, bset, n, args.luma, ch)
             name = "%s-%s-%d" % (paint_name, bset, n)
             write_png(os.path.join(args.out, name + ".png.bin"), img)
             write_layout(os.path.join(args.out, name + ".json"), paint_name, bset, n, L, shift, blocked)
             files.append(name + ".png.bin")
             y = A.luma(img.astype(float))[free]
-            green = sum(1 for c in L.cells if c["kind"] in ("lawn", "garden"))
-            print("%s  free floor luma mean %.2f median %.1f p5 %.1f p95 %.1f  cells %d (%d green)  lines %d"
-                  % (name, y.mean(), np.median(y), np.percentile(y, 5), np.percentile(y, 95), len(L.cells), green, len(L.lines)))
+            green = _green_share(L, shift, free)
+            print("%s  free floor luma mean %.2f median %.1f p5 %.1f p95 %.1f  green %.3f  cells %d  lines %d"
+                  % (name, y.mean(), np.median(y), np.percentile(y, 5), np.percentile(y, 95), green, len(L.cells), len(L.lines)))
         index["%s-%s" % (paint_name, bset)] = dict(paint=paint_name, set=bset, variants=count, files=files)
     idoc = dict(about="C5 block floor variants per combination of visible paint and standing set, written by "
                 "CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12). Each file is a 512 x 512 sRGB PNG "

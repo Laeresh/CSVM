@@ -13,6 +13,18 @@
       "set": "cblock4",
       "variants": 2,
       "files": ["cblock7-cblock4-0.png.bin", "cblock7-cblock4-1.png.bin"]
+    },
+    "cblock1-cblock1": {
+      "paint": "cblock1",
+      "set": "cblock1",
+      "variants": 4,
+      "files": ["cblock1-cblock1-0.png.bin", "cblock1-cblock1-1.png.bin", "cblock1-cblock1-2.png.bin", "cblock1-cblock1-3.png.bin"]
+    },
+    "cblock1-cblock4": {
+      "paint": "cblock1",
+      "set": "cblock4",
+      "variants": 3,
+      "files": ["cblock1-cblock4-0.png.bin", "cblock1-cblock4-1.png.bin", "cblock1-cblock4-2.png.bin"]
     }
   }
 }

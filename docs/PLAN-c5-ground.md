@@ -61,6 +61,7 @@ Scenery off draw the original ground.
 | 19 | The dressing, flown (B15) | **Walls and fences too bright**: darken and desaturate the brick walls and board fences toward the floor's level; density stays. The author chose "Walls/fences too bright". |
 | 20 | The city tree, flown (B15) | **Too bright: darken it** with the night darkening the city's other dressing gets. The author chose "Too bright, darken it". |
 | 21 | The kerb and the dressing's reach, flown (B15) | **Both fixed**: the soft kerb with whole lamp pools, and the dressing fading with the walk-up blocks. The author chose "Both fixed". |
+| 22 | The `cblock1` floors, from captures (C21) | **Kept as generated**: about 10 % green on the tower blocks ("10 % is right"); the walk-ups on `cblock1` paint read as inner city, not as `cblock7`'s gardens ("Inner city"); asphalt is neither capped nor lightened ("Leave it"); the parking stalls stay subtle ("Keep subtle"). |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -196,7 +197,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the whole city
 
-21. ☐ The square districts' other combinations
+21. ☑ The square districts' other combinations
 22. ☐ The diagonal districts
 23. ☐ Open ground on the bare flagged blocks
 24. ☐ Measure the cost on the PC and the Deck
@@ -574,7 +575,28 @@ with the question dialog after the flight, and record the answers in the Decisio
 
 # Wave C, the whole city
 
-## C21 ☐ The square districts' other combinations
+## C21 ☑ The square districts' other combinations
+
+**Landed.** `c5_ground.py` gives each combination a character: `WALKUP` (B12's tables unchanged,
+for `cblock7`), `DOWNTOWN` for `cblock1` with its towers (paved courts, service yards with 4 m
+loading docks behind the towers, flagstone plazas and asphalt parking with painted stalls on the
+vacant frontage, more alleys, about a tenth green), and `INNER_WALKUP` for `cblock4`'s walk-ups on
+`cblock1` paint (downtown paving and green share, the walk-ups' narrow lots and back-yard strips
+kept). It writes 4 variants of `cblock1-cblock1` and 3 of `cblock1-cblock4` at texture luma 35;
+the `cblock7` outputs are byte-identical. The layout JSON and its kinds are unchanged, so no engine
+change was needed: `CityGround` floors 1,514 polygons (from 1,200) and keeps the paint on 442 (from
+756); the dressing grows to 874,842 instances in 103.9 MB of buffers (from 620,438 and 73.7 MB),
+which C24 measures on the Deck. Clear `cblock7` in a 45 m or off-axis frame keeps the original paint
+(`other_frame=31` in the `city ground:` line), as B13 decided. Verdicts: Decision 22.
+
+**Verified.** A rerun of the generator is byte-identical. Free floor per variant: mean 35.0, median
+33.2 to 35.4, p5 to p95 28.1 to 43.9, green 0.102 to 0.111. Captured at `C5-cb1`, `C5-street` and a
+60 m oblique over a `cblock1` block, with and without the HD pack: the floor and dressing replace
+the black original between the towers, and the streets and lamp pools are unchanged. The author
+kept all four look points from the captures. `city-ground`, `city-dressing` and `city-buildings`
+pass with the unit tests (8,525 passed).
+
+**Original approach (kept for reference).**
 
 **Goal.** `cblock1` (clear, and flagged with `cblock4`'s set) and `cblock7` flagged with
 `cblock4`'s set draw the generated ground. No `cblock4` base is exposed (A1), so it needs no floor.
