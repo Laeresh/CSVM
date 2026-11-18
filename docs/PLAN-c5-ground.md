@@ -633,7 +633,14 @@ goldens `c5-city-night-enhanced` and `c5-city-towers-enhanced`).
 
 **Evidence (confidence: n/a).**
 
-**Approach.** <TODO>
+**Approach.** The goldens are re-pinned once, here, after every district has its floor: each Wave C
+district moves the C5 shots again, so an earlier pin is wasted. Until then the plan tree runs the
+`city-ground`, `city-dressing` and `city-buildings` suites with `-SkipGoldens` plus `-Quick`; the
+suites hold Faithful's shader text, the collision census and the live moves, and each item's Off
+and Faithful captures are byte-identical with and without the floor. Here: the complete battery,
+`-RegenGoldens` on the merged tree for the C5 Enhanced shots that moved (named in the commit), and
+a check that no other chapter's shot moved. <TODO: whether a golden over a `cblock7` block should
+be added, since neither C5 shot shows that district.>
 
 **Model recommendation.** <TODO>
 
