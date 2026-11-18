@@ -9,7 +9,8 @@
     "A GPU or driver change legitimately moves every hash at once; the gpu field above is what these were captured on. Regenerate after a driver update, and say so in the commit message.",
     "A landed visual change updates this file in the SAME commit and names the shots it moved. An unexplained flip is a stop-the-line finding, not a regeneration.",
     "exercises = what the shot covers TODAY, one sentence under 250 chars. REWRITE it on a re-pin, never append: no past-change deltas, no item ids, no dates. A commit hook enforces this. History is git log -p on this file; reasoning is the commit message.",
-    "The runner appends --screenshot=<abs path> and --log-file=<abs path>; everything else is the args below verbatim."
+    "The runner appends --screenshot=<abs path> and --log-file=<abs path>; everything else is the args below verbatim.",
+    "release: true marks a shot only RunTests.ps1 -Release runs, the battery before a release; every other run skips it and keeps its pin."
   ],
   "shots": [
     {
@@ -22,7 +23,7 @@
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "3e6e610b3f75c1527d2b87307e723eeb",
+      "hash": "209232301df7c8a45039aa1c2332ff05",
       "exercises": "night lighting, skydome, islands, coastline sheets dimmed by the 0.426 world light like every lit surface, the placed cloud-puff facades on their world-up look-at pose; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -36,7 +37,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "c530a830245d320a2be9bd8a7543b7e7",
+      "hash": "d2f33fb893b34c21966955da5f493857",
       "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, wake spray with far puffs culled, the cloud-puff facades on the world-up look-at, Eiffel lattice and bridge cables blended not cut, two mesh point lights; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -57,7 +58,7 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "4b842a6d541a5b29f3e0d6f15363d759",
+      "hash": "412886180aefcce4e3a5357cab863067",
       "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, city blocks drawing every mesh of their decoration chain, the star field, the -0.8 mip LOD bias, and culled torch puffs.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -71,21 +72,23 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "3383621e52ae09458da509275edfe4b5",
+      "hash": "404285e4c4c933e9a87f990a712a61ee",
       "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
+      "release": true,
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "b2379c95b28354c64e22b600089b618e",
+      "hash": "d583cc168c94135fe4c34317d2c09ffc",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD, including the heading tape's uncapped ends, hem and rim fade; frame-sensitive 12.21 %, and renders with extracted/ absent.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "27639c6a47286e051c2777598496eb20",
+      "hash": "e8cb1a29fcaeed2c79f9aafe876a78d6",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down seconds earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -99,7 +102,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "323c0fed01e45793eb2ecd6fe24e3d5f",
+      "hash": "1e407a339cf9a5e3a2c8ecd56a4bc5bb",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -113,36 +116,41 @@
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "c7cd1726be3442c78d878b683b325ad6",
+      "hash": "8831f5e12c0f0eb8d5a4701e6d8eb092",
       "exercises": "the two-ray column ground-contact tier, blind to each piece's own colliders: a killed hangar's flung debris resting on terrain, their landings' spark puffers on the mission wind as the visible signal, over C1 ground and cutouts under one world light.",
+      "release": true,
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "85708c6ca7dfed3853b9c8ed62a0bc9f",
+      "hash": "d125f993030514e6ba88d48e6cf243fd",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
+      "release": true,
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "5ee60caec40e35179a8e2925f615d846",
+      "hash": "8fb2f6e9531a22a252a6a1840c4f210f",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
+      "release": true,
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {
       "name": "campaign-intro-fill",
       "frame": 120,
-      "hash": "280023fa06db394a8f30eead2c176158",
+      "hash": "2f02ee8547dfe34cc73d5fe465158691",
       "exercises": "A campaign mission's intro cutscene fills the whole window at four human players: one pane at the full rect, the film fitted by the card's height with the bars stretched across it, the rest hidden, the lit C1 scene behind; frame-sensitive 3.89%.",
+      "release": true,
       "args": ["--campaign=csvm-golden:0", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {
       "name": "menu-original-flag",
       "frame": 120,
-      "hash": "51f990a69c83e8110efa99e32635da1f",
+      "hash": "e48239a9ac30efd8877b65afb5704b6f",
       "exercises": "The Original top level: the CrimFlag movie decoded from the install's MPEG-1 as the backmost layer at 250 percent, the logo, frame and every plaque over it, Multiplayer and the join board door included, and the build stamp with its folder icons.",
+      "release": true,
       "args": ["--menu", "--presentation=original", "--det", "--mute"]
     },
     {
@@ -176,14 +184,14 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "84abf65988874df942fa04671a3db68c",
+      "hash": "181a8a97e57e01e952ab2bb7a627e761",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean past the coast, TAA; frame-sensitive 89.72 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "8166b4cd52fdb00b0b3ee2e68e76e74b",
+      "hash": "e1cebdb0cece39d46382531683bcf94c",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -192,6 +200,7 @@
       "frame": 120,
       "hash": "92a4dca7dcf8ba6d7a25f441cedd2056",
       "exercises": "The --xr-sim stand-in headset: both eyes through the multiview path facing away from the chapter origin, the interior drawn from the XR origin's frame over C1, the reticle after its glass, the pipper card; frame-sensitive 19.82 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
@@ -199,6 +208,7 @@
       "frame": 120,
       "hash": "8f63f62a5feda78abcf8e8463e7a2a76",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]
     },
     {
@@ -206,13 +216,15 @@
       "frame": 120,
       "hash": "eb3eb57894212bd5b6bc384114cb8090",
       "exercises": "The stand-in headset's interior 20 km from the chapter origin on a rotated heading, where the eyes' float32 rounding reaches pixels: both eyes drawn by the render thread's eye feed, the pipper at its world point; frame-sensitive 11.92 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=20000,300,0", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit-xr-sim-aft",
       "frame": 120,
-      "hash": "0bbef3871fe0524dc622e45657befec3",
+      "hash": "6cd071f1274500ed67e9a18d295c2fc1",
       "exercises": "A stereo session's own interior with no flag, 12.8 km out facing away from the origin, the head 10 cm aft of the eye: the head plate left out, the gauges, the reticle after its glass and the pipper card; frame-sensitive 8.38 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-9800,700,-8200", "--direction=-0.743,0,-0.669", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=head=0/0/0.1", "--det", "--mute"]
     },
     {
@@ -220,6 +232,7 @@
       "frame": 120,
       "hash": "e99032b7fb07c434ef140fdb8ba409a2",
       "exercises": "The stereo gunsight at infinity over the empty stage's sky, at 0.7 of its authored size with its red index mark covering the sky; the glass and sight body keep their 0.45 m disparity; frame-sensitive 7.71 %.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--direction=0,0.34,-0.94", "--view=cockpit", "--hold=0,0,0,0.6", "--xr-sim=pitch=-4.70001", "--det", "--mute"]
     },
     {
@@ -227,6 +240,7 @@
       "frame": 120,
       "hash": "1310a14046b31bcb8c12b6d402a16c42",
       "exercises": "The world flare in stereo from the nose view: the core and all three rings at sky depth in both eyes, the sun wash on its head-locked quad, the pipper card and the HUD panel's dials over the C3 sky and sea; frame-sensitive 15.65 %.",
+      "release": true,
       "args": ["--chapter=C3", "--plane=player_bhawk", "--pos=0,1200,0", "--direction=0.765,0.469,-0.441", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     },
     {
@@ -234,13 +248,15 @@
       "frame": 120,
       "hash": "e3f0ebf8c385d8e9d74711b10b3d4b73",
       "exercises": "A camera-facing sky sprite with the stand-in head turned 35 degrees off the C1 moon: the moon a disc facing the eye in both eyes, not lying in the head's view plane, the HUD panel's dials fixed to the seat; frame-sensitive 11.50 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,1500,-6144", "--direction=-0.6,0,-0.8", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=yaw=35,pitch=28", "--det", "--mute"]
     },
     {
       "name": "menu-original-xr-sim",
       "frame": 120,
-      "hash": "64095d64a7b12ca42036178abfe671ac",
+      "hash": "d03616cecdaf42dfed48a45afe11e22f",
       "exercises": "The Original top level on the stand-in headset's theater screen: the menu's layers drawn into the screen's surface, the CrimFlag movie playing, on a quad ahead of both eyes over the dark surround; frame-sensitive 7.89 %.",
+      "release": true,
       "args": ["--menu", "--presentation=original", "--xr-sim", "--det", "--mute"]
     },
     {
@@ -248,13 +264,15 @@
       "frame": 120,
       "hash": "dc14743e89d5939709cf9d3ee800cb8e",
       "exercises": "A campaign intro on the stand-in headset's theater screen: each eye its own picture of the film rows between the bars, converged on the card, the surround over the bars; assumes no csvm-golden profile in user://; frame-sensitive 0.50 %.",
+      "release": true,
       "args": ["--xr-sim", "--campaign=csvm-golden:0", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "stage-markers-xr-sim",
       "frame": 45,
-      "hash": "fe4033f2e9a4299d9bebeac4ac599f10",
+      "hash": "7e8a0f55d390c97182c043cb66ef13c8",
       "exercises": "Stereo flight markers over the empty stage: the pipper, the selected Fury's box, label and debug tag on cards at world depth in both eyes, the off-view Kestrel on the head ring, the HUD panel's dials; frame-sensitive 42.40 %.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury:pos=-186/322/-167,player_kestrel:pos=200/300/-223", "--target=ai1_player_fury", "--debug-markers", "--hold=0,0,0,0.6", "--xr-sim=eye=640x720,fov=60", "--det", "--mute"]
     },
     {
@@ -262,6 +280,7 @@
       "frame": 60,
       "hash": "f3897f1f021e5f6e31180e782f0ac5fd",
       "exercises": "The cockpit-locked HUD panel on the stand-in headset in the nose view: the flat HUD's dial columns and heading tape on a quad 2 m ahead in the XR origin's frame, in both eyes over the empty stage; frame-sensitive 31.06 %.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=nose", "--hold=0,0,0,0.6", "--xr-sim=eye=640x720,fov=75", "--det", "--mute"]
     },
     {
@@ -269,6 +288,7 @@
       "frame": 60,
       "hash": "0f29631ff50b40857efa72a363dd77ba",
       "exercises": "The race ghost in stereo: the flown aircraft dithered as a full ghost in the rigid chase over the empty stage, each eye's pattern shifted to the surface's depth so it carries the aircraft's disparity; frame-sensitive 26.66 %.",
+      "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=chase", "--hold=0,0,0,0.6", "--debug-race-ghost", "--xr-sim", "--det", "--mute"]
     },
     {
@@ -276,6 +296,7 @@
       "frame": 60,
       "hash": "81d429449cb172418caab3404078153e",
       "exercises": "The spyglass on the stand-in headset, the head turned 70 degrees off a Fury ahead: one mono picture of it on a disc on the head ring, inside its arrow and label, in both eyes over C1; frame-sensitive 39.14 %.",
+      "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,600,-6144", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury", "--target=ai1_player_fury", "--hold=0,0,0,0.6", "--xr-sim=yaw=-70,eye=640x720,fov=70", "--det", "--mute"]
     },
     {
@@ -302,7 +323,7 @@
     {
       "name": "c3-coast-enhanced",
       "frame": 120,
-      "hash": "0570c62000f30793d9bd9bf242ad9b49",
+      "hash": "02836c3683cc84a3749b4d165d57d655",
       "exercises": "Enhanced wave ocean at a C3 shore strip and cliff tile from 52 m: the shore train, the cliff tile's 25 m alpha blend by distance from the waterline, the procedural surf and the swash fading past the line; frame-sensitive 24.26 %.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4652,52,-3426", "--direction=0.38,-0.7,-0.93", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
     }

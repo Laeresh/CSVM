@@ -533,6 +533,19 @@ public sealed class PlaneBuilder
         {
             return;
         }
+
+        static void CastNoShadow(Node node)
+        {
+            if (node is GeometryInstance3D geometry)
+            {
+                geometry.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            }
+            foreach (var child in node.GetChildren())
+            {
+                CastNoShadow(child);
+            }
+        }
+
         foreach (int c in root.Children)
         {
             var node = _gamez.Nodes[c];
@@ -574,6 +587,12 @@ public sealed class PlaneBuilder
                 : FlatMount(CockpitCameraOffset, _interiorScale);
             n3d.Visible = false; // shown only while a first-person view is on the screen
             ParkInteriorStates(n3d);
+            // The dials stand proud of the panel, so their sun shadow lands on it. Set before the
+            // transplant, which moves these nodes with their setting.
+            if (CockpitTransplant.FindNamed(n3d, "gauges") is { } gauges)
+            {
+                CastNoShadow(gauges);
+            }
             if (xr && !body)
             {
                 // A pack's mesh holds no gamez polygons for OmittedPolygons to drop, so it is cut by shape.

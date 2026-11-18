@@ -156,6 +156,30 @@ public static class CockpitTransplant
         into.SurfaceSetMaterial(into.GetSurfaceCount() - 1, mesh.SurfaceGetMaterial(surface));
     }
 
+    // Depth-first, as PlaneRigPatch.CheckCockpit finds the gauges node on the gamez tree.
+    internal static Node3D? FindNamed(Node3D root, string name)
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is not Node3D n3d)
+            {
+                continue;
+            }
+
+            if (AnimRuntime.NameOf(n3d).Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return n3d;
+            }
+
+            if (FindNamed(n3d, name) is { } hit)
+            {
+                return hit;
+            }
+        }
+
+        return null;
+    }
+
     // The assemblies the table names under the interior's gauges node, with their poses. The glass key
     // names no assembly. Listed first, since Build moves each one out of that node.
     private static List<(Node3D Gauges, Node3D Assembly, RigGaugePose Pose)> NamedAssemblies(Node3D interior, RigCockpit cockpit)
@@ -268,30 +292,6 @@ public static class CockpitTransplant
             if (child is Node3D n3d && AnimRuntime.NameOf(n3d).Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return n3d;
-            }
-        }
-
-        return null;
-    }
-
-    // Depth-first, as PlaneRigPatch.CheckCockpit finds the gauges node on the gamez tree.
-    private static Node3D? FindNamed(Node3D root, string name)
-    {
-        foreach (var child in root.GetChildren())
-        {
-            if (child is not Node3D n3d)
-            {
-                continue;
-            }
-
-            if (AnimRuntime.NameOf(n3d).Equals(name, StringComparison.OrdinalIgnoreCase))
-            {
-                return n3d;
-            }
-
-            if (FindNamed(n3d, name) is { } hit)
-            {
-                return hit;
             }
         }
 

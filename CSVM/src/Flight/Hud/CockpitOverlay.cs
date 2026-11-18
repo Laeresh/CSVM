@@ -47,6 +47,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
     // The shadow-quality revision the light last copied the sun at (FollowSunShadow).
     private int _shadowRevision = Utils.ShadowQualitySetting.Revision;
 
+    // The light's shadow reach, zero until the first shown Sync measures the interior. A body's
+    // twins are posed only there.
+    private float _shadowReach;
+
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun, Node3D? owner, Vector3 eye)
     {
@@ -81,6 +85,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// <summary>This pass's own cloned Environment, for the same registration. Null when the
     /// caller passed no Environment.</summary>
     public Godot.Environment? Env => _view.World3D.Environment;
+
+    private float ShadowReach => _shadowReach > 0f ? _shadowReach : _camera.Far;
 
     /// <summary>Whether a session draws its interiors through this pass: asked for
     /// (<paramref name="asked"/>, which <c>--no-cockpit-pass</c> clears) and not on the stereo path.
@@ -159,6 +165,16 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Mech3.BodyTwins.Mirror(_mirrored, _owner, _panelLocal);
         }
 
+        if (_shadowReach == 0f && _light != null)
+        {
+            // The far plane spread the cascades over 100 m of empty space, so the panel's shadows
+            // stepped. The margin keeps the farthest caster ahead of the 0.8 fade start.
+            float reach = InteriorReach(_interior);
+            _shadowReach = reach > 0f ? Mathf.Min(reach * 1.25f, _camera.Far) : _camera.Far;
+            _light.DirectionalShadowMaxDistance = Mathf.Min(_light.DirectionalShadowMaxDistance, _shadowReach);
+            Log.Debug("flight", $"cockpit pass shadow reach {_shadowReach:0.###}");
+        }
+
         // The view turns in the head's frame, which is level under Assisted while the interior rolls.
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, camera.HeadFrame(attitudeOnly), Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
@@ -186,7 +202,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         }
 
         _shadowRevision = Utils.ShadowQualitySetting.Revision;
-        SunShadow.Copy(_sun, _light, _camera.Far);
+        SunShadow.Copy(_sun, _light, ShadowReach);
     }
 
     /// <summary>Re-take the session sun's colour, specular and shadows after a live graphics-mode
@@ -199,7 +215,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
             _light.LightColor = _sun.LightColor;
             _light.LightSpecular = _sun.LightSpecular;
             _shadowRevision = Utils.ShadowQualitySetting.Revision;
-            SunShadow.Copy(_sun, _light, _camera.Far);
+            SunShadow.Copy(_sun, _light, ShadowReach);
         }
     }
 
@@ -294,6 +310,21 @@ public sealed partial class CockpitOverlay : CanvasLayer
         }
         foreach (var child in node.GetChildren())
             CollectMaterials(child, into);
+    }
+
+    // The farthest corner of any shadow caster's box from the pass's origin, the eye.
+    private static float InteriorReach(Node node)
+    {
+        float reach = 0f;
+        if (node is GeometryInstance3D { CastShadow: not GeometryInstance3D.ShadowCastingSetting.Off } caster)
+        {
+            var box = caster.GetAabb();
+            for (int i = 0; i < 8; i++)
+                reach = Mathf.Max(reach, (caster.GlobalTransform * box.GetEndpoint(i)).Length());
+        }
+        foreach (var child in node.GetChildren())
+            reach = Mathf.Max(reach, InteriorReach(child));
+        return reach;
     }
 
     // Whether the pass draws this frame, as the two writes that decide it: the layer's own

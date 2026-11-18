@@ -198,6 +198,7 @@
     "death-not-a-revival": 4.015,
     "death-respawn-rest-pose": 1.046,
     "death-slot": 0.092,
+    "death-stage-sputter-ends": 0.78,
     "debris-shading": 1.144,
     "debug-kill-target": 0.386,
     "destructible-sub-hull": 2.675,

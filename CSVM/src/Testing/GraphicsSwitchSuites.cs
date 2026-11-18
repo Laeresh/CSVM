@@ -1548,8 +1548,10 @@ internal static class GraphicsSwitchSuites
                     if (holds && n.GetParent() is Node3D parent && parent.IsVisibleInTree())
                         islands.Add(n);
                 });
+                // Baked as the session bakes, the brush's painted ground included.
                 CanopyMask Bake(Func<GameZNode, bool>? prune) => CanopyMask.FromPainted(
-                    Mech3.VegetationGround.Painted(clutter.Gamez, canopy, switchedOff: prune), w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom);
+                    Mech3.VegetationGround.Painted(clutter.Gamez, canopy, switchedOff: prune), w.AreaLeft, w.AreaTop, w.AreaRight, w.AreaBottom,
+                    clutter.Mask, Mech3.VegetationGround.BrushedCanopy(clutter.Gamez, entry, clutter.Mask, switchedOff: prune));
                 var every = Bake(null);
                 var shown = Bake(n => off.Contains(n.Index));
                 bool OnHidden(Vector3 at) => every.CellAt(at.X, at.Z) is int c and >= 0 && every.PaintedShare(c) > 0f && shown.PaintedShare(c) == 0f;
@@ -1851,6 +1853,11 @@ internal static class GraphicsSwitchSuites
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
                 Ring(ctx, freshEnhanced, enhanced: true, "an Enhanced C1B build");
                 HideReadsTheMask(ctx, enhanced, builtFresh);
+                var grids = builtFresh?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new();
+                ctx.Check(grids.Count > 0 && grids.All(g => g.GIMode == GeometryInstance3D.GIModeEnum.Disabled),
+                    $"the ocean's grids stay out of SDFGI's voxels, which blot the water dark next to the camera (#341; {string.Join(", ", grids.Select(g => $"{g.Name}={g.GIMode}"))})");
+                ctx.Check(enhanced.Session.Ocean?.Ocean?.ShaderText.Contains($"EMISSION = ALBEDO * {WeatherRig.GiAmbientFillParam}", StringComparison.Ordinal) == true,
+                    $"the ocean takes SDFGI's ambient floor, as the terrain does, so the sea is not left dark under GI (#341)");
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
@@ -2340,11 +2347,11 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("vegetation-added-stamps",
-        "a C3 Enhanced flight at vegetation quality rich adds palms on the transition textures its entry picks, every one "
+        "a C3 Enhanced flight at vegetation quality rich adds palms on the jungle and transition textures its entry picks, every one "
         + "standing on a picked triangle, about the set's density under the neutral mask and none counted as forest; a live move to "
         + "original and a live switch to Original draw none of them, and a move back draws the same again; a pick of another "
         + "texture, a density edit and a Clear stroke each place them again live, the stroke dropping those under it alone, and the "
-        + "shipped entry gives the first stamps back exactly; a pick to the canopy set stamps none; no added stamp stands on C1's "
+        + "shipped entry gives the first stamps back exactly; a pick to a set with no member stamps none; no added stamp stands on C1's "
         + "railway, a polygon laid over its picked ground; C5 builds no added stamp")]
     internal static void VegetationAddedStamps(TestContext ctx)
     {
@@ -2374,7 +2381,7 @@ internal static class GraphicsSwitchSuites
                 int off = origins.Where((_, i) => i % 25 == 0).Count(o => !OnTriangles(ground, o));
                 var models = kinds.Where(k => k.Added).Select(k => k.Model).Distinct().OrderBy(m => m).ToList();
                 double share = clutter.AddedKept / (double)Math.Max(1, clutter.AddedCandidates);
-                ctx.Check(picked.Count == 2 && origins.Count > 0 && off == 0 && models.SequenceEqual(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }),
+                ctx.Check(picked.Count == 5 && origins.Count > 0 && off == 0 && models.SequenceEqual(new[] { "palmtree1.flt", "palmtree2.flt", "palmtree3.flt" }),
                     $"the flight adds {origins.Count} palms ({string.Join(", ", models)}) on {string.Join(", ", picked)}, {off} of a sample of {(origins.Count + 24) / 25} off a picked triangle");
                 ctx.Check(share > 0.45 && share < 0.55 && kinds.Where(k => k.Added).All(k => !k.Mass) && Handover(c3) == "off",
                     $"the neutral mask keeps {clutter.AddedKept} of {clutter.AddedCandidates} candidates and none counts as forest ({Handover(c3)})");
@@ -2435,17 +2442,44 @@ internal static class GraphicsSwitchSuites
                 Step(c3);
                 ctx.Check(SameAdded(AddedOf(kinds), opening), $"the neutral mask gives them back exactly");
 
+                // The brush set on unpicked ground: a Thicken stroke on the beach plants palms there and nowhere else.
+                var sand = Mech3.VegetationGround.Painted(gamez, t => string.Equals(t, "cliff1_sandtrans.tif", StringComparison.OrdinalIgnoreCase));
+                var beach = Enumerable.Range(0, sand.Length / 3).Select(t => (sand[3 * t], sand[(3 * t) + 1], sand[(3 * t) + 2]))
+                    .OrderByDescending(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length()).First();
+                var spot = (beach.Item1 + beach.Item2 + beach.Item3) / 3f;
+                Vector3[] Standing() => AddedOf(kinds).SelectMany(k => k.Rich).Where(xf => xf.Basis.Determinant() != 0f).Select(xf => xf.Origin).ToArray();
+                var before = Standing().Select(o => (Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z))).ToHashSet();
+                const float BrushRadius = 60f;
+                int CrownsNear() => c3.Session.Vegetation?.CanopyClumpField?.Crowns.Count(c => Flat(c.At, spot) < BrushRadius) ?? -1;
+                int crownsBefore = CrownsNear();
+                var painted = mask.Clone();
+                painted.Stroke(spot.X, spot.Z, BrushRadius, 1f, Mech3.VegetationBrush.Thicken);
+                c3.Session.Vegetation?.Apply(painted);
+                Step(c3);
+                var planted = Standing().Where(o => !before.Contains((Mathf.RoundToInt(o.X), Mathf.RoundToInt(o.Z)))).ToList();
+                int onSand = planted.Count(o => OnTriangles(sand, o));
+                int far = planted.Count(o => Flat(o, spot) > BrushRadius + (2f * texel));
+                int crownsAfter = CrownsNear();
+                ctx.Note($"brush stroke at ({spot.X:0}, {spot.Z:0}): {planted.Count} new palms, {onSand} on the sand; crown models within it {crownsBefore} -> {crownsAfter}");
+                ctx.Check(shipped.Brush == "palms" && onSand > 0 && far == 0,
+                    $"a Thicken stroke on unpicked beach plants the brush set there: {planted.Count} new palms, {onSand} on the sand, {far} outside the stroke");
+                ctx.Check(crownsAfter > crownsBefore, $"and, the set being canopy, crown models there ({crownsBefore} -> {crownsAfter})");
+                c3.Session.Vegetation?.Apply(mask);
+                Step(c3);
+                ctx.Check(SameAdded(AddedOf(kinds), opening) && CrownsNear() == crownsBefore,
+                    $"and the neutral mask takes the brushed palms and crowns away again ({CrownsNear()} crowns)");
+
                 c3.Session.Vegetation?.Apply(new Mech3.VegetationEntry
                 {
                     Seed = shipped.Seed,
                     Mask = shipped.Mask,
                     Kinds = shipped.Kinds,
-                    Sets = shipped.Sets,
-                    Picks = shipped.Picks.Select(p => p with { Set = Mech3.CanopyMask.CanopySet }).ToList(),
+                    Sets = shipped.Sets.Select(s => s with { Models = Array.Empty<string>() }).ToList(),
+                    Picks = shipped.Picks,
                 });
                 Step(c3);
                 ctx.Check(clutter.AddedCandidates == 0 && !kinds.Any(k => k.Added) && AddedDrawn(c3) == 0,
-                    $"a pick to the canopy set stamps none ({clutter.AddedCandidates} candidates)");
+                    $"a pick to a set with no member stamps none ({clutter.AddedCandidates} candidates)");
                 c3.Session.Vegetation?.Apply(shipped);
                 Step(c3);
             }

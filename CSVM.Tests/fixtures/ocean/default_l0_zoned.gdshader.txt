@@ -487,7 +487,9 @@ void fragment() {
     // Foam is matte where it covers the water.
     ROUGHNESS = mix(mix(mix(rough_near, rough_far, smoothstep(150.0, 4000.0, dist)), 0.25, sheet), 0.6, foam_mix);
     FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);
+    // SDFGI's floor, as on the terrain (SceneBuilder's giFloor): GI alone leaves the sea dark.
     AO = csky_cloud_ao(v_shade);
+    EMISSION = ALBEDO * csky_gi_ambient_fill * csky_cloud_ao(v_shade);
 }
 
 void light() {
