@@ -480,8 +480,9 @@ internal static class MenuOriginalCampaignSuites
                 continue;
             }
 
-            ctx.Check(shell.Dialog is { Icon: UI.Campaign.DialogIcon.Query, Answers.Count: 2 } && shell.FocusedKey == OriginalShell.DialogYesKey,
-                $"asked in the query box, opening on Yes ({shell.Dialog?.Icon}, {shell.FocusedKey})");
+            ctx.Check(shell.Dialog is { Icon: UI.Campaign.DialogIcon.Query, Answers.Count: 2, Message: CampaignProgression.SkipOfferPrompt }
+                && shell.FocusedKey == OriginalShell.DialogYesKey,
+                $"asked in the original's words in the query box, opening on Yes ({shell.Dialog?.Message}, {shell.Dialog?.Icon}, {shell.FocusedKey})");
             bool yes = loss > CampaignProgression.SkipOfferAttempts;
             Press(host, seat, yes ? Accept : Back);
             int after = store.Load(Pilot)!.MissionsCompleted;

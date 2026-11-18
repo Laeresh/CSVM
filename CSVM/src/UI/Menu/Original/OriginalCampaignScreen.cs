@@ -1347,8 +1347,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         _host.RaiseDialog(
-            string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                CampaignProgression.SkipOfferPrompt, CampaignProgression.SkipOfferAttempts),
+            CampaignProgression.SkipOfferPrompt,
             DialogIcon.Query,
             Yes(() =>
             {

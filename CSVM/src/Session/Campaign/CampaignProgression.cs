@@ -83,12 +83,10 @@ public static class CampaignProgression
     /// consecutive-failure count (<c>docs/org/debrief.md</c>, "The four-attempt skip offer").</summary>
     public const int SkipOfferAttempts = 4;
 
-    /// <summary>⚠ A PLACEHOLDER wording, not the original's. The offer is langui string 191, which
-    /// is absent from the shipped extraction (its ids jump from 136 to 200), so no original text
-    /// exists to quote here. Formatted with <see cref="SkipOfferAttempts"/>, which is the literal
-    /// the original passes its own string.</summary>
-    public const string SkipOfferPrompt =
-        "You have failed this mission {0} times. Skip it and go on with the campaign?";
+    /// <summary>The skip offer's words, langui string 191, read off a capture of the original because
+    /// the shipped extraction lacks the id. It carries no placeholder, so the 4 the original passes
+    /// it is unused (<c>docs/org/debrief.md</c>).</summary>
+    public const string SkipOfferPrompt = "Do you want to skip this mission?";
 
     /// <summary>The mission reward table, keyed by the 1-based mission ordinal (not by <c>seq</c>
     /// and not by the save id). Ten records, six paying cash and five granting an aircraft, ordinal
