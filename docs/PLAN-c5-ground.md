@@ -62,6 +62,7 @@ Scenery off draw the original ground.
 | 20 | The city tree, flown (B15) | **Too bright: darken it** with the night darkening the city's other dressing gets. The author chose "Too bright, darken it". |
 | 21 | The kerb and the dressing's reach, flown (B15) | **Both fixed**: the soft kerb with whole lamp pools, and the dressing fading with the walk-up blocks. The author chose "Both fixed". |
 | 22 | The `cblock1` floors, from captures (C21) | **Kept as generated**: about 10 % green on the tower blocks ("10 % is right"); the walk-ups on `cblock1` paint read as inner city, not as `cblock7`'s gardens ("Inner city"); asphalt is neither capped nor lightened ("Leave it"); the parking stalls stay subtle ("Keep subtle"). |
+| 23 | The diagonal floors, from captures (C22) | **Kept as generated**: the `cblock5`/`cblock6` walk-ups under diagonal paint read as inner city ("Inner-city walk-ups"), and the cross alleys stay ("Keep them"). Whether the 362 m repeat along a strip shows in flight is owed to the closing flight. |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -198,7 +199,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, the whole city
 
 21. ☑ The square districts' other combinations
-22. ☐ The diagonal districts
+22. ☑ The diagonal districts
 23. ☐ Open ground on the bare flagged blocks
 24. ☐ Measure the cost on the PC and the Deck
 25. ☐ Checks: suite and goldens
@@ -613,7 +614,32 @@ generated floor does there before calling the district done.
 
 **⚠ Traps.** A flagged paint carries the beneath set's layout, never its own (⚠ table, row 2).
 
-## C22 ☐ The diagonal districts
+## C22 ☑ The diagonal districts
+
+**Landed.** `c5_ground.py` lays a diagonal paint out in its strip's own frame (Decision 7): 181 m
+between street centrelines, repeating every 362 m along the street, with kerbed rings on the two
+street sides, a core and cross alleys; the image samples that frame through the 45° turn. It writes
+3 variants each of `cblock2-cblock2` (`DOWNTOWN`), `cblock2-cblock5` and `cblock3-cblock6`
+(`INNER_WALKUP`), and 2 of `cblock3-cblock3` (`DOWNTOWN`), at texture luma 35. Each diagonal
+layout JSON carries a `frame` (origin and two unit axes) turning its cells into UV. `CityDressing`
+reads it, tests streets and lots in UV and turns its slots into UV; `Stand` gives every slot the
+variant of its own cell, so a frame straddling strips keeps every strip's slots (the B14 shortcut
+dropped them). `cblock2-cblock4` (0.131 km²) and flagged `cblock1` over `cblock2` (0.066 km²) keep
+the paint: their sets stand across their paint's street (`on_street` 0.181 and 0.378, over B13's
+`OnStreetMax`). C5 floors 1,769 polygons and keeps the paint on 187, the four `-none` combinations
+(C23) among them. The dressing is 1,031,957 instances in 122.6 MB of buffers. Verdicts: Decision
+23.
+
+**Verified.** Every earlier floor output is byte-identical, and a rerun is byte-identical. Free
+floor per variant: mean 35.0, median 34.5 to 35.8, green 0.102 to 0.129. On the old floors the new
+code stands the same instances per kind as before (874,842). `AFrameAcrossStripsKeepsEveryStripsSlots`
+fails under the old middle-cell rule (768 of 1,024) and passes; `ShippedSlotsStandOnFreeGround`
+covers every shipped layout; the `city-dressing` suite matches the GPU pick to the CPU's on
+`cblock2`'s strips as well as `cblock7`. Captured at `C5-cb23`, `C5-cb6` and a low oblique across a
+strip boundary, with and without the HD pack: floor and dressing between the buildings, streets
+unchanged. `city-ground`, `city-dressing` and `city-buildings` pass with the unit tests (8,526).
+
+**Original approach (kept for reference).**
 
 **Goal.** `cblock2` and `cblock3`, each with both building sets, draw the generated ground, a
 variant per 181 m strip (Decision 7). The small combinations go here too: `cblock2` paint with

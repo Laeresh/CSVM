@@ -17,6 +17,11 @@ the surfaces and the green share: about a quarter of the free floor in the walk-
 (Decision 12), about a tenth in the inner city, which is paved courts, service yards with loading
 docks, plazas and parking (Decision 18).
 
+The diagonal paints (cblock2, cblock3: one 45 degree street per tile, A2) are laid out the same
+way in each strip's own frame (generate_strip), a strip being 181 m between centrelines with no
+cross street, so it has two kerbed rings, a core and cross alleys; the engine picks a variant per
+strip (Decision 7), and the layout JSON carries the frame that turns it into UV.
+
 Every variant keeps the same buildings and streets and rolls its own ring depths, lot cuts, alley,
 core cuts and surfaces from a fixed seed, so a rerun writes the same bytes. The layout is built in a
 frame rolled so that the paint's street crossing sits on the tile corner and its block in the middle
@@ -55,6 +60,11 @@ PX = SIZE / TILE_M
 # The free floor's mean Rec. 601 luma on sRGB texels: set at the controls under C5's lighting, where
 # 20 left the paving's structure unreadable.
 LUMA = 35.0
+# A diagonal street family (A2): its across axis alpha, c = alpha . uv, whose whole values plus the
+# centre are the centrelines, and its along axis beta, d = beta . uv. Both pairs turn the uv frame
+# without mirroring it, so a dressing yaw stays a yaw.
+FAMILY_AXES = {"u+v": ((1, 1), (1, -1)), "u-v": ((1, -1), (-1, -1))}
+
 SIDEWALK_M = 3.0
 ALLEY_M = 5.0
 RING_M = (28.0, 40.0)
@@ -107,7 +117,9 @@ INNER_WALKUP = dict(DOWNTOWN, core=(("strips", 0.30), ("service", 0.30), ("parki
                     apron=2.5, lot_w=(8.0, 14.0))
 # (visible paint, standing set, variants, character). Decision 4: 2 to 4 per combination.
 COMBOS = (("cblock7", "cblock7", 4, WALKUP), ("cblock7", "cblock4", 2, WALKUP),
-          ("cblock1", "cblock1", 4, DOWNTOWN), ("cblock1", "cblock4", 3, INNER_WALKUP))
+          ("cblock1", "cblock1", 4, DOWNTOWN), ("cblock1", "cblock4", 3, INNER_WALKUP),
+          ("cblock2", "cblock2", 3, DOWNTOWN), ("cblock2", "cblock5", 3, INNER_WALKUP),
+          ("cblock3", "cblock3", 2, DOWNTOWN), ("cblock3", "cblock6", 3, INNER_WALKUP))
 
 
 def _pick(rng, table):
@@ -115,8 +127,8 @@ def _pick(rng, table):
     return names[rng.choice(len(names), p=np.array(w) / sum(w))]
 
 
-def px(m):
-    return int(round(m * PX))
+def px(m, pxm=PX):
+    return int(round(m * pxm))
 
 
 # ---------------------------------------------------------------- masks, in the rolled frame
@@ -124,8 +136,8 @@ def px(m):
 def _fill_convex(mask, pts):
     """Sets the pixels whose centres lie inside a convex polygon (pixel coordinates, either winding)."""
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-    x0, x1 = max(int(np.floor(min(xs))), 0), min(int(np.ceil(max(xs))), SIZE)
-    y0, y1 = max(int(np.floor(min(ys))), 0), min(int(np.ceil(max(ys))), SIZE)
+    x0, x1 = max(int(np.floor(min(xs))), 0), min(int(np.ceil(max(xs))), mask.shape[1])
+    y0, y1 = max(int(np.floor(min(ys))), 0), min(int(np.ceil(max(ys))), mask.shape[0])
     if x0 >= x1 or y0 >= y1:
         return
     X, Y = np.meshgrid(np.arange(x0, x1) + 0.5, np.arange(y0, y1) + 0.5)
@@ -155,6 +167,12 @@ def street_mask(streets, shift):
     c = (np.arange(SIZE) + 0.5)
     mask = np.zeros((SIZE, SIZE), bool)
     for st in streets:
+        if st["family"] in FAMILY_AXES:
+            # A diagonal street, in the image frame only (shift 0).
+            alpha = FAMILY_AXES[st["family"]][0]
+            d = (alpha[0] * c[None, :] + alpha[1] * c[:, None]) / SIZE - st["centre"]
+            mask |= np.abs(d - np.round(d)) <= st["half"]
+            continue
         axis = {"u": 1, "v": 0}[st["family"]]
         d = (c + shift[1 - axis]) / SIZE - st["centre"]
         band = np.abs(d - np.round(d)) <= st["half"]
@@ -251,26 +269,32 @@ def _core_cells(rng, rect, out):
         _core_cells(rng, (a0, b0 + t * h, a1, b1), out)
 
 
-def layout(block, lots, rng, ch):
-    """One variant's block in rolled metres, the alley (if any) running along b. lots are bboxes."""
+def layout(block, lots, rng, ch, strip=False):
+    """One variant's block in rolled metres, the alley (if any) running along b. lots are bboxes.
+    A strip (the diagonal districts) has kerbs on T and B only and runs on past both ends of a, its
+    ends the same ground a period apart: it gets no L or R ring and no sidewalk across its ends."""
     A0, B0, A1, B1 = block
     W = SIDEWALK_M
     L = Layout()
-    sides = "TBLR"
+    sides = "TB" if strip else "TBLR"
     # Each lot fronts its nearest kerb; its side's ring is deep enough for it and a yard behind.
     near = {}
     for i, r in enumerate(lots):
         d = {"T": r[1] - B0, "B": B1 - r[3], "L": r[0] - A0, "R": A1 - r[2]}
-        near[i] = min(d, key=d.get)
+        near[i] = min((x for x in d if x in sides), key=d.get)
     depth = {s: rng.uniform(*RING_M) for s in sides}
     for i, s in near.items():
         need = _side_local(s, block, lots[i])[3] + ch["apron"] + YARD_MIN_M
         if need < 60.0:
             depth[s] = max(depth[s], need)
-    full = "TB" if rng.random() < 0.5 else "LR"
+    if strip:
+        depth["L"] = depth["R"] = 0.0
+    full = "TB" if strip or rng.random() < 0.5 else "LR"
     span = {}
     for s in sides:
-        if s in full:
+        if strip:
+            span[s] = (A0, A1)
+        elif s in full:
             span[s] = ((A0 if s in "TB" else B0) + W, (A1 if s in "TB" else B1) - W)
         elif s in "TB":
             span[s] = (A0 + depth["L"], A1 - depth["R"])
@@ -305,8 +329,9 @@ def layout(block, lots, rng, ch):
     # The sidewalk verge along every kerb.
     L.cell("sidewalk", (A0, B0, A1, B0 + W), "verge")
     L.cell("sidewalk", (A0, B1 - W, A1, B1), "verge")
-    L.cell("sidewalk", (A0, B0 + W, A0 + W, B1 - W), "verge")
-    L.cell("sidewalk", (A1 - W, B0 + W, A1, B1 - W), "verge")
+    if not strip:
+        L.cell("sidewalk", (A0, B0 + W, A0 + W, B1 - W), "verge")
+        L.cell("sidewalk", (A1 - W, B0 + W, A1, B1 - W), "verge")
 
     yards = []
     for s in sides:
@@ -377,7 +402,7 @@ def layout(block, lots, rng, ch):
         if use == "strips":
             # Back yards carried on from the ring: lots cut along the nearest kerb, fenced apart.
             dist = {"T": r[1] - B0, "B": B1 - r[3], "L": r[0] - A0, "R": A1 - r[2]}
-            s = min(dist, key=dist.get)
+            s = min((x for x in dist if x in sides), key=dist.get)
             al = (r[0], r[2]) if s in "TB" else (r[1], r[3])
             for k, (s0, s1, _) in enumerate(_cuts(rng, al[0], al[1], [], ch["lot_w"])):
                 sr = (s0, r[1], s1, r[3]) if s in "TB" else (r[0], s0, r[2], s1)
@@ -520,40 +545,42 @@ def _unit(kind):
     return (y + CHROMA * (col - y)) / y * level
 
 
-def paint_floor(L, rng):
-    """The rolled-frame image in levels relative to the floor's mean (scaled later)."""
-    img = np.ones((SIZE, SIZE, 3)) * _unit("sidewalk")
+def paint_floor(L, rng, shape=(SIZE, SIZE), pxm=PX):
+    """The layout frame's raster (rows down b, columns along a, pxm texels a metre) in levels relative
+    to the floor's mean (scaled later). Its columns wrap, as a strip's ends meet."""
+    h, w = shape
+    img = np.ones((h, w, 3)) * _unit("sidewalk")
     for c in L.cells:
         a0, b0, a1, b1 = c["rect"]
-        x0, x1, y0, y1 = px(a0), px(a1), px(b0), px(b1)
+        x0, x1, y0, y1 = px(a0, pxm), px(a1, pxm), px(b0, pxm), px(b1, pxm)
         x0, y0 = max(x0, 0), max(y0, 0)
-        x1, y1 = min(x1, SIZE), min(y1, SIZE)
+        x1, y1 = min(x1, w), min(y1, h)
         if x1 <= x0 or y1 <= y0:
             continue
         img[y0:y1, x0:x1] = _unit(c["kind"]) * _pattern(c["kind"], y1 - y0, x1 - x0, rng)[..., None]
     for c in L.cells:
         if c.get("stalls"):
-            _stalls(img, c["rect"])
+            _stalls(img, c["rect"], pxm)
     for pts in L.paths:
-        _stroke(img, pts, 1.0 if len(pts) == 2 else 0.6, PATH)
+        _stroke(img, pts, 1.0 if len(pts) == 2 else 0.6, PATH, pxm)
     for kind, a0, b0, a1, b1 in L.lines:
-        x0, x1, y0, y1 = px(min(a0, a1)), px(max(a0, a1)), px(min(b0, b1)), px(max(b0, b1))
+        x0, x1, y0, y1 = px(min(a0, a1), pxm), px(max(a0, a1), pxm), px(min(b0, b1), pxm), px(max(b0, b1), pxm)
         if y0 == y1:
-            sl, sh = np.s_[y0 % SIZE, x0:x1], np.s_[(y0 + 1) % SIZE, x0:x1]
+            sl, sh = np.s_[y0 % h, x0:x1], np.s_[(y0 + 1) % h, x0:x1]
         else:
-            sl, sh = np.s_[y0:y1, x0 % SIZE], np.s_[y0:y1, (x0 + 1) % SIZE]
+            sl, sh = np.s_[y0:y1, x0 % w], np.s_[y0:y1, (x0 + 1) % w]
         if kind == "fence":
             img[sl] *= FENCE
         else:
             img[sl] *= WALL
             img[sh] *= WALL_SHADOW
     # A faint wrapped grime over everything, so neighbouring cells of one kind differ.
-    grime = A._blur(A._blur(rng.standard_normal((SIZE, SIZE)), 6), 6)
+    grime = A._blur(A._blur(rng.standard_normal((h, w)), 6), 6)
     grime = grime / max(grime.std(), 1e-9) * 0.035
     return img * (1 + grime)[..., None]
 
 
-def _stalls(img, rect):
+def _stalls(img, rect, pxm=PX):
     """Painted parking stalls along both long sides of a lot: 5 m marks on a 2.6 m pitch. Paint only,
     never layout lines, which the dressing would stand fences on and keep its cars clear of."""
     a0, b0, a1, b1 = rect
@@ -562,9 +589,9 @@ def _stalls(img, rect):
     for t in np.arange(lo + 2.0, hi - 1.5, 2.6):
         for e0, e1 in (((b0, b0 + 5.0) if along_a else (a0, a0 + 5.0)), ((b1 - 5.0, b1) if along_a else (a1 - 5.0, a1))):
             if along_a:
-                img[max(px(e0), 0):min(px(e1), SIZE), px(t) % SIZE] *= STALL
+                img[max(px(e0, pxm), 0):min(px(e1, pxm), img.shape[0]), px(t, pxm) % img.shape[1]] *= STALL
             else:
-                img[px(t) % SIZE, max(px(e0), 0):min(px(e1), SIZE)] *= STALL
+                img[px(t, pxm) % img.shape[0], max(px(e0, pxm), 0):min(px(e1, pxm), img.shape[1])] *= STALL
 
 
 def _green_share(L, shift, free):
@@ -579,12 +606,12 @@ def _green_share(L, shift, free):
     return float(green[free].mean())
 
 
-def _stroke(img, pts, half_px, gain):
-    hit = np.zeros((SIZE, SIZE), bool)
+def _stroke(img, pts, half_px, gain, pxm=PX):
+    hit = np.zeros(img.shape[:2], bool)
     for (a0, b0), (a1, b1) in zip(pts, pts[1:]):
-        n = int(max(abs(a1 - a0), abs(b1 - b0)) * PX * 4) + 1
+        n = int(max(abs(a1 - a0), abs(b1 - b0)) * pxm * 4) + 1
         for t in np.linspace(0, 1, n):
-            x, y = (a0 + (a1 - a0) * t) * PX, (b0 + (b1 - b0) * t) * PX
+            x, y = (a0 + (a1 - a0) * t) * pxm, (b0 + (b1 - b0) * t) * pxm
             hit[max(int(y - half_px + 0.5), 0):int(y + half_px + 0.5), max(int(x - half_px + 0.5), 0):int(x + half_px + 0.5)] = True
     img[hit] *= gain
 
@@ -612,14 +639,15 @@ def _dump(o, ind=0):
     return json.dumps(o, separators=(", ", ": "))
 
 
-def write_layout(path, paint, bset, n, L, shift, blocked):
+def write_layout(path, paint, bset, n, L, uv, blocked, pxm=PX, frame=None):
     """The layout a variant was painted from, for the dressing (B14). UV as in ground_layout.json:
     u along the image's columns, v down its rows, one unit per tile; a rect is [u0, v0, u1, v1] and
     can run past 1, so draw it again shifted by -1 in u and v. cells are in paint order, a later one
     over an earlier one, and can run under a lot; lines and paths are cut where they cross a lot or
-    a street."""
-    def uv(a, b):
-        return [round((a * PX + shift[0]) / SIZE, 5), round((b * PX + shift[1]) / SIZE, 5)]
+    a street. uv maps the layout's metres to the JSON's units; blocked is the layout frame's raster of
+    lots and streets at pxm texels a metre, its columns wrapping where a frame is given (a strip).
+    A frame (the diagonal districts) puts the layout in the strip's own frame: see conventions.frame."""
+    h, w = blocked.shape
 
     def runs(pts):
         """A polyline sampled every half metre and cut into its runs over free floor."""
@@ -628,7 +656,8 @@ def write_layout(path, paint, bset, n, L, shift, blocked):
             n_ = int(max(abs(a1 - a0), abs(b1 - b0)) * 2) + 1
             for t in np.linspace(0, 1, n_):
                 a, b = a0 + (a1 - a0) * t, b0 + (b1 - b0) * t
-                if blocked[min(int(b * PX), SIZE - 1), min(int(a * PX), SIZE - 1)]:
+                col = int(a * pxm) % w if frame else min(int(a * pxm), w - 1)
+                if blocked[min(int(b * pxm), h - 1), col]:
                     if len(cur) > 2:
                         out.append(cur)
                     cur = []
@@ -667,6 +696,12 @@ def write_layout(path, paint, bset, n, L, shift, blocked):
                    lines="fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
                    paths="worn or paved footpaths as polylines, cut the same way"),
                cells=cells, lines=lines, paths=paths)
+    if frame:
+        doc["conventions"]["frame"] = (
+            "the layout lies in the strip's own frame, x along the street, y across it from one centreline to the "
+            "next, one unit per 256 m; a point (x, y) is uv = origin + x * x_axis + y * y_axis, a turn, and the "
+            "ground repeats with the tile, so take uv modulo 1")
+        doc["frame"] = frame
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(_dump(doc) + "\n")
 
@@ -714,7 +749,108 @@ def generate(layout_doc, paint, bset, n, luma, ch):
     # The roll and the analytic masks agree with the masks drawn in the image frame directly.
     direct = ~(lot_mask(lots, (0, 0)) | street_mask(streets, (0, 0)))
     assert (direct == free_img).mean() > 0.999, "rolled frame disagrees with the image frame"
-    return img, L, shift, blocked, free_img
+
+    def uv(a, b):
+        return [round((a * PX + shift[0]) / SIZE, 5), round((b * PX + shift[1]) / SIZE, 5)]
+
+    return dict(img=img, L=L, uv=uv, blocked=blocked, free=free_img, green=_green_share(L, shift, free_img))
+
+
+def generate_strip(layout_doc, paint, bset, n, luma, ch):
+    """One variant of a diagonal paint (Decision 7): the layout is made in the strip's own frame, a
+    across the strip's 362 m period along its street, b across from one centreline to the next, and
+    the image samples it. A strip of the tile is the strip next to it moved a tile along u, so one
+    period of one strip is the whole tile's ground. The raster holds 512 texels across the 181 m
+    strip, so every image texel centre lands on a raster corner and takes the mean of the four
+    texels round it."""
+    st = layout_doc["paints"][paint]["streets"]
+    assert len(st) == 1 and st[0]["family"] in FAMILY_AXES, "one diagonal street family per paint (A2)"
+    st = st[0]
+    alpha, beta = FAMILY_AXES[st["family"]]
+    centre, half = st["centre"], st["half"]
+    lots = layout_doc["templates"][bset]["lots"]
+    rng = np.random.default_rng([zlib.crc32(("%s-%s" % (paint, bset)).encode()), n])
+    wm = TILE_M / np.sqrt(2.0)  # metres per unit of c or d: the strip's width
+    lm = 2 * wm                 # the strip's period along its street
+    pxm = SIZE / wm
+    h, w = SIZE, 2 * SIZE
+    sigma = beta[0]             # how far d moves when a tile step along u moves c by one
+
+    def strip_m(u, v, k):
+        """(along, across) metres of a uv point, in strip k carried back to strip 0."""
+        c = alpha[0] * u + alpha[1] * v
+        d = beta[0] * u + beta[1] * v
+        return (d - sigma * k) * wm, (c - centre - k) * wm
+
+    # Each lot in strip metres, its strip from its origin, then moved a period along so its middle
+    # lies in [0, lm); the frame then starts in the widest gap between lots, so none crosses its ends.
+    polys = []
+    for lot in lots:
+        k = int(np.floor(alpha[0] * lot["o"][0] + alpha[1] * lot["o"][1] - centre))
+        ps = [[strip_m(p[i], p[i + 1], k) for i in range(0, len(p), 2)] for p in lot["poly"]]
+        mid = np.mean([a for p in ps for a, _ in p])
+        shift_a = -np.floor(mid / lm) * lm
+        polys.append([[(a + shift_a, b) for a, b in p] for p in ps])
+    spans = sorted((min(a for p in ps for a, _ in p), max(a for p in ps for a, _ in p)) for ps in polys)
+    gaps = [((spans[i][1], spans[(i + 1) % len(spans)][0] + (lm if i + 1 == len(spans) else 0.0))) for i in range(len(spans))]
+    g0, g1 = max(gaps, key=lambda g: g[1] - g[0])
+    t0px = int(round((g0 + g1) / 2 * pxm)) % w
+    t0 = t0px / pxm
+    boxes, blocked = [], np.zeros((h, w), bool)
+    for ps in polys:
+        mid = np.mean([a for p in ps for a, _ in p])
+        dt = -t0 - np.floor((mid - t0) / lm) * lm
+        ps = [[(a + dt, b) for a, b in p] for p in ps]
+        aa, bb = [a for p in ps for a, _ in p], [b for p in ps for _, b in p]
+        boxes.append([min(aa), min(bb), max(aa), max(bb)])
+        for p in ps:
+            for j in (-1, 0, 1):
+                _fill_convex(blocked, [(a * pxm + j * w, b * pxm) for a, b in p])
+    rows = (np.arange(h) + 0.5) / pxm
+    blocked |= ((rows < half * wm) | (rows > wm - half * wm))[:, None]
+    block = (0.0, half * wm, lm, wm - half * wm)
+    L, yards, cores = layout(block, boxes, rng, ch, strip=True)
+    L.block = block
+
+    def free_px(r):
+        x0, x1, y0, y1 = max(px(r[0], pxm), 0), min(px(r[2], pxm), w), max(px(r[1], pxm), 0), min(px(r[3], pxm), h)
+        return float((~blocked[y0:y1, x0:x1]).sum()) if x1 > x0 and y1 > y0 else 0.0
+
+    _gardens(L, yards, cores, free_px, rng, ch)
+    rel = paint_floor(L, rng, (h, w), pxm)
+
+    # Every image texel centre's raster corner: c and d times 512 are whole there.
+    j, i = np.meshgrid(np.arange(SIZE) + 0.5, np.arange(SIZE) + 0.5)
+    c512 = np.round(alpha[0] * j + alpha[1] * i).astype(np.int64) - int(round(centre * SIZE))
+    d512 = np.round(beta[0] * j + beta[1] * i).astype(np.int64)
+    k = np.floor_divide(c512, SIZE)
+    row = c512 - k * SIZE
+    col = (d512 - sigma * k * SIZE - t0px) % w
+    r0, c0 = (row - 1) % h, (col - 1) % w
+    img = (rel[r0, c0] + rel[r0, col] + rel[row % h, c0] + rel[row % h, col]) / 4
+    free = ~(lot_mask(lots, (0, 0)) | street_mask([st], (0, 0)))
+    assert (free == ~blocked[row % h, col]).mean() > 0.98, "strip frame disagrees with the image frame"
+    kk = luma / A.luma(img)[free].mean()
+    img = np.clip(np.round(img * kk), 0, 255).astype(np.uint8)
+
+    green = np.zeros((h, w), bool)
+    for c in L.cells:
+        x0, x1, y0, y1 = max(px(c["rect"][0], pxm), 0), min(px(c["rect"][2], pxm), w), max(px(c["rect"][1], pxm), 0), min(px(c["rect"][3], pxm), h)
+        if x1 > x0 and y1 > y0:
+            green[y0:y1, x0:x1] = c["kind"] in ("lawn", "garden", "allotment", "bed")
+
+    # The frame: uv of the layout's origin (strip 0, the frame's start) and of its unit steps.
+    inv = np.linalg.inv(np.array([alpha, beta], float))
+    o = inv @ np.array([centre, t0 / wm])
+    ax, ay = inv @ np.array([0.0, np.sqrt(2.0)]), inv @ np.array([np.sqrt(2.0), 0.0])
+    frame = dict(origin=[round(float(x), 6) for x in o], x_axis=[round(float(x), 6) for x in ax],
+                 y_axis=[round(float(x), 6) for x in ay])
+
+    def uv(a, b):
+        return [round(a / TILE_M, 5), round(b / TILE_M, 5)]
+
+    return dict(img=img, L=L, uv=uv, blocked=blocked, free=free, green=float(green[~blocked].mean()),
+                pxm=pxm, frame=frame)
 
 
 def main():
@@ -729,15 +865,17 @@ def main():
     for paint_name, bset, count, ch in COMBOS:
         files = []
         for n in range(count):
-            img, L, shift, blocked, free = generate(doc, paint_name, bset, n, args.luma, ch)
+            diagonal = any(s["family"] in FAMILY_AXES for s in doc["paints"][paint_name]["streets"])
+            g = (generate_strip if diagonal else generate)(doc, paint_name, bset, n, args.luma, ch)
             name = "%s-%s-%d" % (paint_name, bset, n)
-            write_png(os.path.join(args.out, name + ".png.bin"), img)
-            write_layout(os.path.join(args.out, name + ".json"), paint_name, bset, n, L, shift, blocked)
+            write_png(os.path.join(args.out, name + ".png.bin"), g["img"])
+            write_layout(os.path.join(args.out, name + ".json"), paint_name, bset, n, g["L"], g["uv"], g["blocked"],
+                         g.get("pxm", PX), g.get("frame"))
             files.append(name + ".png.bin")
-            y = A.luma(img.astype(float))[free]
-            green = _green_share(L, shift, free)
+            y = A.luma(g["img"].astype(float))[g["free"]]
             print("%s  free floor luma mean %.2f median %.1f p5 %.1f p95 %.1f  green %.3f  cells %d  lines %d"
-                  % (name, y.mean(), np.median(y), np.percentile(y, 5), np.percentile(y, 95), green, len(L.cells), len(L.lines)))
+                  % (name, y.mean(), np.median(y), np.percentile(y, 5), np.percentile(y, 95), g["green"], len(g["L"].cells),
+                     len(g["L"].lines)))
         index["%s-%s" % (paint_name, bset)] = dict(paint=paint_name, set=bset, variants=count, files=files)
     idoc = dict(about="C5 block floor variants per combination of visible paint and standing set, written by "
                 "CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12). Each file is a 512 x 512 sRGB PNG "

@@ -25,6 +25,30 @@
       "set": "cblock4",
       "variants": 3,
       "files": ["cblock1-cblock4-0.png.bin", "cblock1-cblock4-1.png.bin", "cblock1-cblock4-2.png.bin"]
+    },
+    "cblock2-cblock2": {
+      "paint": "cblock2",
+      "set": "cblock2",
+      "variants": 3,
+      "files": ["cblock2-cblock2-0.png.bin", "cblock2-cblock2-1.png.bin", "cblock2-cblock2-2.png.bin"]
+    },
+    "cblock2-cblock5": {
+      "paint": "cblock2",
+      "set": "cblock5",
+      "variants": 3,
+      "files": ["cblock2-cblock5-0.png.bin", "cblock2-cblock5-1.png.bin", "cblock2-cblock5-2.png.bin"]
+    },
+    "cblock3-cblock3": {
+      "paint": "cblock3",
+      "set": "cblock3",
+      "variants": 2,
+      "files": ["cblock3-cblock3-0.png.bin", "cblock3-cblock3-1.png.bin"]
+    },
+    "cblock3-cblock6": {
+      "paint": "cblock3",
+      "set": "cblock6",
+      "variants": 3,
+      "files": ["cblock3-cblock6-0.png.bin", "cblock3-cblock6-1.png.bin", "cblock3-cblock6-2.png.bin"]
     }
   }
 }

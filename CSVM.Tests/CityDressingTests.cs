@@ -26,21 +26,22 @@ public sealed class CityDressingTests
     [Fact]
     public void ShippedSlotsStandOnFreeGround()
     {
-        var files = Directory.GetFiles(Path.Combine(Folder, "ground"), "cblock7-*.json");
-        Assert.NotEmpty(files);
+        var files = Directory.GetFiles(Path.Combine(Folder, "ground"), "cblock*-*.json");
+        Assert.Contains(files, f => Path.GetFileName(f).StartsWith("cblock2-", StringComparison.Ordinal));
         foreach (string file in files)
         {
-            string set = Path.GetFileNameWithoutExtension(file).Split('-')[1];
+            string[] combination = Path.GetFileNameWithoutExtension(file).Split('-');
+            var spec = CityGround.Layout.Parse(GroundJson).Paints[combination[0]];
             var layout = CityDressing.ParseVariant(File.ReadAllText(file));
-            var lots = CityDressing.Lots(GroundJson, set);
-            var slots = CityDressing.Slots(layout, lots, Cblock7);
+            var lots = CityDressing.Lots(GroundJson, combination[1]);
+            var slots = CityDressing.Slots(layout, lots, spec);
             var kinds = slots.Select(s => s.Kind).ToHashSet();
-            Assert.True(new[] { "gd_fence", "gd_wall", "gd_hedge", "gd_sedan", "gd_ashcans", "gd_bench", CityDressing.Tree }.All(kinds.Contains),
+            Assert.True(new[] { "gd_fence", "gd_hedge", "gd_sedan", "gd_ashcans", CityDressing.Tree }.All(kinds.Contains),
                 $"{file}: kinds {string.Join(", ", kinds)}");
             foreach (var slot in slots)
             {
-                Assert.True(layout.Cells.Any(c => c.Rect.HasPoint(slot.At)), $"{file}: {slot.Kind} at {slot.At} in no cell");
-                Assert.False(OnStreet(slot.At), $"{file}: {slot.Kind} at {slot.At} on a street");
+                Assert.True(InCell(layout, slot.At), $"{file}: {slot.Kind} at {slot.At} in no cell");
+                Assert.False(OnStreet(spec, slot.At), $"{file}: {slot.Kind} at {slot.At} on a street");
                 Assert.False(UnderLot(lots, slot.At), $"{file}: {slot.Kind} at {slot.At} under a lot");
                 Assert.InRange(slot.Stretch, 0.5f, 1.25f);
                 Assert.InRange(slot.Keep, 0.01f, 1f);
@@ -84,6 +85,35 @@ public sealed class CityDressingTests
         }
     }
 
+    /// <summary>On a diagonal paint every layout frame straddles strips. A slot stands wherever the strip under it draws
+    /// its variant. So a frame keeps the slots of every strip it holds, not only of the strip at its middle.</summary>
+    [Fact]
+    public void AFrameAcrossStripsKeepsEveryStripsSlots()
+    {
+        var spec = CityGround.Layout.Parse(GroundJson).Paints["cblock2"];
+        // Three variants, each the same 8 x 8 grid of slots over the frame, kept on every block.
+        var grid = Enumerable.Range(0, 64).Select(i => new Vector2(0.5f + (((i % 8) + 0.5f) / 8f), 0.5f + (((i / 8) + 0.5f) / 8f))).ToList();
+        var variants = Enumerable.Range(0, 3)
+            .Select(n => grid.Select(at => new CityDressing.Slot($"v{n}", at, 0f, 1f, 0, 1f)).ToList())
+            .ToList<List<CityDressing.Slot>?>();
+        var placed = new List<CityDressing.Placed>();
+        CityDressing.Stand(Square(0f, 0f, 1024f, 0f), Vector2.Zero, spec, variants, null, placed);
+        int expected = 0;
+        for (int ku = -1; ku <= 4; ku++)
+        {
+            for (int kv = -1; kv <= 4; kv++)
+                expected += grid.Count(g => (g.X + ku) * 256f is >= 0f and <= 1024f && (g.Y + kv) * 256f is >= 0f and <= 1024f);
+        }
+        Assert.Equal(expected, placed.Count);
+        foreach (var p in placed)
+        {
+            var cell = CityGround.CellOf(spec, p.Transform.Origin.X, p.Transform.Origin.Z);
+            Assert.Equal(cell, p.Cell);
+            Assert.Equal($"v{CityGround.Pick(cell.I, cell.J) % 3u}", p.Kind);
+        }
+        Assert.True(placed.Select(p => p.Variant).Distinct().Count() == 3, "every variant stands somewhere");
+    }
+
     /// <summary>A slot kept on half the blocks stands on about half of them, the same ones on every run. It stands on
     /// none where the cover refuses its foot.</summary>
     [Fact]
@@ -110,11 +140,27 @@ public sealed class CityDressingTests
         new(x, y, z), new(x + edge, y, z + edge), new(x, y, z + edge),
     };
 
-    private static bool OnStreet(Vector2 p) => Cblock7.Streets.Any(s =>
+    private static bool OnStreet(CityGround.PaintLayout spec, Vector2 p) => spec.Streets.Any(s =>
     {
         float c = s.Axis.Dot(p) - s.Centre;
         return MathF.Abs(c - MathF.Round(c)) <= s.Half;
     });
+
+    // Whether a slot's UV point, or the same ground a whole tile over, lies in a layout cell, back in the layout's frame.
+    private static bool InCell(CityDressing.VariantLayout layout, Vector2 uv)
+    {
+        for (int du = -3; du <= 3; du++)
+        {
+            for (int dv = -3; dv <= 3; dv++)
+            {
+                var q = uv + new Vector2(du, dv);
+                var p = layout.Frame is { } f ? new Vector2((q - f.Origin).Dot(f.X), (q - f.Origin).Dot(f.Y)) : q;
+                if (layout.Cells.Any(c => c.Rect.HasPoint(p)) && (layout.Frame != null || (du == 0 && dv == 0)))
+                    return true;
+            }
+        }
+        return false;
+    }
 
     private static bool UnderLot(List<Vector2[]> lots, Vector2 p)
     {

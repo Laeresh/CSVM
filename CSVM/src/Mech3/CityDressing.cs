@@ -170,6 +170,11 @@ public sealed class CityDressing
             foreach (var path in paths.EnumerateArray())
                 layout.Paths.Add(Points(path.GetProperty("line")));
         }
+        if (root.TryGetProperty("frame", out var frame))
+        {
+            layout.Frame = (Points(frame.GetProperty("origin"))[0], Points(frame.GetProperty("x_axis"))[0],
+                Points(frame.GetProperty("y_axis"))[0]);
+        }
         return layout;
     }
 
@@ -310,13 +315,13 @@ public sealed class CityDressing
                 }
             }
         }
-        return slots;
+        return layout.Frame == null ? slots : slots.Select(s => InUv(layout, s)).ToList();
     }
 
     /// <summary>Stands the slots on one polygon placement, <paramref name="triangles"/> its world corners, three a
-    /// triangle, its texture UV being world XZ over 256 plus <paramref name="offset"/>. A block takes the slots of the
-    /// variant <see cref="CityGround.Pick"/> gives its cell, a slot only inside that cell and the polygon, and none
-    /// <paramref name="covered"/> refuses. A slot stands by its block's roll against its keep share.</summary>
+    /// triangle, its texture UV being world XZ over 256 plus <paramref name="offset"/>. A slot stands inside the polygon
+    /// where <see cref="CityGround.Pick"/> gives the cell under it the slot's variant. It stands by its block's roll
+    /// against its keep share, unless <paramref name="covered"/> refuses it.</summary>
     internal static void Stand(IReadOnlyList<Vector3> triangles, Vector2 offset, CityGround.PaintLayout spec,
         IReadOnlyList<List<Slot>?> variants, Func<Vector3, bool>? covered, List<Placed> into)
     {
@@ -330,14 +335,6 @@ public sealed class CityDressing
         {
             for (int kv = v0; kv <= v1; kv++)
             {
-                // The block of this tile shift: the cell at the layout frame's middle, which the slots must share.
-                var mid = World(new Vector2(ku + 1f, kv + 1f), offset);
-                var cell = CityGround.CellOf(spec, mid.X, mid.Y);
-                uint block = CityGround.Pick(cell.I, cell.J);
-                int variant = (int)(block % (uint)variants.Count);
-                // ponytail: a slot off the middle's cell is dropped, so a frame straddling cells (the diagonal strips) loses it.
-                if (variants[variant] is not { } slots)
-                    continue;
                 // The polygon's triangles over this frame alone, since a ground polygon can hold hundreds.
                 var lo = World(new Vector2(ku + 0.5f, kv + 0.5f), offset);
                 var hi = World(new Vector2(ku + 1.5f, kv + 1.5f), offset);
@@ -351,16 +348,28 @@ public sealed class CityDressing
                 }
                 if (near.Count == 0)
                     continue;
-                foreach (var slot in slots)
+                // Each slot stands where its own cell draws its variant. A frame can straddle cells, as every diagonal
+                // strip does, and the shader picks per point. Only the variants of the cells the frame meets are tried.
+                var drawn = FrameVariants(spec, ku, kv, offset, variants.Count);
+                for (int variant = 0; variant < variants.Count; variant++)
                 {
-                    var at = World(slot.At + new Vector2(ku, kv), offset);
-                    if (at.X < minX || at.X > maxX || at.Y < minZ || at.Y > maxZ || CityGround.CellOf(spec, at.X, at.Y) != cell
-                        || Unit(Mix(block ^ slot.RollKey)) >= slot.Keep || Height(near, at) is not { } y)
+                    if (!drawn[variant] || variants[variant] is not { } slots)
                         continue;
-                    var foot = new Vector3(at.X, y, at.Y);
-                    if (covered?.Invoke(foot) == true)
-                        continue;
-                    into.Add(new Placed(slot.Kind, new Transform3D(slot.Turn, foot), variant, variants.Count, cell));
+                    foreach (var slot in slots)
+                    {
+                        var at = World(slot.At + new Vector2(ku, kv), offset);
+                        if (at.X < minX || at.X > maxX || at.Y < minZ || at.Y > maxZ)
+                            continue;
+                        var cell = CityGround.CellOf(spec, at.X, at.Y);
+                        uint block = CityGround.Pick(cell.I, cell.J);
+                        if (block % (uint)variants.Count != (uint)variant || Unit(Mix(block ^ slot.RollKey)) >= slot.Keep
+                            || Height(near, at) is not { } y)
+                            continue;
+                        var foot = new Vector3(at.X, y, at.Y);
+                        if (covered?.Invoke(foot) == true)
+                            continue;
+                        into.Add(new Placed(slot.Kind, new Transform3D(slot.Turn, foot), variant, variants.Count, cell, spec));
+                    }
                 }
             }
         }
@@ -408,6 +417,33 @@ public sealed class CityDressing
             }
         });
         return overlay;
+    }
+
+    // A slot of a layout in its own frame, turned into texture UV and wrapped into the frame Stand shifts, [0.5, 1.5).
+    // The frame turns without mirroring, so the yaw turns with it.
+    private static Slot InUv(VariantLayout layout, Slot s)
+    {
+        var uv = layout.ToUv(s.At);
+        var dir = layout.ToUv(s.At + new Vector2(MathF.Cos(s.Yaw), -MathF.Sin(s.Yaw))) - uv;
+        uv -= new Vector2(MathF.Floor(uv.X - 0.5f), MathF.Floor(uv.Y - 0.5f));
+        // A new slot, not a with-copy, which would keep the old yaw's Turn.
+        return new Slot(s.Kind, uv, MathF.Atan2(-dir.Y, dir.X), s.Stretch, s.Roll, s.Keep);
+    }
+
+    // The variants the cells under frame (ku, kv) draw. A cell index is linear in UV, so the cells the frame meets lie
+    // between its corners' indices. The corners sit a hair inside, so a square paint's frame meets its own cell alone.
+    private static bool[] FrameVariants(CityGround.PaintLayout spec, int ku, int kv, Vector2 offset, int count)
+    {
+        var cells = new[] { (0.501f, 0.501f), (1.499f, 0.501f), (0.501f, 1.499f), (1.499f, 1.499f) }
+            .Select(c => World(new Vector2(ku + c.Item1, kv + c.Item2), offset))
+            .Select(w => CityGround.CellOf(spec, w.X, w.Y)).ToList();
+        var drawn = new bool[count];
+        for (int i = cells.Min(c => c.I); i <= cells.Max(c => c.I); i++)
+        {
+            for (int j = cells.Min(c => c.J); j <= cells.Max(c => c.J); j++)
+                drawn[CityGround.Pick(i, j) % (uint)count] = true;
+        }
+        return drawn;
     }
 
     private static Kind? Find(string name) => Array.Find(KindTable, k => k.Name == name);
@@ -620,8 +656,10 @@ public sealed class CityDressing
         public uint RollKey { get; } = Mix(unchecked((uint)Roll * 0x9E3779B1u));
     }
 
-    /// <summary>One placed instance: its kind, world transform, the floor variant of its block of so many, and that block's cell.</summary>
-    internal readonly record struct Placed(string Kind, Transform3D Transform, int Variant, int Variants, (int I, int J) Cell);
+    /// <summary>One placed instance: its kind, world transform, the floor variant of its block of so many, and that block's
+    /// cell. Spec is the paint layout the cell is taken in.</summary>
+    internal readonly record struct Placed(string Kind, Transform3D Transform, int Variant, int Variants, (int I, int J) Cell,
+        CityGround.PaintLayout Spec);
 
     /// <summary>A dressing kind: its model name, fade band in metres, footprint half extents and run length.</summary>
     internal sealed record Kind(string Name, float FadeNearM, float FadeFarM, float HalfLength, float HalfDepth, float RunM = 0f)
@@ -652,6 +690,13 @@ public sealed class CityDressing
         public List<(string Kind, Vector2[] Points)> Lines { get; } = new();
 
         public List<Vector2[]> Paths { get; } = new();
+
+        /// <summary>Gets or sets the turn from the layout's frame to texture UV, null where the layout is in UV. A diagonal
+        /// paint's layout lies along its strip: a point (x, y) is at <c>Origin + x * X + y * Y</c>.</summary>
+        public (Vector2 Origin, Vector2 X, Vector2 Y)? Frame { get; set; }
+
+        /// <summary>A layout point in texture UV.</summary>
+        public Vector2 ToUv(Vector2 p) => Frame is { } f ? f.Origin + (f.X * p.X) + (f.Y * p.Y) : p;
     }
 
     // A kind's meshes (its near variants) and the material drawing them.
@@ -718,7 +763,7 @@ public sealed class CityDressing
         {
             if (UnderLot(p))
                 return 0f;
-            var q = Wrap(p);
+            var q = Wrap(_layout.ToUv(p));
             float best = float.MaxValue;
             foreach (var (poly, _) in _lots)
             {
@@ -784,7 +829,7 @@ public sealed class CityDressing
         // A lot's origin is wrapped into one tile and its polygons are not, so each is tested again a tile over.
         private bool UnderLot(Vector2 p)
         {
-            var q = Wrap(p);
+            var q = Wrap(_layout.ToUv(p));
             foreach (var (poly, box) in _lots)
             {
                 for (int du = -1; du <= 1; du++)
@@ -802,9 +847,10 @@ public sealed class CityDressing
 
         private bool OnStreet(Vector2 p)
         {
+            var uv = _layout.ToUv(p);
             foreach (var s in _spec.Streets)
             {
-                float c = s.Axis.Dot(p) - s.Centre;
+                float c = s.Axis.Dot(uv) - s.Centre;
                 if (MathF.Abs(c - MathF.Floor(c + 0.5f)) <= s.Half)
                     return true;
             }

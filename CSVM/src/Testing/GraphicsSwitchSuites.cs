@@ -1495,11 +1495,15 @@ internal static class GraphicsSwitchSuites
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
             Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
-            var spec = Mech3.CityGround.Layout.Parse(FileAccess.GetFileAsString($"{CityModels.Root}/C5/ground_layout.json")).Paints["cblock7"];
-            var (gpu, cpu) = FloorPicks(ctx, spec);
-            int same = gpu.Zip(cpu).Count(p => p.First == p.Second);
-            ctx.Check(gpu.Count == cpu.Count && cpu.Count > 0 && same == cpu.Count,
-                $"the world shader's pick on the GPU equals the CPU's at {same} of {cpu.Count} world points (first {gpu.FirstOrDefault():x6} against {cpu.FirstOrDefault():x6})");
+            var paints = Mech3.CityGround.Layout.Parse(FileAccess.GetFileAsString($"{CityModels.Root}/C5/ground_layout.json")).Paints;
+            // A square paint's block cells and a diagonal paint's strips.
+            foreach (string paint in new[] { "cblock7", "cblock2" })
+            {
+                var (gpu, cpu) = FloorPicks(ctx, paints[paint]);
+                int same = gpu.Zip(cpu).Count(p => p.First == p.Second);
+                ctx.Check(gpu.Count == cpu.Count && cpu.Count > 0 && same == cpu.Count,
+                    $"{paint}: the world shader's pick on the GPU equals the CPU's at {same} of {cpu.Count} world points (first {gpu.FirstOrDefault():x6} against {cpu.FirstOrDefault():x6})");
+            }
             var live = Open(ctx, true, 1, "C5");
             try
             {
@@ -1513,7 +1517,7 @@ internal static class GraphicsSwitchSuites
                 var kinds = new[] { "gd_wall", "gd_fence", "gd_hedge", "gd_shed", "gd_sedan", "gd_truck", "gd_ashcans", "gd_bench", Mech3.CityDressing.Tree };
                 ctx.Check(kinds.All(k => dressing.Counts.GetValueOrDefault(k) > 0),
                     $"every kind stands ({string.Join(", ", kinds.Select(k => $"{k} {dressing.Counts.GetValueOrDefault(k)}"))})");
-                int wrong = placed.Count(p => Mech3.CityGround.CellOf(spec, p.Transform.Origin.X, p.Transform.Origin.Z) != p.Cell
+                int wrong = placed.Count(p => Mech3.CityGround.CellOf(p.Spec, p.Transform.Origin.X, p.Transform.Origin.Z) != p.Cell
                     || p.Variant != (int)(Mech3.CityGround.Pick(p.Cell.I, p.Cell.J) % (uint)p.Variants));
                 ctx.Check(placed.Count > 0 && wrong == 0, $"each of {placed.Count} instances stands in a block of the variant its cell picks ({wrong} wrong)");
                 List<MultiMeshInstance3D> CellsOf(Node root)
