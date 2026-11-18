@@ -587,7 +587,12 @@ public sealed class VersusDirector
         if (seatRigs.Count > 0)
             seatRigs[0].Controller?.Projectiles?.Clear();
         foreach (var rig in seatRigs)
-            rig.Controller?.Respawn();
+        {
+            if (rig.Controller is not { } controller)
+                continue;
+            controller.Headlight.On = false;
+            controller.Respawn();
+        }
     }
 
     /// <summary>The scoreboard debug force: one scripted, ATTRIBUTED kill on the first sim step,
@@ -1029,6 +1034,9 @@ public sealed class VersusDirector
         }
 
         SpawnsTaken++;
+        // An opening placement is a rematch's fresh round, which starts with the headlight off as a level load does.
+        if (spawn.Kind == Net.NetSpawnKind.Opening)
+            rig.Headlight.On = false;
         if (spawn.Seat < _spawnEntries.Length)
         {
             _spawnEntries[spawn.Seat] = spawn.EntryIndex == Net.NetMessage.NoSpawnEntry

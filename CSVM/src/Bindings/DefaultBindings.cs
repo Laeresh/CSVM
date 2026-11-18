@@ -215,6 +215,11 @@ public static class DefaultBindings
         // down there, so one press opens the editor and steps no mode. Keyboard only, as the step is.
         b.Mod(InputAction.EditHudLayout, KeyModifiers.Shift, Key.F2);
 
+        // The headlight, a remake-only action on H, which no flight action holds. Its pad row is the
+        // view cycle's d-pad down, a tap cycling and a hold switching (Headlight.Read). ActionMap.Shares
+        // lets the two keep that one control.
+        b.Keys(InputAction.Headlight, Key.H).Buttons(InputAction.Headlight, JoyButton.DpadDown);
+
         // The scores table on the original's own Tab. Back is a pad button no other flight action
         // holds, and the conventional place for a held scoreboard.
         b.Keys(InputAction.DisplayScores, Key.Tab).Buttons(InputAction.DisplayScores, JoyButton.Back);

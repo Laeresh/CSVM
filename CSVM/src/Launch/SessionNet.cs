@@ -613,7 +613,7 @@ internal sealed class SessionNet
                 new Net.AircraftStateMessage(
                     (byte)seat, _stateCadence.Next(seat), flown.WorldPosition,
                     flown.Attitude.GetRotationQuaternion(), flown.WorldVelocity, flown.Throttle,
-                    stick.Roll, stick.Pitch, stick.Yaw, flown.Nitro.Boosting),
+                    stick.Roll, stick.Pitch, stick.Yaw, flown.Nitro.Boosting, flown.Headlight.On),
                 Net.NetChannels.ForSeat(seat));
         }
     }

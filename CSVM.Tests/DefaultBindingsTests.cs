@@ -15,15 +15,16 @@ public class DefaultBindingsTests
 {
     private static readonly DeviceId Pad = DeviceId.Joypad("030000004c050000c405000000010000");
 
-    // The controls the shipped set deliberately puts on two actions, which is what a binding list
-    // expresses and the original's four typed slots cannot: the four numpad diagonals, each one key
-    // driving two look directions (Kp7 is Look Up and Look Left).
+    // The controls the shipped set deliberately puts on two actions, which a binding list expresses
+    // and the original's four typed slots cannot. Each numpad diagonal drives two look directions
+    // (Kp7 is Look Up and Look Left). The pad's d-pad down is the view cycle's tap and the headlight's hold.
     private static readonly Binding[] Shared =
     {
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp9)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp1)),
         new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp3)),
+        new(Pad, BindingControl.Button((int)JoyButton.DpadDown)),
     };
 
     /// <summary>The original's shipped keyboard rows, action by action, for
@@ -465,15 +466,39 @@ public class DefaultBindingsTests
         Assert.Equal(other.IndexOf(InputAction.RecenterHeadset) + 1, other.IndexOf(InputAction.CycleHudMode));
     }
 
-    /// <summary>The HUD layout editor is appended last and ships on Shift+F2 alone, keyboard only.
+    /// <summary>The headlight is appended last and ships on H, which no other flight action holds. Its
+    /// pad row is the view cycle's d-pad down. That pair keeps the shared button through a rebind,
+    /// and the Other tab lists it after the HUD layout editor.</summary>
+    [Fact]
+    public void TheHeadlight_IsAppendedAndShipsOnHAndTheViewCyclesPadButton()
+    {
+        var all = Enum.GetValues<InputAction>();
+        Assert.Equal(96, (int)InputAction.Headlight);
+        Assert.Equal(all.Length - 1, (int)InputAction.Headlight);
+
+        var h = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.H));
+        var down = new Binding(Pad, BindingControl.Button((int)JoyButton.DpadDown));
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.Headlight));
+        Assert.Equal(new[] { h, down }, map.Bindings(InputAction.Headlight));
+        Assert.Equal(new[] { InputAction.Headlight }, map.OwnersOf(h));
+        Assert.Equal(new[] { InputAction.CycleCockpitViews, InputAction.Headlight }, map.OwnersOf(down));
+        Assert.True(ActionMap.Shares(InputAction.CycleCockpitViews, InputAction.Headlight));
+        Assert.Empty(map.Assign(InputAction.Headlight, down));
+        Assert.Contains(down, map.Bindings(InputAction.CycleCockpitViews));
+
+        Assert.Equal("Headlight", BindingLabels.Name(InputAction.Headlight));
+        var other = CSVM.UI.Menu.Original.OriginalKeysPage.ControlTabs[6].Rows.Select(r => r.Action).ToList();
+        Assert.Equal(other.IndexOf(InputAction.EditHudLayout) + 1, other.IndexOf(InputAction.Headlight));
+    }
+
+    /// <summary>The HUD layout editor ships on Shift+F2 alone, keyboard only.
     /// Held Shift stands the bare F2 down, so one press opens the editor and steps no HUD mode. The
     /// Other tab lists it after the HUD mode step.</summary>
     [Fact]
     public void TheHudLayoutEditor_IsAppendedAndShipsOnShiftF2()
     {
-        var all = Enum.GetValues<InputAction>();
         Assert.Equal(95, (int)InputAction.EditHudLayout);
-        Assert.Equal(all.Length - 1, (int)InputAction.EditHudLayout);
 
         var shiftF2 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2, KeyModifiers.Shift));
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);

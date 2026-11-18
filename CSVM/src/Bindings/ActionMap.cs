@@ -51,9 +51,12 @@ public sealed class ActionMap
     /// <summary>Whether two actions hold one control without either taking it from the other, which
     /// the steal rule and a screen's steal prompt both skip. True when either is
     /// <see cref="InputAction.SkipCutscene"/>, which is read only while a cutscene or cinema plays.
-    /// Its stick default shares the trigger with menu accept, and a rebind must not undo that.</summary>
+    /// Its stick default shares the trigger with menu accept, and a rebind must not undo that. Also
+    /// true for the view cycle and the headlight, which a shared control splits by hold length.</summary>
     public static bool Shares(InputAction left, InputAction right) =>
-        left != right && (left == InputAction.SkipCutscene || right == InputAction.SkipCutscene);
+        left != right && (left == InputAction.SkipCutscene || right == InputAction.SkipCutscene
+            || (left, right) is (InputAction.CycleCockpitViews, InputAction.Headlight)
+                or (InputAction.Headlight, InputAction.CycleCockpitViews));
 
     /// <summary>Which modifiers this map holds that key under, which is what a bare binding on it
     /// must stand down under. Empty for a key no action names with a modifier.</summary>

@@ -183,10 +183,12 @@ public static class ShadowQualitySetting
     }
 
     // Renderer-wide rather than light properties. Set beside the width they carry, not in
-    // project.godot, where the faithful path would inherit them.
+    // project.godot, where the faithful path would inherit them. The positional filter is the
+    // headlight's, the one shadowed positional light.
     private static void WriteRenderer(RenderingServer.ShadowQuality filter, int atlasSize)
     {
         RenderingServer.DirectionalSoftShadowFilterSetQuality(filter);
+        RenderingServer.PositionalSoftShadowFilterSetQuality(filter);
         RenderingServer.DirectionalShadowAtlasSetSize(atlasSize, true);
     }
 
