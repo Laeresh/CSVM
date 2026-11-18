@@ -587,7 +587,9 @@ takes the hostile, alive world emplacements (`ProjectilePool.CollectTurretEmplac
 `Cost(d + 37.5, 1.0)`, between the vehicles and the structures on a strict win, so an enemy gun
 must stand 37.5 m nearer than an AI aeroplane of no `target_bias` to be taken. The remake-only
 aircraft-first preference withdraws it with the structures while an aircraft is in reach, as it
-withdraws both classes from the AI pilot's picker.
+withdraws both classes from the AI pilot's picker. A gunner carried by a human-flown plane keeps
+both classes and weighs them at 1.25 instead (`TurretController.HumanGunnerStructureWeight`), so an
+emplacement or a zeppelin engine must stand 300 m nearer than an aeroplane to be taken.
 
 ### Nothing in the turret path reads an objective, capture or pickup flag
 
@@ -1210,7 +1212,7 @@ there.
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
-| A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the same four in the decoded order against one running best: the whole `VehicleList` (`ProjectilePool.CollectVehicleList`), the alive world emplacements (`CollectTurretEmplacements`), the mission structures (`CollectMissionStructures`) and the TARGETABLE rounds (`CollectTargetableOrdnance`). The remake-only aircraft-first preference withdraws the emplacements and structures while an aircraft is in reach |
+| A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the same four in the decoded order against one running best: the whole `VehicleList` (`ProjectilePool.CollectVehicleList`), the alive world emplacements (`CollectTurretEmplacements`), the mission structures (`CollectMissionStructures`) and the TARGETABLE rounds (`CollectTargetableOrdnance`). The remake-only aircraft-first preference withdraws the emplacements and structures while an aircraft is in reach, and for a human-flown plane's gunners weighs them at 1.25 instead |
 | A turret's cost | a hard `DETECTION_RANGE` gate on the true distance, then the cost function `0x004ac720` with its class weights (the player `0.8`, a preferred round `0.6`, a turret's `37.5` on its distance) and the candidate's `target_bias` | the same: `TurretController.Cost` gates on `Def.DetectionRange` and scores every candidate on the decoded sum ("The picker's cost" above). Nothing in either version consults an objective or capture flag |
 | A turret against a structure | admitted through `MStructList`, and hostile when the structure's team differs | `TurretController.AcquireTarget` walks the structure pool after the vehicles against the same running best, through `ProjectilePool.CollectMissionStructures`, and drops a gasbag as the decoded pass does |
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
