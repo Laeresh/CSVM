@@ -12,8 +12,9 @@ namespace CSVM.Mech3;
 /// buffers are kept once made, so a recut only swaps nodes and writes the stamps moved since.
 /// ⚠ Keep the faithful path on one whole MultiMesh. Cells blend a kind's cards in another order,
 /// which the pinned goldens would read as a moved pixel.
-/// A listed vegetation kind also carries a Rich variant, index-aligned with the authored stamps,
-/// which the cells draw while <see cref="VegetationQualitySetting.RichOn"/>.
+/// A listed vegetation kind carries an index-aligned Rich variant, drawn while
+/// <see cref="VegetationQualitySetting.RichOn"/>, and a building with a hull its <see cref="City"/> box, drawn while
+/// <see cref="CityModels.On"/>.
 /// </summary>
 public sealed class ClutterInstances
 {
@@ -53,6 +54,12 @@ public sealed class ClutterInstances
     private Prototype? _nearProto;
     private Layout? _nearCells;
 
+    // A building's look-alike under the city (CityModels), null for a kind with no hull. Its box cells are a third
+    // layout beside the Original and Rich ones, cut with the box in place of the mesh. Its near models are _near.
+    private City? _city;
+    private Prototype? _cityProto;
+    private Layout? _cityCells;
+
     private ClutterInstances(Prototype? proto, Layout drawn, int count)
     {
         _proto = proto;
@@ -72,6 +79,11 @@ public sealed class ClutterInstances
     // RichOn already requires Enhanced, so the whole layout is always the Original variant.
     private bool RichWanted => _richVariant != null && VegetationQualitySetting.RichOn;
 
+    private bool CityWanted => _city != null && CityModels.On;
+
+    // The whole node's settings with the city's box as its mesh. The box shader declares no node_bias.
+    private Prototype CityProto => _cityProto ??= _proto! with { Mesh = _city!.Box!, NodeBias = default };
+
     private IReadOnlyList<Transform3D> AuthoredList => _rich ? _richVariant!.Placements : _proto!.Placements;
 
     /// <summary>The kind drawn by its one MultiMesh, as the faithful path draws it.</summary>
@@ -82,15 +94,23 @@ public sealed class ClutterInstances
     /// draws it. The faithful path keeps it whole, and Enhanced cuts it into cells at
     /// <see cref="EffectsLevel.RegisteredScaleSq"/>. The MultiMesh holds the authored
     /// <paramref name="placements"/>, <paramref name="rich"/> is their Rich variant, and
-    /// <paramref name="near"/> the model drawn over it near the camera.</summary>
+    /// <paramref name="near"/> the model drawn over it near the camera. A building's look-alike
+    /// (<paramref name="city"/>) is drawn in place of the mesh while <see cref="CityModels.On"/>.</summary>
     public static ClutterInstances Draw(Node3D root, MultiMeshInstance3D whole,
-        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades, Stamps? rich = null, Near? near = null)
+        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades, Stamps? rich = null, Near? near = null,
+        City? city = null)
     {
         var proto = new Prototype(root, whole.Name, whole.Multimesh!.Mesh, whole.MaterialOverride,
             whole.CastShadow, whole.ExtraCullMargin, whole.GetInstanceShaderParameter("node_bias"),
             placements, fades);
         var single = Layout.Single(whole.Multimesh!, whole.MaterialOverride);
-        var drawn = new ClutterInstances(proto, single, placements.Count) { _whole = single, _richVariant = rich, _near = near };
+        var drawn = new ClutterInstances(proto, single, placements.Count)
+        {
+            _whole = single,
+            _richVariant = rich,
+            _near = near ?? city?.Near,
+            _city = city,
+        };
         drawn.Own(single);
         if (GraphicsMode.Enhanced)
         {
@@ -249,21 +269,24 @@ public sealed class ClutterInstances
         _rich = rich;
     }
 
-    // The cells layout of the variant _rich names at the scale: the kept one, ranged again, when its
-    // cell edge still holds. A new cut makes its nodes with its buffers when asked.
+    // The cells layout at the scale of the variant _rich names, or of the city's box over the kind's own cells. The kept
+    // one is ranged again while its cell edge holds. A new cut makes its nodes with its buffers when asked.
     private Layout CellsAt(float fadeScaleSq, bool nodes = false)
     {
         var proto = _proto!;
-        // The Rich cards fade out further under a far 3D Vegetation word (VegetationModels.Reach), so their cells range further.
+        // The Rich cards fade out further under a far 3D Scenery word (VegetationModels.Reach), so their cells range further.
         if (_rich)
             fadeScaleSq *= VegetationModels.ReachSq;
-        ref var cells = ref _rich ? ref _richCells : ref _cells;
+        bool box = CityWanted && _city!.Box != null;
+        ref var cells = ref box ? ref _cityCells : ref _rich ? ref _richCells : ref _cells;
         float cellM = CellFor(KindFarM(proto.Fades, fadeScaleSq));
         if (cells == null || cells.CellM != cellM)
         {
             if (cells != null && !ReferenceEquals(cells, _drawn))
                 cells.Release();
-            cells = Layout.Cut(proto, _rich ? _richVariant! : proto.Original, cellM, nodes ? fadeScaleSq : null);
+            cells = box
+                ? Layout.Cut(CityProto, new Stamps(proto.Placements, null, _city!.BoxMaterial), cellM, nodes ? fadeScaleSq : null)
+                : Layout.Cut(proto, _rich ? _richVariant! : proto.Original, cellM, nodes ? fadeScaleSq : null);
             Own(cells);
         }
         cells.Range(fadeScaleSq);
@@ -278,23 +301,27 @@ public sealed class ClutterInstances
         want.CatchUp(_moved, AuthoredList);
         var old = _drawn;
         _drawn = want;
-        var node = want.Attach(proto);
+        var node = want.Attach(ReferenceEquals(want, _cityCells) ? CityProto : proto);
         proto.Root!.AddChild(node);
         if (at >= 0)
             proto.Root.MoveChild(node, at);
         if (!ReferenceEquals(old, want))
             old.Detach();
-        if (old.IsCut && !ReferenceEquals(old, _cells) && !ReferenceEquals(old, _richCells))
+        if (old.IsCut && !ReferenceEquals(old, _cells) && !ReferenceEquals(old, _richCells) && !ReferenceEquals(old, _cityCells))
             old.Release();
     }
 
-    // Draws the near model's cells exactly while the Rich variant is drawn and the word asks for models,
-    // brought up to the moved stamps. They are cut once and ranged again at the word's far edge.
+    // Draws the near model's cells while the word asks for models and the Rich variant or the city is drawn. They follow
+    // the moved stamps, are cut once and ranged again at the word's far edge. A further mesh of a
+    // building with a hull hides while the city is drawn, keeping its layout.
     private void FollowNear()
     {
+        if (_city is { Box: null } && _drawn.Node != null)
+            _drawn.Node.Visible = !CityWanted;
         if (_near == null || _proto == null)
             return;
-        if (!_rich || !VegetationModels.On)
+        bool city = _city != null;
+        if (city ? !CityWanted : !_rich || !VegetationModels.On)
         {
             _nearCells?.Detach();
             return;
@@ -305,11 +332,12 @@ public sealed class ClutterInstances
             Name = _proto.Name + "_model",
             Mesh = _near.Mesh,
             Material = _near.Material,
-            CastShadow = VegetationModels.Casting,
+            CastShadow = city ? GeometryInstance3D.ShadowCastingSetting.Off : VegetationModels.Casting,
             NodeBias = default,
             Layers = VegetationModels.Layer,
         };
-        _nearCells ??= Layout.Cut(_nearProto, _richVariant! with { Material = _near.Material }, VegetationModels.CellM);
+        _nearCells ??= Layout.Cut(_nearProto, (city ? _proto.Original : _richVariant!) with { Material = _near.Material },
+            city ? CityModels.CellM : VegetationModels.CellM, near: _near);
         _nearCells.RangeTo(VegetationModels.Band.Y);
         _nearCells.CatchUp(_moved, AuthoredList);
         if (_nearCells.Node == null)
@@ -382,16 +410,16 @@ public sealed class ClutterInstances
         // cell's node is made right after its buffer and ranged at that scale.
         // ⚠ Keep a load's cut making each node beside its buffer, before the whole node is freed.
         // Making the buffers first moves c1-rocket-hit-enhanced, though every float is the same.
-        public static Layout Cut(Prototype proto, Stamps variant, float cellM, float? nodesAt = null)
+        // A near model with variants is keyed by cell and variant, each cell drawing its own variant's mesh.
+        public static Layout Cut(Prototype proto, Stamps variant, float cellM, float? nodesAt = null, Near? near = null)
         {
             var placements = variant.Placements;
             var fades = proto.Fades;
-            var meshBox = proto.Mesh.GetAabb();
-            var byCell = new Dictionary<(int, int), List<int>>();
+            var byCell = new Dictionary<(int, int, int), List<int>>();
             for (int i = 0; i < placements.Count; i++)
             {
                 var o = placements[i].Origin;
-                var key = (Mathf.FloorToInt(o.X / cellM), Mathf.FloorToInt(o.Z / cellM));
+                var key = (Mathf.FloorToInt(o.X / cellM), Mathf.FloorToInt(o.Z / cellM), near?.VariantOf?[i] ?? 0);
                 if (!byCell.TryGetValue(key, out var list))
                     byCell[key] = list = new List<int>();
                 list.Add(i);
@@ -408,8 +436,10 @@ public sealed class ClutterInstances
             var slotOf = new int[placements.Count];
             var group = nodesAt != null ? new Node3D { Name = proto.Name } : null;
             int c = 0;
-            foreach (var (_, list) in byCell)
+            foreach (var ((_, _, v), list) in byCell)
             {
+                var mesh = near?.Variants?[v] ?? proto.Mesh;
+                var meshBox = mesh.GetAabb();
                 Aabb? bounds = null;
                 foreach (int i in list)
                 {
@@ -428,7 +458,7 @@ public sealed class ClutterInstances
                     cellOf[i] = c;
                     slotOf[i] = s;
                 }
-                meshes[c] = Fill(proto.Mesh, local, list, fades, variant.Colors, perInstance: group != null);
+                meshes[c] = Fill(mesh, local, list, fades, variant.Colors, perInstance: group != null);
                 ClutterCull.Index(meshes[c], local);
                 offsets[c] = offset;
                 members[c] = list.ToArray();
@@ -632,7 +662,19 @@ public sealed class ClutterInstances
 
     /// <summary>A kind's near model (<see cref="VegetationModels"/>): the mesh and material drawing it on the Rich
     /// stamps. Its cells stand under the given node, never inside the clutter root.</summary>
-    public sealed record Near(Node3D Root, Mesh Mesh, Material Material);
+    public sealed record Near(Node3D Root, Mesh Mesh, Material Material)
+    {
+        /// <summary>Gets the meshes a building's near model takes per stamp, null for <c>Mesh</c> on every stamp.</summary>
+        public IReadOnlyList<Mesh>? Variants { get; init; }
+
+        /// <summary>Gets each stamp's index into <see cref="Variants"/>, index-aligned with the stamps.</summary>
+        public IReadOnlyList<int>? VariantOf { get; init; }
+    }
+
+    /// <summary>A building kind's look-alike under the city (<see cref="CityModels"/>). The far box draws over the
+    /// kind's own cells in place of its mesh, the near model over the same stamps. A further mesh of the building
+    /// takes one with neither, and hides while the city is drawn.</summary>
+    public sealed record City(Mesh? Box, Material? BoxMaterial, Near? Near);
 
     // Everything the builder's whole node carried, and the authored stamps it held.
     private sealed record Prototype(Node3D? Root, StringName Name, Mesh Mesh, Material? Material,

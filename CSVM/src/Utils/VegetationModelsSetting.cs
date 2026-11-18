@@ -8,7 +8,8 @@ namespace CSVM.Utils;
 /// <c>--vegetation-models=</c> beats the saved <c>vegetationModels</c> option, which beats the
 /// <see cref="Key"/> config key, then <see cref="Default"/> on every machine. Under <c>--det</c> only
 /// the flag survives. It acts only while <see cref="VegetationQualitySetting.RichOn"/>. The VIDEO
-/// page's 3D Vegetation row writes it, applied live by ranging the model cells again.
+/// page's 3D Scenery row writes it, applied live by ranging the model cells again, and
+/// it gates C5's city (<c>Mech3.CityModels.On</c>).
 /// </summary>
 public static class VegetationModelsSetting
 {
@@ -62,8 +63,8 @@ public static class VegetationModelsSetting
         Labels = VegetationModelsSetting.Labels,
         EnhancedOnly = true,
         Detail = static enhanced => enhanced
-            ? "Rich vegetation only: Near to Extreme draw the trees near you in 3D, Off keeps every tree a card. Applies at once."
-            : "Enhanced Graphics only: the original world's trees are always cards.",
+            ? "Rich vegetation only: trees, crowns and city buildings in 3D. Applies at once."
+            : "Enhanced Graphics only: the original world keeps its tree cards and buildings.",
         Shown = static _ => Word,
         Fallback = static _ => new ResolvedWord(Default, SettingSource.Default, null),
         Take = static resolved =>

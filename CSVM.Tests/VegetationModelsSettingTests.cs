@@ -46,6 +46,9 @@ public class VegetationModelsSettingTests
         Assert.Null(SessionSpec.Parse(new[] { "--vegetation-models=on" }).WordFlags[VegetationModelsSetting.Lookup]);
         var kept = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [VegetationModelsSetting.Lookup] = VegetationModelsSetting.Far } }));
         Assert.Equal(VegetationModelsSetting.Far, kept?.Words[VegetationModelsSetting.Lookup]);
+        // A literal options file: the row's label is not part of what the store reads.
+        var old = OptionsStore.Deserialize("{\"version\":1,\"vegetationModels\":\"veryfar\"}");
+        Assert.Equal(VegetationModelsSetting.VeryFar, old?.Words[VegetationModelsSetting.Lookup]);
         var dropped = OptionsStore.Deserialize("{\"version\":1,\"vegetationModels\":\"everywhere\"}");
         Assert.NotNull(dropped);
         Assert.Null(dropped!.Words[VegetationModelsSetting.Lookup]);

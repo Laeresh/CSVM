@@ -121,9 +121,10 @@ perturbation (`c1-flight-kill` 78.07 %, `c1-cockpit-xr-sim` 19.82 %, `c1-cockpit
 `empty-stage` 12.21 %, `c4-snow` 3.74 %, `campaign-intro-fill` 3.89 %, `c1c-rain` 2.50 %,
 `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
-**The six `-enhanced` shots pin the Enhanced Graphics stack** (`--graphics=enhanced` in their own
+**The `-enhanced` shots pin the Enhanced Graphics stack** (`--graphics=enhanced` in their own
 args, which `--det` honours while it drops the saved mode): the lake's reflection and sun shadows,
-the night city's omni pool, the deck's lit puffs, a rocket burst's lit effects, the cockpit pass,
+the night city's omni pool and its script-built buildings (`c5-city-towers-enhanced` over the dense
+towers), the deck's lit puffs, a rocket burst's lit effects, the cockpit pass,
 and the wave ocean. `c1b-ocean-enhanced` passes `--water-quality=waves` itself, so a change to the
 water-quality ladder cannot turn its subject off; the lake, the night city and the rocket shot also
 draw the ocean, through `--det`'s own `waves` fallback. `--det` resolves Vegetation Quality to `rich`
