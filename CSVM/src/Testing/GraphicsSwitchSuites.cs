@@ -1176,7 +1176,8 @@ internal static class GraphicsSwitchSuites
         + "C5/cb00b.glb keeps that kind off the city; the hull's grade is its baseColorFactor; live moves to Off, original "
         + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
         + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
-        + "the shipped hulls carry the facade atlas, the window ids and the facade's poster counts")]
+        + "the shipped hulls carry the facade atlas, the window ids and the facade's poster counts; with the shipped hulls "
+        + "every solid building and dressing kind draws its hull and no original mesh, and under Faithful or Off none does")]
     internal static void CityBuildings(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1341,6 +1342,35 @@ internal static class GraphicsSwitchSuites
             finally
             {
                 live.Close();
+            }
+
+            // The shipped city with no pack: every solid building and dressing kind draws its hull and no original mesh.
+            // A move to Faithful or to Off draws them all whole again.
+            HdModels.Current = pack;
+            CityModels.Root = CityModels.ShippedRoot;
+            var full = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (!full.Built || full.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds } || ClutterRoot(full.Session) is not { } cityRoot)
+                {
+                    ctx.Check(false, $"the shipped C5 session builds its clutter");
+                    return;
+                }
+                var solid = kinds.Where(k => k.Solid && k.Model.Length > 0).ToList();
+                bool Dressed(Mech3.ClutterBuilder.KindExport k) => k.City != null && Visible(cityRoot, k.Mesh) == 0
+                    && (k.City.Box == null || Visible(cityRoot, k.City.Box) > 0);
+                bool Whole(Mech3.ClutterBuilder.KindExport k) => Visible(cityRoot, k.Mesh) > 0 && (k.City?.Box is not { } box || Visible(cityRoot, box) == 0);
+                string Undressed() => string.Join(", ", solid.Where(k => !Dressed(k)).Select(k => HdModels.NodeKey(k.Model)).Distinct());
+                ctx.Check(solid.Count > 0 && solid.All(Dressed), $"every solid kind of the shipped city draws its hull, none its original ({solid.Count} kinds; undressed: {Undressed()})");
+                Switch(full, enhanced: false);
+                ctx.Check(solid.All(Whole), $"under Faithful every solid kind draws its original mesh and no hull");
+                Switch(full, enhanced: true);
+                Models(full, Utils.VegetationModelsSetting.Off);
+                ctx.Check(solid.All(Whole), $"with the 3D models off every solid kind draws its original mesh and no hull");
+            }
+            finally
+            {
+                full.Close();
             }
         }
         finally

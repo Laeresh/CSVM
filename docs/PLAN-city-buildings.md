@@ -77,7 +77,7 @@ objected to; reopen any of them by asking.
 | 31 | Near variants per shape (B15) | **"More for common shapes"**: two for a rare shape, a third or fourth for the shapes placed most often. C21 picks the shapes by A1's placement counts. |
 | 32 | The `det` dressing models (B15) | **"Rebuild them too"**: each dressing piece gets a model in the new towers' style, and its original is not drawn in the Enhanced city. Done in C21. |
 | 33 | Extreme's reach for the city (B15) | **"Full reach, re-measure later."** Extreme hands the city over across its own band. With 2048 m cells the prototype draws 1,776.5 at `C5-alt` against 1,775.5 with the city off, one draw over Decision 8's rule, which the user accepts until C24 measures the whole city; the reach is shortened then if the excess has grown past a figure the user accepts. |
-| 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. A follow-up issue filed in C24, outside this plan (Decision 5). |
+| 34 | Ground and lamps (B15) | **"Ground looks wrong"** beside the new buildings; the lamps were not named. Asked what is wrong: "The ground texture does not match the buildings. There are some roofs that are partly below the models and most of the texture is so dark that it is just black. Perhaps some courtyard, gardens or similar inside the free area in the blocks." Filed as #357, outside this plan (Decision 5). |
 | 35 | Walk-up colour variety (C21) | Of the dressed `cblock4` the user said: "The cblock4 could use more color variation at least the roofs", and of the other walk-up district: "cblock7 looks good". Each tile roof takes one of six colours and the walls under tile roofs four per family; shown both districts before and after, the user chose **"Land it as shown"**, so the variety reaches `cblock7` too. At the controls afterwards: "works for me". |
 | 36 | `cb07b`'s two tops (C21) | **"Keep both"**: the open frame with two slabs on one near variant and the far box, the landing deck with edge rails on the other. |
 | 37 | Walk-up cornice (C21) | **"Add a pale cornice"**: `cb12`, `cb13`, `cb15` and `cb16` get a pale band under the roof edge where the originals carry their dentil cornice, on every near variant and the far box. Shown a first build, a 1.2 m mid-grey band, beside the original's thin near-white line, the user chose **"Thinner and brighter"**, and of the 0.6 m near-white line that followed: **"Land it"**. |
@@ -274,7 +274,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Generate the remaining hulls
 22. ☑ Relabel the 3D Vegetation option to cover scenery
-23. ☐ Engine checks and golden frames for the new city
+23. ☑ Engine checks and golden frames for the new city
 24. ☐ Closing measurement, the integrated-GPU default, and follow-up issues
 
 ## Dependency and parallelism notes
@@ -1245,7 +1245,22 @@ the change still loads with its value.
 
 **⚠ Traps.** The key and the stored values do not change; only the label does.
 
-## C23 ☐ Engine checks and golden frames for the new city
+## C23 ☑ Engine checks and golden frames for the new city
+
+**Landed.** The `city-buildings` suite opens C5 on the shipped hulls with no pack: every solid
+building and dressing kind draws its hull and no original mesh, and after a live switch to
+Faithful or a live move of 3D Scenery to Off every one draws its original mesh and no hull. Golden
+`c5-city-towers-enhanced` pins the Enhanced night city at A2's `C5-cb1` view at frame 120.
+`c5-city-night-enhanced` is the only other golden that shows C5 under Enhanced.
+
+**Verified.** By the item's agent. The new check fails with 3D Scenery off at session start (all
+96 kinds named as undressed) and with `cb05a.glb.bin` set aside (`undressed: cb05a`), and passes
+with both restored. The new shot rendered 68124038 on five separate launches and again in the
+battery. The complete `RunTests.ps1` passes: 8,505 units, 681 engine suites with engine errors
+clean, 42 goldens hash-identical. The orchestrator read the check and the manifest entry. Not
+checked: a golden under external GPU load, the Deck.
+
+**Original approach (kept for reference).**
 
 **Goal.** The new city is pinned: a check that C5's buildings draw script-built models under
 Enhanced and originals under Faithful, and golden frames for the C5 Enhanced views.
