@@ -53,7 +53,10 @@ Scenery off draw the original ground.
 | 11 | First prototype | **`cblock7`** with its own walk-ups, judged at the controls and on montages before the other combinations. |
 | 12 | Character | **Mostly paved, some green**: back courts, alleys and service yards (asphalt, gravel, flagstone, fences, sheds, parked cars, ash cans), about a quarter of the free area as small gardens with trees, open blocks as parks or parking lots. |
 | 13 | What counts as street | **The whole street, kerb to kerb, lit or unlit.** The author, on A3's montages: "The yellow marks of the street don't include the unlit streets between them. They should not get objects." The street mask is geometric (kerbs, the building-free corridors), never a luma threshold, which finds only the lamp pools. No floor change and no dressing on any street. |
-| 14 | Which trees (B14) | **A new deciduous city tree** (plane tree or elm style) built with the vegetation generator pipeline, plus the existing bushes for hedges. No existing vegetation model is a city deciduous tree. The author chose "New deciduous model". |
+| 14 | Which trees (B14) | **A new deciduous city tree** (plane tree or elm style) built with the vegetation generator pipeline. No existing vegetation model is a city deciduous tree. The author chose "New deciduous model". |
+| 15 | The dressing set (B14) | **Placed as built**: wall, fence, two sheds, sedan, delivery truck, ash cans, bench, the city tree. The author, on the offline montages: "Yes, place them"; grade, fog and night are tuned at B15. |
+| 16 | Hedges (B14) | **A cheap box hedge** (`gd_hedge`, 18 triangles, 1.05 to 1.3 m) laid in runs along garden edges, over C1's bushes (682 and 192 triangles, the smaller bluish at night). The author chose "Cheap box hedge". |
+| 17 | The `cblock7` floor layout (B12) | **Wired in as generated**; the core's patchwork of rectangles is judged in perspective under the dressing at B15. The author chose "Wire it in as is". |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -182,9 +185,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the `cblock7` prototype
 
 11. ☑ Export the footprint and street data the generator needs
-12. ☐ Generate the block floor variants for `cblock7`
-13. ☐ Composite and select the new ground in the engine
-14. ☐ Build and stamp the low block dressing
+12. ☑ Generate the block floor variants for `cblock7`
+13. ◐ Composite and select the new ground in the engine
+14. ◐ Build and stamp the low block dressing (models landed, stamping open)
 15. ☐ Judge the prototype at the controls
 
 ### Wave C, the whole city
@@ -359,7 +362,27 @@ rule finds the lamp pools and misses the unlit asphalt between them. A substitut
 (`analysis/city-hulls/FINDINGS.md`); the footprint must be the union over everything a lot can roll.
 The `cblock2/3/5/6` buildings stand turned 45° in their own frames.
 
-## B12 ☐ Generate the block floor variants for `cblock7`
+## B12 ☑ Generate the block floor variants for `cblock7`
+
+**Landed.** `CSVM/data/city_models/c5_ground.py` reads only `ground_layout.json` and writes
+`CSVM/data/city_models/C5/ground/`: 4 variants of `cblock7` paint with its own walk-ups and 2 of
+`cblock7` paint with `cblock4`'s set, each 512 × 512 sRGB, one tile in the template's UV, seamless,
+named `<paint>-<set>-<n>.png.bin` (every image under `data/` is `.bin`, so Godot does not import it
+and the export ships its bytes); `index.json` lists the file names, which the engine reads instead
+of building them. Beside each variant a layout JSON holds its surface cells (kind and region),
+fence and wall lines and paths, for the dressing stamper. A block: a 3 m sidewalk verge, a ring of
+lots 28 to 40 m deep (each building on a lot of its own width with an apron and a yard behind,
+vacant lots, lot-line fences, rear walls), a core of back-yard strips, service yards, courts and
+open lots, a 5 m service alley where no building blocks it, 25 % to 26 % green. Free floor mean
+texture luma 20.0, p5 to p95 15.3 to 24.9. `--luma 30 --out <dir>` writes the comparison set,
+kept outside the repo.
+
+**Verified.** A rerun of both levels is byte-identical; the generator asserts its rolled-frame free
+mask matches the image-frame mask on more than 99.9 % of texels; 0.1 % to 0.7 % of the free floor
+is in no layout cell (slivers, paved, no dressing). The author saw the 3 × 3 montages (Decision 17).
+Confidence: direction-sound, magnitudes TUNE.
+
+**Original approach (kept for reference).**
 
 **Goal.** 2 to 4 block floor variants at 512² for `cblock7` with its walk-ups, mostly paved with
 some green (Decision 12), at a mean texture luma of about 20 with one comparison set at 30
@@ -424,7 +447,26 @@ paint. So do the two minor combinations whose buildings stand across their paint
 `no_clutter` bias stays at half a level (`SceneBuilder.cs:486-492`). Original pixels are composited
 at runtime and never written to the repo, a cache or a release.
 
-## B14 ☐ Build and stamp the low block dressing
+## B14 ◐ Build and stamp the low block dressing
+
+**Landed, the models.** `CSVM/data/city_models/c5_ground_dressing.py` builds `gd_wall`, `gd_fence`,
+`gd_shed`, `gd_sedan`, `gd_truck`, `gd_ashcans`, `gd_bench` and `gd_hedge` in `C5/` through the
+city pipeline (near and far nodes, 14 to 50 triangles near, 4 to 20 far, every structure under the
+4 m cap, asserted), and `CSVM/data/vegetation_models/citytree.py` the city tree in
+`vegetation_models/C5/` (178 triangles near, 24 far, 9.6 m). Pivots stand at the footprint centre on
+the ground with the long axis on X; wall, fence and hedge are runs (8 m, 8 m, 3 m) laid end to end
+or stretched by up to a quarter; the fence's boards sit at z = 0 with its posts on −Z. The seed
+(`INSTANCE_CUSTOM.w`) picks the near variant and varies grade and tint, and picks the truck's
+poster. `analysis/city-hulls/margin.py` and `corners.py` skip the `gd_` files.
+
+**Open, the stamping.** The `gd_` files load through `CityModels.Load` but need a C5 kind list (the
+engine loads by key); the tree needs a `VegetationModels` registration and a grade reference.
+Placement reads B12's layout JSON per variant: fences and walls on its lines, hedges on garden
+edges, trees in gardens and lawns with about 8 m clear overhead, sheds, cars and bins in yards,
+service yards and the alley, benches in gardens; nothing on a street, under a lot, or in a
+no-cell sliver. Bench and ash cans fade early rather than drawing their far nodes.
+
+**Original approach (kept for reference).**
 
 **Goal.** Low, non-solid dressing (courtyard walls, fences, sheds, parked period cars, ash cans,
 trees) stands in the free area of `cblock7`'s blocks, rolled per stamp from its seed.
