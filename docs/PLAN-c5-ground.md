@@ -57,6 +57,10 @@ Scenery off draw the original ground.
 | 15 | The dressing set (B14) | **Placed as built**: wall, fence, two sheds, sedan, delivery truck, ash cans, bench, the city tree. The author, on the offline montages: "Yes, place them"; grade, fog and night are tuned at B15. |
 | 16 | Hedges (B14) | **A cheap box hedge** (`gd_hedge`, 18 triangles, 1.05 to 1.3 m) laid in runs along garden edges, over C1's bushes (682 and 192 triangles, the smaller bluish at night). The author chose "Cheap box hedge". |
 | 17 | The `cblock7` floor layout (B12) | **Wired in as generated**; the core's patchwork of rectangles is judged in perspective under the dressing at B15. The author chose "Wire it in as is". |
+| 18 | The floor layout, flown (B15) | **Kept for the walk-up districts; the inner city gets more pavement and fewer gardens.** The author, flown at level 35: "works as is. for the inner city use more pavement less gardens." The tower districts (`cblock1`, `cblock2`, `cblock3` and their beneath sets, C21 and C22) take a smaller green share than `cblock7`'s 25 % (about 10 %, TUNE). |
+| 19 | The dressing, flown (B15) | **Walls and fences too bright**: darken and desaturate the brick walls and board fences toward the floor's level; density stays. The author chose "Walls/fences too bright". |
+| 20 | The city tree, flown (B15) | **Too bright: darken it** with the night darkening the city's other dressing gets. The author chose "Too bright, darken it". |
+| 21 | The kerb and the dressing's reach, flown (B15) | **Both fixed**: the soft kerb with whole lamp pools, and the dressing fading with the walk-up blocks. The author chose "Both fixed". |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
