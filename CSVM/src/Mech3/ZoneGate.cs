@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace CSVM.Mech3;
 
 /// <summary>The original's per-node visibility gate: a node draws iff its <c>zone_id</c> is −1
@@ -63,6 +66,13 @@ public static class ZoneGate
     /// Census: docs/org/weather.md.</summary>
     public static uint HeldCullMask(uint mask, int cameraState) =>
         CullMask(mask, cameraState) | (cameraState == 3 ? 0u : LayerFor(1) | LayerFor(2));
+
+    /// <summary>The dome zone a camera shows while the volumetric clouds hold
+    /// <paramref name="cameraState"/>: the upper band zone among <paramref name="domeZones"/>, the sky
+    /// the slab's rifts open onto. ⚠ Never zone 3: C5's <c>dome_zone3</c> is the fog volumes' grey
+    /// interior, and as the sky it hides the night dome. No band dome leaves the state's own.</summary>
+    public static int HeldDomeZone(IEnumerable<int> domeZones, int cameraState) =>
+        domeZones.Where(z => z is 1 or 2).DefaultIfEmpty(cameraState).Max();
 
     /// <summary>One camera's cull mask with the whole zone band restored, the ungated camera
     /// (<c>--no-zone-cull</c>, and the reset a session-spanning camera needs before its first

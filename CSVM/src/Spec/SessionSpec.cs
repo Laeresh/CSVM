@@ -608,6 +608,11 @@ public sealed record SessionSpec
     public int? AmmoCap { get; private set; }
     public bool AutoFire { get; private set; }
     public bool AutoFireRockets { get; private set; }
+
+    /// <summary><c>--headlight</c>: every human seat's headlight switch starts on, the scripted
+    /// twin of pressing H. It still draws under Enhanced graphics alone.</summary>
+    public bool HeadlightOn { get; private set; }
+
     /// <summary><c>--incoming[=metres[,wep_id]]</c>: the incoming-fire test rig, a phantom shooter
     /// on each player's six walking a burst into the airframe, so both cues and the shield behind
     /// them are reachable without an AI gunner. The metres offset the burst sideways (default none,
@@ -1692,6 +1697,7 @@ public sealed record SessionSpec
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
+            else if (arg == "--headlight") { s.HeadlightOn = true; }
             else if (arg == "--leading-assist") { s.LeadingAimAssist = s.LeadingAimAssistExplicit = true; }
             else if (arg == "--lead-marker") { s.LeadMarker = s.LeadMarkerExplicit = true; }
             else if (arg == "--throttle-plate") { s.ThrottlePlate = s.ThrottlePlateExplicit = true; }

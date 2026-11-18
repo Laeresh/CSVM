@@ -525,6 +525,11 @@ void fragment() {
     // picked by eye against the original's screenshots, at the controls and not by a luminance
     // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
+
+    // Enhanced only: the gain on the muzzle lights' emission on an aircraft. At the original's 1 a
+    // one-frame flash is lost against Enhanced's sunlight; picked at the controls over a 20x capture.
+    private const float AircraftMuzzleGain = 6f;
+
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -958,6 +963,14 @@ void fragment() {
     /// chapter's bias as one device render state. An arm sampling unbiased draws that chapter at a
     /// mip level the original never chose (docs/org/textures.md).</summary>
     internal static string SampleAlbedo(string uv) => $"csky_sample_albedo(albedo_tex, {uv})";
+
+    /// <summary>A plain aircraft surface's shader text under the current graphics mode: textured,
+    /// opaque, lit, fogged and sun-vertex-lit. For the suites.</summary>
+    internal static string AircraftShaderCode() => BiasShaderCode(shaded: true, textured: true, blend: false,
+        scissor: false, doubleSided: false, scroll: false, clampUv: false, lit: true, fogged: true,
+        edgeClamp: UvClampAxes.None, clutterFade: false, water: false, sunVertexLit: true, gammaBlend: false,
+        debugClutter: false, noAlphaCoverage: false, raceGhost: false, oceanBase: false, xrInterior: false,
+        stereoGhost: false);
 
     /// <summary>The <c>light()</c> of an Enhanced arm the baked terrain shadow reaches. It is Godot's
     /// own diffuse and specular from <c>csky_terrain_shadow.gdshaderinc</c>, the directional light
@@ -2781,7 +2794,9 @@ void light() {{
         // The point-light term reaches only the two original-mode arms that evaluate the original's
         // vertex light, and only on a model authored `lighting: true`.
         bool pointLit = lit && (fullbright || sunLit);
-        if (pointLit)
+        // The Enhanced aircraft take the muzzle lights the original's way, from their own set, as emission.
+        bool aircraftPoint = lit && shaded && sunVertexLit && GraphicsMode.Enhanced;
+        if (pointLit || aircraftPoint)
             sb.AppendLine(LightsInclude);
         if (oceanHide || coastFade)
             sb.AppendLine(OceanInclude);
@@ -2812,6 +2827,12 @@ void light() {{
             sb.AppendLine("varying float v_plane_sun;");
             // The cockpit pass's eye (CockpitOverlay), zero for a plane drawn in the world itself.
             if (!xrInterior)
+                sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
+        }
+        if (aircraftPoint)
+        {
+            sb.AppendLine("varying vec3 v_aircraft_point;");
+            if (!planeShadow && !xrInterior)
                 sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
         }
         if (textured)
@@ -2848,7 +2869,7 @@ void light() {{
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
-        if (!shaded || sunLit || gammaBlend)
+        if (!shaded || sunLit || gammaBlend || aircraftPoint)
             sb.AppendLine(SrgbInclude);
         if (sunLit)
         {
@@ -2910,11 +2931,17 @@ void light() {{
               + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (world_light + point), 0.0, 1.0))\n"
               + "            - csky_srgb_to_linear(COLOR.rgb * world_light);\n"
               + "    }\n";
+        // The original's point factor on the authored colour, clamped, with no sun beside it: Godot lights the rest.
+        string aircraftPointVertex = !aircraftPoint ? ""
+            : "    v_aircraft_point = vec3(0.0);\n"
+              + "    if (csky_aircraft_light_count > 0) {\n"
+              + $"        v_aircraft_point = clamp(COLOR.rgb * csky_aircraft_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + {originAt}), 0.0, 1.0);\n"
+              + "    }\n";
         if (xrInterior)
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{planeVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
+{clutterVertex}{ghostVertex}{oceanVertex}{planeVertex}{sunVertex}{pointVertex}{aircraftPointVertex}{XrInteriorVertex(normalSign)}}}
 
 void fragment() {{");
         }
@@ -2922,7 +2949,7 @@ void fragment() {{");
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{planeVertex}{sunVertex}{pointVertex}{(floorArm ? CityGround.VertexLine : "")}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{planeVertex}{sunVertex}{pointVertex}{aircraftPointVertex}{(floorArm ? CityGround.VertexLine : "")}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -3040,6 +3067,14 @@ void fragment() {{");
             sb.AppendLine(worldLit
                 ? "    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);"
                 : "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);");
+        }
+        // Light falling on the texel, as the sun-lit arm's point term is; emission so no N.L shades it, faded with the fog.
+        if (aircraftPoint)
+        {
+            string gain = AircraftMuzzleGain.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
+            sb.AppendLine(fogged
+                ? $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain} * (1.0 - csky_fog_on * fog_amt);"
+                : $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain};");
         }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,

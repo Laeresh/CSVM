@@ -1144,6 +1144,108 @@ internal static class CombatSuites
         }
     }
 
+    // A third-person shot light reaches a plane the original's way in both modes. Original takes the
+    // world set's point term, Enhanced the aircraft's own set. Neither lights an omni, whose N.L leaves
+    // the Warhawk's hull unlit. Every shot keeps one authored pair whole.
+    [Suite("muzzle-light-third-person-point-term",
+        "a third-person shot light joins the world point set in Original and the aircraft set in Enhanced with no omni, always at one of the three authored near/far pairs, the Enhanced aircraft shader reads the aircraft set as emission, and an unbound pool keeps the omni")]
+    internal static void MuzzleLightThirdPersonPointTerm(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var gun = WeaponDefs.Load(ctx.Zrdr, null).All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var pools = new List<ProjectilePool>();
+        var set = new WorldLights();
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+                return;
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+            ProjectilePool Pool(bool bind)
+            {
+                var p = new ProjectilePool(textures, null, null) { FirstPersonView = () => false };
+                pools.Add(p);
+                ctx.Host.AddChild(p);
+                if (bind)
+                    p.BindPointLights(set);
+                return p;
+            }
+
+            var authored = new[] { (1.0f, 2.0f), (1.25f, 3.25f), (2.0f, 3.75f) };
+            foreach (bool enhanced in new[] { false, true })
+            {
+                GraphicsMode.Set(enhanced);
+                string mode = enhanced ? "Enhanced" : "Original";
+                var bound = Pool(bind: true);
+                var seen = new HashSet<(float, float)>();
+                bool allAuthored = true;
+                for (int shot = 0; shot < 60; shot++)
+                {
+                    bound.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+                    var held = (enhanced ? bound.PendingAircraftFlashes() : bound.PendingPointFlashes()).ToList();
+                    foreach (var f in held)
+                    {
+                        seen.Add((f.Near, f.Far));
+                        allAuthored &= authored.Contains((f.Near, f.Far));
+                    }
+                    if (shot == 0)
+                    {
+                        ctx.Same(1, held.Count, $"{mode}: the shot holds one light for its set");
+                        ctx.Same(0, (enhanced ? bound.PendingPointFlashes() : bound.PendingAircraftFlashes()).Count(),
+                            $"{mode}: and nothing for the other set");
+                        ctx.Same(0, bound.ActiveMuzzleLights().Count(), $"{mode}: and lights no omni");
+                        bound._Process(1f / 60f);
+                        if (enhanced)
+                        {
+                            var committed = bound.AircraftLights?.CommittedPositions ?? new List<Vector3>();
+                            ctx.Check(committed.Count == 1 && held.Count == 1 && committed[0] == held[0].Position,
+                                $"{mode}: the pool commits it to the aircraft set at the queued position ({committed.Count})");
+                        }
+                        else
+                        {
+                            set.Begin();
+                            set.Commit(new[] { muzzle.Origin });
+                            ctx.Check(set.CommittedPositions.Count == 1 && held.Count == 1 && set.CommittedPositions[0] == held[0].Position,
+                                $"{mode}: the world set carries it at the queued position ({set.CommittedPositions.Count})");
+                        }
+                    }
+                    bound.Clear();
+                }
+                ctx.Check(allAuthored && seen.Count == 3,
+                    $"{mode}: 60 shots keep the authored pairs whole and reach all three: {string.Join(", ", seen)}");
+            }
+
+            GraphicsMode.Set(true);
+            string enhancedCode = SceneBuilder.AircraftShaderCode();
+            ctx.Check(enhancedCode.Contains("csky_aircraft_point_light(", System.StringComparison.Ordinal)
+                      && enhancedCode.Contains("EMISSION = csky_srgb_to_linear(v_aircraft_point)", System.StringComparison.Ordinal)
+                      && !enhancedCode.Contains("csky_point_light(", System.StringComparison.Ordinal),
+                $"the Enhanced aircraft shader reads the aircraft set as emission and not the world set");
+            GraphicsMode.Set(false);
+            string originalCode = SceneBuilder.AircraftShaderCode();
+            ctx.Check(originalCode.Contains("csky_point_light(", System.StringComparison.Ordinal)
+                      && !originalCode.Contains("csky_aircraft_point_light(", System.StringComparison.Ordinal),
+                $"the Original aircraft shader keeps the world set's point term alone");
+
+            var unbound = Pool(bind: false);
+            unbound.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+            ctx.Same(1, unbound.ActiveMuzzleLights().Count(),
+                $"ABLE-TO-FAIL CONTROL: with no point set bound the flash falls back to one omni");
+        }
+        finally
+        {
+            foreach (var p in pools)
+                p.Free();
+            set.Dispose();
+            textures.Dispose();
+            GraphicsMode.Set(wasEnhanced);
+        }
+    }
+
     // Trail-world-anchor's own shape, for a death fire: PUFFER_STATE anchored on
     // TurretController.Site, the node a real destroy sequence targets. Site sits under a carrier
     // posed off-axis and translated between two ticks, the ZeppelinRuntime.Place shape (a plain

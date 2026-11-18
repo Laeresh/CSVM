@@ -32,7 +32,8 @@ public readonly record struct RemotePose(
     float Aileron,
     float Elevator,
     float Rudder,
-    bool Nitro);
+    bool Nitro,
+    bool Headlight = false);
 
 /// <summary>What one or more <see cref="RemotePoseBuffer"/>s took and answered. It holds samples
 /// accepted and dropped as stale, and the owner's reads by feed. It also holds each accepted
@@ -336,7 +337,7 @@ public sealed class RemotePoseBuffer
 
     private static RemotePose At(in AircraftStateMessage sample, RemotePoseFeed feed) =>
         new(feed, sample.Position, Unit(sample.Attitude), sample.Velocity,
-            sample.Throttle, sample.Aileron, sample.Elevator, sample.Rudder, sample.Nitro);
+            sample.Throttle, sample.Aileron, sample.Elevator, sample.Rudder, sample.Nitro, sample.Headlight);
 
     private static RemotePose Between(in AircraftStateMessage a, in AircraftStateMessage b, float t) =>
         new(RemotePoseFeed.Interpolating,
@@ -347,7 +348,8 @@ public sealed class RemotePoseBuffer
             Mathf.Lerp(a.Aileron, b.Aileron, t),
             Mathf.Lerp(a.Elevator, b.Elevator, t),
             Mathf.Lerp(a.Rudder, b.Rudder, t),
-            t >= 0.5f ? b.Nitro : a.Nitro);
+            t >= 0.5f ? b.Nitro : a.Nitro,
+            t >= 0.5f ? b.Headlight : a.Headlight);
 
     // One accepted sample's say over the playout clock. Its lead error is how far the playout
     // stood from the delay behind it when it landed. A first sample, or one past the snap

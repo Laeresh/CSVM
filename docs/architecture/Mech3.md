@@ -705,7 +705,7 @@ to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameS
 owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
 against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the same rank onto pooled
 `OmniLight3D` nodes ([Spec.md](Spec.md)), up to `OmniBudget` for the effects level while the texture keeps `MaxActive`. Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
-dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest. The pool reads the mode on every commit, and `FollowGraphicsMode` drops the live bursts on a switch to the faithful path.
+dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest. The pool reads the mode on every commit, and `FollowGraphicsMode` drops the live bursts on a switch to the faithful path. `ForAircraft` is a second set over its own globals (`csky_aircraft_light_data`, `csky_aircraft_light_count`) with no omni parent: the Enhanced aircraft arm reads it alone, for the muzzle flashes `ProjectilePool` submits and commits there.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

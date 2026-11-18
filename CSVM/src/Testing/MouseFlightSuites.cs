@@ -118,6 +118,9 @@ internal static class MouseFlightSuites
             var unscripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
             ctx.Check(unscripted.MouseCaptureAllowed == realDisplay,
                 $"ABLE-TO-FAIL CONTROL: the same resolution in a launch that is not scripted answers the display alone (allowed {unscripted.MouseCaptureAllowed}, real display {realDisplay})");
+            var lab = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--weapon-lab" }));
+            ctx.Check(!lab.MouseCaptureAllowed,
+                $"and the weapon lab takes no mouse in any launch, since a click parks its held plane (allowed {lab.MouseCaptureAllowed})");
         }
         finally
         {

@@ -195,6 +195,7 @@ rows).
 - `src/Flight/Airframe/ControlSurfaceAnimator.cs`, poses ailerons/elevators/rudders from those slot angles; `--fly` only.
 - `src/Flight/Airframe/WingLightBlinker.cs`, blinks the wingtip flares for about a frame every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/Airframe/NitroSystem.cs`, the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
+- `src/Flight/Airframe/Headlight.cs`, the Enhanced-only headlight: the pilot's switch, its tap/hold split with the view cycle, and the lazily built `SpotLight3D` at the nose.
 - `src/Flight/Airframe/PlaneCollider.cs`, derives up to 8 plane-frame convex collision hulls from the built model's triangles, with no per-plane data.
 - `src/Flight/Airframe/ConvexHull.cs`, an engine-free convex hull over a point cloud: vertices, faces, thickness padding and the point-distance query.
 - `src/Flight/Airframe/CollisionLayers.cs`, the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.

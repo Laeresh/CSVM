@@ -26,4 +26,20 @@ vec3 csky_point_light(vec3 world_pos) {
     return sum;
 }
 
+// The same term over the Enhanced aircraft's own set (WorldLights.ForAircraft): the per-shot muzzle
+// lights only. The world's lamps reach an Enhanced plane as omnis, so its arm reads this set alone.
+global uniform sampler2D csky_aircraft_light_data;
+global uniform int csky_aircraft_light_count;
+
+vec3 csky_aircraft_point_light(vec3 world_pos) {
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < csky_aircraft_light_count; i++) {
+        vec4 pr = texelFetch(csky_aircraft_light_data, ivec2(0, i), 0);
+        vec4 cr = texelFetch(csky_aircraft_light_data, ivec2(1, i), 0);
+        float dist = length(pr.xyz - world_pos);
+        sum += cr.rgb * clamp((pr.w - dist) / max(pr.w - cr.a, 0.0001), 0.0, 1.0);
+    }
+    return sum;
+}
+
 #endif

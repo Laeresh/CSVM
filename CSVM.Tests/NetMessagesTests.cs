@@ -58,6 +58,29 @@ public class NetMessagesTests
         Assert.Equal(sent.Elevator, got.Elevator, QuantisedPlaces);
         Assert.Equal(sent.Rudder, got.Rudder, QuantisedPlaces);
         Assert.True(got.Nitro);
+        Assert.False(got.Headlight);
+    }
+
+    // The headlight shares the nitro's flags byte, so every pairing of the two must come back as
+    // sent, and the message keeps its width.
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void AircraftStateRoundTripsTheHeadlightBesideTheNitroWithinTheBudget(bool nitro, bool headlight)
+    {
+        var sent = new AircraftStateMessage(
+            2, 7, Vector3.One, Quaternion.Identity, Vector3.Zero, 0.5f, 0f, 0f, 0f, nitro, headlight);
+
+        Span<byte> buffer = stackalloc byte[64];
+        int written = sent.Write(buffer);
+
+        Assert.Equal(AircraftStateMessage.Size, written);
+        Assert.True(AircraftStateMessage.Size <= NetMessage.AircraftStateBudget);
+        Assert.True(AircraftStateMessage.TryRead(buffer[..written], out var got));
+        Assert.Equal(nitro, got.Nitro);
+        Assert.Equal(headlight, got.Headlight);
     }
 
     // A stick held hard over must not come back on the other side of neutral. An unclamped
