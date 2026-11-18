@@ -88,6 +88,11 @@ public sealed class WorldSession
         IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
     {
         var s = new WorldSession();
+        // The session drops what the load leaves untaken (GameSession, as the load finishes).
+        if (textures.DecodeHdAhead(gamez.TextureNames) is > 0 and var hdAhead)
+        {
+            Log.Info("world", $"HD decode ahead: {hdAhead} started");
+        }
 
         // Loaded before the build: scroll rates feed the material cache key
         // (MissionSetup.ScrollByModel); the entity half applies later, in the animation bootstrap.
