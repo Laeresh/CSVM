@@ -1,4 +1,4 @@
-"""C5 building hull census for docs/PLAN-city-buildings.md A1.
+"""C5 building hull census for PLAN-city-buildings item A1.
 
 Per C5 building decoration model: bounding box, triangle count, textures, mean texture colour
 and brightness, the templates that place it (directly or through the substitute roll), its fade

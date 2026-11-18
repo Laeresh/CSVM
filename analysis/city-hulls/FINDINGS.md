@@ -3,7 +3,7 @@
 **Question.** Which building hulls does C5's Manhattan place, at what size, with which textures and
 colours, and how often; whether a `b`, `c` or `d` substitute differs from its `a` model in shape or
 only in texture; how a `det` half combines with its building; and what the clutter collision note's
-"about 2,300 distinct" figure counts. Asked by `docs/PLAN-city-buildings.md` item A1.
+"about 2,300 distinct" figure counts. Asked by PLAN-city-buildings item A1.
 
 **Instrument.** `census.py` reuses `../bl-305-clutter-uv/eligibility.py`'s loader and template
 resolver over `extracted/C5/gamez` and `extracted/C5/zrdr/templates.zrd.json`. A decoration's
