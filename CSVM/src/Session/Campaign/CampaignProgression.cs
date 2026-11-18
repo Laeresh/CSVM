@@ -248,6 +248,19 @@ public static class CampaignProgression
         return recorded;
     }
 
+    /// <summary>Saves the aircraft <paramref name="recorded"/> granted into the build store
+    /// <paramref name="planes"/>, each waiting for EXPORT like a campaign-built one. The cabin looks
+    /// a plane's fit up there by name at launch, so a grant missing from it flies as stock.</summary>
+    public static void SaveAwards(MissionRecorded recorded, CustomPlaneStore planes)
+    {
+        ArgumentNullException.ThrowIfNull(planes);
+        foreach (var build in recorded.AwardedBuilds)
+        {
+            build.AwaitingExport = true;
+            Utils.Log.Info("core", $"campaign: award '{build.Name}' saved to {planes.Save(build)}");
+        }
+    }
+
     /// <summary>The story position Next Mission resolves to: the profile's own progress, clamped to
     /// the last mission. The original's cabin asks with a <c>-2</c> sentinel and gets
     /// <c>progress + 1</c> as a 1-based ordinal, which is this same mission.</summary>

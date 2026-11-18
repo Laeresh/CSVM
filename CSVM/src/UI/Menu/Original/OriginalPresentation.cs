@@ -526,7 +526,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         else if (destination is DebriefReturn debrief)
         {
             _shell.Campaign.OpenCampaign();
-            if (!_shell.Campaign.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon))
+            if (!_shell.Campaign.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon, debrief.SkipOffer))
             {
                 Log.Warn("ui", $"original presentation: debrief return could not seat '{debrief.Profile}'; the profile screen shows instead");
             }

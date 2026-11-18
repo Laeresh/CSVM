@@ -1928,10 +1928,7 @@ public partial class Launcher : Node3D
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         Log.Info("core", $"campaign: {result.Outcome}, arrived at the debrief with '{profile}'");
-        // A co-op guest has no profile, and its debrief is the one its host shows.
-        ReturnToMenu(profile.Length == 0
-            ? new CoopGuestReturn(result.Attempt)
-            : new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
+        ReturnToMenu(MenuReturnDestination.ForDebrief(profile, result));
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a

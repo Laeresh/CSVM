@@ -516,7 +516,7 @@ when the menu comes back, said semantically; the hierarchy is closed:
 | `TopLevel` | the cold start, a Free Flight or Dogfight sortie left early, a failed build, every switch | the top level with its list cursors kept and every pick dropped |
 | `InstantAction` | an Instant Action sortie or an authored course left early, and a course the build refused | the Instant Action screen, over the setup that flew |
 | `CabinReturn(profile)` | leaving a campaign screen for the cabin, and a campaign mission left early | the cabin over the named profile, re-read from the presentation's store |
-| `DebriefReturn(profile, missionSeq)` | a campaign mission's end, won or lost | the book on the flown mission |
+| `DebriefReturn(profile, missionSeq, won, skipOffer)` | a campaign mission's end, won or lost (`MenuReturnDestination.ForDebrief`) | the book on the flown mission, under the skip offer's Yes/No when the result raised it |
 
 Which of them a flight comes back to is the launch's own business: `MenuReturnDestination.ForLaunch`
 reads it off the exit that started the flight, and `Launcher` holds that answer for every way a

@@ -518,17 +518,24 @@ merge, not its author, and the two run in the same mission-end pass.
   campaign's current position (they differ after a win); Return to Cabin pops back to the cabin
   `SelectProfile` already pushed. Both tabs are live, and Replay Mission is offered only where
   `uiData` 2411 offers it: a results page whose mission's record holds a time in either half.
-- **The skip offer's counter and its answer are implemented; the asking is not (B14).**
+- **The skip offer is implemented: the counter, the asking and the answer.**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive
   failures and stops at the mission's first completion. Its fourth increment raises
-  `MissionRecorded.SkipOffered`, which the flown result carries to the screen; answering Yes is
+  `MissionRecorded.SkipOffered`. `MenuReturnDestination.ForDebrief` carries that result, with the
+  lost world's capture, on `DebriefReturn.SkipOffer`, and the Original shell asks over the lost book
+  in a Yes/No query box (`OriginalCampaignScreen.ShowScrapbook`). Answering Yes is
   `CampaignProgression.AcceptSkip`, which re-records the same attempt with bit 0 set, the original's
   synthetic win, and commits the failed attempt's world capture the way the win flag's save gate
-  does. CSVM keeps the counter in the profile because the original's own array sits in the
-  undecoded `0x0071b480` overlap below. The prompt itself is `SkipOfferPrompt`, a marked
-  placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet: the
-  original asks it in a message box, and this shell has no such screen.
+  does; `CampaignFeature.AcceptSkip` saves the profile and the debrief is re-entered as won, the
+  original's own re-entry. The original asks before its screen shows; CSVM's world is freed by
+  then, so the box stands over the book. A co-op guest has no profile and never asks. The
+  mission end has already dropped the loss's staged danger-zone photographs when Yes is answered,
+  so a skip keeps none; whether the original's `FUN_004072a0` sweep runs before or after its
+  re-entered win is not decoded. CSVM keeps
+  the counter in the profile because the original's own array sits in the undecoded `0x0071b480`
+  overlap below. The prompt itself is `SkipOfferPrompt`, a marked placeholder: string 191's
+  wording is not in the extraction.
 - **Both mask sources are implemented.** `ObjectiveGraph.CompletedMask` is the objective-number
   half; `CampaignDirector.DangerZoneMask` is the id 18 to 30 half, a bit per completed danger zone
   by the number the mission's `dzones.zrd` gives that zone, and the two are merged at mission end.

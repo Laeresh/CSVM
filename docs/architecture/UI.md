@@ -1631,7 +1631,7 @@ arrives as one jump. The four device reads are injected delegates, so the seat i
 Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `InstantActionWrapupReturn(snapshot)`, `CabinReturn(profile)`, `DebriefReturn(profile, missionSeq)` and `LobbyReturn(scores, race)`, a completed Dogfight's or an ended stunt race's landing on the lobby's Game Scores. The host names the destination and the
+Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `InstantActionWrapupReturn(snapshot)`, `CabinReturn(profile)`, `DebriefReturn(profile, missionSeq, won, skipOffer)` and `LobbyReturn(scores, race)`, a completed Dogfight's or an ended stunt race's landing on the lobby's Game Scores. The host names the destination and the
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from (an Instant Action def or an authored course with no wire names the Instant Action screen; a lobby's course launch does not), which is
 where a flight left early lands and where a refused course returns; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
