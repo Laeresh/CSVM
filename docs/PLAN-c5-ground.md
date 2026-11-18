@@ -42,22 +42,25 @@ Scenery off draw the original ground.
 |---|---|---|
 | 1 | How much of the original ground to keep | **Keep the original's lit street band, regenerate the block interiors.** Original pixels never ship: the street band is copied from the player's own install at load time and composited with the generated floor. |
 | 2 | What fills the free area | **Painted floor plus 3D dressing**: courtyard walls, fences, sheds, parked period cars, trees. |
-| 3 | How bright the floor reads at night | **Dim, readable**: texture luma about 25 to 35 (TUNE at the controls), under the walls (40 to 70) and the streets (82 to 89). |
+| 3 | How bright the floor reads at night | **Dim, readable, generated at a mean texture luma of about 20 (18 to 22), with one comparison build at 30 for B15.** First set at texture 25 to 35 against the wall textures (40 to 70); A3 measured that the ground renders at 0.56 to 0.70 of its texture luma while the new walls render at a median of 10 to 13 at three of four views, so 25 to 35 would render brighter than the facades. The author chose "~20, plus a 30 variant". TUNE at the controls. |
 | 4 | Repetition | **2 to 4 floor variants per combination, picked per block** by a hash of the block's texture cell, the cells shifted half a tile so seams fall on street centrelines. The dressing rolls per stamp from its seed like the buildings. |
 | 5 | Colliders on the dressing | **Never solid, kept low**: a structure height cap of about 4 m (TUNE), trees under the nearby eaves. |
 | 6 | Texel size | **50 cm** (512² per 256 m tile). |
-| 7 | Diagonal districts (`cblock2/3` paint) | **Rotated variant cells if the 45° streets form a regular grid** (measured first, A2); otherwise one design per combination with only the dressing varied. |
+| 7 | Diagonal districts (`cblock2/3` paint) | **Variants per strip.** A2 found one 45° street per tile and no cross street, so no diamond lattice exists; each 181 m strip between consecutive street centrelines picks its own variant, cell index floor(u + v − 0.5) on `cblock2` and floor(u − v − 0.5) on `cblock3`. Along a strip the floor repeats every 362 m. The author chose "Variants per strip" over one design per combination. |
 | 8 | "No clutter" ground with no layer beneath (no buildings) | **Open ground per block**: parks, plazas, parking lots, vacant lots, by the variant hash, with low dressing. |
 | 9 | What switches it on | **`CityModels.On`**: the new ground draws exactly when the new buildings do. No new option. |
 | 10 | Budget | **Shared with the buildings**: buildings, ground and dressing together at most +2.0 ms GPU and +0.5 ms CPU over the original city on the city plan's nine C5 views, distant draws at or under the original city's. The Deck keeps its one-pane default only at 60 fps or more on every view. |
 | 11 | First prototype | **`cblock7`** with its own walk-ups, judged at the controls and on montages before the other combinations. |
 | 12 | Character | **Mostly paved, some green**: back courts, alleys and service yards (asphalt, gravel, flagstone, fences, sheds, parked cars, ash cans), about a quarter of the free area as small gardens with trees, open blocks as parks or parking lots. |
+| 13 | What counts as street | **The whole street, kerb to kerb, lit or unlit.** The author, on A3's montages: "The yellow marks of the street don't include the unlit streets between them. They should not get objects." The street mask is geometric (kerbs, the building-free corridors), never a luma threshold, which finds only the lamp pools. No floor change and no dressing on any street. |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
 is composited at every texture level from the original's authored `_1`/`_2` levels, so distant
 streets keep their lamp points; the floor and the dressing keep clear of the original hulls grown by
-their awnings and fire escapes, and of the lamp posts.
+their awnings and fire escapes, and of the lamp posts. Decision 4's variant cell is hashed on world
+XZ, floor(x / 256 + 0.5) and floor(z / 256 + 0.5), never on raw UV: 1,801 distinct world tiles hold
+UV (0, 0) and polygon edges cross the middle of blocks, so a UV hash would seam inside them (A2).
 
 ## ⚠ Read this before implementing anything
 
@@ -65,12 +68,16 @@ their awnings and fire escapes, and of the lamp posts.
 |---|---|---|
 | 1 | The painted roofs are the original buildings' roofs, exposed because the new models are carved up to 3 m inside the original hulls. | The paint never fitted the template layouts. Under all eight axis-aligned texture frames the texels inside the original footprints average luma 3 to 6; 72 % to 94 % of the bright painted structure lies outside every footprint (this session's survey, A1). The new models only make the old mismatch legible. |
 | 2 | One replacement texture per `cblock` texture is enough. | "No clutter" `cblock1/2/3` (and `cblock7`) paint is dressed by the `cblock4/5/6` building set beneath it (`docs/org/clutter.md:163-170`), while the clear paint carries its own set. The two sets share only 47 % to 76 % of the beneath set's footprint area, so one paint carries two layouts. |
+| 3 | `cblock4` shows on about 3 % of its area and is a combination of its own. | A1's exact planar arrangement: every `cblock4/5/6` polygon is covered by an overlay, 0.000 km² exposed. `CBLOCK-LOD.md` §2's 336,000 m² saw only overlap inside one model. |
+| 4 | Bare flagged ground is 7.6 % of C5's ground. | A per-polygon sum counts stacked overlays twice; the arrangement gives 12.96 of 180.13 km², 7.2 % (A1). |
+| 6 | A texel brighter than 55 after a 16 m box filter is street. | It finds the lamp pools only; the unlit asphalt between them was counted as block floor in A1's free-floor columns and in A3's floor class (the author, Decision 13). A1's street mask is redone from the kerbs. |
+| 5 | Rendered, a floor at texture luma 25 to 35 sits under the walls. | A3: the ground renders at 0.56 to 0.70 of its texture, the new walls at a median of 10 to 13 at three of four views; Decision 3 now generates at about 20. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Measured from shipped data, this session** | A1, A2 (the survey numbers) | Re-run the committed script, then build on it. |
+| **Measured from shipped data and captures** | A1, A2, A3 | Re-run the committed scripts, then build on them. |
 | **Direction sound, magnitude TUNE** | B12, B14, B15 (brightness, height cap, variant count, mix) | The *what* is the author's decision; the numbers are set at the controls. |
-| **Leads only** | B13 (the load-time composite and the variant pick), C22 (diagonal cells) | Budget for investigation; the mechanism is proposed, not traced. |
+| **Leads only** | B13 (the load-time composite and the variant pick), C22 (the strip cells) | Budget for investigation; the mechanism is proposed, not traced. |
 
 ## What the data actually ships
 
@@ -81,27 +88,47 @@ All from `extracted/C5` (`gamez`, `texture`, `zrdr/templates.zrd.json`), through
 at the same height and the same 256 m texture repeat (`analysis/item9-depth-bias/CBLOCK-LOD.md`
 §1c, §2). The `no_clutter` polygon flag picks which layer decorates and the flagged layer draws on
 top (`CSVM/src/Mech3/SceneBuilder.cs:486-492`, `docs/org/clutter.md:163-170`). Flagged overlay with
-no base beneath it, 7.6 % of C5's ground, carries no buildings.
+no base beneath it, 7.2 % of C5's ground, carries no buildings.
 
-**The combinations of visible paint and standing building set:**
+**The combinations of visible paint and standing building set** (`analysis/c5-ground/FINDINGS.md`;
+area from an exact planar arrangement of the world's `cblock` polygons, the other columns per
+256 m tile):
 
-| Visible paint | Building set | Built share of block area | Painted structure (luma ≥ 25) uncovered | Free floor luma mean, median | Free floor at luma ≤ 5 | Widest free spot |
-|---|---|---|---|---|---|---|
-| `cblock1` | `cblock1` (clear) | 0.27 | 0.84 | 8.6, 0 | 0.65 | 72 m |
-| `cblock1` | `cblock4` (flagged) | 0.26 | 0.80 | 8.2, 0 | 0.66 | 160 m |
-| `cblock2` | `cblock2` (clear) | 0.27 | 0.82 | 6.6, 0 | 0.72 | 81 m |
-| `cblock2` | `cblock5` (flagged) | 0.23 | 0.72 | 5.9, 0 | 0.74 | 96 m |
-| `cblock3` | `cblock3` (clear) | 0.29 | 0.80 | 5.1, 0 | 0.78 | 75 m |
-| `cblock3` | `cblock6` (flagged) | 0.26 | 0.79 | 4.9, 0 | 0.78 | 74 m |
-| `cblock7` | `cblock7` (clear) | 0.15 | 0.94 | 8.6, 0 | 0.65 | 149 m |
-| `cblock7` | `cblock4` (flagged) | 0.29 | 0.77 | 8.8, 0 | 0.65 | 158 m |
-| `cblock4` | `cblock4` (exposed base) | 0.30 | 0.71 | 28.5, 30 | 0.13 | 96 m |
-| `cblock1/2/3/7` | none (flagged, no base) | 0 | 1.00 | <TODO: per paint> | | |
+| Visible paint | Building set | Area (km²) | Built share of block | Painted structure (luma ≥ 25) uncovered | Free floor luma mean, median | Free floor at luma ≤ 5 | Widest free spot |
+|---|---|---|---|---|---|---|---|
+| `cblock7` | `cblock7` (clear) | 75.756 | 0.15 | 0.93 | 8.6, 0 | 0.65 | 149 m |
+| `cblock1` | `cblock1` (clear) | 51.474 | 0.27 | 0.84 | 8.6, 0 | 0.65 | 72 m |
+| `cblock1` | `cblock4` (flagged) | 9.850 | 0.26 | 0.80 | 8.2, 0 | 0.66 | 160 m |
+| `cblock2` | `cblock2` (clear) | 9.425 | 0.27 | 0.82 | 6.6, 0 | 0.72 | 81 m |
+| `cblock2` | `cblock5` (flagged) | 8.390 | 0.23 | 0.72 | 5.9, 0 | 0.74 | 96 m |
+| `cblock3` | `cblock6` (flagged) | 6.092 | 0.26 | 0.79 | 4.9, 0 | 0.78 | 74 m |
+| `cblock3` | `cblock3` (clear) | 4.914 | 0.29 | 0.80 | 5.1, 0 | 0.78 | 75 m |
+| `cblock7` | `cblock4` (flagged) | 1.062 | 0.29 | 0.76 | 8.7, 0 | 0.65 | 158 m |
+| `cblock2` | `cblock4` (flagged) | 0.131 | | | | | |
+| `cblock1` | `cblock2` (flagged, over clear `cblock2`) | 0.066 | | | | | |
+| `cblock3` or `cblock6` | both (neither flagged) | 0.008 | | | | | |
+| `cblock1` | none (flagged, no base) | 3.906 | 0 | 1.00 | 7.6, 0 | 0.67 | 214 m |
+| `cblock3` | none | 3.524 | 0 | 1.00 | 4.6, 0 | 0.79 | 211 m |
+| `cblock2` | none | 3.091 | 0 | 1.00 | 5.9, 0 | 0.74 | 211 m |
+| `cblock7` | none | 2.423 | 0 | 1.00 | 8.0, 0 | 0.67 | 216 m |
+| `cblock1` | none (flagged over flagged `cblock4`) | 0.016 | | | | | |
 
+The ground totals 180.13 km² under 206.57 km² of polygons. No `cblock4/5/6` base is exposed.
 "Street" is texels whose 16 m box-filtered luma exceeds 55; blocks are everything else. Streets
-average luma 82 to 89; the original building textures 40 to 70
+average texture luma 82 to 89; the original building textures 40 to 70
 (`analysis/city-hulls/FINDINGS.md`, Hulls table). `cblock7` is `cblock1`'s art at 128²
-(r = 0.983, `CBLOCK-LOD.md` §1a) under small walk-ups, the largest district at 75.8 km².
+(r = 0.983, `CBLOCK-LOD.md` §1a) under small walk-ups, 42 % of the city's ground. Of it, 0.427 km²
+is flagged `cblock7` over clear `cblock7` laid in a 45 m or an off-axis 128 m UV frame, whose
+buildings stamp in that frame (inferred, not watched).
+
+**The diagonal paints** (`analysis/c5-ground/diagonal.py`): `cblock2` and `cblock3` carry one lit
+45-degree street per tile, 22.6 m between kerbs, centrelines on u + v = 0.5 + k and u − v = 0.5 + k,
+181.0 m apart. No street crosses them and no footprint of either set touches a centreline.
+
+**Rendered** (`analysis/c5-ground/DARKNESS.md`): the ground renders at 0.56 of its texture luma at
+16, 0.66 at 32 and 0.70 from 64 up, at every view to 1000 m; the zone's black fog (1500 to 2250 m)
+darkens it beyond. Rendered medians at the C5 cost views: walls 10 to 13 (27 over `cblock7`), roofs
+9 to 19, streets 53 to 72, today's floor 0 to 2.7.
 
 **Footprints map to the paint through the template quad.** A decoration's texture UV is its origin
 projected through the template ground quad (`CSVM/src/Mech3/Clutter.cs:1251-1264`), the quad frame
@@ -113,8 +140,8 @@ its buildings everywhere.
 against a box filter's 15.6: hand-authored, darker, the lamp points kept (`CBLOCK-LOD.md` §1b).
 `TextureArchive` installs them (`--mips=authored`).
 
-Caveat: this session's world walk summed `cblock1` clear ground to 51.5 km² where
-`CBLOCK-LOD.md` §2 has 32.4 km²; only shares are quoted until A1 settles which is right.
+`CBLOCK-LOD.md` §2's 32.4 km² of clear `cblock1` counts models of two or more polygons once each;
+the world holds 51.47 km² (A1).
 
 ## Ground rules
 
@@ -142,9 +169,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, survey
 
-1. ☐ Commit the #357 ground survey as `analysis/c5-ground/`
-2. ☐ Measure the diagonal districts' street grid and the bare flagged ground
-3. ☐ Measure the ground's darkness in a rendered C5 frame
+1. ◐ Commit the #357 ground survey as `analysis/c5-ground/` (the street mask is being redone from the kerbs, Decision 13)
+2. ☑ Measure the diagonal districts' street grid and the bare flagged ground
+3. ☑ Measure the ground's darkness in a rendered C5 frame
 
 ### Wave B, the `cblock7` prototype
 
@@ -174,7 +201,23 @@ C25 come last.
 
 # Wave A, survey
 
-## A1 ☐ Commit the #357 ground survey as `analysis/c5-ground/`
+## A1 ☑ Commit the #357 ground survey as `analysis/c5-ground/`
+
+**Landed.** `analysis/c5-ground/survey.py` and `FINDINGS.md`. The survey maps each building
+decoration into texture UV through its template quad (`Clutter.cs:1251-1264`), wrapping a
+footprint across the tile edge, and computes an exact planar arrangement of every coplanar `cblock`
+triangle reached from `world1`. The table in "What the data actually ships" is its output. The
+paint never fitted the buildings: under all eight frames the texels inside a template's own
+footprints average luma 2.9 to 6.4, and 67 % to 93 % of the painted structure lies outside them.
+`CBLOCK-LOD.md` §2's 32.4 km² comes from a probe that skips single-polygon models and counts each
+model once; the world holds 51.47 km² of clear `cblock1`. No `cblock4` base is exposed, and bare
+flagged ground is 7.2 %.
+
+**Verified.** The script reproduces every number of the plan's first table, the eight-frame test
+and the UV-frame census, and §2's 32,435,893 and 11,281,871 m² and its 196-polygon bimodal coverage
+under that probe's restrictions (confidence: traced, from shipped data).
+
+**Original approach (kept for reference).**
 
 **Goal.** The measurements in "What the data actually ships" are reproducible from a committed
 script and a `FINDINGS.md`, with the `cblock1` area discrepancy settled.
@@ -198,7 +241,22 @@ with `CBLOCK-LOD.md` §2 or the difference is explained.
 **⚠ Traps.** Census by template root, never by `cbNNa` name range (`docs/formats/clutter.md:152-155`).
 The overlays and any contact sheet hold original pixels.
 
-## A2 ☐ Measure the diagonal districts' street grid and the bare flagged ground
+## A2 ☑ Measure the diagonal districts' street grid and the bare flagged ground
+
+**Landed.** `analysis/c5-ground/diagonal.py`, and the bare-ground section of `FINDINGS.md`.
+`cblock2`'s kerbs lie on texel diagonals 111 and 143 (u + v family), `cblock3`'s on 112 and 144
+(u − v family), each lit on 81 % to 100 % of every quarter of the tile, which pins them to 45° within
+0.22°. One street per tile, 22.6 m wide, centrelines 181.0 m apart; the best-lit crossing diagonal
+is lit on only 0.51 and 0.44 of its length, and every crossing diagonal runs through a building of
+the flagged set. So no diamond lattice exists and the stripe lattice does (Decision 7). The bare
+flagged ground is 12.96 km² in 55 to 68 polygons per paint, its free floor as dark as its paint
+(mean 4.6 to 7.9, median 0); its largest clusters are listed in `FINDINGS.md`.
+
+**Verified.** The stripe plots (`diagonal.py --plot`, outside the repo) show the centrelines clear
+of both sets' footprints on 3 × 3 tiles (confidence: traced for the measurements; the stripe lattice
+is direction-sound until B13 draws it).
+
+**Original approach (kept for reference).**
 
 **Goal.** Decision 7 can be applied: whether `cblock2` and `cblock3`'s 45° streets form a regular
 grid in texture space, at what spacing and offset, and the free-floor numbers for the flagged ground
@@ -218,7 +276,24 @@ spacing and phase. For the bare ground, list its polygons per paint and their ar
 **⚠ Traps.** A diagonal block straddles the 256 m tile edge, so any per-tile statistic must wrap the
 tile (the survey's distance transform tiles 3 × 3).
 
-## A3 ☐ Measure the ground's darkness in a rendered C5 frame
+## A3 ☑ Measure the ground's darkness in a rendered C5 frame
+
+**Landed.** `analysis/c5-ground/darkness.ps1`, `darkness_measure.py` and `DARKNESS.md`. 14
+`--freecam --det --fov=60` captures per view at `measure.ps1`'s `C5-cb7`, `C5-cb1`, `C5-alt` and
+`C5-street`, classified with existing flags only: ground by flattening every `cblock` texture to two
+greys (`--tex-override`), street and floor by reading each ground pixel back through its own
+transfer curve, buildings against a `--no-clutter` twin, roofs by their gain under a zenith sun
+(`--debug-lighting`). The ground renders at 0.56 of its texture luma at 16 and 0.70 from 64 up, the
+same at every view to 1000 m, because it takes no Godot light. The new walls render at a median of
+10 to 13 at three views and 27 over `cblock7`, roofs at 9 to 19, streets at 53 to 72. A floor mean
+of texture 20 renders at about 12 (Decision 3).
+
+**Verified.** A repeated capture is byte-identical (METHOD-2); the read-back floor at `C5-cb7` near,
+8.7, matches the survey's 8.6; Faithful renders the ground at exactly its texel byte (SHOT-46).
+Confidence: measured for the transfer, TUNE for the target. Not covered: no view stands under the
+western district's fog volumes.
+
+**Original approach (kept for reference).**
 
 **Goal.** Decision 3's texture target (luma 25 to 35) has a rendered counterpart: the block floor,
 the walls and the streets measured on today's Enhanced city at fixed C5 views.
@@ -255,15 +330,16 @@ data.>
 
 **Verify.** <TODO: the exported footprints rasterised over the original texture match A1's overlay.>
 
-**⚠ Traps.** A substitute (`b`, `c`, `d`) can differ in shape from its `a` model in 29 of 39 pairs
+**⚠ Traps.** The street mask is A1's geometric one (Decision 13), never a luma threshold: a luma
+rule finds the lamp pools and misses the unlit asphalt between them. A substitute (`b`, `c`, `d`) can differ in shape from its `a` model in 29 of 39 pairs
 (`analysis/city-hulls/FINDINGS.md`); the footprint must be the union over everything a lot can roll.
 The `cblock2/3/5/6` buildings stand turned 45° in their own frames.
 
 ## B12 ☐ Generate the block floor variants for `cblock7`
 
 **Goal.** 2 to 4 block floor variants at 512² for `cblock7` with its walk-ups, mostly paved with
-some green (Decision 12), dim and readable (Decision 3), plus the mask that says where the
-original's street band shows through.
+some green (Decision 12), at a mean texture luma of about 20 with one comparison set at 30
+(Decision 3), plus the mask that says where the original's street band shows through.
 
 **Evidence (confidence: direction-sound, magnitudes TUNE).** `cblock7` is 15 % built with 94 % of
 its painted structure exposed and its widest free spot 149 m.
@@ -291,7 +367,8 @@ different materials. The authored levels are installed by `TextureArchive`.
 
 **Approach.** Composite at load per texture level, the street band from the original's own level
 (`cblock7`, `cblock7_1`) and the floor from the generated image's mip, into a texture array of
-variants; the ground shader picks the layer by a hash of the half-tile-shifted texture cell.
+variants; the ground shader picks the layer by a hash of the half-tile cell on world XZ,
+floor(x / 256 + 0.5) and floor(z / 256 + 0.5), never on raw UV (A2).
 <TODO: where the composite runs, how the shader variant joins the material cache key, and what it
 costs at load.>
 
@@ -344,10 +421,12 @@ with the question dialog after the flight, and record the answers in the Decisio
 
 ## C21 ☐ The square districts' other combinations
 
-**Goal.** `cblock1` (clear, and flagged with `cblock4`'s set), `cblock7` flagged with `cblock4`'s
-set, and the exposed `cblock4` draw the generated ground.
+**Goal.** `cblock1` (clear, and flagged with `cblock4`'s set) and `cblock7` flagged with
+`cblock4`'s set draw the generated ground. No `cblock4` base is exposed (A1), so it needs no floor.
 
-**Evidence (confidence: direction-sound).** The combinations table.
+**Evidence (confidence: direction-sound).** The combinations table. The 0.427 km² of clear
+`cblock7` in a 45 m or off-axis frame stamps its buildings in that frame (inferred); check what the
+generated floor does there before calling the district done.
 
 **Approach.** Extend B11 to B14 per combination. <TODO>
 
@@ -359,10 +438,13 @@ set, and the exposed `cblock4` draw the generated ground.
 
 ## C22 ☐ The diagonal districts
 
-**Goal.** `cblock2` and `cblock3`, each with both building sets, draw the generated ground, varied
-as A2 allows (Decision 7).
+**Goal.** `cblock2` and `cblock3`, each with both building sets, draw the generated ground, a
+variant per 181 m strip (Decision 7). The small combinations go here too: `cblock2` paint with
+`cblock4`'s set (0.131 km²) and flagged `cblock1` over clear `cblock2` (0.066 km²).
 
-**Evidence (confidence: lead-only).** Depends on A2.
+**Evidence (confidence: direction-sound).** A2: one street family per paint, centrelines
+u ± v = 0.5 + k, the strip index floor(u ± v − 0.5) repeats with the tile. 0.008 km² of
+`cblock3`/`cblock6` coplanar with neither flagged has no rule; leave it to whichever layer wins today.
 
 **Approach.** <TODO>
 
@@ -377,7 +459,8 @@ as A2 allows (Decision 7).
 **Goal.** Flagged ground with no base beneath shows parks, plazas, parking lots and vacant lots
 (Decision 8), no building-like shape.
 
-**Evidence (confidence: direction-sound).** 7.6 % of C5's ground (`docs/org/clutter.md:169-170`).
+**Evidence (confidence: direction-sound).** 12.96 km², 7.2 % of C5's ground, in 55 to 68 polygons
+per paint; its clusters are in `analysis/c5-ground/FINDINGS.md` (A2).
 
 **Approach.** The generator with an empty footprint set. <TODO>
 
