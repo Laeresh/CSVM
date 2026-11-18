@@ -53,15 +53,15 @@ public sealed class CityDressing
     // no far mesh, since at the default View Distance they fade inside the Near band, a few pixels tall.
     private static readonly Kind[] KindTable =
     {
-        new("gd_wall", 200f, 300f, 4f, 0.3f, 8f),
-        new("gd_fence", 200f, 300f, 4f, 0.15f, 8f),
+        new("gd_wall", 200f, 300f, 4f, 0.3f, 8f) { BoardTone = new Vector4(0.3f, 0.3f, 0.3f, 0.45f) },
+        new("gd_fence", 200f, 300f, 4f, 0.15f, 8f) { BoardTone = new Vector4(0.32f, 0.32f, 0.32f, 0.4f) },
         new("gd_hedge", 200f, 300f, 1.5f, 0.4f, 3f),
         new("gd_shed", 200f, 300f, 1.7f, 1.4f),
         new("gd_sedan", 200f, 300f, 2.2f, 0.9f),
         new("gd_truck", 200f, 300f, 2.75f, 1.0f),
         new("gd_ashcans", 100f, 150f, 0.65f, 0.65f) { Far = false },
         new("gd_bench", 100f, 150f, 0.95f, 0.4f) { Far = false },
-        new(Tree, 200f, 300f, 0.6f, 0.6f),
+        new(Tree, 200f, 300f, 0.6f, 0.6f) { Gain = 0.35f },
     };
 
     private readonly GameZ _gamez;
@@ -110,12 +110,14 @@ public sealed class CityDressing
                 if (VegetationModels.ForMean(chapter, Tree, null) is { } model)
                 {
                     var far = VegetationModels.ForMean(chapter, Tree + "_far", null) is { } stand
-                        ? (stand.Mesh, (Material)VegetationModels.Material(stand, lit: true, fogged: true, cardWidth: 9f, far: true)) : ((Mesh, Material)?)null;
-                    looks[Tree] = new Look(kind, new Mesh[] { model.Mesh }, VegetationModels.Material(model, lit: true, fogged: true, cardWidth: 9f), far);
+                        ? (stand.Mesh, (Material)VegetationModels.Material(stand, lit: true, fogged: true, cardWidth: 9f, far: true, gain: true)) : ((Mesh, Material)?)null;
+                    looks[Tree] = new Look(kind, new Mesh[] { model.Mesh }, VegetationModels.Material(model, lit: true, fogged: true, cardWidth: 9f, gain: true), far);
                 }
             }
             else if (CityModels.For(chapter, kind.Name, textures) is { Near.Count: > 0 } hull)
             {
+                if (kind.BoardTone != Vector4.One)
+                    CityModels.Tone(hull, kind.BoardTone);
                 looks[kind.Name] = new Look(kind, hull.Near.Cast<Mesh>().ToArray(), hull.NearMaterial, kind.Far ? (hull.Box, hull.BoxMaterial) : null);
             }
         }
@@ -140,7 +142,10 @@ public sealed class CityDressing
                 material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);
                 // The clutter scale alone, as the gd_ kinds and the blocks fade: no 3D Scenery word pushes the tree out.
                 if (look.Kind.Name == Tree)
+                {
                     material.SetShaderParameter(VegetationModels.ReachParam, 1f);
+                    material.SetShaderParameter(VegetationModels.GainParam, look.Kind.Gain);
+                }
             }
         }
         Range();
@@ -626,6 +631,14 @@ public sealed class CityDressing
 
         /// <summary>Gets a value indicating whether the kind draws its far mesh past the band.</summary>
         public bool Far { get; init; } = true;
+
+        /// <summary>Gets the tone of a gd_ kind's boards (<see cref="CityModels.BoardToneParam"/>), all ones for the atlas's own.
+        /// TUNE. Walls and fences take one toward the floor, since the board class skips the hull's grade.</summary>
+        public Vector4 BoardTone { get; init; } = Vector4.One;
+
+        /// <summary>Gets the tree's albedo gain (<see cref="VegetationModels.GainParam"/>). TUNE. The unlit tree has no night
+        /// lighting of its own, so this puts it at the walk-ups' level.</summary>
+        public float Gain { get; init; } = 1f;
     }
 
     /// <summary>One cell of a variant layout: its surface kind, its region and its rect in the layout's frame.</summary>
