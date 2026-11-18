@@ -421,6 +421,10 @@ public sealed class SceneBuilder
     /// building. ⚠ A builder with neither this nor <see cref="HdAirframe"/> set draws no replacement.</summary>
     internal string? HdChapter;
 
+    /// <summary>The city's block floor over this world's painted ground (<see cref="CityGround"/>), null for none.
+    /// Set before building: a paint's surfaces then carry UV2 and take the floor arm.</summary>
+    internal CityGround? Ground;
+
     /// <summary>The airframe, as its model node (<c>player_bhawk</c>), under which every node of
     /// the next build looks up its replacement. <see cref="PlaneBuilder"/> sets it per build.</summary>
     internal string? HdAirframe;
@@ -559,11 +563,11 @@ void fragment() {
     private readonly Func<string, ImageTexture?, ImageTexture?>? _textureSubstitute;
     private readonly IReadOnlyDictionary<int, Vector2>? _scrollOverrides;
     // ⚠ Never drop a component of this key. Each one selects a different depth bias, sampler wrap
-    // mode or shader variant, and one source material legitimately skins surfaces that disagree
-    // about every one of them: scroll rate, ClampUv, NoClutter, the model's own Lit/Fogged render
-    // flags, and Pass. Dropping one hands a cached material back at the wrong setting.
+    // mode or shader variant. One source material legitimately skins surfaces that disagree on each:
+    // scroll rate, ClampUv, NoClutter, Lit/Fogged, Pass, and Floor (a paint under CityGround).
+    // Dropping one hands a cached material back at the wrong setting.
     // Non-scrolling surfaces all key on (0,0), so the common path's cache behaviour is unchanged.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint, bool Floor), Material> _materialCache = new();
     // Keyed by (model index, force-double-sided, force-lit, clutter-fade): every override is baked
     // into the built surfaces (sidedness into the geometry groups, `lit` and the fade into which
     // material/shader a surface gets), so a forced build must not be handed back for the same
@@ -579,7 +583,7 @@ void fragment() {
     private readonly Dictionary<(Material? Source, int Rank, bool DoubleSided, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, bool ClutterFade), Material> _packMaterialCache = new();
     // The ground-layer twin of a blended _materialCache entry, under the same key. It is a twin, not
     // a key component, so no opaque or scissored material is ever split in two.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint), Material> _groundLayerCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint, bool Floor), Material> _groundLayerCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     // A built mesh's painted shadow decal surfaces, split off it (ShadowDecalTextures).
     private readonly Dictionary<ArrayMesh, ArrayMesh> _decalMeshes = new();
@@ -1238,7 +1242,7 @@ void light() {{
     // authored value once rather than squaring it.
     // ⚠ flagColors is per polygon, never an instance tint: the no_clutter flag varies WITHIN a mesh.
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
-        List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
+        List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false, Vector2? uv2 = null)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -1249,20 +1253,20 @@ void light() {{
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated, flagColors);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated, flagColors, uv2);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated, flagColors);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated, flagColors, uv2);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated, flagColors);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated, flagColors, uv2);
         }
     }
 
     private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
-        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
+        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false, Vector2? uv2 = null)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -1286,6 +1290,8 @@ void light() {{
                     : Colors.White);
             if (uvs != null && corner < uvs.Count)
                 st.SetUV(uvs[corner]);
+            if (uv2 is { } second)
+                st.SetUV2(second);
             st.AddVertex(Pos(corner));
         }
     }
@@ -2145,9 +2151,12 @@ void light() {{
                 continue;
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
+            // A paint's every polygon carries UV2, zero where it keeps the paint, so the surface has one format.
+            bool floor = Ground != null && pass == 0 && !clutterFade && !glowSprite && cylAxis == CylAxis.None && !billboardMesh
+                && materialIndex >= 0 && materialIndex < _gamez.Materials.Count && Ground.Paints(_gamez.Materials[materialIndex].TextureName);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
-                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag);
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag, floor ? Ground!.Uv2Of(poly) : null);
             // Wrapping is what produces the hairline seams on a surface mapped once (see ClampFor).
             var (clampUv, edgeClamp) = ClampFor(UvAxesWithinUnitSquare(polys, pass), scroll);
 
@@ -2157,7 +2166,7 @@ void light() {{
             var surfaceMaterial = glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
                 : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade,
-                    groundLayer: _fullbright && !clutterFade && !forceLit && !doubleSided && !billboardMesh && LiesFlat(mesh, polys));
+                    groundLayer: _fullbright && !clutterFade && !forceLit && !doubleSided && !billboardMesh && LiesFlat(mesh, polys), floor: floor);
             if (!CountSurface(surfaceMaterial, clampUv, edgeClamp))
                 continue;
             // What SurfaceTool.Commit does, with the arrays kept for the world's merge. Commit adds
@@ -2348,20 +2357,20 @@ void light() {{
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
         Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool groundLayer = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool groundLayer = false, bool floor = false)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass, clutterFade, Tint);
+        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass, clutterFade, Tint, floor);
         if (!_materialCache.TryGetValue(key, out var mat))
         {
-            mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
+            mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, floor);
             _materialCache[key] = mat;
         }
         if (!groundLayer || AlphaOf(mat) != TransparencyClass.BlendSurface || OnBlendList(materialIndex))
             return mat;
         if (!_groundLayerCache.TryGetValue(key, out var layered))
         {
-            layered = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
+            layered = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, floor);
             layered.RenderPriority = GroundLayerRenderPriority;
             FollowSlab(layered, 0);
             _groundLayerCache[key] = layered;
@@ -2412,7 +2421,7 @@ void light() {{
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
         Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false)
+        bool clutterFade = false, bool floor = false)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -2472,7 +2481,7 @@ void light() {{
             bool oceanSurf = water && IsSurfTexture(texName);
             bool paintedCoast = IsPaintedCoastTexture(texName);
             var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
-                oceanSurf: oceanSurf, paintedCoast: paintedCoast);
+                oceanSurf: oceanSurf, paintedCoast: paintedCoast, floor: floor ? texName : null);
             // Opaque under Original, where a priority only orders the opaque pass.
             if (paintedCoast && !water && !blend && !scissor)
                 textured.RenderPriority = CoastRampRenderPriority;
@@ -2568,15 +2577,20 @@ void light() {{
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
         UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false, bool oceanBase = false,
-        bool replacement = false, bool oceanSurf = false, bool paintedCoast = false)
+        bool replacement = false, bool oceanSurf = false, bool paintedCoast = false, string? floor = null)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
+        // The floor samples the unclamped UV through a repeating sampler, which a seamless floor allows under a clamped
+        // paint. A paint that scrolls or blends keeps its own arm.
+        bool cityFloor = floor != null && Ground != null && tex != null && !blend && !scissor && !scrolls && !water && !XrPreciseInterior;
         var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
             blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water, oceanBase,
-            replacement, oceanSurf, paintedCoast));
+            replacement, oceanSurf, paintedCoast, cityFloor));
+        if (cityFloor)
+            Ground!.Bind(mat, floor!);
         NoteAlpha(mat, blend, scissor);
         if (XrPreciseInterior)
             _interiorPlaced.Add(mat.GetInstanceId());
@@ -2614,14 +2628,14 @@ void light() {{
 
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
-    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. 2^27 and up the tint. Then
+    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. 2^27, 2^28 the tint, 2^29 the city floor. Then
     // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
     // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring, 67108864 painted coast.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false, bool oceanBase = false, bool replacement = false,
-        bool oceanSurf = false, bool paintedCoast = false)
+        bool oceanSurf = false, bool paintedCoast = false, bool cityFloor = false)
     {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
@@ -2650,7 +2664,7 @@ void light() {{
             | (xrInterior ? 1048576 : 0)
             | (stereoGhost ? 2097152 : 0) | (underInterior ? 4194304 : 0) | (replacement ? 8388608 : 0)
             | (NoShadowReceive ? 16777216 : 0) | (oceanSurf ? 33554432 : 0) | (paintedCoast ? 67108864 : 0)
-            | ((int)tint << 27);
+            | ((int)tint << 27) | (cityFloor ? 1 << 29 : 0);
         bool noShadowReceive = NoShadowReceive;
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
@@ -2658,7 +2672,7 @@ void light() {{
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
                 debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
-                noShadowReceive, oceanSurf, paintedCoast, tint),
+                noShadowReceive, oceanSurf, paintedCoast, tint, cityFloor),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2673,8 +2687,11 @@ void light() {{
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
         bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
-        bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false, SurfaceTint tint = SurfaceTint.None)
+        bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false, SurfaceTint tint = SurfaceTint.None,
+        bool cityFloor = false)
     {
+        // Enhanced only, so the Original text of a paint is the text it always was.
+        bool floorArm = cityFloor && GraphicsMode.Enhanced && textured && !xrInterior;
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
         // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
@@ -2808,6 +2825,8 @@ void light() {{
             // render state a chapter sets once (docs/org/textures.md).
             sb.AppendLine(MipBiasInclude);
         }
+        if (floorArm)
+            sb.AppendLine(CityGround.Declarations);
         // UV animation (the model's texture_scroll / the boot script's Object3DSetScroll). Emitted
         // only for surfaces that actually scroll, so every other shader's text is unchanged.
         // ⚠ The phase must come from csky_time, not Godot's TIME, or the scroll ignores the clock.
@@ -2903,7 +2922,7 @@ void fragment() {{");
         {
             sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{planeVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{oceanVertex}{terrainVertex}{planeVertex}{sunVertex}{pointVertex}{(floorArm ? CityGround.VertexLine : "")}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2942,6 +2961,8 @@ void fragment() {{");
                 : scroll ? $"    vec4 base_col = {SampleAlbedo("UV + scroll_rate * csky_time")};"
                 : $"    vec4 base_col = {SampleAlbedo("UV")};");
         }
+        if (floorArm)
+            sb.AppendLine(CityGround.FragmentLines);
         if (textured && replacement)
             sb.AppendLine("    base_col *= albedo_color;");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");

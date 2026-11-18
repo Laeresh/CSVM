@@ -133,6 +133,9 @@ public sealed class WorldSession
         builder.HdChapter = o.Chapter;
         // The last chapter's replacement imports would otherwise stay for the rest of the run.
         HdModelMeshes.Current.KeepChapter(o.Chapter);
+        // Before the build: a paint's surfaces carry the floor's combination and take its arm (CityGround).
+        if (o.NodeSubtree == null)
+            builder.Scene.Ground = CityGround.Load(gamez, o.Chapter);
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only

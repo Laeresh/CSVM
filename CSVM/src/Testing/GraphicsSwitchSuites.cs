@@ -1383,6 +1383,103 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("city-ground",
+        "C5's block floor from placeholder images in an Enhanced flight at rich and near: the paint's surfaces carry their "
+        + "combination in UV2 (two variants for its own set, one for none, zero to keep the paint), its materials sample the "
+        + "floor array with the layout's street and cell, a combination with no image keeps the paint and is named once; the "
+        + "floor global follows the city on a live move to Off and back, Faithful's text carries no floor and Enhanced's again "
+        + "after the switch back; no other texture takes the floor, and a folder with no index or a chapter with no layout "
+        + "builds none")]
+    internal static void CityGroundFloor(TestContext ctx)
+    {
+        RequireData(ctx, "C5");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        string? folder = Mech3.CityGround.Folder;
+        string floors = System.IO.Path.Combine(ctx.ScratchDir, "city-ground");
+        System.IO.Directory.CreateDirectory(floors);
+        var files = new (string Name, Color Fill)[]
+        {
+            ("cblock7-cblock7-0.png.bin", new Color(0.8f, 0.2f, 0.2f)), ("cblock7-cblock7-1.png.bin", new Color(0.2f, 0.2f, 0.8f)),
+            ("cblock7-none-0.png.bin", new Color(0.2f, 0.8f, 0.2f)),
+        };
+        foreach (var (name, fill) in files)
+        {
+            var image = Image.CreateEmpty(512, 512, false, Image.Format.Rgb8);
+            image.Fill(fill);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(floors, name), image.SavePngToBuffer());
+        }
+        System.IO.File.WriteAllText(System.IO.Path.Combine(floors, "index.json"), "{ \"combinations\": { "
+            + "\"cblock7-cblock7\": { \"files\": [\"cblock7-cblock7-0.png.bin\", \"cblock7-cblock7-1.png.bin\"] }, "
+            + "\"cblock7-none\": { \"files\": [\"cblock7-none-0.png.bin\"] } } }");
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            Mech3.CityGround.Folder = floors;
+            var live = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (!live.Built || live.Session.WorldScene is not { Ground: { } ground } scene)
+                {
+                    ctx.Check(false, $"the C5 session builds a city ground from the placeholder floors");
+                    return;
+                }
+                ctx.Check(ground.Floored > 0 && ground.Missing.Contains("cblock7-cblock4") && !ground.Missing.Contains("cblock7-cblock7"),
+                    $"{ground.Floored} polygons draw a floor, and the combination with no image keeps the paint ({string.Join(", ", ground.Missing)})");
+                var paint = scene.TexturedMaterials.Where(t => Mech3.CityGround.Stem(t.TextureName) == "cblock7").Select(t => t.Material).ToList();
+                var others = scene.TexturedMaterials.Where(t => Mech3.CityGround.Stem(t.TextureName) != "cblock7").Select(t => t.Material).ToList();
+                bool Floored(ShaderMaterial m) => m.Shader?.Code.Contains("city_floor_tex", StringComparison.Ordinal) == true;
+                var array = paint.Select(m => m.GetShaderParameter("city_floor_tex").As<Texture2DArray>()).FirstOrDefault(a => a != null);
+                ctx.Check(paint.Count > 0 && paint.All(Floored) && array?.GetLayers() == 3 && array.HasMipmaps()
+                        && paint.All(m => m.GetShaderParameter("city_floor_street0").AsVector4().IsEqualApprox(new Vector4(1f, 0f, 0.5f, 0.07031f))
+                            && m.GetShaderParameter("city_floor_cell").AsVector4() == new Vector4(1f, 0f, 0f, 1f)),
+                    $"each of the paint's {paint.Count} materials samples the three-layer floor array with the layout's street and cell ({paint.Count(Floored)} floored, {array?.GetLayers()} layers, street {paint[0].GetShaderParameter("city_floor_street0")}, cell {paint[0].GetShaderParameter("city_floor_cell")})");
+                ctx.Check(others.Count > 0 && !others.Any(Floored), $"none of the {others.Count} other textured materials takes the floor");
+                var uv2 = new HashSet<float>();
+                var paintSet = paint.Cast<Material>().ToHashSet();
+                Walk(live.Session, node =>
+                {
+                    if (node is not MeshInstance3D { Mesh: ArrayMesh mesh })
+                        return;
+                    for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                    {
+                        if (mesh.SurfaceGetMaterial(s) is { } m && paintSet.Contains(m))
+                            uv2.UnionWith(mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.TexUV2].AsVector2Array().Select(v => v.Y));
+                    }
+                });
+                ctx.Check(uv2.SetEquals(new[] { 0f, 1f, 2f }), $"the paint's surfaces carry UV2 counts of two, one and zero ({string.Join(", ", uv2.Order())})");
+                float Global() => Mech3.CityGround.Published;
+                ctx.Check(Global() == 1f, $"the floor global is on with the city");
+                Models(live, Utils.VegetationModelsSetting.Off);
+                ctx.Check(Global() == 0f, $"a live move to Off turns the floor global off");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                ctx.Check(Global() == 1f, $"and back to Near on");
+                Switch(live, enhanced: false);
+                ctx.Check(paint.All(m => !Floored(m) && m.Shader?.Code.Contains("UV2", StringComparison.Ordinal) == false) && Global() == 0f,
+                    $"under Faithful the paint's text carries no floor arm and the global is off");
+                Switch(live, enhanced: true);
+                ctx.Check(paint.All(Floored) && Global() == 1f, $"back under Enhanced the floor arm draws again");
+            }
+            finally
+            {
+                live.Close();
+            }
+            Mech3.CityGround.Folder = System.IO.Path.Combine(ctx.ScratchDir, "no-floor");
+            var gamez = ctx.ChapterGamez("C5");
+            ctx.Check(gamez != null && Mech3.CityGround.Load(gamez, "C5") == null && Mech3.CityGround.Load(gamez, "C1") == null,
+                $"a floor folder with no index and a chapter with no layout build no city ground");
+        }
+        finally
+        {
+            Mech3.CityGround.Folder = folder;
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("canopy-models",
         "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "

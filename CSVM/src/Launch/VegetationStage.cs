@@ -57,6 +57,7 @@ internal sealed class VegetationStage
     public void Follow()
     {
         Clutter?.Recut();
+        CityGround.Follow();
         _edgeExtender?.FollowClutterFade();
         FollowCanopyClumps();
     }

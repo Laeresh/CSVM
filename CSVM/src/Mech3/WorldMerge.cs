@@ -381,10 +381,11 @@ public sealed partial class WorldMerge : Node3D
         var normals = new Vector3[count];
         Color[]? colors = null;
         Vector2[]? uvs = null;
+        Vector2[]? uv2s = null;
         int at = 0;
         foreach (var (member, surface) in group.Parts)
         {
-            var (v, n, c, uv) = Arrays(member.Full, surface);
+            var (v, n, c, uv, uv2) = Arrays(member.Full, surface);
             Array.Copy(v, 0, vertices, at, v.Length);
             Array.Copy(n, 0, normals, at, n.Length);
             if (c.Length > 0)
@@ -397,6 +398,12 @@ public sealed partial class WorldMerge : Node3D
                 uvs ??= new Vector2[count];
                 Array.Copy(uv, 0, uvs, at, uv.Length);
             }
+            // The city floor's combination per polygon (CityGround); the group key's format keeps it on every part.
+            if (uv2.Length > 0)
+            {
+                uv2s ??= new Vector2[count];
+                Array.Copy(uv2, 0, uv2s, at, uv2.Length);
+            }
             at += v.Length;
         }
         var merged = new Godot.Collections.Array();
@@ -407,6 +414,8 @@ public sealed partial class WorldMerge : Node3D
             merged[(int)Mesh.ArrayType.Color] = colors;
         if (uvs != null)
             merged[(int)Mesh.ArrayType.TexUV] = uvs;
+        if (uv2s != null)
+            merged[(int)Mesh.ArrayType.TexUV2] = uv2s;
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, merged);
         mesh.SurfaceSetMaterial(0, group.Key.Material);
@@ -437,6 +446,7 @@ public sealed partial class WorldMerge : Node3D
         var n = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
         var c = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
         var uv = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+        var uv2 = arrays[(int)Mesh.ArrayType.TexUV2].AsVector2Array();
         var index = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
         if (index.Length > 0)
         {
@@ -444,8 +454,9 @@ public sealed partial class WorldMerge : Node3D
             n = Unindex(n, index);
             c = Unindex(c, index);
             uv = Unindex(uv, index);
+            uv2 = Unindex(uv2, index);
         }
-        data = new SurfaceData(v, n, c, uv);
+        data = new SurfaceData(v, n, c, uv, uv2);
         _arrays[(mesh, surface)] = data;
         return data;
     }
@@ -569,7 +580,7 @@ public sealed partial class WorldMerge : Node3D
         }
     }
 
-    private readonly record struct SurfaceData(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] Uvs);
+    private readonly record struct SurfaceData(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s);
 
     // Frame is compared exactly, so a merged mesh stands where every member's own instance stood.
     private readonly record struct GroupKey(Transform3D Frame, Material Material, float NodeBias, uint Layers,

@@ -595,6 +595,8 @@ public partial class Launcher : Node3D
         Effects.Ocean.RegisterGlobal();
         Effects.TerrainShadow.RegisterGlobals();
         Effects.CloudShadow.RegisterGlobals();
+        Mech3.CityGround.RegisterGlobal();
+        Mech3.CityGround.Folder = _spec.CityGround;
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump

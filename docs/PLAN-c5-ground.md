@@ -186,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Export the footprint and street data the generator needs
 12. ☑ Generate the block floor variants for `cblock7`
-13. ◐ Composite and select the new ground in the engine
+13. ☑ Composite and select the new ground in the engine
 14. ◐ Build and stamp the low block dressing (models landed, stamping open)
 15. ☐ Judge the prototype at the controls
 
@@ -411,7 +411,34 @@ The level-30 comparison set of Decision 3 is written outside the repo, for B15 o
 lamp's painted glow is cut off. A variant seam lies on a street centreline (Decision 4), so the
 floor at the half-tile cell edge must be street, never block.
 
-## B13 ☐ Composite and select the new ground in the engine
+## B13 ☑ Composite and select the new ground in the engine
+
+**Landed.** `CSVM/src/Mech3/CityGround.cs` reads `ground_layout.json` and the floor folder's
+`index.json` into one mipmapped texture array per paint, and gives each painted polygon reached
+from `world1` its building set: clear paint its own; flagged paint the coplanar clear layer under
+the centre of its largest triangle (within 0.5 m; coverage is all or nothing per polygon, A1), the
+rule `Clutter` and `VegetationGround` use for which layer decorates; otherwise `none`. It keeps the
+paint off the `U+X V+Z` 256 m frame, where two placements of one mesh disagree, for a set whose
+`on_street` share exceeds 0.01, and for a combination with no image, naming the missing ones once in
+the `city ground:` log line. `SceneBuilder` writes each paint polygon's first layer and variant
+count into UV2 (zero keeps the paint) rather than splitting surface groups, which would move ranks
+and depth bias; the material cache keys gain `Floor`; an Enhanced-only arm under shader key bit
+2^29 draws the original paint (with its authored levels) inside the analytic street bands,
+antialiased over a pixel, and a floor layer elsewhere, hashed on the world-XZ cell. The composite
+runs per fragment, so no original pixel is copied. `WorldMerge` carries UV2. The global
+`csky_city_ground` follows `CityModels.On` through `VegetationStage.Follow`. `--city-ground=<folder>`
+reads another floor set. Load: 88 ms on C5 with six variants (census: 1,200 polygons floored, 31
+off-frame, 13 with disagreeing placements, 756 kept).
+
+**Verified.** `CityGroundTests` (set resolution on a hand-built world, the two-placement conflict,
+the frame test, both parses) and the `city-ground` engine suite (UV2, the array and uniforms, no
+other texture floored, the missing combination, live moves between Off/Near and Faithful/Enhanced,
+Faithful's shader text free of the arm) pass beside `city-buildings`; `-Quick` passes. At `C5-cb7`
+placeholder floors in two colours change on the street centrelines with the streets kept; 3D
+Scenery off and Faithful frames are byte-identical with and without floors. The merged tree's run
+is in the landing commit. Confidence: traced for the selection and the identity; the look is B15's.
+
+**Original approach (kept for reference).**
 
 **Goal.** Wherever `CityModels.On` holds, `cblock7` surfaces draw the street band from the
 install's own texture and the generated floor elsewhere, a variant picked per block; Faithful and 3D
