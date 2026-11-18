@@ -46,6 +46,10 @@ public static class VegetationModels
     /// a card with no model, which then draws at every distance.</summary>
     public const string BandParam = "vegetation_model_band";
 
+    /// <summary>The albedo gain a material made with <c>gain</c> reads, 1 by default. A model with no card to meet, as C5's
+    /// city tree, takes its night level from it; every other material's text lacks it.</summary>
+    public const string GainParam = "model_gain";
+
     /// <summary>The canopy material's parameter for how far, in model metres, the painted surface stands over
     /// a crown's sunk origin. The crown reads the terrain and cloud shadows there.</summary>
     public const string SunLiftParam = "sun_lift";
@@ -69,7 +73,7 @@ public static class VegetationModels
     private const string SunLitLines = "    vec2 sun_pair = csky_sun_light_at(CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO *= csky_sun_vertex_light_at(v_normal, CAMERA_POSITION_WORLD) / max(sun_pair.x + 0.5 * sun_pair.y, 1e-3);\n";
 
-    private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy, bool Far), Shader> Shaders = new();
+    private static readonly Dictionary<(bool Lit, bool Fogged, bool Canopy, bool Far, bool Gain), Shader> Shaders = new();
 
     // ponytail: the map edge's model copies cast none, and no option or live switch reaches it.
 
@@ -144,18 +148,19 @@ public static class VegetationModels
     /// <summary>A material drawing <paramref name="model"/> as a card of the given render flags and width in
     /// metres draws. A <paramref name="canopy"/> model stands on no card, so no card fade bounds it. Its
     /// instance basis scales it, and its band hands it over to the crowns of <see cref="CanopyClumps"/>. A
-    /// <paramref name="far"/> model takes the card's side of the band: it draws the dither cells the near model gives up.</summary>
-    public static ShaderMaterial Material(Model model, bool lit, bool fogged, float cardWidth, bool canopy = false, bool far = false)
+    /// <paramref name="far"/> model takes the card's side of the band: it draws the dither cells the near model gives up.
+    /// A <paramref name="gain"/> material scales its albedo by <see cref="GainParam"/>.</summary>
+    public static ShaderMaterial Material(Model model, bool lit, bool fogged, float cardWidth, bool canopy = false, bool far = false, bool gain = false)
     {
-        if (!Shaders.TryGetValue((lit, fogged, canopy, far), out var shader))
+        if (!Shaders.TryGetValue((lit, fogged, canopy, far, gain), out var shader))
         {
             // A shadow pass draws from the light, so a casting model's vertex stage fades by the pane's own
             // eye. The fragment stage has no such built-in, and its colour draws in no shadow pass.
-            string code = ShaderCode(lit, fogged, canopy, far);
+            string code = ShaderCode(lit, fogged, canopy, far, gain);
             int fragment = code.IndexOf("void fragment()", StringComparison.Ordinal);
             if (CastShadows)
                 code = code[..fragment].Replace("CAMERA_POSITION_WORLD", "MAIN_CAM_INV_VIEW_MATRIX[3].xyz", StringComparison.Ordinal) + code[fragment..];
-            Shaders[(lit, fogged, canopy, far)] = shader = new Shader { Code = code };
+            Shaders[(lit, fogged, canopy, far, gain)] = shader = new Shader { Code = code };
         }
         // A coverage cutout sorting with the blends paints over a truss in front of it (SceneBuilder.CutoutRenderPriority).
         var material = new ShaderMaterial { Shader = shader, RenderPriority = SceneBuilder.CutoutRenderPriority };
@@ -296,7 +301,7 @@ public static class VegetationModels
     // ⚠ Never light a card's model with the scene's lights: the card is unlit, and a lit model shows at the band.
     // Every model takes the sun term on its normals about its mean (SunLitLines), so the graded brightness holds.
     // ⚠ Never give it an instance uniform: each model cell would take 16 slots of Godot's global buffer.
-    private static string ShaderCode(bool lit, bool fogged, bool canopy, bool far) => $$"""
+    private static string ShaderCode(bool lit, bool fogged, bool canopy, bool far, bool gain) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{SceneBuilder.CoverageMode}};
 
@@ -313,7 +318,7 @@ public static class VegetationModels
         #include "res://shaders/csky_time.gdshaderinc"
         {{ClutterBuilder.TerrainShadowDecl}}
         const float csky_fog_on = 1.0;
-        uniform float half_width = 1.0;
+        uniform float half_width = 1.0;{{(gain ? $"\n        uniform float {GainParam} = 1.0;" : "")}}
 
         varying flat float v_far;
         varying flat float v_card;
@@ -347,7 +352,7 @@ public static class VegetationModels
                 discard;
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
-            ALBEDO = col.rgb * grade{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
+            ALBEDO = col.rgb * grade{{(gain ? " * " + GainParam : "")}}{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
         {{SunLitLines}}{{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;

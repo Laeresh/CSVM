@@ -1550,6 +1550,14 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(tree.Shader.Code.Contains("float keep = live * step(0.004, v_card);", StringComparison.Ordinal)
                         && tree.Shader.Code.Contains("if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_card)) {", StringComparison.Ordinal),
                     $"the far tree keeps the dither cells the near tree gives up across the band");
+                Variant Param(string kind, string param) =>
+                    ((ShaderMaterial)nearCells.First(c => c.Name.ToString().StartsWith(kind, StringComparison.Ordinal)).MaterialOverride).GetShaderParameter(param);
+                var wallTone = Param("gd_wall", CityModels.BoardToneParam);
+                var shedTone = Param("gd_shed", CityModels.BoardToneParam);
+                float treeGain = Param(Mech3.CityDressing.Tree, Mech3.VegetationModels.GainParam).AsSingle();
+                ctx.Check(wallTone.VariantType == Variant.Type.Vector4 && wallTone.AsVector4().W < 1f && shedTone.VariantType == Variant.Type.Nil
+                        && treeGain < 1f && tree.GetShaderParameter(Mech3.VegetationModels.GainParam).AsSingle() == treeGain,
+                    $"the walls' boards are toned ({wallTone}) and a shed's are not, and both tree materials take the gain {treeGain}");
                 ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
 
                 bool Shown() => dressing.Root.IsVisibleInTree();
