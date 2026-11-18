@@ -85,6 +85,12 @@ internal static class GraphicsSwitchSuites
     // steinmann ship's hull.
     private static readonly string[] RampChapters = { "C2", "C5" };
 
+    // The cblock1 tower district's building models, each given a fixture hull by the city suite.
+    private static readonly string[] CityFixtureModels =
+    {
+        "cb00a", "cb00b", "cb01a", "cb01b", "cb01c", "cb01d", "cb02a", "cb02b", "cb03a", "cb03b", "cb04a", "cb04b", "cb05a", "cb05b",
+    };
+
     // The painted coast textures each chapter lays (analysis/painted-coasts/FINDINGS.md). C1 has opaque tiles
     // under a rock overlay pass, C2 a beach and a rock decal, C3 blended strips, shallows and opaque cliff tiles.
     private static readonly (string Chapter, string[] Textures)[] PaintedCoastChapters =
@@ -1161,6 +1167,222 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("city-buildings",
+        "C5's buildings with fixture hulls in an Enhanced flight at rich and near, against a build with no hull: each building "
+        + "with a hull draws its box in the kind's own cells and no original mesh, its further meshes are hidden, every stamp "
+        + "stands in exactly one box cell and one near cell, each near cell draws the variant its stamps' seeds pick, ranged "
+        + "past the band on the models' layer with no collider, shadow or instance uniform; the collision shapes, attachments "
+        + "and region bodies equal the bare build's and its visible clutter nodes are at most the bare build's; a pack's "
+        + "C5/cb00b.glb keeps that kind off the city; the hull's grade is its baseColorFactor; live moves to Off, original "
+        + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
+        + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
+        + "the shipped hulls carry the facade atlas, the window ids and the facade's poster counts; with the shipped hulls "
+        + "every solid building and dressing kind draws its hull and no original mesh, and under Faithful or Off none does")]
+    internal static void CityBuildings(TestContext ctx)
+    {
+        RequireData(ctx, "C5");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        string root = CityModels.Root;
+        var pack = HdModels.Current;
+        string fixtures = System.IO.Path.Combine(ctx.ScratchDir, "city-hulls");
+        string packRoot = System.IO.Path.Combine(ctx.ScratchDir, "city-pack");
+        var grade = new Color(0.6f, 0.45f, 0.3f);
+        foreach (string model in CityFixtureModels)
+            WriteHull(System.IO.Path.Combine(fixtures, "C5", model + ".glb.bin"), grade, "far", "near0", "near1");
+        // A pack file names the gamez node it replaces, which is the one carrying the decoration's mesh.
+        var decoration = ctx.ChapterGamez("C5") is { } gamez && gamez.FindByName("cb00b.flt") is { } node
+            ? Mech3.ClutterBuilder.FirstWithMesh(gamez, node) : null;
+        WriteHull(System.IO.Path.Combine(packRoot, "HDModels", "test", "C5", "cb00b.glb"), grade, HdModels.NodeKey(decoration?.Name ?? "cb00b"));
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            using var packed = HdModels.Open(packRoot, "HDModels");
+            HdModels.Current = packed;
+            CityModels.Root = System.IO.Path.Combine(ctx.ScratchDir, "no-city");
+            var bare = Open(ctx, true, 1, "C5");
+            CityReading? off = null;
+            try
+            {
+                if (bare.Built && bare.Session.Vegetation?.Clutter is { ExportedKinds: { } bareKinds } bareClutter && ClutterRoot(bare.Session) is { } bareRoot)
+                    off = ReadCity(bareClutter, bareKinds, bareRoot);
+            }
+            finally
+            {
+                bare.Close();
+            }
+
+            CityModels.Root = fixtures;
+            var live = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (off is not { } b || !live.Built || live.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds, ModelRoot: { } models } clutter
+                    || ClutterRoot(live.Session) is not { } clutterRoot)
+                {
+                    ctx.Check(false, $"both C5 sessions build their clutter, the one with hulls with a model root");
+                    return;
+                }
+                var on = ReadCity(clutter, kinds, clutterRoot);
+                var hulls = kinds.Where(k => k.City?.Box != null).ToList();
+                var parts = kinds.Where(k => k.City is { Box: null }).ToList();
+                var mains = kinds.Where(k => k.Solid && k.Model.Length > 0).ToList();
+                bool Fixture(Mech3.ClutterBuilder.KindExport k) => CityFixtureModels.Contains(HdModels.NodeKey(k.Model)) && HdModels.NodeKey(k.Model) != "cb00b";
+                ctx.Check(hulls.Count > 0 && mains.All(k => (k.City != null) == Fixture(k)),
+                    $"every building whose model has a hull takes it and no other ({string.Join(", ", hulls.Select(k => HdModels.NodeKey(k.Model)).Distinct())})");
+                var packedKind = mains.FirstOrDefault(k => HdModels.NodeKey(k.Model) == "cb00b");
+                ctx.Check(packedKind != null && packedKind.City == null && Visible(clutterRoot, packedKind.Mesh) > 0,
+                    $"a pack's C5/cb00b.glb keeps cb00b off the city, drawing the pack's mesh");
+                var hull = CityModels.For("C5", "cb00a");
+                var read = hull?.BoxMaterial.GetShaderParameter("grade").AsVector3() ?? Vector3.Zero;
+                var linear = grade.SrgbToLinear();
+                ctx.Check(hull != null && hull.Near.Count == 2 && read.DistanceTo(new Vector3(linear.R, linear.G, linear.B)) < 1e-3f,
+                    $"the hull reads two near variants and its baseColorFactor as the grade ({read})");
+
+                var boxCells = hulls.Select(k => k.City!.Box!).Distinct().SelectMany(m => CityCells(clutterRoot, m)).ToList();
+                var boxStamps = boxCells.SelectMany(CellStamps).OrderBy(s => s, StringComparer.Ordinal).ToList();
+                var stamps = hulls.SelectMany(k => k.Placements).Select(Key).OrderBy(s => s, StringComparer.Ordinal).ToList();
+                ctx.Check(boxCells.All(c => c.IsVisibleInTree()) && boxStamps.SequenceEqual(stamps),
+                    $"every stamp with a hull stands in exactly one box cell ({boxStamps.Count} of {stamps.Count})");
+                var cellsOff = b.Cells;
+                var cellsOn = kinds.Select(k => k.Instances?.CellCount ?? 0).ToList();
+                var hullAt = Enumerable.Range(0, kinds.Count).Where(i => kinds[i].City?.Box != null).ToList();
+                ctx.Check(hullAt.All(i => cellsOn[i] == cellsOff[i]) && hullAt.Sum(i => cellsOn[i]) == boxCells.Count,
+                    $"each box draws in its kind's own cells ({boxCells.Count})");
+                ctx.Check(hulls.All(k => Visible(clutterRoot, k.Mesh) == 0) && parts.Count > 0 && parts.All(k => Visible(clutterRoot, k.Mesh) == 0),
+                    $"no building with a hull draws its original mesh, and its {parts.Count} further mesh(es) are hidden");
+                ctx.Check(hulls.All(k => k.Fades.All(f => f.A == MathF.Floor(f.A) && f.A < 16777216f)) && hulls.SelectMany(k => k.Fades).Select(f => f.A).Distinct().Count() > 1,
+                    $"each building stamp's custom data w holds an integer seed");
+
+                var near = ModelCells(models);
+                var owner = new Dictionary<string, (Mech3.ClutterBuilder.KindExport Kind, int Index)>();
+                foreach (var k in hulls)
+                {
+                    for (int i = 0; i < k.Placements.Count; i++)
+                        owner[Key(k.Placements[i])] = (k, i);
+                }
+                int seen = 0, wrong = 0;
+                foreach (var cell in near)
+                {
+                    foreach (var key in CellStamps(cell))
+                    {
+                        seen++;
+                        if (!owner.TryGetValue(key, out var at) || at.Kind.City!.Near!.Variants![CityModels.VariantOf(at.Kind.Fades[at.Index].A, 2)] != cell.Multimesh.Mesh)
+                            wrong++;
+                    }
+                }
+                var variants = near.Select(c => c.Multimesh.Mesh).Distinct().Count();
+                ctx.Check(seen == stamps.Count && wrong == 0 && variants > hulls.Select(k => k.City!.Near!.Variants![0]).Distinct().Count(),
+                    $"every stamp stands in exactly one near cell of the variant its seed picks ({seen} of {stamps.Count}, {wrong} wrong, {variants} variant meshes)");
+                float reach = Mech3.VegetationModels.FarM + CityModels.CellM;
+                ctx.Check(near.All(m => m.VisibilityRangeEnd > Mech3.VegetationModels.FarM && m.VisibilityRangeEnd < reach
+                        && m.Layers == Mech3.VegetationModels.Layer && m.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off)
+                        && !Under(models, "clutter") && !HasCollider(models),
+                    $"{near.Count} near cells, ranged past the band and short of {reach:0} m on the models' layer, casting no shadow, outside the clutter root with no collider");
+                string boxCode = hull?.BoxMaterial.Shader.Code ?? "", nearCode = hull?.NearMaterial.Shader.Code ?? "";
+                ctx.Check(!boxCode.Contains("instance uniform", StringComparison.Ordinal) && !boxCode.Contains("csky_instance_uniforms", StringComparison.Ordinal)
+                        && !nearCode.Contains("csky_instance_uniforms", StringComparison.Ordinal) && boxCode.Contains("v_box *= " + Mech3.ClutterBuilder.ModelShare, StringComparison.Ordinal)
+                        && nearCode.Contains("|| csky_clutter_dither_keep(FRAGCOORD.xy, v_box)", StringComparison.Ordinal),
+                    $"neither city shader declares an instance uniform, the box fades by the band's share and the near model keeps the cells it gives up");
+                string look = CityModels.LookCode();
+                ctx.Check(boxCode.Contains(look, StringComparison.Ordinal) && nearCode.Contains(look, StringComparison.Ordinal)
+                        && boxCode.Contains("v_seed = uint(INSTANCE_CUSTOM.w + 0.5);", StringComparison.Ordinal)
+                        && nearCode.Contains("ALBEDO = csky_city_look(v_seed, UV, UV2, grade, glow);", StringComparison.Ordinal)
+                        && boxCode.Contains(Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal) && nearCode.Contains(Mech3.SceneBuilder.TimeInclude, StringComparison.Ordinal),
+                    $"the box and the near model expand the stamp's seed by one look, on the shader clock");
+
+                ctx.Check(on.Collision == b.Collision && on.Bodies == b.Bodies && on.Colliders == b.Colliders,
+                    $"collision equals the bare build's ({on.Collision}; {on.Bodies.Length} body chars)");
+                ctx.Check(on.Visible <= b.Visible, $"the visible clutter nodes are at most the bare build's ({on.Visible} against {b.Visible})");
+                ctx.Note($"C5 clutter: {b.Visible} visible nodes with no hull, {on.Visible} with hulls over {hulls.Count} kind(s) and {parts.Count} further mesh(es); {near.Count} near cells");
+
+                live.Session.EdgeExtender?.Update(live.Session.EdgeExtender.BeyondCorner);
+                var (edgeBoxes, edgeOriginals, edgeParts) = EdgeCity(live, kinds);
+                ctx.Check(edgeOriginals == 0 && edgeParts == 0, $"the map edge copies draw {edgeBoxes} box(es), no original mesh of a building with a hull and no further mesh");
+
+                Models(live, Utils.VegetationModelsSetting.Off);
+                var offLive = ReadCity(clutter, kinds, clutterRoot);
+                var (edgeOffBoxes, edgeOffOriginals, _) = EdgeCity(live, kinds);
+                ctx.Check(ModelCells(models).Count == 0 && offLive.Visible == b.Visible && hulls.All(k => Visible(clutterRoot, k.City!.Box!) == 0 && Visible(clutterRoot, k.Mesh) > 0)
+                        && parts.All(k => Visible(clutterRoot, k.Mesh) > 0) && edgeOffBoxes == 0 && edgeOffOriginals == edgeBoxes,
+                    $"a live move to Off draws the original city ({offLive.Visible} visible nodes, {edgeOffOriginals} edge originals)");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                ctx.Check(ReadCity(clutter, kinds, clutterRoot).Visible == on.Visible && ModelCells(models).Count == near.Count && EdgeCity(live, kinds) == (edgeBoxes, 0, 0),
+                    $"and back to Near draws the same city");
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(ModelCells(models).Count == 0 && ReadCity(clutter, kinds, clutterRoot).Visible == b.Visible,
+                    $"a live move to original draws the original city");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                Switch(live, enhanced: false);
+                ctx.Check(ModelCells(models).Count == 0 && hulls.All(k => k.Instances!.CellCount == 1 && Visible(clutterRoot, k.Mesh) > 0
+                        && Visible(clutterRoot, k.City!.Box!) == 0) && parts.All(k => Visible(clutterRoot, k.Mesh) > 0),
+                    $"a live switch to Faithful draws each building whole on its original mesh");
+                Switch(live, enhanced: true);
+                ctx.Check(ReadCity(clutter, kinds, clutterRoot).Visible == on.Visible && ModelCells(models).Count == near.Count
+                        && CityCells(clutterRoot, hull!.Box).Count > 0,
+                    $"and back in Enhanced the same city draws again");
+
+                ctx.Check(hull!.BoxMaterial.GetShaderParameter("facade_tex").VariantType == Variant.Type.Nil
+                        && hull.NearMaterial.GetShaderParameter("facade_ids").VariantType == Variant.Type.Nil,
+                    $"a hull folder with no facade files leaves the textures unset, so its buildings draw the flat grade");
+                CityModels.Root = CityModels.ShippedRoot;
+                var shipped = CityModels.For("C5", "cb00a");
+                var atlas = shipped?.BoxMaterial.GetShaderParameter("facade_tex").As<Texture2D>();
+                var ids = shipped?.NearMaterial.GetShaderParameter("facade_ids").As<Texture2D>();
+                ctx.Check(atlas != null && ids != null && atlas.GetImage().HasMipmaps() && !ids.GetImage().HasMipmaps()
+                        && atlas.GetWidth() == 1024 && ids.GetWidth() == 1024 && shipped!.BoxMaterial.GetShaderParameter("facade_ids").As<Texture2D>() == ids,
+                    $"a shipped hull's materials carry the facade atlas with mipmaps and the window ids without");
+                // Unset, the uniform keeps its default and the chapter's own posters are never drawn.
+                var counts = shipped?.NearMaterial.GetShaderParameter("poster_counts");
+                ctx.Check(counts?.VariantType == Variant.Type.Vector2 && counts.Value.AsVector2().X >= 6f && counts.Value.AsVector2().Y >= 4f
+                        && shipped!.BoxMaterial.GetShaderParameter("poster_counts").VariantType == Variant.Type.Vector2,
+                    $"a shipped hull's materials carry the facade's poster counts ({counts})");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            // The shipped city with no pack: every solid building and dressing kind draws its hull and no original mesh.
+            // A move to Faithful or to Off draws them all whole again.
+            HdModels.Current = pack;
+            CityModels.Root = CityModels.ShippedRoot;
+            var full = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (!full.Built || full.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds } || ClutterRoot(full.Session) is not { } cityRoot)
+                {
+                    ctx.Check(false, $"the shipped C5 session builds its clutter");
+                    return;
+                }
+                var solid = kinds.Where(k => k.Solid && k.Model.Length > 0).ToList();
+                bool Dressed(Mech3.ClutterBuilder.KindExport k) => k.City != null && Visible(cityRoot, k.Mesh) == 0
+                    && (k.City.Box == null || Visible(cityRoot, k.City.Box) > 0);
+                bool Whole(Mech3.ClutterBuilder.KindExport k) => Visible(cityRoot, k.Mesh) > 0 && (k.City?.Box is not { } box || Visible(cityRoot, box) == 0);
+                string Undressed() => string.Join(", ", solid.Where(k => !Dressed(k)).Select(k => HdModels.NodeKey(k.Model)).Distinct());
+                ctx.Check(solid.Count > 0 && solid.All(Dressed), $"every solid kind of the shipped city draws its hull, none its original ({solid.Count} kinds; undressed: {Undressed()})");
+                Switch(full, enhanced: false);
+                ctx.Check(solid.All(Whole), $"under Faithful every solid kind draws its original mesh and no hull");
+                Switch(full, enhanced: true);
+                Models(full, Utils.VegetationModelsSetting.Off);
+                ctx.Check(solid.All(Whole), $"with the 3D models off every solid kind draws its original mesh and no hull");
+            }
+            finally
+            {
+                full.Close();
+            }
+        }
+        finally
+        {
+            HdModels.Current = pack;
+            CityModels.Root = root;
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("canopy-models",
         "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
@@ -1631,6 +1853,11 @@ internal static class GraphicsSwitchSuites
                     $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
                 Ring(ctx, freshEnhanced, enhanced: true, "an Enhanced C1B build");
                 HideReadsTheMask(ctx, enhanced, builtFresh);
+                var grids = builtFresh?.GetChildren().OfType<MeshInstance3D>().ToList() ?? new();
+                ctx.Check(grids.Count > 0 && grids.All(g => g.GIMode == GeometryInstance3D.GIModeEnum.Disabled),
+                    $"the ocean's grids stay out of SDFGI's voxels, which blot the water dark next to the camera (#341; {string.Join(", ", grids.Select(g => $"{g.Name}={g.GIMode}"))})");
+                ctx.Check(enhanced.Session.Ocean?.Ocean?.ShaderText.Contains($"EMISSION = ALBEDO * {WeatherRig.GiAmbientFillParam}", StringComparison.Ordinal) == true,
+                    $"the ocean takes SDFGI's ambient floor, as the terrain does, so the sea is not left dark under GI (#341)");
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
@@ -3557,7 +3784,7 @@ internal static class GraphicsSwitchSuites
         Step(rig);
     }
 
-    // A 3D Vegetation apply as the Options accept makes it, then the steps a reading waits for.
+    // A 3D Scenery apply as the Options accept makes it, then the steps a reading waits for.
     private static void Models(Rig rig, string word)
     {
         VegetationModelsSetting.Resolve(word, null, null);
@@ -3575,6 +3802,87 @@ internal static class GraphicsSwitchSuites
         bool found = false;
         Walk(root, node => found |= node is CollisionObject3D or CollisionShape3D);
         return found;
+    }
+
+    // A fixture hull: one box per named mesh node, each 0.9 the size of the last and standing on its origin. All share one
+    // material of the given colour. Godot's own glTF export writes it, so it reads back as a pipeline file does.
+    private static void WriteHull(string path, Color grade, params string[] nodes)
+    {
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var scene = new Node3D { Name = "hull" };
+        var material = new StandardMaterial3D { AlbedoColor = grade };
+        float scale = 1f;
+        foreach (string name in nodes)
+        {
+            var size = new Vector3(20f, 30f, 20f) * scale;
+            var arrays = new BoxMesh { Size = size }.GetMeshArrays();
+            var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            for (int v = 0; v < vertices.Length; v++)
+                vertices[v].Y += size.Y / 2f;
+            arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.SurfaceSetMaterial(0, material);
+            scene.AddChild(new MeshInstance3D { Name = name, Mesh = mesh });
+            scale *= 0.9f;
+        }
+        var state = new GltfState();
+        var document = new GltfDocument();
+        document.AppendFromScene(scene, state);
+        System.IO.File.WriteAllBytes(path, document.GenerateBuffer(state));
+        scene.Free();
+    }
+
+    // What the city must leave as a bare build has it: the collision census, the region bodies and every solid export's
+    // attachment slots. Then the visible clutter nodes and each export's drawn cell count.
+    private static CityReading ReadCity(Mech3.ClutterBuilder clutter, IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds, Node3D root)
+    {
+        var bodies = root.GetChildren().OfType<StaticBody3D>()
+            .Select(b => $"{b.Name}:{PhysicsServer3D.BodyGetShapeCount(b.GetRid())}").OrderBy(s => s, StringComparer.Ordinal);
+        string colliders = string.Join(";", kinds.Where(k => k.Solid)
+            .Select(k => string.Join(",", (k.Colliders ?? Array.Empty<(Rid, int)?>()).Select(c => c?.Item2 ?? -1))));
+        int visible = 0;
+        Walk(root, node => visible += node is MultiMeshInstance3D m && m.IsVisibleInTree() ? 1 : 0);
+        return new CityReading($"{clutter.SolidCollisionShapes} shapes, {clutter.SolidCollisionTriangles} triangles, {clutter.SolidCollisionInstances} attachments",
+            string.Join(" ", bodies), colliders, visible, kinds.Select(k => k.Instances?.CellCount ?? 0).ToList());
+    }
+
+    // The MultiMesh nodes in the tree under a node that draw a mesh.
+    private static List<MultiMeshInstance3D> CityCells(Node root, Mesh mesh)
+    {
+        var cells = new List<MultiMeshInstance3D>();
+        Walk(root, node =>
+        {
+            if (node is MultiMeshInstance3D { Multimesh: { } mm } m && mm.Mesh == mesh && m.IsInsideTree())
+                cells.Add(m);
+        });
+        return cells;
+    }
+
+    private static int Visible(Node root, Mesh mesh) => CityCells(root, mesh).Count(m => m.IsVisibleInTree());
+
+    // Every stamp one cell draws, by Key in world space.
+    private static IEnumerable<string> CellStamps(MultiMeshInstance3D cell) => Enumerable.Range(0, cell.Multimesh.InstanceCount)
+        .Select(i => cell.Multimesh.GetInstanceTransform(i)).Select(xf => Key(new Transform3D(xf.Basis, cell.Position + xf.Origin)));
+
+    // The map edge's shown copies of buildings with a hull: those drawing the box, those drawing the original mesh, and
+    // the further meshes' copies.
+    private static (int Boxes, int Originals, int Parts) EdgeCity(Rig rig, IReadOnlyList<Mech3.ClutterBuilder.KindExport> kinds)
+    {
+        int boxes = 0, originals = 0, parts = 0;
+        if (rig.Session.EdgeExtender is { } edge)
+        {
+            Walk(edge, node =>
+            {
+                if (node is not MultiMeshInstance3D { Multimesh: { } mm } m || !m.IsVisibleInTree() || !node.Name.ToString().StartsWith("clutter_", StringComparison.Ordinal)
+                    || !int.TryParse(node.Name.ToString().AsSpan(8), NumberStyles.None, CultureInfo.InvariantCulture, out int k) || kinds[k].City is not { } city)
+                    return;
+                boxes += city.Box != null && mm.Mesh == city.Box ? 1 : 0;
+                originals += city.Box != null && mm.Mesh == kinds[k].Mesh ? 1 : 0;
+                parts += city.Box == null ? 1 : 0;
+            });
+        }
+        return (boxes, originals, parts);
     }
 
     // Whether every listed card's Rich material carries the handover band: on, off, or mixed.
@@ -4625,6 +4933,9 @@ internal static class GraphicsSwitchSuites
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"{Vertices} vertices of {Materials} material(s) in {Nodes} surface draw(s)");
     }
+
+    // A C5 build's city census (ReadCity).
+    private sealed record CityReading(string Collision, string Bodies, string Colliders, int Visible, List<int> Cells);
 
     // The wake slots drawn after a hull stood still and after it moved, the track length, and the
     // uniforms published last.

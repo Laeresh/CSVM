@@ -141,7 +141,7 @@ internal static class MenuOriginalSuites
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
         + "and picking a frame cap, over the Render Scale and Anti-aliasing rows, the Shadow Quality row "
-        + "dead under Original and live once the Enhanced Graphics checkbox flips, View Distance, Vegetation, 3D Vegetation, Ground Cover, Cloud Shadows, Shadow Distance, Post-processing, Volumetric Clouds, Global Illumination and then VR Mode "
+        + "dead under Original and live once the Enhanced Graphics checkbox flips, View Distance, Vegetation, 3D Scenery, Ground Cover, Cloud Shadows, Shadow Distance, Post-processing, Volumetric Clouds, Global Illumination and then VR Mode "
         + "scrolling into the window's foot, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "

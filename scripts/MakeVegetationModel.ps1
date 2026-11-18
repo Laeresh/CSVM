@@ -7,21 +7,26 @@
 # <data root>/extracted: $env:CSVM_DATA_ROOT, else this tree, else the main checkout (a worktree
 # has no extracted/). Pipeline and conventions: docs/tooling.md, "Vegetation models".
 #
+# -Folder city_models runs a city generator from CSVM/data/city_models instead (docs/tooling.md,
+# "City models"); it writes its own files and prints CITY lines.
+#
 # Pure ASCII on purpose (CLAUDE.md): PowerShell 5.1 mangles a BOM-less non-ASCII script.
 #
 # Usage:
 #   .\scripts\MakeVegetationModel.ps1 -Species firtree1                  the generator's first chapter
 #   .\scripts\MakeVegetationModel.ps1 -Species firtree1 -Chapter C1 -NoRender
+#   .\scripts\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Species,
     [string]$Chapter,
     [switch]$NoRender,
+    [ValidateSet('vegetation_models', 'city_models')][string]$Folder = 'vegetation_models',
     [string]$Blender = 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$script = Join-Path $root "CSVM\data\vegetation_models\$Species.py"
+$script = Join-Path $root "CSVM\data\$Folder\$Species.py"
 if (-not (Test-Path -LiteralPath $script)) { throw "No generator at $script" }
 if (-not (Test-Path -LiteralPath $Blender)) { throw "Blender 5.2 not found at $Blender (pass -Blender)" }
 
@@ -45,7 +50,7 @@ $log = Join-Path $scratch "$Species.log"
 $ErrorActionPreference = 'Continue'
 & $Blender --background --factory-startup --python-exit-code 1 --python $script -- @pyArgs *> $log
 $code = $LASTEXITCODE
-Get-Content -LiteralPath $log | Where-Object { $_ -match '^VEG ' }
+Get-Content -LiteralPath $log | Where-Object { $_ -match '^(VEG|CITY) ' }
 if ($code -ne 0) {
     Get-Content -LiteralPath $log -Tail 30
     Write-Host "Blender failed (exit $code); full log: $log"

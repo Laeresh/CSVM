@@ -838,6 +838,99 @@ tiles' mean colour, and leaves Blender's log in
 else the tree, else the main checkout, and the generator stops if the card's size differs from
 the one it was built for. The script launches no Godot.
 
+## City models (`MakeVegetationModel.ps1 -Folder city_models`)
+
+The Enhanced look's C5 buildings are generated the same way, headless in Blender 5.2, from
+`CSVM/data/city_models/`: `c5.py` holds each building kind's measured hull and its near variants,
+`city_blender.py` the shared builder and the file conventions, and `city_atlas.py` the facade atlas
+painter and its layout (numpy only, so the analysis scripts import it).
+
+- A kind's hull is a profile of horizontal sections from the base up, measured from the original
+  mesh by `analysis/city-hulls/tiers.py`; the generator reads no game file. A building that stands
+  turned in its mesh frame (the `cblock2`, `cblock3`, `cblock5` and `cblock6` kinds, at 45 degrees)
+  is measured turned back (`tiers.py --turn=45`), built in its own frame and turned again on
+  export. A band between unlike sections, which a stack of rectangles cannot hold (ridged wings
+  with gable ends, a hipped skirt round a notched plan, twin pyramids), is built by the hull's
+  `bands` entry (`city_blender.hip_band`, `c5.py`'s `pyramids`). The far box is that profile
+  alone, plus any measured part a profile cannot hold (a chimney, a roof light, `cb07b`'s open
+  frame, the roof billboards of `cb22` and `cb23`). A near variant is the profile or its own
+  profile of the same hull, with
+  parapets, a set-back top floor, light wells, a crown stepped in or reshaped, a pitched roof cut
+  to a flat walk, dormers, street awnings, and roof dressing (water tanks, bulkheads, machine
+  rooms, vents, chimneys), inside the plan's margin: at most about 3 m in from the original's
+  surface, at most about 4 m above it, nothing past it sideways. `analysis/city-hulls/margin.py`
+  measures the three per mesh; it reads the original as a height field, so an awning counts as
+  solid to the ground and a light well cut beside one reads deeper than it is.
+- The output is `CSVM/data/city_models/C5/<model>.glb.bin` per kind (mesh nodes `near0` to
+  `near3`, two to four by how often the shape is placed, and `far`, one material whose `baseColorFactor` grades the far box's mean atlas colour to the
+  original's mean unlit colour, its painted lit windows left out because the engine lights the
+  windows itself), `facade.png.bin` (the atlas, sRGB) and `facade_ids.png.bin` (per texel the window
+  id, the floor within the tile and the glass weight). The export's `data/*.bin` filter packs them
+  as it packs the vegetation models. A rerun under the same Blender build writes every file byte
+  for byte the same.
+- `TEXCOORD_0` is facade tile coordinates (8 m tiles, two 4 m floors): on a wall u runs left to
+  right along the wall plane with a whole-number offset per plane, so every window column of a
+  building has its own integer u, and v is height over 8 m. Every facade row has an even bay
+  count, so all four rows of a family have a pier every 4 m (`city_atlas.grid_m`). A plane holds
+  a whole number of those 4 m bays between its ends, stretched by at most 10 %, or else centred
+  with a solid strip at each end; a wall end inside a plane that falls off the grid is a solid
+  strip too, so no window is cut at a corner whichever row the shader picks. The near variants'
+  set-backs, light wells, low ends and attics stand on the grid, which leaves solid only the
+  2.5 m sides of light wells and notches and the ends of the long-side set-backs under `cb12b`'s
+  and `cb14c`'s roofs. A dormer front is 2 m wide and shows one 2 m bay from a tile edge: one
+  whole window of every walk-up row, off centre in the paired row. `cb02a`'s L-steps stand on its
+  grid, 1.33 m in from the measured 5.3 m. `py -I analysis/city-hulls/corners.py` checks every
+  windowed wall edge of the shipped models against every row's bays (`--strips` lists the solid
+  strips). `TEXCOORD_1` is (family, surface class:
+  0 wall, 1 roof, 2 light metal, which the shader takes ungraded so posts and rails stay pale on a
+  dark building, 3 cornice, the light metal cell ungraded and brightened by
+  `CityModels.CorniceGain`, 4 board, whose `TEXCOORD_1.x` is the board's format instead of the
+  family). The walk-ups under a tile roof (`cb12`, `cb13`, `cb15`, `cb16`) wear a
+  0.6 m cornice line at the top of the wall under every roof edge and eave, after the bright line
+  along the originals' dentil cornice (`c5.py`'s `CORNICE_M`). A gabled kind maps its gable ends onto the wall's solid band. The six families
+  are grey stone and brick walk-ups, warm and dark office towers, and the two walk-ups again under
+  a brown tile roof, their rows in wall colours of their own (`TILE_WALLS`) held to the first two
+  families' mean, so their grades stand. The shader recolours a tile roof per building
+  (`CityModels.Roofs`). `city_atlas.py`'s docstring gives the cell layout and the ids encoding.
+- The boards (surface class 4) fill the atlas's free strips under the families and right of the
+  metal cells, ungraded: six landscape posters (12 x 6 m boards) and four portrait ones
+  (5.9 x 8.86 m), the shader picking one per building from its seed so the near model and the far
+  box agree, a plank back and a red brick gable, which tile. A poster's face is the one the
+  original's poster faces, both faces on `cb23`'s single board, and the other face is the back.
+  The posters are ours: block lettering and plain shapes (a plane, a propeller, a shield, rays,
+  stripes, a skyline) over companies the game's own text names (`ui_strings.json`: Blake
+  Aviation, the Tornado engines, the Achilles Armor Company, and the plane and engine makers
+  Hughes, Wright, Bristol, Ford and Colt) and two plain words. At run time the chapter's own
+  posters (`poster02` and `poster04` landscape, `poster03` portrait) join the draw with an equal
+  chance: `CityModels` copies them from the textures the game loads into empty strip cells of
+  the atlas image, so the committed atlas holds none of them. `CityModels.PosterGain` lifts a
+  poster to the original's lit poster on a night frame. `cb17a`'s gable ends take the brick cell
+  at the original gable texture's unlit mean colour, since another family's solid band under the
+  kind's grade came out about 2.5 times too dark.
+- The `det` dressing (`c5.py`'s `DRESSING`) is a model file per dressing kind like a building's,
+  with one near node and a far node, its pieces at the places measured on the original and its far
+  node at the original's triangles: street awnings in light metal, fire escapes as dark plates for
+  the flights and landings with a lattice band along each flight and a rail over each landing, roof
+  boxes and vent stubs, a ledge ring, and a lattice mast. The near node adds the flat pieces'
+  undersides. The lattice is the board format 4, our own truss drawn as light metal on black;
+  a file whose material is named `*.cutout` draws through `CityModels`'s cut-out shader, which
+  discards its black. `analysis/city-hulls/margin.py` checks a dressing model by its box: within
+  the original's grown by `DET_TOL` (0.05 m).
+- Nothing from the original's textures goes into a model or the atlas: the facade families are
+  drawn after what the originals show, and each kind's grade is a number set from the original's
+  mean colour of its texels at or below `UNLIT_LUMA`, as `analysis/city-hulls/census.py` measures
+  it (its `unlit colour` table).
+
+`.\scripts\MakeVegetationModel.ps1 -Folder city_models -Species c5 -NoRender` regenerates the atlas
+and every kind, printing a `CITY` line per kind (triangles per mesh, family, grade); Blender's log
+is `.scratch/vegetation/c5.log`. With `CSVM_DATA_ROOT` naming a checkout that holds `extracted/`,
+`py -I analysis/city-hulls/margin.py` prints the margin per mesh and
+`py -I analysis/city-hulls/preview.py <dir outside the repo>` draws the originals beside the
+models, the atlas and a night mock; with model names after the folder it draws only those shapes,
+each original beside every near variant and its far box (`--exposure=K` lifts the light on both so
+dark massing reads, `--scale=S` sets pixels per metre). The previews hold original pixels and are
+never committed.
+
 ## `tools/` (git-ignored)
 
 Downloaded binaries: the Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/` (use

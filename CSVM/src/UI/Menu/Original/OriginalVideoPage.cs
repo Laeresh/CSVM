@@ -52,10 +52,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's vegetation-quality dropdown, under View Distance in the scrolled window.</summary>
     public const string VegetationQualityKey = "VEGETATIONQUALITY";
 
-    /// <summary>The page's 3D vegetation dropdown, under Vegetation in the scrolled window.</summary>
+    /// <summary>The page's 3D scenery dropdown, under Vegetation in the scrolled window.</summary>
     public const string VegetationModelsKey = "VEGETATIONMODELS";
 
-    /// <summary>The page's ground cover dropdown, under 3D Vegetation in the scrolled window.</summary>
+    /// <summary>The page's ground cover dropdown, under 3D Scenery in the scrolled window.</summary>
     public const string GroundCoverKey = "GROUNDCOVER";
 
     /// <summary>The page's cloud shadows dropdown, under Ground Cover in the scrolled window.</summary>
@@ -167,7 +167,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(ShadowQualityKey, CSVM.Utils.ShadowQualitySetting.Lookup, "Shadow Quality"),
         Word(ViewDistanceKey, CSVM.Utils.ViewDistance.Lookup, "View Distance"),
         Word(VegetationQualityKey, CSVM.Utils.VegetationQualitySetting.Lookup, "Vegetation"),
-        Word(VegetationModelsKey, CSVM.Utils.VegetationModelsSetting.Lookup, "3D Vegetation"),
+        Word(VegetationModelsKey, CSVM.Utils.VegetationModelsSetting.Lookup, "3D Scenery"),
         Word(GroundCoverKey, CSVM.Utils.GroundCoverSetting.Lookup, "Ground Cover"),
         Word(CloudShadowsKey, CSVM.Utils.CloudShadowSetting.Lookup, "Cloud Shadows"),
         Word(ShadowDistanceKey, CSVM.Utils.ShadowDistanceSetting.Lookup, "Shadow Distance"),
