@@ -40,8 +40,40 @@ public sealed class CityGround
         }
         """;
 
+    /// <summary>The vertex-stage line, before the view transform.</summary>
+    internal const string VertexLine = "    v_city_floor_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n";
+
+    // TUNE. How far inside the band the verge colour is read: past the HD pack's kerb line, on its sidewalk.
+    internal const float KerbSampleInsetM = 1f;
+
+    // TUNE. The verge colour is the darkest of the kerb point and the points this far along the kerb either side. A lamp
+    // pool painted at the kerb is about 25 m long, so the darkest is the verge between pools and no pool smears.
+    internal const float VergeSpanM = 16f;
+
+    // TUNE. The metres past the kerb over which the verge colour fades to the floor. Under a pixel wider than this the fade
+    // takes the pixel's width instead, so the kerb never aliases.
+    internal const float KerbBlendM = 4f;
+
+    // TUNE. How far past the kerb a painted lamp pool still shows over the floor, faded over the last LightFadeM.
+    // The cblock7 paint's pools reach about 12 m past its kerbs, and its painted structure lies beyond them.
+    internal const float LightReachM = 14f, LightFadeM = 6f;
+
+    // TUNE. The paint's sRGB luma over which it counts as light, from nothing to whole. Both sit above the floor's own
+    // level of about 20, so the dark paint and its black roofs never show through.
+    internal const float LightKneeLo = 48f / 255f, LightKneeHi = 96f / 255f;
+
+    // How far, in UV, a corner may sit off the U+X V+Z frame of one 256 m repeat with whole UVs on whole tiles.
+    internal const float FrameSlack = 0.01f;
+
+    // A set with more of its footprint than this inside its paint's streets stands across them. A floor would cut
+    // its buildings, so it keeps the paint.
+    internal const float OnStreetMax = 0.01f;
+
+    // Coplanar layers lie within this of each other (VegetationGround's rule).
+    internal const float CoplanarM = 0.5f;
+
     /// <summary>The fragment-stage declarations of the floor arm, after the mip bias include.</summary>
-    internal const string Declarations = $$"""
+    internal static readonly string Declarations = $$"""
         global uniform float {{OnParam}};
         uniform sampler2DArray city_floor_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
         uniform vec4 city_floor_street0 = vec4(0.0, 0.0, 0.0, -1.0);
@@ -52,36 +84,40 @@ public sealed class CityGround
 
         {{PickCode}}
 
-        // The paint's share at uv in one street band: 1 inside, 0 outside, the edge spread over a pixel.
-        float csky_city_floor_street(vec4 s, vec2 uv) {
+        // How far past one street band's kerb uv lies in metres (0 or less inside), and a pixel's width there in metres.
+        // Then the uv just inside that kerb straight across from uv, where the paint's verge colour is read.
+        vec4 csky_city_floor_kerb(vec4 s, vec2 uv) {
             float c = dot(s.xy, uv) - s.z;
-            float d = abs(fract(c + 0.5) - 0.5) - s.w;
-            return s.w < 0.0 ? 0.0 : clamp(0.5 - d / max(fwidth(c), 1e-6), 0.0, 1.0);
+            float metres = 256.0 / max(length(s.xy), 1e-6);
+            float f = fract(c + 0.5) - 0.5;
+            float d = (abs(f) - s.w) * metres;
+            float target = sign(f) * max(s.w - {{F(KerbSampleInsetM)}} / metres, 0.0);
+            vec2 kerb = uv + s.xy * (target - f) / max(dot(s.xy, s.xy), 1e-6);
+            return s.w < 0.0 ? vec4(1e6, 0.0, uv) : vec4(d, fwidth(c) * metres, kerb);
         }
         """;
 
-    /// <summary>The vertex-stage line, before the view transform.</summary>
-    internal const string VertexLine = "    v_city_floor_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n";
-
-    /// <summary>The fragment lines after <c>base_col</c>. UV2 holds the combination's first layer and its count, 0 to
-    /// keep the paint. ⚠ Keep every sample outside a branch: the street edge reads screen derivatives.</summary>
-    internal const string FragmentLines = """
+    /// <summary>The fragment lines after <c>base_col</c>, the paint. UV2 holds the combination's first layer and its
+    /// count, 0 to keep the paint. The street band stays the paint exactly. Past the kerb the verge colour fades to the
+    /// floor over <see cref="KerbBlendM"/>. A lamp pool stays where it outshines the floor.
+    /// ⚠ Keep every sample outside a branch: the kerb reads screen derivatives.</summary>
+    internal static readonly string FragmentLines = $$"""
             uint city_floor_pick = csky_city_floor_pick(v_city_floor_pos.xz / 256.0);
             float city_floor_layer = UV2.x + float(city_floor_pick % uint(max(UV2.y, 1.0) + 0.5));
             vec4 city_floor_col = texture(city_floor_tex, vec3(UV, city_floor_layer), csky_mip_bias);
-            float city_street = max(csky_city_floor_street(city_floor_street0, UV), csky_city_floor_street(city_floor_street1, UV));
-            base_col = mix(base_col, city_floor_col, (1.0 - city_street) * step(0.5, csky_city_ground) * step(0.5, UV2.y));
+            vec4 city_kerb0 = csky_city_floor_kerb(city_floor_street0, UV);
+            vec4 city_kerb1 = csky_city_floor_kerb(city_floor_street1, UV);
+            vec4 city_kerb = city_kerb0.x < city_kerb1.x ? city_kerb0 : city_kerb1;
+            vec2 city_along = (city_kerb0.x < city_kerb1.x ? city_floor_street0.yx : city_floor_street1.yx) * vec2(-1.0, 1.0);
+            city_along *= {{F(VergeSpanM / 256f)}} / max(length(city_along), 1e-6);
+            vec4 city_verge = min(csky_sample_albedo(albedo_tex, city_kerb.zw),
+                min(csky_sample_albedo(albedo_tex, city_kerb.zw - city_along), csky_sample_albedo(albedo_tex, city_kerb.zw + city_along)));
+            vec4 city_floored = mix(city_verge, city_floor_col, smoothstep(0.0, max({{F(KerbBlendM)}}, city_kerb.y), city_kerb.x));
+            float city_light = smoothstep({{F(Linear(LightKneeLo))}}, {{F(Linear(LightKneeHi))}}, dot(base_col.rgb, vec3(0.2126, 0.7152, 0.0722)))
+                * (1.0 - smoothstep({{F(LightReachM - LightFadeM)}}, {{F(LightReachM)}}, city_kerb.x));
+            city_floored = mix(city_floored, max(city_floored, base_col), city_light);
+            base_col = mix(base_col, city_floored, float(city_kerb.x > 0.0) * step(0.5, csky_city_ground) * step(0.5, UV2.y));
         """;
-
-    // How far, in UV, a corner may sit off the U+X V+Z frame of one 256 m repeat with whole UVs on whole tiles.
-    private const float FrameSlack = 0.01f;
-
-    // A set with more of its footprint than this inside its paint's streets stands across them. A floor would cut
-    // its buildings, so it keeps the paint.
-    private const float OnStreetMax = 0.01f;
-
-    // Coplanar layers lie within this of each other (VegetationGround's rule).
-    private const float CoplanarM = 0.5f;
 
     private readonly Dictionary<string, Floor> _floors;
     private readonly Dictionary<GameZPolygon, Vector2> _uv2;
@@ -396,6 +432,11 @@ public sealed class CityGround
             return x;
         }
     }
+
+    private static string F(float v) => v.ToString("0.0######", CultureInfo.InvariantCulture);
+
+    // The sRGB transfer's decode, since the floor arm compares a linear sample against an sRGB knee.
+    private static float Linear(float srgb) => srgb <= 0.04045f ? srgb / 12.92f : MathF.Pow((srgb + 0.055f) / 1.055f, 2.4f);
 
     private static string Rooted(string folder) =>
         folder.Contains("://", StringComparison.Ordinal) || System.IO.Path.IsPathRooted(folder) ? folder : System.IO.Path.GetFullPath(folder);
