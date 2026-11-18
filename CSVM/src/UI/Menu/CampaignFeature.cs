@@ -1024,6 +1024,26 @@ public sealed class CampaignFeature : IMenuFeature
         _debriefCash = run?.Money ?? 0;
     }
 
+    /// <summary>The skip offer's Yes on the seated profile. The lost <paramref name="result"/> is
+    /// re-recorded as the synthetic win with its carried capture, and the profile and any award are
+    /// saved. False with nobody seated.</summary>
+    public bool AcceptSkip(CampaignMissionResult result)
+    {
+        if (Profile is not { } profile)
+        {
+            return false;
+        }
+
+        var recorded = CampaignProgression.AcceptSkip(profile, result.Attempt, result.Chapter, result.SkipCapture);
+        Store?.Save(profile);
+        if (Planes is { } planes)
+        {
+            CampaignProgression.SaveAwards(recorded, planes);
+        }
+
+        return true;
+    }
+
     /// <summary>The debrief is over, a board other than the book being entered.</summary>
     public void CloseDebrief() => Debriefing = false;
 

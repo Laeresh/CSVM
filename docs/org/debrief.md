@@ -104,6 +104,13 @@ The offer is a `dialog.zrd` `MESSAGEBOX` (`FUN_004af930`) carrying langui string
 and the literal `4`. A return of `6`, the Yes answer, calls `FUN_00463c10(campaign, 1)` to **set
 the win flag** and then re-enters `FUN_004194e0`.
 
+String 191 is absent from the shipped `langui.dll` table (its ids jump from 136 to 200), so its
+wording comes from a capture of the original (`OriginalScreenshots/Screenshot 2026-11-18
+174921.png`): **"Do you want to skip this mission?"**, with `yes` and `no` answers. The string has
+no placeholder, so the `4` passed to it is unused. The capture also shows where the box stands:
+over the mission's own world at its end (the wreck burning, the "Fatal Crash" line still up), not
+over the debrief screen, which the pass shows only after the box is answered.
+
 The skip is therefore implemented as a synthetic win. The second pass takes the won branch, sets
 bit 0, and reads the same objective state, which is also why taking the offer makes the world-state
 save gate in `FUN_0046b450` pass where the failed attempt itself wrote nothing.
@@ -518,17 +525,24 @@ merge, not its author, and the two run in the same mission-end pass.
   campaign's current position (they differ after a win); Return to Cabin pops back to the cabin
   `SelectProfile` already pushed. Both tabs are live, and Replay Mission is offered only where
   `uiData` 2411 offers it: a results page whose mission's record holds a time in either half.
-- **The skip offer's counter and its answer are implemented; the asking is not (B14).**
+- **The skip offer is implemented: the counter, the asking and the answer.**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive
   failures and stops at the mission's first completion. Its fourth increment raises
-  `MissionRecorded.SkipOffered`, which the flown result carries to the screen; answering Yes is
+  `MissionRecorded.SkipOffered`. `MenuReturnDestination.ForDebrief` carries that result, with the
+  lost world's capture, on `DebriefReturn.SkipOffer`, and the Original shell asks over the lost book
+  in a Yes/No query box (`OriginalCampaignScreen.ShowScrapbook`). Answering Yes is
   `CampaignProgression.AcceptSkip`, which re-records the same attempt with bit 0 set, the original's
   synthetic win, and commits the failed attempt's world capture the way the win flag's save gate
-  does. CSVM keeps the counter in the profile because the original's own array sits in the
-  undecoded `0x0071b480` overlap below. The prompt itself is `SkipOfferPrompt`, a marked
-  placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet: the
-  original asks it in a message box, and this shell has no such screen.
+  does; `CampaignFeature.AcceptSkip` saves the profile and the debrief is re-entered as won, the
+  original's own re-entry. The original asks over the ended mission's world; CSVM's world is freed
+  by the time the menu opens, so the box stands over the book instead. A co-op guest has no profile and never asks. The
+  mission end has already dropped the loss's staged danger-zone photographs when Yes is answered,
+  so a skip keeps none; whether the original's `FUN_004072a0` sweep runs before or after its
+  re-entered win is not decoded. CSVM keeps
+  the counter in the profile because the original's own array sits in the undecoded `0x0071b480`
+  overlap below. The prompt is `SkipOfferPrompt`, string 191's wording as the capture above
+  shows it.
 - **Both mask sources are implemented.** `ObjectiveGraph.CompletedMask` is the objective-number
   half; `CampaignDirector.DangerZoneMask` is the id 18 to 30 half, a bit per completed danger zone
   by the number the mission's `dzones.zrd` gives that zone, and the two are merged at mission end.
@@ -539,9 +553,6 @@ merge, not its author, and the two run in the same mission-end pass.
   `PC_B_PREVIOUS`'s `ScriptToExe = ScrapBook_TOC` and where `$$SR$$` is set before the mission-end
   path opens the book are both unread; the `ghidra-mcp` bridge was not reachable in the session
   that wrote the entry-path decode. Nothing above depends on either address (A3).
-- **The wording of string 191.** `langui.dll`'s table (`ui_strings.json`) jumps from id 136 to id 200,
-  so the skip offer's text is absent from the game files. Its shape is known (a Yes/No message box
-  taking a string and the number 4 as its two format arguments) and its wording is not.
 - **The `0x0071b480` overlap.** The campaign object's base and the `PilotStatus` save section's
   destination are the same address, and the attempt counters this page reads sit inside the
   1448-byte range that section covers, yet the only available profile's `PilotStatus` is all zeros

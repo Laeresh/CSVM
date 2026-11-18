@@ -1484,13 +1484,7 @@ public sealed class CampaignDirector
             return;
         }
 
-        var planes = CustomPlaneStore.UserPlanes();
-        foreach (var build in recorded.AwardedBuilds)
-        {
-            // A granted aircraft is the campaign's, so it waits for EXPORT like a campaign-built one.
-            build.AwaitingExport = true;
-            Log.Info("core", $"campaign: award '{build.Name}' saved to {planes.Save(build)}");
-        }
+        CampaignProgression.SaveAwards(recorded, CustomPlaneStore.UserPlanes());
     }
 
     // This director's place in the CALLBACK host chain. Owning a code means answering it here even
