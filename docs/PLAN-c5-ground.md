@@ -192,7 +192,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Generate the block floor variants for `cblock7`
 13. ☑ Composite and select the new ground in the engine
 14. ☑ Build and stamp the low block dressing
-15. ☐ Judge the prototype at the controls
+15. ☑ Judge the prototype at the controls
 
 ### Wave C, the whole city
 
@@ -541,7 +541,22 @@ shape count stays 123 shapes, 4,224 triangles).>
 **⚠ Traps.** Height cap about 4 m (TUNE, Decision 5). The dressing must not suggest a landable spot
 where a collider stands. The distant draw count must not rise (Decision 10).
 
-## B15 ☐ Judge the prototype at the controls
+## B15 ☑ Judge the prototype at the controls
+
+**Landed.** The author flew the `cblock7` prototype with the HD pack, under C5's retuned lighting
+(7e1f0f04e, merged into the plan branch). Fixes from the flight: a soft kerb with whole painted lamp
+pools (the floor met the pack's sidewalk in a one-pixel step and covered the half of each pool past
+the band edge); the dressing faded like the walk-up blocks with far models past the band (it was cut
+at about 660 m while still opaque); the floor at texture luma 35 (Decision 3 amended: at 20 the
+structure did not show under the new lighting); walls and fences toned through `CityModels.Tone`
+(their atlas boards skipped the grade); the city tree through `VegetationModels`' gain arm; the
+truck's poster board toned with its colours kept. Verdicts: Decisions 18 to 21.
+
+**Verified.** The author, after each fix: "Both fixed" (kerb and reach), "level35 works with the
+current settings", and of the toned dressing and trucks: "works for me". The city suites and
+`-Quick` pass on the plan tree; goldens wait for C25.
+
+**Original approach (kept for reference).**
 
 **Goal.** The author's verdict on the `cblock7` prototype: brightness, variant count, the
 paved/green mix, the height cap.
