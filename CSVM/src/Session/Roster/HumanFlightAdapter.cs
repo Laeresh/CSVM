@@ -408,6 +408,7 @@ internal sealed class HumanFlightAdapter
                 controller.AmmoCapOverride = _policy.AmmoCap;
                 controller.AutoFire = _policy.AutoFire;
                 controller.AutoFireRockets = _policy.AutoFireRockets;
+                controller.Headlight.On = _policy.HeadlightOn;
                 controller.InitialGunSelect = _policy.GunSelect;
                 // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is mounted.
                 // A testing hook, all 11 stock loadouts carry HE, so this is the only way to

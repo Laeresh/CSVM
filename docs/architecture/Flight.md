@@ -450,8 +450,8 @@ the two fuses and the three end conditions), the swept hit ray over world and ai
 impact that follows, the struck material's `IMPACT` row for a ray hit and the `default` row for a
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
-muzzle light (the first-person pair joins the `WorldLights` point term in original mode via
-`BindPointLights`), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
+muzzle light (via `BindPointLights`, original mode puts both branches into the `WorldLights` point term, and Enhanced
+the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
@@ -1352,6 +1352,14 @@ engine-out aircraft and a re-engage while the boost or decay animation is alive.
 injector, and the `...ThisTick` edges are what `FlightController.AdvanceNitro` turns into the shake
 kick, the two defs and the keyed `snd_nitro` loop. `RestoreCharge` puts back a stunt tap return's
 snapshot after `Reset`. Decode: [../org/flightModel.md](../org/flightModel.md).
+
+## src/Flight/Airframe/Headlight.cs
+The headlight, a remake-only forward cone of light a human pilot switches, drawn under Enhanced graphics
+alone. `On` is the switch: off with a new aircraft, never reset by a respawn, and a remote seat's
+comes from its owner's `AircraftStateMessage`. `Read` splits one control the view cycle and the
+switch both hold by hold length (`TapHoldButton`), which is how the pad's d-pad down carries both.
+`Show` builds the `SpotLight3D` ahead of the hull's front on its first lit frame and keeps its shadow
+on Shadow Quality. `FlightController.StepHeadlight` is the one caller. Read `SeatControls.cs` next.
 
 ## src/Flight/Ai/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher

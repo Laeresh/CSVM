@@ -182,4 +182,8 @@ public enum InputAction
     // Opening the HUD layout editor over the seat's pane, Shift+F2 by default. A remake-only flight
     // action beside the HUD mode step. Appended because the enum is positional.
     EditHudLayout,
+
+    // Switching the Enhanced-only headlight, H by default, the pad's held d-pad down beside the view
+    // cycle's tap. A remake-only flight action. Appended because the enum is positional.
+    Headlight,
 }

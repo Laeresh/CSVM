@@ -193,9 +193,11 @@ internal static class LocalBotSuites
         Lift(pane);
         bot.DebugForceCrash();
         StepUntil(() => bot.Crashed, session);
+        pane.Headlight.On = true;
         session.Dogfight.Restart();
         ctx.Check(Board(session).All(row => row == (0, 0, 0)) && !match.Completed,
             $"[{cell}] the rematch zeroes the board ({Scoreboard(session)})");
+        ctx.Check(!pane.Headlight.On, $"[{cell}] and switches the pane's lit headlight off, as a level load does");
         ctx.Check(!pane.Crashed && !bot.Crashed && EntryAt(table, pane) == paneOpening && EntryAt(table, bot) == botOpening,
             $"[{cell}] and places both on their opening entries (pane {EntryAt(table, pane)} against {paneOpening}, bot {EntryAt(table, bot)} against {botOpening}, bot down {bot.Crashed})");
     }
