@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using CSVM.Utils;
 using Godot;
 
@@ -760,6 +761,9 @@ public sealed class TextureArchive : IDisposable
     // Base name -> the original's size, for every texture an HD replacement took over. Its texture
     // reports that size, as HdArt's 2D art does: the compass tape draws archive art by pixel rects.
     private readonly Dictionary<string, Vector2I> _hdSizes = new(StringComparer.OrdinalIgnoreCase);
+
+    // Archive name -> its HD replacement decoding on the thread pool, taken once by Build.
+    private readonly Dictionary<string, Task<Image?>> _hdAhead = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public TextureArchive(TextureSet textures)
@@ -1061,6 +1065,46 @@ public sealed class TextureArchive : IDisposable
         return tex;
     }
 
+    /// <summary>Starts decoding the HD replacement of each of <paramref name="materialTextureNames"/>
+    /// on the thread pool. The build's <see cref="Find"/> then takes a finished image rather than
+    /// decoding each in turn on the main thread. Returns how many it started; none without a pack.
+    /// <see cref="ReleaseHdAhead"/> frees what no lookup took.</summary>
+    public int DecodeHdAhead(IEnumerable<string> materialTextureNames)
+    {
+        var hd = Extraction.HdTextures.Current;
+        if (hd.Count == 0)
+        {
+            return 0;
+        }
+
+        int started = 0;
+        foreach (var material in materialTextureNames)
+        {
+            if (Read(Path.GetFileNameWithoutExtension(material))?.Key is { } name && !_hdAhead.ContainsKey(name))
+            {
+                // ⚠ The worker touches only the pack, which locks its reads, and its own new Image.
+                _hdAhead[name] = Task.Run(() => HdArt.Decode(hd.ForWorld(_archive, name)));
+                started++;
+            }
+        }
+
+        return started;
+    }
+
+    /// <summary>Drops the decodes ahead no lookup took, disposing each once it finishes. Returns how
+    /// many it dropped.</summary>
+    public int ReleaseHdAhead()
+    {
+        int dropped = _hdAhead.Count;
+        foreach (var ahead in _hdAhead.Values)
+        {
+            ahead.ContinueWith(t => t.Result?.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion);
+        }
+
+        _hdAhead.Clear();
+        return dropped;
+    }
+
     /// <summary>True when <see cref="Find"/> has handed out this texture and its alpha depth
     /// follows the graphics mode.</summary>
     public bool FollowsAlphaDepth(string materialTextureName) =>
@@ -1170,6 +1214,7 @@ public sealed class TextureArchive : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        ReleaseHdAhead();
     }
 
     // The level an archive name claims by its `_N` suffix, or 0 for a base texture. Only 1 and 2
@@ -1324,7 +1369,7 @@ public sealed class TextureArchive : IDisposable
         // After the alpha reads, which stay the original's, so the blend/scissor choice is unchanged.
         // Converted to the original's format, so an opaque original stays opaque.
         bool hd = false;
-        if (HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_archive, name)) is { } big)
+        if (DecodeHd(name) is { } big)
         {
             if (big.GetFormat() != img.GetFormat())
             {
@@ -1443,6 +1488,17 @@ public sealed class TextureArchive : IDisposable
                 Log.Warn("world", $"authored mip level refused texture={archiveBaseName}_{level} reason={why}");
             }
         }
+    }
+
+    // The HD replacement of one archive texture: the decode ahead once, then a decode in place.
+    private Image? DecodeHd(string archiveName)
+    {
+        if (_hdAhead.Remove(archiveName, out var ahead))
+        {
+            return ahead.GetAwaiter().GetResult();
+        }
+
+        return HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_archive, archiveName));
     }
 
     // Resolve, then the after-Dispose contract on a name that resolved.
