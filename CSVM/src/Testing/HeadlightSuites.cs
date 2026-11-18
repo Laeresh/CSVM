@@ -162,6 +162,9 @@ internal static class HeadlightSuites
         Idle(seat);
         ctx.Check(!off && seat.Headlight.Light.ShadowEnabled,
             $"the beam casts no shadow with Shadow Quality Off and one at Ultra (off={off}, ultra={seat.Headlight.Light.ShadowEnabled})");
+        var reach = seat.Headlight.Reach!;
+        ctx.Check(reach.Visible && !reach.ShadowEnabled && reach.SpotRange > seat.Headlight.Light.SpotRange,
+            $"while the far light past the near one's range lights unshadowed at any level (range {reach.SpotRange} over {seat.Headlight.Light.SpotRange}, shadow {reach.ShadowEnabled})");
         Press(seat, Key.H);
     }
 

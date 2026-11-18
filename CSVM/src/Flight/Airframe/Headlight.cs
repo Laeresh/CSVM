@@ -7,19 +7,27 @@ namespace CSVM.Flight.Airframe;
 /// <summary>The headlight: a forward cone of light ahead of the aircraft's nose that a human pilot
 /// switches, which the original does not have. The switch starts off with the aircraft and nothing
 /// resets it, so it survives a respawn. The caller allows the beam under Enhanced graphics alone,
-/// and it casts shadows unless Shadow Quality is Off. The light is built on its first shown frame,
-/// so an aircraft that never lights it pays nothing. The switch shares a control with the view
-/// cycle (<see cref="Read"/>).</summary>
+/// and its near light casts shadows unless Shadow Quality is Off. The lights are built on the first
+/// shown frame, so an aircraft that never lights them pays nothing. The switch shares a control
+/// with the view cycle (<see cref="Read"/>).</summary>
 public sealed class Headlight
 {
-    /// <summary>The beam's reach in metres. TUNE: judged at the controls.</summary>
+    /// <summary>The beam's reach in metres, the unshadowed far light's range. TUNE: judged at the controls.</summary>
     public const float Range = 400f;
 
-    /// <summary>The cone's half-angle in degrees. TUNE.</summary>
+    /// <summary>The shadowed near light's range in metres. ⚠ Keep it short: one shadow map over the whole
+    /// reach either stripes far out or, biased against that, detaches every near shadow.</summary>
+    public const float NearRange = 120f;
+
+    /// <summary>The cone's half-angle in degrees, both lights. TUNE.</summary>
     public const float ConeDegrees = 20f;
 
-    /// <summary>The beam's energy. TUNE.</summary>
-    public const float Energy = 4.5f;
+    /// <summary>The near light's energy. Above the far light's, so a near shadow, which the far light
+    /// still fills, reads dark. TUNE.</summary>
+    public const float Energy = 3.5f;
+
+    /// <summary>The far light's energy. TUNE.</summary>
+    public const float ReachEnergy = 2f;
 
     /// <summary>How far ahead of the hull's front the light sits, in metres. ⚠ Keep it outside the
     /// hull: a light inside the nose has its whole beam shadowed by the airframe.</summary>
@@ -28,12 +36,12 @@ public sealed class Headlight
     /// <summary>Where the light sits on an aircraft with no model to measure, metres ahead of its origin.</summary>
     public const float BareNoseDistance = 5f;
 
-    /// <summary>The shadow's depth bias, over Godot's spot default 0.03. ⚠ Keep it raised: across a
-    /// beam this long the default leaves a building or rock face shadowing itself in broad stripes.</summary>
-    public const float ShadowBias = 0.25f;
+    /// <summary>The near shadow's depth bias, a little over Godot's spot default 0.03. A large one
+    /// detaches a tower's shadow from its foot and drops a wall's. TUNE.</summary>
+    public const float ShadowBias = 0.05f;
 
-    /// <summary>The shadow's normal bias, over Godot's default 1.0, for the same stripes. TUNE.</summary>
-    public const float ShadowNormalBias = 4f;
+    /// <summary>The near shadow's normal bias, a little over Godot's default 1.0. TUNE.</summary>
+    public const float ShadowNormalBias = 1.5f;
 
     /// <summary>The beam's warm white. TUNE.</summary>
     public static readonly Color WarmWhite = new(1f, 0.9f, 0.75f);
@@ -44,8 +52,11 @@ public sealed class Headlight
     /// <summary>Gets or sets the pilot's switch. A remote aircraft's is its owner's, from the samples.</summary>
     public bool On { get; set; }
 
-    /// <summary>Gets the built light, null until the beam first shows.</summary>
+    /// <summary>Gets the built near light, the shadowed one, null until the beam first shows.</summary>
     public SpotLight3D? Light { get; private set; }
+
+    /// <summary>Gets the built far light, unshadowed, null until the beam first shows.</summary>
+    public SpotLight3D? Reach { get; private set; }
 
     /// <summary>Gets a value indicating whether the beam draws this frame.</summary>
     public bool Lit => Light is { Visible: true };
@@ -71,12 +82,19 @@ public sealed class Headlight
         if (!show)
         {
             if (Light != null)
-                Light.Visible = false;
+                Light.Visible = Reach!.Visible = false;
             return;
         }
 
-        Light ??= Build(host, model);
-        Light.Visible = true;
+        if (Light == null)
+        {
+            float z = NoseZ(host, model);
+            Light = Build(host, "headlight", z, NearRange, Energy);
+            Reach = Build(host, "headlight_reach", z, Range, ReachEnergy);
+            Log.Debug("flight", $"headlight built on {host.Name} at z={z:0.00}");
+        }
+
+        Light.Visible = Reach!.Visible = true;
         Light.ShadowEnabled = ShadowQualitySetting.Sun.Cast;
     }
 
@@ -86,23 +104,22 @@ public sealed class Headlight
         return ((cycle && !light) || press == TapHold.Tap, (light && !cycle) || press == TapHold.Hold);
     }
 
-    private static SpotLight3D Build(Node3D host, Node3D? model)
+    private static SpotLight3D Build(Node3D host, string name, float z, float range, float energy)
     {
         var light = new SpotLight3D
         {
-            Name = "headlight",
-            Position = new Vector3(0f, 0f, NoseZ(host, model)),
-            SpotRange = Range,
+            Name = name,
+            Position = new Vector3(0f, 0f, z),
+            SpotRange = range,
             // ⚠ Keep Godot's inverse-distance term off. At its default the beam is energy/d, gone by 60 m in daylight.
             SpotAttenuation = WorldLights.OmniAttenuation,
             SpotAngle = ConeDegrees,
             ShadowBias = ShadowBias,
             ShadowNormalBias = ShadowNormalBias,
-            LightEnergy = Energy,
+            LightEnergy = energy,
             LightColor = WarmWhite,
         };
         host.AddChild(light);
-        Log.Debug("flight", $"headlight built on {host.Name} at z={light.Position.Z:0.00}");
         return light;
     }
 
