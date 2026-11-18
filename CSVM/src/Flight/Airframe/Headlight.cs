@@ -30,10 +30,10 @@ public sealed class Headlight
 
     /// <summary>The shadow's depth bias, over Godot's spot default 0.03. ⚠ Keep it raised: across a
     /// beam this long the default leaves a building or rock face shadowing itself in broad stripes.</summary>
-    public const float ShadowBias = 0.1f;
+    public const float ShadowBias = 0.25f;
 
     /// <summary>The shadow's normal bias, over Godot's default 1.0, for the same stripes. TUNE.</summary>
-    public const float ShadowNormalBias = 3f;
+    public const float ShadowNormalBias = 4f;
 
     /// <summary>The beam's warm white. TUNE.</summary>
     public static readonly Color WarmWhite = new(1f, 0.9f, 0.75f);
