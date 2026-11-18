@@ -22,17 +22,22 @@ internal sealed class VegetationStage
 
     /// <summary>The stage over one world's <paramref name="clutter"/>, drawn under
     /// <paramref name="plane"/> from <paramref name="textures"/>. The session built
-    /// <paramref name="edgeExtender"/> and keeps it; the stage only follows it.</summary>
+    /// <paramref name="edgeExtender"/> and keeps it; the stage only follows it, as it does the city's <paramref name="dressing"/>.</summary>
     public VegetationStage(SessionSpec spec, Node3D plane, TextureArchive? textures, ClutterBuilder? clutter,
-        MapEdgeExtender? edgeExtender)
+        MapEdgeExtender? edgeExtender, CityDressing? dressing = null)
     {
         _spec = spec;
         _plane = plane;
         _textures = textures;
         Clutter = clutter;
         _edgeExtender = edgeExtender;
+        Dressing = dressing;
+        Dressing?.Follow();
         FollowCanopyClumps();
     }
+
+    /// <summary>The city's block dressing, null where none stands.</summary>
+    public CityDressing? Dressing { get; }
 
     /// <summary>The world's clutter, null where it has none.</summary>
     public ClutterBuilder? Clutter { get; }
@@ -58,6 +63,7 @@ internal sealed class VegetationStage
     {
         Clutter?.Recut();
         CityGround.Follow();
+        Dressing?.Follow();
         _edgeExtender?.FollowClutterFade();
         FollowCanopyClumps();
     }

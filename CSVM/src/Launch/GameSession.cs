@@ -1895,7 +1895,7 @@ public partial class GameSession : Node3D
             if (_probes!.DumpTileGrid(_edgeExtender))
                 return false;
         }
-        _vegetation = new VegetationStage(_spec, _plane, _sessionTextures, session.Clutter, _edgeExtender);
+        _vegetation = new VegetationStage(_spec, _plane, _sessionTextures, session.Clutter, _edgeExtender, session.Dressing);
         // The sky step: the weather rig, its domes and decks' zone, the cloud field and banks, then
         // the lens flare over them (src/Launch/SkyStage.cs).
         _sky!.Build(state, builder);

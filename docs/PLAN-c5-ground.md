@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Export the footprint and street data the generator needs
 12. ☑ Generate the block floor variants for `cblock7`
 13. ☑ Composite and select the new ground in the engine
-14. ◐ Build and stamp the low block dressing (models landed, stamping open)
+14. ☑ Build and stamp the low block dressing
 15. ☐ Judge the prototype at the controls
 
 ### Wave C, the whole city
@@ -474,7 +474,7 @@ paint. So do the two minor combinations whose buildings stand across their paint
 `no_clutter` bias stays at half a level (`SceneBuilder.cs:486-492`). Original pixels are composited
 at runtime and never written to the repo, a cache or a release.
 
-## B14 ◐ Build and stamp the low block dressing
+## B14 ☑ Build and stamp the low block dressing
 
 **Landed, the models.** `CSVM/data/city_models/c5_ground_dressing.py` builds `gd_wall`, `gd_fence`,
 `gd_shed`, `gd_sedan`, `gd_truck`, `gd_ashcans`, `gd_bench` and `gd_hedge` in `C5/` through the
@@ -486,12 +486,36 @@ or stretched by up to a quarter; the fence's boards sit at z = 0 with its posts 
 (`INSTANCE_CUSTOM.w`) picks the near variant and varies grade and tint, and picks the truck's
 poster. `analysis/city-hulls/margin.py` and `corners.py` skip the `gd_` files.
 
-**Open, the stamping.** The `gd_` files load through `CityModels.Load` but need a C5 kind list (the
-engine loads by key); the tree needs a `VegetationModels` registration and a grade reference.
-Placement reads B12's layout JSON per variant: fences and walls on its lines, hedges on garden
-edges, trees in gardens and lawns with about 8 m clear overhead, sheds, cars and bins in yards,
-service yards and the alley, benches in gardens; nothing on a street, under a lot, or in a
-no-cell sliver. Bench and ash cans fade early rather than drawing their far nodes.
+**Landed, the stamping.** `CSVM/src/Mech3/CityDressing.cs` stands the dressing wherever
+`CityGround` draws the floor, while `CityModels.On`, built on the first follow with the city on (a
+Faithful session pays nothing). Each variant's layout JSON gives its slots: walls and fences on its
+lines in 8 m pieces stretched by at most a quarter, box hedges round gardens and lawns where no line
+or path runs, the city tree on a jittered 10 m grid in gardens and lawns at least 5.5 m from every
+lot, sheds in yards, sedans and trucks (one in five) along the parking sides of asphalt, concrete,
+gravel and the alley, ash cans in corners, benches in gardens. Every slot is inside a layout cell,
+off the streets and outside every lot drawn again shifted by ±1. A block stands the slots of the
+variant `CityGround.Pick` gives its world-XZ cell, the hash the shader runs from the same `PickCode`
+text; a slot stands only inside that cell, the polygon, and the top layer. A per-block roll keeps
+each slot: hedge edges 0.5, trees 0.6, sheds 0.4, cars 0.25, ash cans 0.35, benches 0.4 (TUNE).
+512 m cells of MultiMeshes; fades end inside the Near band (trees 450 m, walls, sheds and trucks
+350 m, fences, hedges and sedans 300 m, benches and ash cans 150 m), so no far node draws; no
+collider, no shadow. C5: 620,438 instances in 3,921 nodes (fences 54 %), about 40 MB of buffers,
+built in about 1.05 s.
+
+**Verified.** The `city-dressing` suite runs `PickCode` on the GPU at 512 world points and matches the
+CPU pick on all 24 bits, and every instance stands in a block of its cell's variant; the nodes carry
+no collider or shadow; live moves to Off, Original and Faithful hide it and back shows it.
+`CityDressingTests` pin the slots on the shipped layouts and the variant match at three UV offsets.
+`city-buildings` (the collision census) and `city-ground` pass. Frame cost at 5120 × 1440, two
+launches per case: `C5-cb7` +0.09 ms GPU, +0.05 ms render CPU; `C5-alt` ±0 GPU, +0.02 ms render
+CPU, draws unchanged. With the buildings: about +0.67 ms GPU and +0.20 ms CPU (Decision 10).
+Confidence: traced for the variant match and the gate; density and look are B15's.
+
+**For B15 and Wave C.** The tree has no night darkening near the camera and reads bright green. The
+tree's far model never draws (a far arm in `VegetationModels.ShaderCode` would be needed). The map
+edge's copied tiles draw the floor without dressing. A slot outside the cell at its frame's middle
+is dropped, harmless on `cblock7` but to change for C22's diagonal strips. The 40 MB of buffers
+matter on the Deck (C24).
 
 **Original approach (kept for reference).**
 

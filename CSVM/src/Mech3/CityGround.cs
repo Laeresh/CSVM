@@ -22,6 +22,24 @@ public sealed class CityGround
     /// <summary>The global the floor shader reads: 1 while <see cref="CityModels.On"/>, else 0.</summary>
     public const string OnParam = "csky_city_ground";
 
+    /// <summary>The variant pick of a world point, <c>w</c> its XZ over 256, under the cell uniforms. <see cref="Pick"/>
+    /// is its CPU twin. The <c>city-dressing</c> suite runs this text on the GPU against it.</summary>
+    internal const string PickCode = """
+        uint csky_city_floor_hash(uint x) {
+            x ^= x >> 16u;
+            x *= 0x7feb352du;
+            x ^= x >> 15u;
+            x *= 0x846ca68bu;
+            x ^= x >> 16u;
+            return x;
+        }
+
+        uint csky_city_floor_pick(vec2 w) {
+            return csky_city_floor_hash(uint(int(floor(dot(city_floor_cell.xy, w) - city_floor_origin.x)))
+                ^ csky_city_floor_hash(uint(int(floor(dot(city_floor_cell.zw, w) - city_floor_origin.y))) + 0x9e3779b9u));
+        }
+        """;
+
     /// <summary>The fragment-stage declarations of the floor arm, after the mip bias include.</summary>
     internal const string Declarations = $$"""
         global uniform float {{OnParam}};
@@ -32,14 +50,7 @@ public sealed class CityGround
         uniform vec2 city_floor_origin = vec2(0.0);
         varying vec3 v_city_floor_pos;
 
-        uint csky_city_floor_hash(uint x) {
-            x ^= x >> 16u;
-            x *= 0x7feb352du;
-            x ^= x >> 15u;
-            x *= 0x846ca68bu;
-            x ^= x >> 16u;
-            return x;
-        }
+        {{PickCode}}
 
         // The paint's share at uv in one street band: 1 inside, 0 outside, the edge spread over a pixel.
         float csky_city_floor_street(vec4 s, vec2 uv) {
@@ -55,9 +66,7 @@ public sealed class CityGround
     /// <summary>The fragment lines after <c>base_col</c>. UV2 holds the combination's first layer and its count, 0 to
     /// keep the paint. ⚠ Keep every sample outside a branch: the street edge reads screen derivatives.</summary>
     internal const string FragmentLines = """
-            vec2 city_floor_w = v_city_floor_pos.xz / 256.0;
-            uint city_floor_pick = csky_city_floor_hash(uint(int(floor(dot(city_floor_cell.xy, city_floor_w) - city_floor_origin.x)))
-                ^ csky_city_floor_hash(uint(int(floor(dot(city_floor_cell.zw, city_floor_w) - city_floor_origin.y))) + 0x9e3779b9u));
+            uint city_floor_pick = csky_city_floor_pick(v_city_floor_pos.xz / 256.0);
             float city_floor_layer = UV2.x + float(city_floor_pick % uint(max(UV2.y, 1.0) + 0.5));
             vec4 city_floor_col = texture(city_floor_tex, vec3(UV, city_floor_layer), csky_mip_bias);
             float city_street = max(csky_city_floor_street(city_floor_street0, UV), csky_city_floor_street(city_floor_street1, UV));
@@ -76,11 +85,14 @@ public sealed class CityGround
 
     private readonly Dictionary<string, Floor> _floors;
     private readonly Dictionary<GameZPolygon, Vector2> _uv2;
+    private readonly Dictionary<GameZPolygon, (string Paint, string? Set)> _sets;
 
-    private CityGround(Dictionary<string, Floor> floors, Dictionary<GameZPolygon, Vector2> uv2, List<string> missing)
+    private CityGround(Dictionary<string, Floor> floors, Dictionary<GameZPolygon, Vector2> uv2,
+        Dictionary<GameZPolygon, (string Paint, string? Set)> sets, List<string> missing)
     {
         _floors = floors;
         _uv2 = uv2;
+        _sets = sets;
         Missing = missing;
     }
 
@@ -127,11 +139,13 @@ public sealed class CityGround
         {
             var images = new Godot.Collections.Array<Image>();
             var sets = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase);
+            var paths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var (set, onStreet) in spec.Sets)
             {
                 if (onStreet > OnStreetMax)
                     continue;
                 int first = images.Count;
+                var read = new List<string>();
                 foreach (string file in index.TryGetValue($"{paint}-{set}", out var named) ? named : new List<string>())
                 {
                     if (ReadImage($"{dir}/{file}") is not { } image)
@@ -145,11 +159,15 @@ public sealed class CityGround
                         continue;
                     }
                     images.Add(image);
+                    read.Add($"{dir}/{file}");
                 }
                 if (images.Count == first)
                     missing.Add($"{paint}-{set}");
                 else
+                {
                     sets[set] = new Vector2(first, images.Count - first);
+                    paths[set] = read;
+                }
             }
             if (images.Count == 0)
                 continue;
@@ -160,7 +178,7 @@ public sealed class CityGround
                 continue;
             }
             variants += images.Count;
-            floors[paint] = new Floor(array, spec, sets);
+            floors[paint] = new Floor(array, spec, sets, paths);
         }
         if (floors.Count == 0)
         {
@@ -174,7 +192,7 @@ public sealed class CityGround
             uv2[poly] = set != null && floors.TryGetValue(paint, out var floor) && floor.Sets.TryGetValue(set, out var at)
                 ? at : Vector2.Zero;
         }
-        var ground = new CityGround(floors, uv2, missing);
+        var ground = new CityGround(floors, uv2, resolved, missing);
         Follow();
         Log.Info("world",
             $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; polygons floored={ground.Floored} other_frame={census.OtherFrame} two_frames={census.TwoFrames} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
@@ -301,6 +319,27 @@ public sealed class CityGround
         return files;
     }
 
+    /// <summary>The variant cell of world point (<paramref name="x"/>, <paramref name="z"/>) on a paint, as
+    /// <see cref="PickCode"/> takes it. Each family gives floor(dot(axis, xz / 256) - origin), a missing one 0.</summary>
+    internal static (int I, int J) CellOf(PaintLayout spec, float x, float z)
+    {
+        float u = x / 256f, v = z / 256f;
+        int Index(int k) => k < spec.Cells.Count
+            ? (int)MathF.Floor((spec.Cells[k].Axis.X * u) + (spec.Cells[k].Axis.Y * v) - spec.Cells[k].Origin) : 0;
+        return (Index(0), Index(1));
+    }
+
+    /// <summary><see cref="PickCode"/>'s pick of cell (<paramref name="i"/>, <paramref name="j"/>). A polygon's layer is
+    /// its first plus the pick modulo its count.</summary>
+    internal static uint Pick(int i, int j) => Hash(unchecked((uint)i) ^ Hash(unchecked((uint)j + 0x9e3779b9u)));
+
+    /// <summary>The floor a polygon draws, null where it keeps the paint. It names the paint's layout, the set and the
+    /// layers' floor files in order; <c>&lt;file&gt;.json</c> beside an image is its dressing layout.</summary>
+    internal (PaintLayout Spec, string Set, IReadOnlyList<string> Files)? FloorOf(GameZPolygon poly) =>
+        _uv2.TryGetValue(poly, out var at) && at.Y > 0f && _sets.TryGetValue(poly, out var combo) && combo.Set is { } set
+            && _floors.TryGetValue(combo.Paint, out var floor) && floor.Files.TryGetValue(set, out var files)
+            ? (floor.Spec, set, files) : null;
+
     // The centre of the polygon's largest triangle in the world. A paint overlies its base wholly or not at all, so one
     // point inside it answers for the polygon.
     private static Vector3 Centre(GameZMesh mesh, GameZPolygon poly, Transform3D xf)
@@ -343,6 +382,19 @@ public sealed class CityGround
         image.Convert(Image.Format.Rgb8);
         image.GenerateMipmaps();
         return image;
+    }
+
+    private static uint Hash(uint x)
+    {
+        unchecked
+        {
+            x ^= x >> 16;
+            x *= 0x7feb352du;
+            x ^= x >> 15;
+            x *= 0x846ca68bu;
+            x ^= x >> 16;
+            return x;
+        }
     }
 
     private static string Rooted(string folder) =>
@@ -399,5 +451,5 @@ public sealed class CityGround
         };
     }
 
-    private sealed record Floor(Texture2DArray Array, PaintLayout Spec, Dictionary<string, Vector2> Sets);
+    private sealed record Floor(Texture2DArray Array, PaintLayout Spec, Dictionary<string, Vector2> Sets, Dictionary<string, List<string>> Files);
 }
