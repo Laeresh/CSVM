@@ -150,10 +150,10 @@ internal sealed class FlightRosterPolicy
         InfiniteAmmo = spec.InfiniteAmmo,
         NoAssist = spec.NoAssist,
         WeaponLab = spec.WeaponLab,
-        // The display is read here because it is a property of the launch, not of the seat. It
-        // answers for a headless host alone; the hidden test desktop is a real one. The scripted
-        // arm, the launch's included, is what keeps a suite's mouse mode its own.
-        MouseCaptureAllowed = MouseCapture.Allowed(
+        // The display is read here, a property of the launch, not the seat; the hidden test desktop is a
+        // real one. The scripted arm keeps a suite's mouse mode its own. The weapon lab parks by a click,
+        // so it keeps the pointer free.
+        MouseCaptureAllowed = !spec.WeaponLab && MouseCapture.Allowed(
             DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
         // Read here for the same reason: the stereo path is the process's, booted before any session.
         XrInterior = XrCockpit.Live,
