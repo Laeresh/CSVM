@@ -58,7 +58,7 @@ public sealed class CityDressing
         new("gd_hedge", 200f, 300f, 1.5f, 0.4f, 3f),
         new("gd_shed", 200f, 300f, 1.7f, 1.4f),
         new("gd_sedan", 200f, 300f, 2.2f, 0.9f),
-        new("gd_truck", 200f, 300f, 2.75f, 1.0f),
+        new("gd_truck", 200f, 300f, 2.75f, 1.0f) { BoardTone = new Vector4(0.35f, 0.35f, 0.35f, 1f) },
         new("gd_ashcans", 100f, 150f, 0.65f, 0.65f) { Far = false },
         new("gd_bench", 100f, 150f, 0.95f, 0.4f) { Far = false },
         new(Tree, 200f, 300f, 0.6f, 0.6f) { Gain = 0.35f },
