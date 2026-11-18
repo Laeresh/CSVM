@@ -763,7 +763,7 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, Vector2I> _hdSizes = new(StringComparer.OrdinalIgnoreCase);
 
     // Archive name -> its HD replacement decoding on the thread pool, taken once by Build.
-    private readonly Dictionary<string, Task<Image?>> _hdAhead = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (HdPrep Prep, Task<Image?> Image)> _hdAhead = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public TextureArchive(TextureSet textures)
@@ -1080,12 +1080,21 @@ public sealed class TextureArchive : IDisposable
         int started = 0;
         foreach (var material in materialTextureNames)
         {
-            if (Read(Path.GetFileNameWithoutExtension(material))?.Key is { } name && !_hdAhead.ContainsKey(name))
+            string baseName = Path.GetFileNameWithoutExtension(material);
+            if (Read(baseName) is not { } texture || _hdAhead.ContainsKey(texture.Key))
             {
-                // ⚠ The worker touches only the pack, which locks its reads, and its own new Image.
-                _hdAhead[name] = Task.Run(() => HdArt.Decode(hd.ForWorld(_archive, name)));
-                started++;
+                continue;
             }
+
+            // The alpha reads Build makes, so the worker can build the chain Build would.
+            string name = texture.Key;
+            var original = ImageOf(texture);
+            bool alpha = ImageHasAlpha(original);
+            var prep = new HdPrep(original.GetFormat(), alpha && !SoftAlpha(original, baseName));
+            original.Dispose();
+            // ⚠ The worker touches only the pack, which locks its reads, and its own new Image.
+            _hdAhead[name] = (prep, Task.Run(() => HdArt.Decode(hd.ForWorld(_archive, name)) is { } big ? Prepared(big, prep) : null));
+            started++;
         }
 
         return started;
@@ -1096,9 +1105,9 @@ public sealed class TextureArchive : IDisposable
     public int ReleaseHdAhead()
     {
         int dropped = _hdAhead.Count;
-        foreach (var ahead in _hdAhead.Values)
+        foreach (var (_, ahead) in _hdAhead.Values)
         {
-            ahead.ContinueWith(t => t.Result?.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion);
+            Drop(ahead);
         }
 
         _hdAhead.Clear();
@@ -1261,6 +1270,41 @@ public sealed class TextureArchive : IDisposable
         return opaque < ink * 0.45f || ink == 0;
     }
 
+    // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
+    // rule says about it (see SoftAlphaNamed).
+    private static bool SoftAlpha(Image img, string baseName) =>
+        AlphaIsSoft(img) || SoftAlphaNamed.Contains(baseName) || baseName.Contains("trans");
+
+    // The box-filtered chain, and a scissor cutout's coverage kept down it. Pure on the image, so a
+    // decode ahead runs it on its worker.
+    private static void Prepare(Image img, bool scissor)
+    {
+        // Box-filter the whole chain first either way: it allocates the levels and fixes their
+        // offsets. Levels 3-and-below have no authored sibling to take their place.
+        img.GenerateMipmaps();
+        // Scissor cutouts only: box-filtered alpha sinks below the 0.5 threshold at distance and
+        // the object thins away. Must run BEFORE the authored install.
+        if (scissor)
+        {
+            ScissorMipsKeepCoverage(img);
+        }
+    }
+
+    // A decoded replacement in the original's format with its chain built, for a worker.
+    private static Image Prepared(Image big, HdPrep prep)
+    {
+        if (big.GetFormat() != prep.Format)
+        {
+            big.Convert(prep.Format);
+        }
+
+        Prepare(big, prep.Scissor);
+        return big;
+    }
+
+    private static void Drop(Task<Image?> ahead) =>
+        ahead.ContinueWith(t => t.Result?.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion);
+
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
 
@@ -1363,13 +1407,15 @@ public sealed class TextureArchive : IDisposable
         // ⚠ Read the class off the RESOLVED archive name, never the material's: a truncated or
         // period-doubled material name is not a stored name (see Resolve).
         LastAlphaClass = AlphaClassOf(name, LastHadAlpha);
-        // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
-        // rule says about it (see SoftAlphaNamed).
-        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaNamed.Contains(baseName) || baseName.Contains("trans"));
+        LastAlphaIsSoft = LastHadAlpha && SoftAlpha(img, baseName);
+        // The drop-in instruments repaint the RGB flat and keep size, format and alpha channel. The
+        // alpha class read just above, its blend/scissor choice and cutout silhouette, holds.
+        var flat = TextureDropIn.ColorFor(name, baseName);
         // After the alpha reads, which stay the original's, so the blend/scissor choice is unchanged.
         // Converted to the original's format, so an opaque original stays opaque.
         bool hd = false;
-        if (DecodeHd(name) is { } big)
+        var prep = new HdPrep(img.GetFormat(), LastHadAlpha && !LastAlphaIsSoft);
+        if (DecodeHd(name, flat == null ? prep : null) is { } big)
         {
             if (big.GetFormat() != img.GetFormat())
             {
@@ -1380,22 +1426,14 @@ public sealed class TextureArchive : IDisposable
             img = big;
             hd = true;
         }
-        // The drop-in instruments repaint the RGB flat and keep everything else, size, format,
-        // alpha channel, so the alpha class read just above (and with it the blend/scissor choice
-        // and the cutout silhouette) is unchanged.
-        var flat = TextureDropIn.ColorFor(name, baseName);
         if (flat is { } color)
         {
             TextureDropIn.Flatten(img, color);
         }
-        // Box-filter the whole chain first either way: it allocates the levels and fixes their
-        // offsets, and levels 3-and-below have no authored sibling to take their place.
-        img.GenerateMipmaps();
-        // Scissor cutouts only: box-filtered alpha sinks below the 0.5 threshold at distance and
-        // the object thins away. Must run BEFORE the authored install.
-        if (LastHadAlpha && !LastAlphaIsSoft)
+        // A decode ahead arrives with the two steps below done (Prepare).
+        if (!img.HasMipmaps())
         {
-            ScissorMipsKeepCoverage(img);
+            Prepare(img, prep.Scissor);
         }
         // A replacement's authored siblings are the original's size, a level it does not have.
         if (Mips == MipSource.Authored && !hd)
@@ -1490,12 +1528,18 @@ public sealed class TextureArchive : IDisposable
         }
     }
 
-    // The HD replacement of one archive texture: the decode ahead once, then a decode in place.
-    private Image? DecodeHd(string archiveName)
+    // The HD replacement of one archive texture. The decode ahead is taken once when it was prepared
+    // as `want` asks (null wants no chain); otherwise a plain decode in place.
+    private Image? DecodeHd(string archiveName, HdPrep? want)
     {
         if (_hdAhead.Remove(archiveName, out var ahead))
         {
-            return ahead.GetAwaiter().GetResult();
+            if (ahead.Prep == want)
+            {
+                return ahead.Image.GetAwaiter().GetResult();
+            }
+
+            Drop(ahead.Image);
         }
 
         return HdArt.Decode(Extraction.HdTextures.Current.ForWorld(_archive, archiveName));
@@ -1530,4 +1574,8 @@ public sealed class TextureArchive : IDisposable
         }
         return match;
     }
+
+    // What a decode ahead builds on its worker: the original's format, and whether its chain keeps
+    // scissor coverage.
+    private readonly record struct HdPrep(Image.Format Format, bool Scissor);
 }

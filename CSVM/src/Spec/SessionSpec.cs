@@ -1257,6 +1257,11 @@ public sealed record SessionSpec
     /// reads no pack. Null when absent, which leaves config.json's <c>textures.hd</c>.</summary>
     public string? Hd { get; private set; }
 
+    /// <summary><c>--shader-list=</c>: the shader warm list's file, in place of
+    /// <c>user://shader_warm.json</c>. Empty reads and writes none. Null when absent; a
+    /// <c>--det</c> run then keeps none, so no golden depends on what earlier loads wore.</summary>
+    public string? ShaderList { get; private set; }
+
     /// <summary><c>--hd-models=</c>: the HD model pack folder, under the data root unless rooted.
     /// Empty reads no pack. Null when absent, which leaves config.json's <c>models.hd</c>.</summary>
     public string? HdModels { get; private set; }
@@ -1855,6 +1860,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--control=")) { s.ControlPort = int.Parse(arg["--control=".Length..], CultureInfo.InvariantCulture); }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
             else if (arg.StartsWith("--hd=")) { s.Hd = arg["--hd=".Length..]; }
+            else if (arg.StartsWith("--shader-list=")) { s.ShaderList = arg["--shader-list=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
             else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }

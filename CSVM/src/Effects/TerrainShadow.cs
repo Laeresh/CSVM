@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -118,17 +120,18 @@ internal sealed partial class TerrainShadow : Node
             return null;
         var result = new TerrainShadow { Name = "TerrainShadow", _tris = tris };
         var timing = new System.Text.StringBuilder(string.Create(CultureInfo.InvariantCulture, $"tris={tris.Length / 3} collect={OceanMask.Lap(ref t0):0}"));
-        int k = 0;
-        foreach (var orientation in orientations)
+        // Each zone's raster on its own worker; the uploads stay on this thread, in zone order.
+        var wanted = orientations.Distinct().ToArray();
+        var rasters = new Rasterised[wanted.Length];
+        Parallel.For(0, wanted.Length, i => rasters[i] = Rasterise(tris, wanted[i]));
+        for (int k = 0; k < wanted.Length; k++)
         {
-            if (result._baked.ContainsKey(orientation))
-                continue;
-            var raster = result.BakeOne(orientation);
+            var orientation = wanted[k];
+            var raster = result.Install(orientation, rasters[k]);
             if (png.Length > 0)
                 Dump(raster, k == 0 ? png : System.IO.Path.ChangeExtension(png, $".{k}.png"));
             timing.Append(string.Create(CultureInfo.InvariantCulture,
                 $" [{Mathf.RadToDeg(orientation.X):0}/{Mathf.RadToDeg(orientation.Y):0}: fill={raster.FillMs:0} sweep={raster.SweepMs:0} upload={OceanMask.Lap(ref t0):0}]"));
-            k++;
         }
         result.Timing = timing.ToString();
         return result;
@@ -302,13 +305,23 @@ internal sealed partial class TerrainShadow : Node
     private static bool IsSea(string texture) =>
         SceneBuilder.ClassifySurface(texture) == "water" || TextureArchive.IsPaintedShallows(texture);
 
-    // Bakes one orientation into the cache and returns its raster.
-    private TerrainShadowRaster.Result BakeOne(Vector3 orientation)
+    // One orientation's raster and its texel bytes. Pure, so the load runs zones side by side.
+    private static Rasterised Rasterise(Vector3[] tris, Vector3 orientation)
     {
         // The light shines down its -Z, so +Z points at the sun, as WeatherRig.SunDirectionFor reads it.
         var sun = Basis.FromEuler(orientation).Z.Normalized();
-        var raster = TerrainShadowRaster.Run(_tris, sun, OceanMaskRaster.DefaultBands);
-        var image = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rgh, Halves(raster.Line, raster.Distance));
+        var raster = TerrainShadowRaster.Run(tris, sun, OceanMaskRaster.DefaultBands);
+        return new Rasterised(raster, Halves(raster.Line, raster.Distance), sun);
+    }
+
+    // Bakes one orientation into the cache and returns its raster.
+    private TerrainShadowRaster.Result BakeOne(Vector3 orientation) => Install(orientation, Rasterise(_tris, orientation));
+
+    // Uploads one rasterised orientation into the cache and returns its raster.
+    private TerrainShadowRaster.Result Install(Vector3 orientation, Rasterised rasterised)
+    {
+        var (raster, halves, sun) = rasterised;
+        var image = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rgh, halves);
         _baked[orientation] = new Baked(TextureUpload.Create(image), sun);
         Width = raster.Width;
         Height = raster.Height;
@@ -319,4 +332,6 @@ internal sealed partial class TerrainShadow : Node
 
     // One orientation's texture and the direction toward its sun.
     private sealed record Baked(ImageTexture Texture, Vector3 Sun);
+
+    private sealed record Rasterised(TerrainShadowRaster.Result Raster, byte[] Halves, Vector3 Sun);
 }
