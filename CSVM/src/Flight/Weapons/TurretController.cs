@@ -83,10 +83,10 @@ public sealed class TurretController
     /// <c>0x004ac7c2</c>. The range gate reads the true distance first (docs/org/targeting.md "The picker's cost").</summary>
     public const float TurretDistanceTerm = 37.5f;
 
-    /// <summary>An emplacement's or structure's weight for a gunner on a human-flown plane while an
-    /// enemy aircraft is in reach. It sits 300 m behind an aircraft rather than withdrawn. A
-    /// remake-only softening of the aircraft-first rule (#360), a hand-tuned starting value.</summary>
-    public const float HumanGunnerStructureWeight = 1.25f;
+    /// <summary>A human-flown plane's gunner weighs an emplacement or structure at this while an enemy
+    /// aircraft is in reach. That is 300 m behind a weight-1.0 aeroplane, not withdrawn. A remake-only
+    /// rule (docs/org/targeting.md "What a turret's candidate set holds").</summary>
+    public const float HumanGunnerStructureClassWeight = 1.25f;
 
     // WorldBlocksEmplacementLine's ray and its empty exclusion, shared by every emplacement.
     private static PhysicsRayQueryParameters3D? _emplacementRay;
@@ -812,15 +812,16 @@ public sealed class TurretController
         }
 
         // The aircraft-first preference, the same remake-only rule the aeroplane picker takes, so a
-        // zeppelin's guns and the wingmen beside them go after the same enemies. A human-flown
-        // host's gunners only weigh structures down (HumanGunnerStructureWeight).
+        // zeppelin's guns and the wingmen beside them go after the same enemies. A player's own
+        // gunner keeps both classes, or it never shoots an objective in a dogfight.
         bool preferAircraft = AiTargetRanking.AircraftFirst && aircraftInReach;
-        if (!preferAircraft || _host is { IsHumanPiloted: true })
+        bool humanHost = _host is { IsHumanPiloted: true };
+        if (!preferAircraft || humanHost)
         {
             // The emplacements, then the structures. The picker's second argument is 0.0 for a gun,
             // so neither pass adds a bias. No carried gun is an emplacement: the original keeps it off
             // this pass (docs/org/targeting.md "What a turret's candidate set holds").
-            float weight = preferAircraft ? HumanGunnerStructureWeight : 1f;
+            float weight = preferAircraft && humanHost ? HumanGunnerStructureClassWeight : 1f;
             _pool.CollectTurretEmplacements(_scan, _team);
             OfferPass(_scan.Turrets, here, weight, TurretDistanceTerm, ref pick);
             _pool.CollectTurretStructures(_scan, _team);

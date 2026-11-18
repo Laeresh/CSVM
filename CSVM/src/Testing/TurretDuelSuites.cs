@@ -147,7 +147,7 @@ internal static class TurretDuelSuites
 
     // A Kestrel's rear gunner with an enemy aeroplane in reach. Under a person it weighs the
     // emplacement and the engine at 1.25 against the aeroplane's 1.0. Under the AI the filter
-    // withdraws both (#360).
+    // withdraws both.
     [Suite("human-gunner-targeting",
         "a turret carried by a human-flown plane keeps enemy emplacements and zeppelin engines in " +
         "its ranking while an enemy aeroplane is in reach, 300 m of distance behind the aeroplane; " +
@@ -235,7 +235,7 @@ internal static class TurretDuelSuites
                 return gunner.TargetSource;
             }
 
-            float penalty = (TurretController.HumanGunnerStructureWeight - 1f) * AiTargetRanking.WeightScale;
+            float penalty = (TurretController.HumanGunnerStructureClassWeight - 1f) * AiTargetRanking.WeightScale;
             ctx.Check(Mathf.IsEqualApprox(penalty, 300f), $"the penalty is 300 m of distance, read {penalty:0.0}");
 
             // The enemy emplacement first, the turret term on its distance.

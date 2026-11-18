@@ -588,8 +588,10 @@ takes the hostile, alive world emplacements (`ProjectilePool.CollectTurretEmplac
 must stand 37.5 m nearer than an AI aeroplane of no `target_bias` to be taken. The remake-only
 aircraft-first preference withdraws it with the structures while an aircraft is in reach, as it
 withdraws both classes from the AI pilot's picker. A gunner carried by a human-flown plane keeps
-both classes and weighs them at 1.25 instead (`TurretController.HumanGunnerStructureWeight`), so an
-emplacement or a zeppelin engine must stand 300 m nearer than an aeroplane to be taken.
+both classes and weighs them at 1.25 instead (`TurretController.HumanGunnerStructureClassWeight`), so an
+emplacement or a zeppelin engine must stand 300 m nearer than a weight-1.0 aeroplane to be taken.
+The margin rides on the aeroplane's own weight: an escort at 1.4 loses to a structure up to 180 m
+farther off, and an enemy human at 0.8 needs one 540 m nearer.
 
 ### Nothing in the turret path reads an objective, capture or pickup flag
 
