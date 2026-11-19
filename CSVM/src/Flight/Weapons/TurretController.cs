@@ -647,7 +647,7 @@ public sealed class TurretController
                 : TurretGate.NoAmmo;
             return;
         }
-        if (LineOfSightBlocked(targetPos))
+        if (TargetSource is FlightController && LineOfSightBlocked(targetPos))
         {
             Gate = TurretGate.Blocked;
             return;
@@ -876,9 +876,9 @@ public sealed class TurretController
     }
 
     // The original casts from the platform to 0.2 m above the target and caches the verdict for
-    // a random 1–2 s before re-testing; a failed test blocks firing. World geometry only,
-    // another aircraft in the way is not cover. C9a applies the cached test to whatever target
-    // was acquired (the original scopes it to the player); emplacements keep that consistent.
+    // a random 1–2 s. A failed test blocks firing. World geometry only,
+    // another aircraft in the way is not cover. C9a widens it from the player to every aircraft.
+    // ⚠ Never to an emplacement or structure: the cast ends inside the target's own body (#360).
     private bool LineOfSightBlocked(Vector3 targetPos)
     {
         double now = Utils.GameClock.Current?.Time ?? 0.0;
