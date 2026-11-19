@@ -650,6 +650,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Set while an Advance runs on a fresh sample; outside one, a gate asks the seam live.
     private bool _rangeSampled;
 
+    // The instance whose STOP_ANIMATION is running; StopCallees never cascades onto it.
+    private AnimInstance? _stopSpare;
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -2872,6 +2875,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             var callee = callees[^1].Callee;
             callees.RemoveAt(callees.Count - 1);
+            if (ReferenceEquals(callee, _stopSpare))
+                continue;
             int at = _instances.IndexOf(callee);
             if (at >= 0 && RemoveInstance(at, callee, tearDown: true) is { } more)
                 callees.AddRange(more);
@@ -3261,7 +3266,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopAnimation":
-                Stop(ev.Data.Str("name"));
+                // ⚠ Spare the stopping instance from its caller's cascade: C2/M01's path2_accelerate
+                // stops path2_accel_test, its caller, and dying with it strands the goose (#367).
+                _stopSpare = InstanceOf(def, anchor);
+                try
+                {
+                    Stop(ev.Data.Str("name"));
+                }
+                finally
+                {
+                    _stopSpare = null;
+                }
                 return true;
 
             case "InvalidateAnimation":
