@@ -175,7 +175,7 @@ internal sealed class FrameInstruments
 
     /// <summary>The opt-in half of the frame: the --perf window over the counters
     /// <see cref="BeginFrame"/> read, and the once-a-wall-second --debug-mem line.</summary>
-    public void EndFrame(double delta, GameClock? clock)
+    public void EndFrame(double frameMs, GameClock? clock)
     {
         if (_spec.Perf)
         {
@@ -188,7 +188,7 @@ internal sealed class FrameInstruments
             }
 
             (_gcTrace ??= GcTrace.Create(_spec.GcTypes)).Tick();
-            ReportPerf(delta, _counters, clock);
+            ReportPerf(frameMs, _counters, clock);
         }
 
         // The frame's own stamp, the one BeginFrame took.
@@ -256,8 +256,8 @@ internal sealed class FrameInstruments
 
     // Samples the engine's eight per-frame counters once, for every instrument. The two `TIME_*`
     // monitors are seconds and are converted here, so everything downstream is in milliseconds.
-    // Like `delta` they describe the frame that just ended, which is what a hitch record needs.
-    // The render pair is one draw older under the separate render thread.
+    // They describe the frame that just ended, which is what a hitch record needs. The render
+    // pair is one draw older under the separate render thread.
     private FrameCounters ReadFrameCounters()
     {
         var (renderCpuMs, gpuMs) = _renderTime.Read();
@@ -308,11 +308,11 @@ internal sealed class FrameInstruments
     // `script_ms`/`physics_ms` are Godot's worst-of-the-last-second monitors, kept for old records.
     // The measured terms are `proc_ms`, `phys_tick_ms` and `ai_ms` (verification PERF-1).
     // No `p99_ms`: a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
-    private void ReportPerf(double delta, in FrameCounters counters, GameClock? clock)
+    private void ReportPerf(double frameMs, in FrameCounters counters, GameClock? clock)
     {
         _perfFrames++;
-        _perfFrameMs[_perfFrames - 1] = delta * 1000;
-        _perfClock += delta;
+        _perfFrameMs[_perfFrames - 1] = frameMs;
+        _perfClock += frameMs / 1000;
         _perfProcess += counters.ScriptMs;
         _perfPhysics += counters.PhysicsMs;
         _perfCpuRender += counters.RenderCpuMs;
@@ -349,7 +349,7 @@ internal sealed class FrameInstruments
         long simFrame = clock?.Frame ?? 0;
         double wallMs = 1000 * _perfClock;
         double fps = n / _perfClock;
-        double frameMs = wallMs / n;
+        double meanFrameMs = wallMs / n;
         // Every ms term is already in milliseconds here: ReadFrameCounters converts Godot's two
         // TIME_* monitors once, at the read.
         double scriptMs = _perfProcess / n;
@@ -394,7 +394,7 @@ internal sealed class FrameInstruments
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} setup_ms={setupMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} phys_engine_ms={physEngineMs:0.000} defer_ms={deferMs:0.000} draw_ms={drawMs:0.000} idle_ms={idleMs:0.000} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={meanFrameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} setup_ms={setupMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} phys_engine_ms={physEngineMs:0.000} defer_ms={deferMs:0.000} draw_ms={drawMs:0.000} idle_ms={idleMs:0.000} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
         // Its own line, not another term on the window above. The BYTE figure answers a different
         // question from the millisecond one: which phase feeds the collector, rather than which
         // phase the pause landed in (PERF-34). The two are read side by side.

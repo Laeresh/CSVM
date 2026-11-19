@@ -389,6 +389,10 @@ covers it.
   3072x3264 against 20.4 to 23.8 ms there: close enough to rank settings, never a substitute for the
   headset's own `xr frames` line, which also carries the runtime's compositing. The cutscene pair
   added 1.3 to 1.6 ms at 1600x1200 per eye.
+- **PERF-52**, **An exact refresh-period `frame_ms` is not evidence of a mode-specific cap until
+  the same mode stays there under lower load and the raw `[perf] rate` disagrees; reconcile the root
+  and secondary viewports' GPU time first.** Half-resolution clouds exceeded 160 fps at 1280x720
+  and rose above 16.67 ms with GPU load at 3444x1410 on the same hidden 60 Hz desktop.
 
 ## LOG, logs, error censuses, and exit codes
 
