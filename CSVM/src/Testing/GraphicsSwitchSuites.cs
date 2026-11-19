@@ -1485,7 +1485,8 @@ internal static class GraphicsSwitchSuites
         + "the GPU from the world shader's own text equals the CPU's over a lattice of world points; every dressing kind "
         + "stands, each instance in a block of the variant that pick gives its cell, the cblock2 tiles over cblock4's set "
         + "among them, in nodes with no collider and no shadow "
-        + "on the models' layer; the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
+        + "on the models' layer; the traffic's nodes drive, ranged, and every city shader takes its driving rewrite; "
+        + "the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
     internal static void CityDressingStands(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1570,6 +1571,12 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(wallTone.VariantType == Variant.Type.Vector4 && wallTone.AsVector4().W < 1f && shedTone.VariantType == Variant.Type.Nil
                         && treeGain < 1f && tree.GetShaderParameter(Mech3.VegetationModels.GainParam).AsSingle() == treeGain,
                     $"the walls' boards are toned ({wallTone}) and a shed's are not, and both tree materials take the gain {treeGain}");
+                var cars = dressing.Root.GetNodeOrNull("traffic") is { } traffic ? CellsOf(traffic) : new List<MultiMeshInstance3D>();
+                ctx.Check(cars.Count > 0 && cars.All(c => c.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && c.Layers == Mech3.VegetationModels.Layer && c.VisibilityRangeEnd > 0f),
+                    $"{cars.Count} traffic nodes drive the streets, ranged, on the models' layer with no shadow");
+                bool drives = new[] { true, false }.All(near => new[] { false, true }.All(toned => new[] { false, true }.All(paint =>
+                    Mech3.CityTraffic.DrivingCode(CityModels.ShaderCode(near, toned: toned), paint) != null)));
+                ctx.Check(drives, $"every city shader a car may draw with holds each text the traffic's driving rewrite edits");
                 ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
 
                 bool Shown() => dressing.Root.IsVisibleInTree();
