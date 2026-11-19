@@ -79,6 +79,7 @@ internal sealed class SessionVoices
         var radio = Radio = new MissionRadio(vDefs, vGroups, worldSounds.StreamFor);
         worldSounds.Radio = radio;
         _worldRoot.AddChild(radio);
+        AddSubtitles(radio, Extraction.Subtitles.Current);
         var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.Zrdr));
         var voice = Voice = new AiVoiceRuntime(combatVoice, worldSounds, radio, Rng.NewSystemRandom(Rng.Ai));
         _worldRoot.AddChild(voice); // its realtime tick; freed with the world subtree
@@ -143,6 +144,23 @@ internal sealed class SessionVoices
         int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
         Voice.RegisterAi(ai, accentId, skills.At("talker_chance", talkerRating),
             skills.At("constitution_chance", constitutionRating));
+    }
+
+    // One subtitle per pane over the shared radio, on a layer of its own so a cutscene's hidden HUD
+    // leaves it up. No table builds nothing.
+    private void AddSubtitles(MissionRadio radio, Extraction.Subtitles table)
+    {
+        if (table.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var rig in _rigs)
+        {
+            var layer = new CanvasLayer { Layer = UI.Boards.HudLayers.Subtitles, Name = "subtitles" };
+            layer.AddChild(new Flight.Hud.SubtitleLine(() => (radio.OnAirWav, radio.OnAirSeconds), table));
+            rig.HudParent.AddChild(layer);
+        }
     }
 
     // Every human aircraft joins the voice runtime. Outside a network match that is each pane's,

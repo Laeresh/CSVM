@@ -1112,6 +1112,15 @@ only where it sits, as `LineAnchor` over a pane size, static so a suite asserts 
 centres its own. `Prompt` is a `UI/Boards/ControlLine.cs`, not a string, so a pad seat's control draws as a
 glyph where the words go; `Line` is still the words. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's own placement".
 
+## src/Flight/Hud/SubtitleLine.cs
+A voice subtitle, remake-only: the words of the clip sounding at the seconds played, looked up in
+`Extraction/Subtitles.cs`, centred near the foot of the pane with the speaker's name in the prompt
+line's yellow. In flight it reads `Mech3/MissionRadio.cs` (`OnAirWav`, `OnAirSeconds`), one per pane
+on its own `HudLayers.Subtitles` layer so a cutscene that hides the HUD leaves it up;
+`Launch/SessionVoices.cs` builds them only when the table has lines. In the menus
+`Launch/MenuAudioService.cs` builds one over the briefing narration on `HudLayers.BriefingSubtitles`. `Wrap` and `Compose` are static, so a test asserts the wording with no `Control`.
+Coverage: `CSVM.Tests/SubtitlesTests.cs`.
+
 ## src/Flight/Hud/FlightChat.cs
 One machine's in-flight chat in a network match, engine-free: the original's chat panel of five
 lines shown for ten seconds after the newest, and the entry a pilot types into under its "To All:"

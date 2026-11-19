@@ -499,6 +499,10 @@ public partial class Launcher : Node3D
             HdSounds.Current = HdSounds.Open(dataRoot, soundFolder);
         }
         Flight.Audio.EnhancedSoundTuning.Reload();
+        if (HdSounds.FolderFor(null, _spec.Det, Config.GetString(Subtitles.ConfigKey, Subtitles.DefaultFolder)) is { } subtitleFolder)
+        {
+            Subtitles.Current = Subtitles.Open(dataRoot, subtitleFolder);
+        }
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)

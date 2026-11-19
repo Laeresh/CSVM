@@ -59,6 +59,14 @@ internal static class HudLayers
     /// it takes over from keeps drawing on top of it.</summary>
     public const int SessionStartFade = MissionEndFade;
 
+    /// <summary>The radio subtitle (<c>Flight.Hud.SubtitleLine</c>). Over the HUD and the wash so a
+    /// line reads through both, on the fades' tier and built before them, so a fade covers it.</summary>
+    public const int Subtitles = MissionEndFade;
+
+    /// <summary>The briefing narration's subtitle, over the <see cref="Board"/> the briefing draws
+    /// on. It shares <see cref="PerfReadout"/>'s tier, and the two never overlap on screen.</summary>
+    public const int BriefingSubtitles = PerfReadout;
+
     /// <summary>The debug overlays: node labels (T), class overlay, AI nets, markers (K),
     /// colliders (F20), the selection gizmo and the tile grid.</summary>
     public const int Debug = 4;
