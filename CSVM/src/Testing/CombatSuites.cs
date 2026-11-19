@@ -1144,6 +1144,60 @@ internal static class CombatSuites
         }
     }
 
+    // #368: under Enhanced a round in flight lights the world set, a tracer in its streak's colour and
+    // a rocket motor in red. The motorless rear flash stays dark, and Original lights no round at all.
+    [Suite("in-flight-round-lights",
+        "under Enhanced a gun round and a rocket in flight each submit a light to the bound world set, the rocket's red, the drifting rear flash none, and in Original no round submits one")]
+    internal static void InFlightRoundLights(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null).All;
+        var gun = weapons.FirstOrDefault(w => w.IsGun);
+        var rocket = weapons.FirstOrDefault(w => w.Id == "wep_06");
+        var flare = weapons.FirstOrDefault(w => w.Id == "wep_15");
+        var textures = new TextureArchive(texturesPath);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var pools = new List<ProjectilePool>();
+        try
+        {
+            ctx.Check(gun != null && rocket != null && flare != null, $"a gun, wep_06 and wep_15 loaded from the catalogue");
+            if (gun == null || rocket == null || flare == null)
+                return;
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+            List<Color> Committed(bool enhanced, params WeaponDef[] fired)
+            {
+                GraphicsMode.Set(enhanced);
+                var set = new WorldLights();
+                var p = new ProjectilePool(textures, null, null) { FirstPersonView = () => false };
+                pools.Add(p);
+                ctx.Host.AddChild(p);
+                p.BindPointLights(set);
+                foreach (var w in fired)
+                    p.Spawn(w, muzzle, Vector3.Zero, shooterId: 0);
+                set.Begin();
+                set.Commit(new[] { muzzle.Origin });
+                var factors = set.CommittedFactors.ToList();
+                set.Dispose();
+                return factors;
+            }
+
+            var lit = Committed(true, gun, rocket, flare);
+            ctx.Same(2, lit.Count, $"Enhanced: the gun round and the rocket light the set, the rear flash does not: {string.Join(", ", lit)}");
+            ctx.Same(1, lit.Count(c => c.G < 0.5f * c.R && c.B < 0.5f * c.R), $"Enhanced: one light is the rocket motor's red");
+            ctx.Same(0, Committed(true, flare).Count, $"Enhanced: the rear flash alone submits nothing");
+            ctx.Same(0, Committed(false, rocket).Count, $"Original: a rocket in flight submits no light");
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+            foreach (var p in pools)
+                p.Free();
+            textures.Dispose();
+        }
+    }
+
     // A third-person shot light reaches a plane the original's way in both modes. Original takes the
     // world set's point term, Enhanced the aircraft's own set. Neither lights an omni, whose N.L leaves
     // the Warhawk's hull unlit. Every shot keeps one authored pair whole.

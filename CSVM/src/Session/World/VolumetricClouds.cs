@@ -345,6 +345,52 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform bool march_temporal = false;
         uniform sampler2D resolved_texture : filter_linear, repeat_disable;
 
+        // The world's point lights glowing in the clouds (#368): bursts, fires, tracers and rockets. It
+        // runs here per pixel, so the temporal resolve never holds a moving light in its history.
+        #include "res://shaders/csky_lights.gdshaderinc"
+        uniform float point_gain = 1.5;
+        // A light reaches this many times its far range inside a cloud, which scatters it wide.
+        uniform float point_reach = 3.0;
+
+        // The point lights' glow along the ray from `t0` to `t1`, premultiplied. Each light's chord
+        // takes eight steps of the cloud, lit by its falloff and dimmed by the cloud before them.
+        vec3 pc_point_glow(vec3 eye, vec3 dir, float t0, float t1) {
+            vec3 sum = vec3(0.0);
+            for (int i = 0; i < csky_light_count; i++) {
+                vec4 pr = texelFetch(csky_light_data, ivec2(0, i), 0);
+                vec4 cr = texelFetch(csky_light_data, ivec2(1, i), 0);
+                float r = pr.w * point_reach;
+                vec3 oc = pr.xyz - eye;
+                float tc = dot(oc, dir);
+                float d2 = max(dot(oc, oc) - tc * tc, 0.0);
+                if (d2 >= r * r) {
+                    continue;
+                }
+                float half_chord = sqrt(r * r - d2);
+                float a = max(tc - half_chord, t0);
+                float b = min(tc + half_chord, t1);
+                if (b <= a) {
+                    continue;
+                }
+                float dt = (b - a) / 8.0;
+                float trans = csky_pc_veil_at(eye, eye + dir * a);
+                float acc = 0.0;
+                for (int k = 0; k < 8; k++) {
+                    vec3 q = eye + dir * (a + dt * (float(k) + 0.5));
+                    float sigma = pc_density(q, layer_bottom, layer_top) * density_gain;
+                    if (sigma <= 0.0) {
+                        continue;
+                    }
+                    float w = clamp(1.0 - distance(q, pr.xyz) / r, 0.0, 1.0);
+                    float s = 1.0 - exp(-sigma * dt);
+                    acc += trans * s * w * w;
+                    trans *= 1.0 - s;
+                }
+                sum += cr.rgb * acc;
+            }
+            return sum * point_gain;
+        }
+
         // Whether this view is the camera the reduced march traced. TAA's jitter leaves the lens
         // diagonal alone, and the eye test fails for a headset's eyes and every other camera.
         bool pc_reduced(vec3 eye, mat4 inv_view, mat4 inv_projection) {
@@ -379,6 +425,9 @@ internal sealed partial class VolumetricClouds : Node3D
         // the cap. The shafts and the sky or fog behind follow.
         void pc_resolve(vec3 eye, vec3 dir, vec2 span, float scene, vec4 trace, inout vec3 albedo, inout float alpha) {
             vec4 m = vec4(pc_colour(trace.xy, eye), trace.z);
+            if (csky_light_count > 0 && span.y >= 0.0) {
+                m.rgb += pc_point_glow(eye, dir, span.x, min(span.y, scene));
+            }
             float t0 = 0.0;
             if (span.y >= 0.0) {
                 t0 = span.x;
