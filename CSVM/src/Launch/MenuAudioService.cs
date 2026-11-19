@@ -210,7 +210,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     }
 
     // The narration's subtitle, built on the first briefing a table captions. It sits over the
-    // board the briefing draws on, and reads the player's own position so REPLAY restarts it too.
+    // board the briefing draws on, timed by the narration's playback position so REPLAY restarts it.
     private void AddSubtitles(Extraction.Subtitles table)
     {
         if (_subtitles != null || table.Count == 0)
@@ -218,12 +218,9 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
             return;
         }
 
-        _subtitles = new CanvasLayer { Layer = UI.Boards.HudLayers.BriefingSubtitles, Name = "briefing_subtitles" };
-        _subtitles.AddChild(new Flight.Hud.SubtitleLine(
-            () => (_narration.Playing ? _narrationWav : null, _narration.GetPlaybackPosition()), table)
-        {
-            Area = BriefingCaptionArea,
-        });
+        _subtitles = Flight.Hud.SubtitleLine.OnLayer(UI.Boards.HudLayers.BriefingSubtitles, "briefing_subtitles",
+            () => (_narration.Playing ? _narrationWav : null, _narration.GetPlaybackPosition()), table,
+            BriefingCaptionArea);
         AddChild(_subtitles);
     }
 

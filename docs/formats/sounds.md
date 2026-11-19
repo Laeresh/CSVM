@@ -420,7 +420,8 @@ override inside a zip is read, and the lab's Save is off for it.
 The original captions no voice line, and its archives carry no transcript. The remake reads one
 from `<dataRoot>/Subtitles` (`config.json` key `subtitles`; a `--det` run reads none): every
 `*.json` file in that folder, loaded in name order, a later file's entry replacing an earlier one.
-Each file is one object keyed by WAV name:
+Only loose files are read: unlike a sound pack, a zip or a subfolder is not. Each file is one
+object keyed by WAV name:
 
 ```json
 {
@@ -435,14 +436,16 @@ Each file is one object keyed by WAV name:
 A key matches as a pack's sound does: the file name's stem, without case or extension. `speaker`
 is optional. A clip with `segments` is captioned by the seconds it has played: a segment shows
 from its `start` until the next one starts, but no longer than one second past its own `end`. A
-segment without a `speaker` takes the clip's. An entry with neither `text` nor `segments` is
-ignored.
+segment without an `end` lasts until the next one starts, and one without a `speaker` takes the
+clip's. An entry with neither `text` nor `segments` is ignored.
 
-Two players are captioned, near the foot of the screen with the speaker's name first. The mission
-radio covers the objective callouts, the VO dialogue chains and the combat voice, which share the
-one radio queue; every pane shows the line on air. The briefing narration (`*_briefing.wav`, see
-[briefing.md](briefing.md)) is captioned over the briefing screen, timed by the narration player's
-own position, so REPLAY BRIEFING restarts the captions with the voice.
+Two voices are captioned, with the speaker's name first, each timed by its own playback position
+so a caption ends with the voice. The mission radio covers the objective callouts, the VO dialogue
+chains and the combat voice, which share the one radio queue; every pane shows the line on air near
+its foot, the headset's HUD panel included. The briefing narration (`*_briefing.wav`, see
+[briefing.md](briefing.md)) is captioned over the map on the briefing board, so REPLAY BRIEFING
+restarts the captions with the voice. A campaign cinema's speech is inside the film and is not
+captioned.
 
 ## The sound archives
 

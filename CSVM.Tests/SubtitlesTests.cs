@@ -45,7 +45,8 @@ public class SubtitlesTests
             { "brief.wav": { "speaker": "Boss", "segments": [
                 { "start": 5.0, "end": 6.0, "text": "two", "speaker": "Jack" },
                 { "start": 1.0, "end": 2.0, "text": "one" },
-                { "start": 6.5, "end": 8.0, "text": "three" } ] } }
+                { "start": 6.5, "end": 8.0, "text": "three" } ] },
+              "open.wav": { "segments": [ { "start": 1.0, "text": "a" }, { "start": 9.0, "text": "b" } ] } }
             """);
 
         var table = Subtitles.Open(root, "Subtitles");
@@ -57,6 +58,8 @@ public class SubtitlesTests
         Assert.Equal(new Subtitles.Line("Jack", "two"), table.At("brief.wav", 6.4));
         Assert.Equal("three", table.At("brief.wav", 6.5)?.Text);
         Assert.Null(table.At("brief.wav", 9.1));
+        Assert.Equal("a", table.At("open.wav", 8.9)?.Text);
+        Assert.Equal("b", table.At("open.wav", 60.0)?.Text);
     }
 
     [Fact]

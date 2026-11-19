@@ -6,10 +6,10 @@ using Godot;
 namespace CSVM.Flight.Hud;
 
 /// <summary>A voice subtitle: the words of the clip sounding, centred near the foot of the pane
-/// with the speaker's name before them. The mission radio and the briefing narration each feed one. The original captions nothing, so this is remake-only. It
-/// draws only a clip the subtitle table carries, so a launch with no subtitle folder draws nothing.
-/// Every pane carries its own copy over the one shared radio. Table format: docs/formats/sounds.md
-/// "Subtitles".</summary>
+/// with the speaker's name before them. The mission radio and the briefing narration each feed one.
+/// The original captions nothing, so this is remake-only. It draws, and shows, only a clip the
+/// subtitle table carries, so a launch with no subtitle folder draws nothing. Every pane carries
+/// its own copy over the one shared radio. Table format: docs/formats/sounds.md "Subtitles".</summary>
 public sealed partial class SubtitleLine : Control
 {
     // TUNE: remake layout, nothing to decode. The last line sits at 86 % of the pane height and
@@ -44,6 +44,17 @@ public sealed partial class SubtitleLine : Control
 
     /// <summary>The caption this frame draws, or null for none: the readback a suite asserts.</summary>
     public string? Caption => _line is { } line ? Compose(line) : null;
+
+    /// <summary>A canvas layer of number <paramref name="layer"/> holding one subtitle over
+    /// <paramref name="playing"/>, laid out in <paramref name="area"/> (null for the flight layout).
+    /// </summary>
+    public static CanvasLayer OnLayer(int layer, string name, Func<(string? Wav, double At)> playing,
+        Subtitles table, Func<Vector2, Rect2>? area = null)
+    {
+        var canvas = new CanvasLayer { Layer = layer, Name = name };
+        canvas.AddChild(new SubtitleLine(playing, table) { Area = area, Visible = false });
+        return canvas;
+    }
 
     /// <summary>One line as it reads: the speaker's name and a colon before the words.</summary>
     public static string Compose(Subtitles.Line line) =>
@@ -88,6 +99,8 @@ public sealed partial class SubtitleLine : Control
         }
 
         _line = line;
+        // Hidden while silent: the headset's HUD panel shows while any layer on it holds a visible item.
+        Visible = line != null;
         QueueRedraw();
     }
 

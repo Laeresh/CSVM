@@ -147,7 +147,7 @@ internal sealed class SessionVoices
     }
 
     // One subtitle per pane over the shared radio, on a layer of its own so a cutscene's hidden HUD
-    // leaves it up. No table builds nothing.
+    // leaves it up. It goes where the pane's chrome goes, the headset's HUD panel in a stereo session.
     private void AddSubtitles(MissionRadio radio, Extraction.Subtitles table)
     {
         if (table.Count == 0)
@@ -157,9 +157,8 @@ internal sealed class SessionVoices
 
         foreach (var rig in _rigs)
         {
-            var layer = new CanvasLayer { Layer = UI.Boards.HudLayers.Subtitles, Name = "subtitles" };
-            layer.AddChild(new Flight.Hud.SubtitleLine(() => (radio.OnAirWav, radio.OnAirSeconds), table));
-            rig.HudParent.AddChild(layer);
+            (rig.ChromeParent ?? rig.HudParent).AddChild(Flight.Hud.SubtitleLine.OnLayer(
+                UI.Boards.HudLayers.Subtitles, "subtitles", () => (radio.OnAirWav, radio.OnAirSeconds), table));
         }
     }
 

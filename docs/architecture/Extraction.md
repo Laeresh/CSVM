@@ -217,8 +217,9 @@ override, the last pack's winning, and `OverridePath` is null when it sits in a 
 The subtitle table in `<dataRoot>/Subtitles` (`subtitles`; a `--det` run reads none): every
 `*.json` in the folder, in name order, maps a WAV name to its speaker and words, or to timed
 segments for a long clip, keyed as `HdSounds.KeyFor` keys a sound. `At(wav, seconds)` answers the
-line showing that far into the clip. The game ships no transcript, so an empty table is the
-ordinary case and builds no subtitle at all. `Launch/SessionVoices.cs` (the mission radio) and
-`Launch/MenuAudioService.cs` (the briefing narration) hand `Current` to a `Flight/Hud/SubtitleLine.cs`. Engine-free. Format: [../formats/sounds.md](../formats/sounds.md)
-"Subtitles". Coverage: `CSVM.Tests/SubtitlesTests.cs`.
+line showing that far into the clip. The original ships no transcript, so an empty table is the
+ordinary case and builds no subtitle at all. Loose files only, not `PackIndex.cs`: a zip is not
+read. `Launch/SessionVoices.cs` (the mission radio) and `Launch/MenuAudioService.cs` (the briefing
+narration) hand `Current` to a `Flight/Hud/SubtitleLine.cs`. Engine-free. Format:
+[../formats/sounds.md](../formats/sounds.md) "Subtitles". Coverage: `CSVM.Tests/SubtitlesTests.cs`.
 
