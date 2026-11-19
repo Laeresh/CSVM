@@ -197,8 +197,10 @@ internal static class MenuInstantActionSuites
         + "and two racing bot rows on a Balmoral and an Avenger: off a course every list admits the Balmoral; picking "
         + "C2/Hollywood_Track_1, which refuses it, in the Course box puts the Balmoral bot back on Random and keeps the Avenger "
         + "one; the join board reached through the top level's door, which a local Dogfight shares, offers the Balmoral "
-        + "ungreyed, while the board opened under Instant Action's rule greys it in its Edit Bot plane list, ignores a click "
-        + "on it and a step from the Avenger lands past it; seat 0 keeps its pick, the Pilot Plane list greys the stock Balmoral and the build, FLY MISSION "
+        + "ungreyed and its CONTINUE lands on the top level, while the cursor's walk reaches Instant Action's own door, which draws its "
+        + "focus wash, and an Accept on it opens the board, which greys it in its "
+        + "Edit Bot plane list, ignores a click on it and a step from the Avenger lands past it, and its CONTINUE and, after a click "
+        + "on the door, its BACK each land back on Instant Action with the course and the focus on the door kept; seat 0 keeps its pick, the Pilot Plane list greys the stock Balmoral and the build, FLY MISSION "
         + "answers with the course's reason and no launch, and a step from the Avenger lands past it; a second seat left "
         + "confirmed on a Balmoral is walked again, its list greys the row, an Accept on it raises the reason, and the walk "
         + "leaves as one launch of the course with no Balmoral anywhere on it, which the course admits")]
@@ -245,9 +247,12 @@ internal static class MenuInstantActionSuites
             if (CoursePlanesPicked(ctx, host, seat, shell, fit, ia, setup) is { } bots)
             {
                 CoursePlanesOffTheDoor(ctx, host, seat, shell, fit, bots.Avenger);
-                shell.JoinBoard.Open(ia.AdmitsBot);
-                CoursePlanesOnTheBoard(ctx, host, seat, shell, fit, setup, bots.Avenger);
                 host.Show(MenuReturnDestination.InstantAction);
+                CoursePlanesThroughTheDoor(ctx, host, seat, shell, fit, ia, OriginalJoinBoard.ContinueKey, walk: true);
+                CoursePlanesOnTheBoard(ctx, host, seat, shell, fit, setup, bots.Avenger);
+                CoursePlanesBackThroughTheDoor(ctx, host, seat, shell, fit, ia, OriginalJoinBoard.ContinueKey);
+                CoursePlanesThroughTheDoor(ctx, host, seat, shell, fit, ia, OriginalJoinBoard.BackKey, walk: false);
+                CoursePlanesBackThroughTheDoor(ctx, host, seat, shell, fit, ia, OriginalJoinBoard.BackKey);
                 CoursePlanesForSeats(ctx, host, seat, shell, fit, ia, setup, exits);
             }
         }
@@ -325,6 +330,51 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.Screen == OriginalScreen.JoinBoard && item is { Enabled: true },
             $"ABLE-TO-FAIL CONTROL: through the top level's door, with Instant Action left on {RefusingCourse}, the Balmoral stands ungreyed ({shell.Screen}, {item?.Enabled})");
         shell.JoinBoard.CloseDropdown();
+        shell.JoinBoard.ShowBot(-1);
+        ClickRow(host, seat, shell, fit, OriginalJoinBoard.ContinueKey);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"and that board's CONTINUE lands on the top level ({shell.Screen})");
+    }
+
+    // A pointer click 5 px inside the showing row carrying a key; nothing where no row carries it.
+    private static void ClickRow(MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, string key)
+    {
+        if (Row(shell, key) is { } row)
+        {
+            Click(host, seat, Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
+        }
+    }
+
+    // Instant Action's own door onto the join board, walked onto and accepted as a keyboard or pad
+    // does, or clicked.
+    private static void CoursePlanesThroughTheDoor(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, string leaveBy, bool walk)
+    {
+        var door = Row(shell, OriginalInstantActionScreen.JoinBoardKey);
+        if (walk)
+        {
+            OriginalWalk.WalkTo(shell, OriginalInstantActionScreen.JoinBoardKey, frame => Press(host, seat, frame));
+            bool washed = door != null && shell.Compose().Fills.Any(f => !f.Border && f.X == door.X && f.Y == door.Y);
+            ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.JoinBoardKey && washed,
+                $"the cursor's walk reaches the door, which draws its focus wash ({shell.FocusedKey}, {washed})");
+            Press(host, seat, Accept);
+        }
+        else
+        {
+            ClickRow(host, seat, shell, fit, OriginalInstantActionScreen.JoinBoardKey);
+        }
+
+        ctx.Check(door is { Visible: true, Enabled: true } && shell.Screen == OriginalScreen.JoinBoard && ia.LaunchCourse == RefusingCourse,
+            $"Instant Action's door, {(walk ? "accepted" : "clicked")}, opens the join board, to leave by {leaveBy} ({door?.Label}, {shell.Screen}, {ia.LaunchCourse})");
+    }
+
+    // The board's CONTINUE or BACK returns to Instant Action with the player's place kept.
+    private static void CoursePlanesBackThroughTheDoor(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, string key)
+    {
+        ClickRow(host, seat, shell, fit, key);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && ia.LaunchCourse == RefusingCourse && ia.RaceBots
+                && shell.FocusedKey == OriginalInstantActionScreen.JoinBoardKey,
+            $"the board's {key} lands back on Instant Action, the course, the race toggle and the focus on the door kept ({shell.Screen}, {ia.LaunchCourse}, {ia.RaceBots}, {shell.FocusedKey})");
     }
 
     private static string BotPlaneItem(int airframe) =>

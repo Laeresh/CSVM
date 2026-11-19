@@ -128,6 +128,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// which the first environment's shipped sample course fills.</summary>
     public const string InstantActionCourseAid = "course";
 
+    /// <summary>The Instant Action aid's argument that stands the race bots pose with the cursor on
+    /// the join board door instead. No other shot shows the door focused.</summary>
+    public const string InstantActionJoinBoardDoorAid = "join-board-door";
+
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
     /// the page a flown mission's ending lands on.</summary>
     public const string InstantActionWrapupAid = "instant-action-wrapup";
@@ -697,6 +701,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionAid + ":" + InstantActionCourseAid:
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseCourse();
+                    break;
+                case InstantActionAid + ":" + InstantActionJoinBoardDoorAid:
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseRaceBots();
+                    ((IOriginalScreenHost)_shell).FocusKey(OriginalInstantActionScreen.JoinBoardKey);
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));

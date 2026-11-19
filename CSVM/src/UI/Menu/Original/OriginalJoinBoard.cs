@@ -110,6 +110,9 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
 
     private PosedRoster? _posed;
 
+    // Where CONTINUE and BACK land: the screen whose door opened the board.
+    private OriginalScreen _return = OriginalScreen.TopLevel;
+
     /// <summary>A board over <paramref name="layout"/>'s paper plaque strip and the pad roster
     /// <paramref name="roster"/>, calling back into <paramref name="host"/> for the shell state.
     /// Without a roster every entry draws open, which is what an engine-free test sees. The bot rows
@@ -148,11 +151,13 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
     // pads. A shell built without a roster draws nothing at all.
     private IJoinRoster? Roster => _posed ?? _roster;
 
-    /// <summary>Opens the board, the top level's door. A bot's plane list greys an airframe
-    /// <paramref name="admitsBot"/> refuses, which only a door whose mode will race the bots passes.
+    /// <summary>Opens the board, whose CONTINUE and BACK land on <paramref name="returnTo"/>. A bot's
+    /// plane list greys an airframe <paramref name="admitsBot"/> refuses, which only a door whose
+    /// mode will race the bots passes, Instant Action's own.
     /// ⚠ The top level's door passes none: a local Dogfight may fly the rows next, under no course.</summary>
-    public void Open(Func<int, bool>? admitsBot = null)
+    public void Open(Func<int, bool>? admitsBot = null, OriginalScreen returnTo = OriginalScreen.TopLevel)
     {
+        _return = returnTo;
         _posed = null;
         _bots.Reset(admitsBot);
         _host.Open(OriginalScreen.JoinBoard);
@@ -163,6 +168,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
     /// seat joined. A shot posed this way says nothing about what a launch would carry.</summary>
     public void Pose(int pads)
     {
+        _return = OriginalScreen.TopLevel;
         _bots.Reset();
         _host.Open(OriginalScreen.JoinBoard);
         _posed = new PosedRoster(Math.Clamp(pads, 0, Entries));
@@ -323,12 +329,12 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         _ => string.Empty,
     };
 
-    private void Continue() => _host.Open(OriginalScreen.TopLevel);
+    private void Continue() => _host.Open(_return);
 
     private void Leave()
     {
         Roster?.DropSignOns();
-        _host.Open(OriginalScreen.TopLevel);
+        _host.Open(_return);
     }
 
     private OriginalRow Plaque(string key, string label, float x, float y)
