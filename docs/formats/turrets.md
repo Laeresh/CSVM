@@ -301,6 +301,11 @@ carried turret) to a point 0.2 m above the target, and **caches the result for a
 seconds** before re-testing. A failed test blocks firing. Against non-player targets there is no
 occlusion test at all.
 
+The remake widens the test from the player to every aircraft target and runs none against an
+emplacement, a mission structure or a hull. ⚠ The cast to 0.2 m above such a target ends inside the
+target's own body (an `aagun` rig stands 3.5 m over its node), so testing it would block every shot,
+and a gunner would track the target without ever firing.
+
 ⚠ **Whatever that cast hits, it cannot be the thing the gun is bolted to.** Every standalone entry
 stands on modelled geometry: a zeppelin hull, a balloon, a boat, an AA gun's own body. A test that
 counted the mount as cover would silence all 26 of them from the first frame, so the mount is not
