@@ -448,6 +448,11 @@ public sealed class AnimEvent
     /// never a bool read, and never read the adjacent <c>wait_for_raw</c> slot as a
     /// wait.</summary>
     public bool WaitsForCompletion;
+
+    /// <summary>Whether a <c>CALL_ANIMATION</c> owns a call-table slot, the only place the original
+    /// records its callee for a later stop to reach (docs/org/sequences.md, "Stopping a caller").
+    /// A reader event carries no slot index and keeps the default.</summary>
+    public bool HasCallSlot = true;
     public AnimData Data = AnimData.Empty;
 
     public static AnimEvent? Parse(AnimData d)
@@ -481,6 +486,8 @@ public sealed class AnimEvent
             ev.StartTime = start.Num("time") ?? 0f;
         }
         ev.WaitsForCompletion = ev.Kind == "CallAnimation" && ev.Data.Has("wait_for_completion");
+        // The slot index is one field the extraction splits by the wait flag; -1 is no slot.
+        ev.HasCallSlot = ev.Data.Num("wait_for_completion") is >= 0f || ev.Data.Has("wait_for_raw");
         return ev;
     }
 
