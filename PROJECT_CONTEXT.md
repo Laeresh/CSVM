@@ -159,8 +159,10 @@ One line each, **the game files, the launch scripts and the release scripts are 
   `Verification:` commit, the `--no-ff` merge into main) under one machine-wide lock, so concurrent
   landings queue instead of each invalidating the last one's run; land every branch through it, and
   its header lists the exit codes. Targeted and quick runs are partial by
-  design and never satisfy that landing gate. `CSVM.Tests/`-only, documentation, and tooling
-  changes do not require the full run to land.
+  design and never satisfy that landing gate, with one exception: a landing with others queued
+  behind it lands on `-Quick` and owes the complete run to the last of the queue, which runs it on
+  main plus every such landing (a failure names them as suspects). `CSVM.Tests/`-only,
+  documentation, and tooling changes do not require the full run to land.
 - **A complete PASS writes a green stamp** keyed on the content of `CSVM/`, `CSVM.Tests/` and
   `analysis/goldens/`, shared by every worktree. The plain complete run on stamped content prints
   `already green` and exits 0 without running (`-Force` runs it), so main after a merge of a
