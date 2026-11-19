@@ -158,7 +158,7 @@ internal sealed class SessionVoices
         foreach (var rig in _rigs)
         {
             (rig.ChromeParent ?? rig.HudParent).AddChild(Flight.Hud.SubtitleLine.OnLayer(
-                UI.Boards.HudLayers.Subtitles, "subtitles", () => (radio.OnAirWav, radio.OnAirSeconds), table));
+                UI.Boards.HudLayers.Subtitles, "subtitles", () => (radio.OnAirWav, radio.OnAirSeconds, radio.OnAirSpeaker), table));
         }
     }
 

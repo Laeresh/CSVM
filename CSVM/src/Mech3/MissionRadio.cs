@@ -80,6 +80,10 @@ public sealed partial class MissionRadio : Node
     /// long clip's subtitle.</summary>
     public double OnAirSeconds => _player.GetPlaybackPosition();
 
+    /// <summary>The name of the pilot whose line is on air, which a subtitle names a bark by, or
+    /// null for a line no pilot owns.</summary>
+    public string? OnAirSpeaker => OnAirWav != null ? _onAir?.SpeakerName : null;
+
     /// <summary>How many calls are waiting for the channel.</summary>
     public int Pending => _queue.Count;
 
@@ -97,19 +101,19 @@ public sealed partial class MissionRadio : Node
         return lines.Count;
     }
 
-    /// <summary>Queues one combat voice line on this same channel with no start delay, and returns
-    /// the definition it will speak, or null when the name is no radio line or its WAV never
-    /// decoded. The original hands a combat bark to the one queue the objective cues use, without
-    /// their delay (docs/formats/sounds.md). <paramref name="speakerId"/> is the pilot the line
-    /// belongs to, what <see cref="IsSpeaking"/> answers from.</summary>
-    public string? Speak(string name, Random rng, int speakerId = NoSpeaker)
+    /// <summary>Queues one combat voice line on this channel with no start delay. Returns the
+    /// definition it will speak, or null when the name is no radio line or its WAV never decoded.
+    /// The original queues a bark where the objective cues go, without their delay
+    /// (docs/formats/sounds.md). The id is the pilot <see cref="IsSpeaking"/> answers for, and the
+    /// name is what the subtitle calls that pilot.</summary>
+    public string? Speak(string name, Random rng, int speakerId = NoSpeaker, string? speakerName = null)
     {
         if (Resolve(name, rng) is not { Count: > 0 } lines || _stream(lines[0]) == null)
         {
             return null;
         }
 
-        Enqueue(name, lines, 0f, speakerId);
+        Enqueue(name, lines, 0f, speakerId, speakerName);
         return lines[0];
     }
 
@@ -207,7 +211,7 @@ public sealed partial class MissionRadio : Node
 
     public override void _Ready() => AddChild(_player);
 
-    private void Enqueue(string name, List<string> lines, float delay, int speakerId)
+    private void Enqueue(string name, List<string> lines, float delay, int speakerId, string? speakerName = null)
     {
         // The tolerance is the first line's: the data authors one QUEUE value per mission, so
         // every line of a chain carries the same number anyway.
@@ -222,6 +226,7 @@ public sealed partial class MissionRadio : Node
             Delay = delay - Math.Max(0f, LateBy),
             Late = LateBy > 0f,
             Speaker = speakerId,
+            SpeakerName = speakerName,
         });
         Log.Debug("sound", $"radio queue cue={name} lines={lines.Count} wait<={tolerance:0.#}s pending={_queue.Count}");
     }
@@ -347,6 +352,7 @@ public sealed partial class MissionRadio : Node
         public float Tolerance;
         public bool Late;
         public int Speaker = NoSpeaker;
+        public string? SpeakerName;
 
         public bool Names(string name) =>
             string.Equals(Cue, name, StringComparison.OrdinalIgnoreCase)

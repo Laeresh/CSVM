@@ -68,6 +68,11 @@ public class SubtitlesTests
         Assert.Equal("Betty: hello", SubtitleLine.Compose(new Subtitles.Line("Betty", "hello")));
         Assert.Equal("hello", SubtitleLine.Compose(new Subtitles.Line(null, "hello")));
 
+        // A bark the table names nobody for takes the speaking aircraft's name; a named line keeps its own.
+        Assert.Equal(new Subtitles.Line("Medusa Kestrel", "bark"), SubtitleLine.Named(new Subtitles.Line(null, "bark"), "Medusa Kestrel"));
+        Assert.Equal(new Subtitles.Line("Zachary", "line"), SubtitleLine.Named(new Subtitles.Line("Zachary", "line"), "Bloodhawk"));
+        Assert.Null(SubtitleLine.Named(null, "Bloodhawk"));
+
         // One unit per character, so the width is the length.
         Assert.Equal(new[] { "aaa bb", "cccc", "dddddddddd", "e" },
             SubtitleLine.Wrap("aaa bb  cccc dddddddddd e", 6f, t => t.Length));

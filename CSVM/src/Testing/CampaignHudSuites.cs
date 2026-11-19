@@ -277,9 +277,11 @@ internal static class CampaignHudSuites
         // What the combat-voice gate's "already talking" test reads: a line carries the pilot it
         // belongs to, and that pilot holds the channel only for the length of its own line.
         int pilot = 7;
-        ctx.Check(radio.Speak(lineCue, new System.Random(4), pilot) != null,
+        ctx.Check(radio.Speak(lineCue, new System.Random(4), pilot, "Test Kestrel") != null,
             $"a combat line queues for a named speaker cue='{lineCue}'");
         radio.Tick(0.1f);
+        ctx.Check(radio.OnAirSpeaker == "Test Kestrel",
+            $"…the subtitle's speaker is that pilot's name while it is on air: '{radio.OnAirSpeaker}'");
         ctx.Check(radio.IsSpeaking(pilot), $"…and that speaker reads as talking while it is on air");
         ctx.Check(!radio.IsSpeaking(pilot + 1),
             $"…while another pilot sharing the busy channel does not");
@@ -297,7 +299,7 @@ internal static class CampaignHudSuites
         string dir = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(root, "Subtitles")).FullName;
         var entry = new Dictionary<string, object> { [wav] = new { speaker = "Tester", text = "on air" } };
         System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "t.json"), System.Text.Json.JsonSerializer.Serialize(entry));
-        var caption = new SubtitleLine(() => (radio.OnAirWav, radio.OnAirSeconds), Subtitles.Open(root, "Subtitles"));
+        var caption = new SubtitleLine(() => (radio.OnAirWav, radio.OnAirSeconds, radio.OnAirSpeaker), Subtitles.Open(root, "Subtitles"));
         ctx.Host.AddChild(caption);
         caption._Process(0);
         ctx.Check(caption.Caption == "Tester: on air",

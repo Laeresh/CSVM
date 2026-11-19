@@ -299,6 +299,13 @@ public sealed partial class AiVoiceRuntime : Node
         Raised?.Invoke(ai, bearing, quarry.Team);
     }
 
+    // What a bark's subtitle calls its speaker. A network seat is its callsign. Anyone else takes
+    // the name its marker and kill line show: the roster pilot, the airframe title, the plane.
+    private static string SubtitleName(FlightController speaker) =>
+        speaker.PilotName is { Length: > 0 } callsign ? callsign
+        : speaker.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats)
+        : PlaneRoster.Humanize(speaker.Name);
+
     // The human a pursuer attacks, or null. ⚠ Keep the InPlay and Hostile gates: a downed pursuer's
     // gunner still holds its target, and its wreck would raise "six low" every 15 s. They are the
     // beeper paint gate's own pair, and the original's combat driver never runs for a downed aircraft.
@@ -597,7 +604,7 @@ public sealed partial class AiVoiceRuntime : Node
             // ⚠ Do not place a line at the speaker; the defs are QUEUE radio lines with no 3D flag,
             // and the original plays them flat through the one queue the objective callouts use.
             // The speaker rides along so the gate's already-talking test can read it back.
-            string? resolved = _radio.Speak(clip, _rng, speaker.Id);
+            string? resolved = _radio.Speak(clip, _rng, speaker.Id, node != null ? SubtitleName(node) : null);
             Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}{(resolved != null && resolved != clip ? $" ({resolved})" : "")} ({decision.Outcome})");
             if (resolved != null)
             {

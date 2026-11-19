@@ -24,13 +24,14 @@ public sealed partial class SubtitleLine : Control
     private static readonly Color TextColor = new(1f, 1f, 1f);
     private static readonly Color OutlineColor = new(0f, 0f, 0f, 0.85f);
 
-    private readonly Func<(string? Wav, double At)> _playing;
+    private readonly Func<(string? Wav, double At, string? Speaker)> _playing;
     private readonly Subtitles _table;
     private Subtitles.Line? _line;
 
-    /// <summary>A subtitle over <paramref name="playing"/>, the WAV sounding (null for none) and
-    /// the seconds played into it, worded from <paramref name="table"/>.</summary>
-    public SubtitleLine(Func<(string? Wav, double At)> playing, Subtitles table)
+    /// <summary>A subtitle worded from <paramref name="table"/>. The source gives the WAV sounding
+    /// (null for none), the seconds played into it, and who speaks it where the table names nobody.
+    /// </summary>
+    public SubtitleLine(Func<(string? Wav, double At, string? Speaker)> playing, Subtitles table)
     {
         _playing = playing;
         _table = table;
@@ -48,13 +49,18 @@ public sealed partial class SubtitleLine : Control
     /// <summary>A canvas layer of number <paramref name="layer"/> holding one subtitle over
     /// <paramref name="playing"/>, laid out in <paramref name="area"/> (null for the flight layout).
     /// </summary>
-    public static CanvasLayer OnLayer(int layer, string name, Func<(string? Wav, double At)> playing,
+    public static CanvasLayer OnLayer(int layer, string name, Func<(string? Wav, double At, string? Speaker)> playing,
         Subtitles table, Func<Vector2, Rect2>? area = null)
     {
         var canvas = new CanvasLayer { Layer = layer, Name = name };
         canvas.AddChild(new SubtitleLine(playing, table) { Area = area, Visible = false });
         return canvas;
     }
+
+    /// <summary>The table's line with <paramref name="speaker"/> standing in for a name it lacks:
+    /// a combat bark is a pilot's voice take, named by the aircraft speaking it.</summary>
+    public static Subtitles.Line? Named(Subtitles.Line? line, string? speaker) =>
+        line is { Speaker: null } bare && speaker is { Length: > 0 } ? bare with { Speaker = speaker } : line;
 
     /// <summary>One line as it reads: the speaker's name and a colon before the words.</summary>
     public static string Compose(Subtitles.Line line) =>
@@ -91,8 +97,8 @@ public sealed partial class SubtitleLine : Control
     {
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        var (wav, at) = _playing();
-        var line = _table.At(wav, at);
+        var (wav, at, speaker) = _playing();
+        var line = Named(_table.At(wav, at), speaker);
         if (line == _line)
         {
             return;
