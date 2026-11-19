@@ -1843,11 +1843,16 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private void BuildLoadoutRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(LoadoutSection);
-        if (screen == null || AddOpenListRows(screen, rows))
+        if (screen != null && !AddOpenListRows(screen, rows))
         {
-            return;
+            BuildLoadoutWidgets(screen, rows);
         }
+    }
 
+    // The loadout page's closed fields and strips, whatever list stands open. They are the rows
+    // when none does, and the page drawn under the list when one does.
+    private void BuildLoadoutWidgets(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
         for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
         {
             if (GunFor(_loadoutDef, slot) != null)
@@ -1965,7 +1970,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         if (_iaOpen != null)
         {
             var closed = new List<OriginalRow>();
-            BuildLoadoutRows(closed);
+            BuildLoadoutWidgets(screen, closed);
             widgets = closed;
             widgetFocus = -1;
             widgetPressed = -1;

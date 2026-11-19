@@ -969,6 +969,21 @@ public class OriginalInstantActionTests
         Assert.Null(Assert.Single(launch.Seats).Fit);
     }
 
+    // An open list hangs over the loadout page. Every other field still stands under it.
+    [Fact]
+    public void AnOpenLoadoutListKeepsEveryOtherFieldDrawn()
+    {
+        var host = Open(out _, stock: true);
+        Click(host, OriginalInstantActionScreen.WeaponLoadoutKey);
+        var fields = host.Rows.Where(r => r.Kind == OriginalRowKind.Dropdown).ToList();
+        Assert.Equal(3, fields.Count);
+
+        Click(host, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0");
+        Assert.NotNull(host.Module.OpenDropdown);
+        var board = Compose(host);
+        Assert.All(fields, f => Assert.Contains(board.Fills, fill => fill.X == f.X && fill.Y == f.Y));
+    }
+
     [Fact]
     public void WeaponLoadoutOnThePilotEditsSeatZerosFitWhichRidesTheLaunchAndDropsWithTheAirframe()
     {
