@@ -993,7 +993,7 @@ public partial class Launcher : Node3D
         // extraction screen too, since a player whose extraction failed needs the logs icon most.
         _buildStamp?.Tick(_menu.Host is { OnMainMenu: true } || _sourceScreen != null);
         TickNetReadout(delta);
-        _instruments.EndFrame(delta, ClockNow);
+        _instruments.EndFrame(frameMs, ClockNow);
         // Wall time, like the instruments above: the score is not part of the simulation, and a
         // paused or stepped session must not stall a fade halfway.
         _audio.Tick((float)delta);
