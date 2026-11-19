@@ -959,11 +959,12 @@ internal static class OrdnanceSuites
     [Suite("flyout-rack-pose",
         "a FLYOUT body built for a pylon is posed at its MODEL_ANIMATION def's RESET_STATE: the " +
         "flare's sflsh star is hidden and rapolys shown, where the raw prototype instance shows " +
-        "both; the torpedo's wings and prop are folded away; every reset event on a non-root node " +
+        "both; the torpedo's wings and prop are folded away; both pylon bodies draw through the " +
+        "airframe's lit arm and shadow lookup while the in-flight body keeps the world's; every reset event on a non-root node " +
         "of every FLYOUT weapon holds on the built body; a fired flare still starts " +
         "deploy_reararc at spawn, so its star is on the round the frame it leaves; and the star's " +
         "per-instance opacity follows the authored ramp (0 at spawn, 1 at 0.05 s, down over 2.25 s) " +
-        "while it scales 1 to 2, with the rack copy's opacity, overrides and materials untouched; " +
+        "while it scales 1 to 2, with a still copy's opacity, overrides and materials untouched; " +
         "the round's end stops the def, so a fired flare flashes once at its 2.0 s detonation and " +
         "never reaches the def's 4.0 s rear_flash_effect, which a lab flare with no fuse does reach")]
     internal static void FlyoutRackPose(TestContext ctx)
@@ -1015,19 +1016,35 @@ internal static class OrdnanceSuites
                 ctx.Check(raw != null && Named(raw, "sflsh") is { Visible: true } && Named(raw, "rapolys") is { Visible: true },
                     $"CONTROL: the raw reararc instance shows sflsh and rapolys, both ACTIVE in the chapter record");
 
-                var rack = live.BuildFlyoutBody(flare);
+                var rack = live.BuildPylonBody(flare);
                 if (rack != null)
                     built.Add(rack);
                 ctx.Check(rack != null && Named(rack, "sflsh") is { Visible: false } && Named(rack, "rapolys") is { Visible: true },
                     $"the flare built for the rack has sflsh hidden and rapolys shown sflsh={(rack != null ? Named(rack, "sflsh")?.Visible : null)}");
 
-                var torp = live.BuildFlyoutBody(torpedo);
+                var torp = live.BuildPylonBody(torpedo);
                 if (torp != null)
                     built.Add(torp);
                 ctx.Check(torp != null && Named(torp, "rightwing") is { Visible: false }
                           && Named(torp, "leftwing") is { Visible: false } && Named(torp, "atprop") is { Visible: false }
                           && Named(torp, "atbody") is { Visible: true },
                     $"the torpedo built for the rack has its wings and prop folded away and its body shown");
+
+                // A pylon body draws through the airframe's arm: its sun term, its shadow lookup, shadows cast and received.
+                string airframeArm = GraphicsMode.Enhanced ? "LIGHT_VERTEX = VERTEX + NORMAL * shadow_lookup_offset" : "v_sun_lit";
+                bool AirframeLit(Node3D? part) => part != null && MeshesUnder(part) is { Count: > 0 } meshes
+                    && meshes.All(mi => mi.CastShadow != GeometryInstance3D.ShadowCastingSetting.Off
+                        && SurfaceMaterials(mi).All(p => p.Item1 is ShaderMaterial m && p.Item2 is { } sh
+                            && Mathf.IsEqualApprox(m.GetShaderParameter("shadow_lookup_offset").AsSingle(), PlaneBuilder.AirframeShadowLookupOffset)
+                            && sh.Code.Contains(airframeArm, System.StringComparison.Ordinal)
+                            && !sh.Code.Contains("shadows_disabled", System.StringComparison.Ordinal)));
+                var flown = live.BuildFlyoutBody(torpedo);
+                if (flown != null)
+                    built.Add(flown);
+                ctx.Check(AirframeLit(torp != null ? Named(torp, "atbody") : null) && AirframeLit(rack != null ? Named(rack, "rapolys") : null),
+                    $"the torpedo and the flare rack on their pylons draw through the airframe's {(GraphicsMode.Enhanced ? "Enhanced" : "Original")} arm, offset {PlaneBuilder.AirframeShadowLookupOffset}");
+                ctx.Check(flown != null && !AirframeLit(Named(flown, "atbody")),
+                    $"ABLE-TO-FAIL CONTROL: the in-flight torpedo body keeps the world scene's arm");
 
                 // The general rule, over every FLYOUT weapon whose def resolves in this chapter.
                 int checkedEvents = 0, wrong = 0;
@@ -1068,14 +1085,18 @@ internal static class OrdnanceSuites
 
                 // deploy_reararc's third sequence fades sflsh 0 to 1 over 0.05 s, then 1 to 0 over
                 // 2.25 s. Its second sequence scales the star 1 to 2 over 0.3 s meanwhile.
+                // A second world-scene flare stands for every body sharing the fired star's materials.
                 var star = round != null ? Named(round, "sflsh") : null;
-                var rackStar = rack != null ? Named(rack, "sflsh") : null;
+                var still = live.BuildFlyoutBody(flare);
+                if (still != null)
+                    built.Add(still);
+                var rackStar = still != null ? Named(still, "sflsh") : null;
                 var starMeshes = star != null ? MeshesUnder(star) : new List<MeshInstance3D>();
                 var rackMeshes = rackStar != null ? MeshesUnder(rackStar) : new List<MeshInstance3D>();
                 var rackMaterials = rackMeshes.Select(SurfaceMaterials).ToList();
                 ctx.Check(starMeshes.Count > 0 && rackMeshes.Count == starMeshes.Count
                           && starMeshes.Zip(rackMeshes).All(pair => SurfaceMaterials(pair.First).SequenceEqual(SurfaceMaterials(pair.Second))),
-                    $"the fired and the rack star draw the same shared materials, so an edit to one would show on the other: fired {starMeshes.Count} mesh(es), rack {rackMeshes.Count}");
+                    $"the fired and a still flare's star draw the same shared materials, so an edit to one would show on the other: fired {starMeshes.Count} mesh(es), still {rackMeshes.Count}");
                 ctx.Check(starMeshes.Count > 0 && starMeshes.All(HasAlphaPath),
                     $"every star mesh on the fired round has an alpha path for the fade to show on");
 
@@ -1117,7 +1138,7 @@ internal static class OrdnanceSuites
                                      && Enumerable.Range(0, mi.GetSurfaceOverrideMaterialCount()).All(s => mi.GetSurfaceOverrideMaterial(s) == null);
                 }
                 ctx.Check(rackUntouched,
-                    $"the rack flare's star has no opacity written, no surface override and the same shared materials after the fired star's fade");
+                    $"the still flare's star has no opacity written, no surface override and the same shared materials after the fired star's fade");
 
                 // The def ends with the round, as FUN_005ad2d0 stops it at the retire. The def calls
                 // rear_flash_effect at 4.0 s, after the flare's 2.0 s fuse.

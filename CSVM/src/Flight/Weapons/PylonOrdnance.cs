@@ -8,7 +8,7 @@ namespace CSVM.Flight.Weapons;
 /// <summary>
 /// The ordnance hanging under a plane's wings: one <c>FLYOUT MODEL</c> body instanced at each
 /// loaded pylon and hidden the moment that pylon runs dry. The body is the round's own prototype
-/// from <see cref="ProjectilePool.BuildFlyoutBody"/> in its <c>RESET_STATE</c> pose, hung at the
+/// from <see cref="ProjectilePool.BuildPylonBody"/> in its <c>RESET_STATE</c> pose, hung at the
 /// pylon marker. Its root shows only while the pylon is armed. Built once at
 /// session setup, it rides the plane and is freed with it.
 /// ⚠ One model per pylon, never one per <c>CLUSTER_SIZE</c> round, the original shows a single
@@ -39,7 +39,7 @@ public sealed class PylonOrdnance
         var mounts = new List<Mount>();
         foreach (var hp in loadout.Hardpoints)
         {
-            var model = pool.BuildFlyoutBody(hp.Weapon);
+            var model = pool.BuildPylonBody(hp.Weapon);
             if (model == null)
             {
                 continue;   // chapter lacks the prototype (or the ordnance carries no FLYOUT MODEL)
@@ -55,7 +55,7 @@ public sealed class PylonOrdnance
             // The copy draws steady, and the interior covers it wherever they overlap, as the flat pass
             // does: the interior is not the airframe scaled. The pylon, the launch point, stays put.
             Node3D? copy = null;
-            if (stereo != null && pool.BuildFlyoutBody(hp.Weapon, stereo: true) is { } built)
+            if (stereo != null && pool.BuildPylonBody(hp.Weapon, stereo: true) is { } built)
             {
                 built.Name = $"stereo_ordnance{hp.Index}";
                 built.Visible = shown;

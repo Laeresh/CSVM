@@ -39,7 +39,7 @@ public sealed class PlaneBuilder
     // shared bias pair instead; that detaches every contact shadow. ⚠ Do not raise this back
     // toward 0.5 either. A biplane's wing gap is about a metre and the offset spends it. The upper
     // wing's shadow on the lower one then breaks into holes that move with the roll (#326).
-    private const float AirframeShadowLookupOffset = 0.2f;
+    internal const float AirframeShadowLookupOffset = 0.2f;
 
     // The flare mesh is a SphericalY facade, posed through the facade look-at like every other
     // population of that class (docs/org/cloudCards.md), keeping the node's scale.

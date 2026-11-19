@@ -467,8 +467,9 @@ public sealed partial class ProjectilePool : Node3D
     private GameZNode? _casingProto;           // the gunshell gamez prototype, resolved once
     private bool _casingProtoResolved;
     private bool _casingLogged;
-    // The flyout scene's stereo-interior twin, built on the first stereo pylon store.
-    private SceneBuilder? _stereoFlyoutScene;
+    // The pylon bodies' builders, flat and stereo-interior, each built on the first store that needs it.
+    private SceneBuilder? _pylonScene;
+    private SceneBuilder? _stereoPylonScene;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
@@ -1230,46 +1231,32 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> prototype as a fresh, unparented,
-    /// collision-exempt body posed at its def's <c>RESET_STATE</c>. The in-flight round and
-    /// <see cref="PylonOrdnance"/> share it. A reset may hide the root, so the caller sets the
-    /// root's visibility. Null without a world scene, a <c>FLYOUT</c> <c>MODEL</c> or the
-    /// prototype root in this chapter's gamez. A stereo body wears the stereo interior's shader and
-    /// draws under the interior (<c>SceneBuilder.XrUnderInterior</c>).</summary>
-    public Node3D? BuildFlyoutBody(WeaponDef weapon, bool stereo = false)
-    {
-        if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
-            return null;
-        if (!_flyoutNodes.TryGetValue(modelName, out var node))
-        {
-            node = _flyoutGamez.FindByName(modelName);
-            _flyoutNodes[modelName] = node;
-            if (node == null)
-                Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez, rocket flies streak-only");
-        }
-        if (node == null)
-            return null;
-        // ⚠ A stereo copy never takes the world scene's shaders: the lifted interior would draw them at
-        // the world origin. The twin has no billboard or glow arm, since neither has a stereo variant.
-        var scene = !stereo ? _flyoutScene
-            : _stereoFlyoutScene ??= new SceneBuilder(_flyoutGamez, _textures, fullbright: true, cullBackfaces: true)
-            {
-                XrPreciseInterior = true,
-                XrUnderInterior = true,
-                HdChapter = _flyoutScene.HdChapter,
-            };
+    /// collision-exempt body posed at its def's <c>RESET_STATE</c>. The in-flight round draws it
+    /// through the world scene. A reset may hide the root, so the caller sets the root's visibility. Null
+    /// without a world scene, a <c>FLYOUT</c> <c>MODEL</c> or the prototype root in this chapter's gamez.</summary>
+    public Node3D? BuildFlyoutBody(WeaponDef weapon) =>
+        _flyoutScene == null ? null : BuildFlyoutBody(weapon, _flyoutScene);
 
-        // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not
-        // obstruct another round or the world hit-test; mounted ordnance must not be shootable either),
-        // and the world builder would otherwise attach one.
-        int replacedBefore = scene.ReplacedMeshCount;
-        var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
-        if (inst != null)
-            PoseAtResetState(inst, weapon);
-        // Verification breadcrumb (once per model name): confirms the named prototype resolved and
-        // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
-        if (inst != null && _flyoutLogged.Add(modelName))
-            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es), {scene.ReplacedMeshCount - replacedBefore} from the model pack");
-        return inst;
+    /// <summary>The <see cref="BuildFlyoutBody(WeaponDef)"/> body for <see cref="PylonOrdnance"/>, drawn
+    /// through the airframe's builder settings so it is lit and takes shadow as the wing it hangs on.
+    /// A stereo body wears the stereo interior's shader and draws under the interior
+    /// (<c>SceneBuilder.XrUnderInterior</c>).</summary>
+    public Node3D? BuildPylonBody(WeaponDef weapon, bool stereo = false)
+    {
+        if (_flyoutScene == null || _flyoutGamez == null)
+            return null;
+        // ⚠ Never the world scene: its fullbright arm draws the store brighter than the airframe and
+        // shadowless. A stereo copy never takes the flat shaders either, or the lifted interior would
+        // draw it at the world origin. Neither twin has a billboard or glow arm.
+        ref var scene = ref stereo ? ref _stereoPylonScene : ref _pylonScene;
+        scene ??= new SceneBuilder(_flyoutGamez, _textures, cullBackfaces: true, sunVertexLit: true)
+        {
+            ShadowLookupOffset = PlaneBuilder.AirframeShadowLookupOffset,
+            XrPreciseInterior = stereo,
+            XrUnderInterior = stereo,
+            HdChapter = _flyoutScene.HdChapter,
+        };
+        return BuildFlyoutBody(weapon, scene);
     }
 
     /// <summary>One ballistics step: integrate every live round and apply its first end condition.
@@ -2071,6 +2058,33 @@ public sealed partial class ProjectilePool : Node3D
         var inst = BuildFlyoutBody(weapon);
         if (inst != null)
             _flyoutModels.AddChild(inst);
+        return inst;
+    }
+
+    private Node3D? BuildFlyoutBody(WeaponDef weapon, SceneBuilder scene)
+    {
+        if (_flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
+            return null;
+        if (!_flyoutNodes.TryGetValue(modelName, out var node))
+        {
+            node = _flyoutGamez.FindByName(modelName);
+            _flyoutNodes[modelName] = node;
+            if (node == null)
+                Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez, rocket flies streak-only");
+        }
+        if (node == null)
+            return null;
+
+        // Collision-exempt: a rocket raycasts for its own hits and must not obstruct another round or
+        // the world hit-test. Mounted ordnance must not be shootable either.
+        int replacedBefore = scene.ReplacedMeshCount;
+        var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        if (inst != null)
+            PoseAtResetState(inst, weapon);
+        // Verification breadcrumb (once per model name): confirms the named prototype resolved and
+        // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
+        if (inst != null && _flyoutLogged.Add(modelName))
+            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es), {scene.ReplacedMeshCount - replacedBefore} from the model pack");
         return inst;
     }
 
