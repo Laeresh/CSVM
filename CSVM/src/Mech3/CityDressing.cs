@@ -377,6 +377,49 @@ public sealed class CityDressing
 
     // A variant's slots, read once per floor file: its layout beside the image, against its set's lots. Null where the
     // layout is missing or unreadable, so that variant's blocks stand nothing.
+    /// <summary>The ground height at <paramref name="at"/> (world XZ) over a triangle list, null off every triangle.</summary>
+    internal static float? Height(IReadOnlyList<Vector3> triangles, Vector2 at)
+    {
+        var p = new Vector3(at.X, 0f, at.Y);
+        for (int i = 0; i + 2 < triangles.Count; i += 3)
+        {
+            if (VegetationGround.HeightIn(triangles[i], triangles[i + 1], triangles[i + 2], p) is { } y)
+                return y;
+        }
+        return null;
+    }
+
+    /// <summary>The city's integer hash, shared by the dressing and the traffic.</summary>
+    internal static uint Mix(uint x)
+    {
+        unchecked
+        {
+            x ^= x >> 16;
+            x *= 0x7feb352du;
+            x ^= x >> 15;
+            x *= 0x846ca68bu;
+            x ^= x >> 16;
+            return x;
+        }
+    }
+
+    /// <summary>A MultiMesh buffer of instances about <paramref name="centre"/>, uploaded once per node. Each holds its
+    /// basis by rows, each row closed by an origin component, then the custom data.</summary>
+    internal static float[] Buffer(List<(Transform3D Xf, Color Custom)> list, Vector3 centre)
+    {
+        var buffer = new float[list.Count * 16];
+        for (int i = 0; i < list.Count; i++)
+        {
+            var (b, o, c) = (list[i].Xf.Basis, list[i].Xf.Origin - centre, list[i].Custom);
+            var row = buffer.AsSpan(i * 16, 16);
+            (row[0], row[1], row[2], row[3]) = (b.X.X, b.Y.X, b.Z.X, o.X);
+            (row[4], row[5], row[6], row[7]) = (b.X.Y, b.Y.Y, b.Z.Y, o.Y);
+            (row[8], row[9], row[10], row[11]) = (b.X.Z, b.Y.Z, b.Z.Z, o.Z);
+            (row[12], row[13], row[14], row[15]) = (c.R, c.G, c.B, c.A);
+        }
+        return buffer;
+    }
+
     private static List<Slot>? SlotsFor(string image, string set, CityGround.PaintLayout spec, string? groundJson,
         Dictionary<string, List<Slot>?> slotsOf)
     {
@@ -450,17 +493,6 @@ public sealed class CityDressing
 
     private static Vector2 World(Vector2 uv, Vector2 offset) => (uv - offset) * TileM;
 
-    private static float? Height(IReadOnlyList<Vector3> triangles, Vector2 at)
-    {
-        var p = new Vector3(at.X, 0f, at.Y);
-        for (int i = 0; i + 2 < triangles.Count; i += 3)
-        {
-            if (VegetationGround.HeightIn(triangles[i], triangles[i + 1], triangles[i + 2], p) is { } y)
-                return y;
-        }
-        return null;
-    }
-
     // Pieces of a run from a to b: as many as keep each within a quarter of its length, stretched to fit. A stub
     // under half a piece stands none.
     private static IEnumerable<(Vector2 At, float Yaw, float Stretch)> Run(Vector2 a, Vector2 b, float pieceM)
@@ -505,19 +537,6 @@ public sealed class CityDressing
 
     private static float Unit(uint h) => (h >> 8) * (1f / 16777216f);
 
-    private static uint Mix(uint x)
-    {
-        unchecked
-        {
-            x ^= x >> 16;
-            x *= 0x7feb352du;
-            x ^= x >> 15;
-            x *= 0x846ca68bu;
-            x ^= x >> 16;
-            return x;
-        }
-    }
-
     // Places every slot on the floored polygons reached from world1 and builds one node per cell and mesh.
     private void Build()
     {
@@ -556,6 +575,13 @@ public sealed class CityDressing
         Counts = placed.GroupBy(p => p.Kind).ToDictionary(g => g.Key, g => g.Count());
         double placing = clock.Elapsed.TotalMilliseconds;
         long bytes = Draw(placed);
+        if (CityTraffic.Wanted && _looks.TryGetValue("gd_sedan", out var sedan) && _looks.TryGetValue("gd_truck", out var truck))
+        {
+            var traffic = new Node3D { Name = "traffic" };
+            Root.AddChild(traffic);
+            _ranged.AddRange(CityTraffic.Build(_gamez, _ground, sedan, truck, traffic));
+            Range();
+        }
         Log.Info("world", $"city dressing: {placed.Count} instances ({string.Join(", ", Counts.OrderBy(c => c.Key).Select(c => $"{c.Key} {c.Value}"))}) in {NearRoot.GetChildCount()} near and {FarRoot.GetChildCount()} far nodes holding {bytes / 1048576.0:0.0} MB; flagged ground in {overlay:0} ms, placed in {placing - overlay:0} ms, built in {clock.Elapsed.TotalMilliseconds - placing:0} ms");
     }
 
@@ -603,19 +629,8 @@ public sealed class CityDressing
                 Mesh = mesh,
                 InstanceCount = list.Count,
             };
-            // One upload per node: the basis by rows, each closed by an origin component, then the custom data.
-            var buffer = new float[list.Count * 16];
-            for (int i = 0; i < list.Count; i++)
-            {
-                var (b, o, c) = (list[i].Xf.Basis, list[i].Xf.Origin - centre, list[i].Custom);
-                var row = buffer.AsSpan(i * 16, 16);
-                (row[0], row[1], row[2], row[3]) = (b.X.X, b.Y.X, b.Z.X, o.X);
-                (row[4], row[5], row[6], row[7]) = (b.X.Y, b.Y.Y, b.Z.Y, o.Y);
-                (row[8], row[9], row[10], row[11]) = (b.X.Z, b.Y.Z, b.Z.Z, o.Z);
-                (row[12], row[13], row[14], row[15]) = (c.R, c.G, c.B, c.A);
-            }
-            mm.Buffer = buffer;
-            bytes += buffer.Length * sizeof(float);
+            mm.Buffer = Buffer(list, centre);
+            bytes += mm.Buffer.Length * sizeof(float);
             var group = far ? FarRoot : NearRoot;
             var node = new MultiMeshInstance3D
             {
@@ -699,8 +714,8 @@ public sealed class CityDressing
         public Vector2 ToUv(Vector2 p) => Frame is { } f ? f.Origin + (f.X * p.X) + (f.Y * p.Y) : p;
     }
 
-    // A kind's meshes (its near variants) and the material drawing them.
-    private sealed record Look(Kind Kind, Mesh[] Meshes, Material Material, (Mesh Mesh, Material Material)? Far);
+    /// <summary>A kind's meshes (its near variants), the material drawing them and its far mesh and material.</summary>
+    internal sealed record Look(Kind Kind, Mesh[] Meshes, Material Material, (Mesh Mesh, Material Material)? Far);
 
     // The free-ground tests in one variant's frame. Lengths are in layout units.
     private sealed class Ground

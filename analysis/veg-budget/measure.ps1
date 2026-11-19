@@ -23,7 +23,8 @@ Far), vdnormal and vdunlimited (no clutter fade). FINDINGS.md holds their baseli
 every vegetation entry, so there the 3D Scenery word reaches only the new city (CityModels.On,
 Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
 (Vegetation Quality Original) a second off; noground and xnoground are near and extreme with no block
-floor and so no dressing. A --det enhanced launch draws the city at near.
+floor and so no dressing. A --det enhanced launch draws the city at near. notraffic is enhanced with
+CSVM_CITY_TRAFFIC=off, so no city traffic, the traffic's A/B; C5-air looks down an avenue at it.
 Each case also reports the startup line's build times and the city models log line.
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
@@ -84,6 +85,8 @@ $views = @{
     # (-10752,-3584), clear of the fog volumes, looking 600 m north across each district.
     "C5-cb5" = @("--pos=-7680,60,-4800", "--lookat=-7680,15,-4200")
     "C5-cb6" = @("--pos=-10750,60,-4100", "--lookat=-10750,15,-3500")
+    # air: 300 m over downtown, looking along an avenue about 1.2 km ahead at its traffic.
+    "C5-air" = @("--pos=-7000,300,-11200", "--lookat=-7350,5,-12300")
 }
 $modeArgs = @{
     "faithful" = @("--graphics=original")
@@ -103,6 +106,12 @@ $modeArgs = @{
     "enhanced"    = @("--graphics=enhanced")
     "vdnormal"    = @("--graphics=enhanced", "--view-distance=normal")
     "vdunlimited" = @("--graphics=enhanced", "--view-distance=unlimited")
+    # C5's traffic A/B against enhanced: the same launch with no traffic built (see $modeEnv).
+    "notraffic" = @("--graphics=enhanced")
+}
+# The environment a mode's launches take, each variable put back after the launch.
+$modeEnv = @{
+    "notraffic" = @{ "CSVM_CITY_TRAFFIC" = "off" }
 }
 # Extra views replace the chapter ones: the name's text before the first '-' is the chapter.
 if ($ExtraViews) {
@@ -123,7 +132,14 @@ if (-not $SummaryOnly) {
                 $base = Join-Path $scratch "$Tag$ch-$mode-$i"
                 $godotArgs = @("--freecam", "--chapter=$(($ch -split '-')[0])") + $views[$ch] + $modeArgs[$mode] +
                     @("--det", "--perf", "--no-vsync", "--mute", "--frames=$Frames", "--screenshot=$base.png")
+                $vars = if ($modeEnv.ContainsKey($mode)) { $modeEnv[$mode] } else { @{} }
+                $kept = @{}
+                foreach ($k in $vars.Keys) {
+                    $kept[$k] = [Environment]::GetEnvironmentVariable($k)
+                    [Environment]::SetEnvironmentVariable($k, $vars[$k])
+                }
                 & $probe -TimeoutSec 300 -Resolution $Resolution -EngineArgs @("--log-file", "$base.log") @godotArgs | Out-Null
+                foreach ($k in $kept.Keys) { [Environment]::SetEnvironmentVariable($k, $kept[$k]) }
                 Write-Host "$ch $mode $i exit $LASTEXITCODE"
             }
         }
