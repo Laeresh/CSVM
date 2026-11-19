@@ -42,6 +42,11 @@ public sealed partial class SpectatorCamera : Node
     /// a lock once a translation has released it.</summary>
     public Func<IReadOnlyList<Node3D>>? LockCandidates;
 
+    /// <summary>What the flight map's <see cref="InputAction.ToggleGraphicsMode"/> key does here, the
+    /// Launcher's live switch for <c>--freecam</c>, which has no flight seat to read it. Null (the
+    /// default) leaves the key inert.</summary>
+    public Action? ToggleGraphicsMode;
+
     private const float MinSpeed = 2f, MaxSpeed = 6000f;
     private const float BoostFactor = 6f, SlowFactor = 6f;
     private const float MouseLookRate = 0.0035f;   // radians per pixel of mouse motion. TUNE.
@@ -189,6 +194,11 @@ public sealed partial class SpectatorCamera : Node
         // it still reaches the look and wheel cases.
         if (IsLockPress(@event))
             CycleLock();
+        if (ToggleGraphicsMode != null && @event is InputEventKey { Pressed: true, Echo: false } gKey
+            && _useKeyboard && !KeyboardCaptured
+            && IsBound(LaunchBindings.Map(1, InputContext.Flight, SeatPad, true).Bindings(InputAction.ToggleGraphicsMode),
+                DeviceId.Keyboard, ControlKind.Key, (int)gKey.Keycode, HeldModifiers(gKey)))
+            ToggleGraphicsMode();
 
         switch (@event)
         {
