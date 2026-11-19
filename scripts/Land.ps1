@@ -15,6 +15,12 @@
 # A merged tree whose CSVM/, CSVM.Tests/ and analysis/goldens/ equal main's lands without the battery:
 # documentation and tooling changes give it nothing to judge (PROJECT_CONTEXT.md exempts them).
 #
+# A HOLDER WITH LANDINGS QUEUED BEHIND IT RUNS -Quick, not the complete battery, and adds its merge
+# to the owed list (csvm-landing-owed.txt in the git common dir). The last landing in the queue runs
+# the complete battery on main plus all of them: a pass clears the list, a failure prints it as the
+# suspects. Waiters register as csvm-landing-queue/<pid>.txt while they wait for the lock. A
+# no-battery branch still runs the complete battery when it is last and the list is not empty.
+#
 # Exit codes: 0 landed; 1 battery FAIL; 2 refused before anything changed; 3 battery DEFERRED;
 # 4 merging main in conflicted (aborted, resolve by hand, commit, rerun); 5 main moved during the run.
 # On 1, 3 and 5 the branch keeps its merge of main; nothing reached main.
@@ -122,6 +128,28 @@ function Invoke-SelfTest {
         $tip = (Invoke-Git $main log -1 --format=%s main) -join ""
         Assert-Land ($code -eq 5 -and $tip -eq "direct") "main moved under the run exits 5 without merging ($code, '$tip')"
 
+        # A live waiter's ticket (this process) puts the holder on -Quick and the landing on the owed list.
+        $queue = Join-Path $main ".git\csvm-landing-queue"
+        $owedList = Join-Path $main ".git\csvm-landing-owed.txt"
+        $null = New-Item -ItemType Directory -Path $queue -Force
+        Set-Content -LiteralPath (Join-Path $queue "$PID.txt") -Value "waiter"
+        $wt = New-Branch "quick1" "CSVM\e.txt" "quick1"
+        $code = Invoke-Land $wt "pass"
+        $verify = (Invoke-Git $main log -1 --format=%B main^2) -join " "
+        $owedNow = (Get-Content -LiteralPath $owedList -ErrorAction SilentlyContinue) -join " "
+        Assert-Land ($code -eq 0 -and $verify -like "*-Quick PASS*queued behind*" -and $owedNow -like "* quick1") "a holder with a waiter lands on -Quick and owes the battery ($code, '$owedNow')"
+        Remove-Item -LiteralPath (Join-Path $queue "$PID.txt") -Force
+
+        $before = (Invoke-Git $main rev-parse main) -join ""
+        $wt = New-Branch "docslast" "notes2.md" "docs"
+        $code = Invoke-Land $wt "fail"
+        Assert-Land ($code -eq 1 -and ((Invoke-Git $main rev-parse main) -join "") -eq $before -and (Test-Path $owedList)) "a no-battery branch landing last with a battery owed runs it ($code)"
+
+        $wt = New-Branch "full" "CSVM\f.txt" "full"
+        $code = Invoke-Land $wt "pass"
+        $verify = (Invoke-Git $main log -1 --format=%B main^2) -join " "
+        Assert-Land ($code -eq 0 -and $verify -like "*Complete RunTests.ps1 PASS*quick1*" -and -not (Test-Path $owedList)) "the last landing's complete battery covers and clears the owed list ($code)"
+
         $code = Invoke-Land $main "pass"
         Assert-Land ($code -eq 2) "the main checkout itself is refused ($code)"
     } finally {
@@ -156,11 +184,26 @@ if (-not $Message) { $Message = "Merge $branch" }
 $common = (Invoke-Git $wt rev-parse --git-common-dir) -join ""
 if (-not [IO.Path]::IsPathRooted($common)) { $common = Join-Path $wt $common }
 $holderFile = Join-Path $common "csvm-landing.json"
+$owedFile = Join-Path $common "csvm-landing-owed.txt"
+$queueDir = Join-Path $common "csvm-landing-queue"
+$ticket = Join-Path $queueDir "$PID.txt"
+
+# The landings waiting for the lock now; a ticket whose process is gone is swept.
+# ponytail: a reused PID keeps a dead ticket alive until that process exits, costing one -Quick landing.
+function Get-Waiters {
+    @(Get-ChildItem -LiteralPath $queueDir -Filter "*.txt" -ErrorAction SilentlyContinue | Where-Object {
+        if (Get-Process -Id ([int]$_.BaseName) -ErrorAction SilentlyContinue) { return $true }
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+        return $false
+    })
+}
 
 # --- The queue -------------------------------------------------------------------------------------
 $mutex = New-Object System.Threading.Mutex($false, $LockName)
 $held = $false
 try {
+    $null = New-Item -ItemType Directory -Path $queueDir -Force
+    [IO.File]::WriteAllText($ticket, $branch)
     while (-not $held) {
         try { $held = $mutex.WaitOne(60000) } catch [System.Threading.AbandonedMutexException] { $held = $true }
         if (-not $held) {
@@ -169,6 +212,7 @@ try {
             Write-Host "  Land: waiting for the landing in progress: $holder"
         }
     }
+    Remove-Item -LiteralPath $ticket -Force -ErrorAction SilentlyContinue
     [IO.File]::WriteAllText($holderFile, (ConvertTo-Json -Compress -InputObject ([ordered]@{ branch = $branch; worktree = $wt; pid = $PID; since = (Get-Date).ToString("s") })))
     Write-Host "  Land: $branch holds the landing queue"
 
@@ -185,21 +229,39 @@ try {
     $head = (Invoke-Git $wt rev-parse --short HEAD) -join ""
     $headKey = Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit "HEAD"
     $body = @("Verification: $branch with main merged in ($($mainAt.Substring(0, 9)))", "")
+    $owed = @(Get-Content -LiteralPath $owedFile -ErrorAction SilentlyContinue | Where-Object { $_ })
+    $waiters = (Get-Waiters).Count
+    $ran = ""
     # The battery judges only these paths; a branch that leaves them as main has them (documentation,
-    # tooling) adds nothing for it to judge, whether or not main itself is stamped.
-    if ($headKey -and $headKey -eq (Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit $mainAt)) {
+    # tooling) adds nothing for it to judge, unless it is last in line with a complete run owed.
+    if ($headKey -and $headKey -eq (Get-TreeKey -Root $wt -Paths $GreenKeyPaths -Commit $mainAt) -and ($waiters -gt 0 -or $owed.Count -eq 0)) {
         Write-Host "  Land: $GreenWhat match main; no battery"
         $body += "No battery: the tree at $head holds main's $GreenWhat unchanged."
     } else {
         # --- The battery, as a child so its exit cannot end this script ----------------------------
         $exe = (Get-Process -Id $PID).Path
-        & $exe -NoProfile -ExecutionPolicy Bypass -File $Runner
+        if ($waiters -gt 0) {
+            $ran = "quick"
+            Write-Host "  Land: $waiters landing(s) queued behind; -Quick now, the complete battery is owed to the last"
+            & $exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Quick
+        } else {
+            $ran = "full"
+            & $exe -NoProfile -ExecutionPolicy Bypass -File $Runner
+        }
         $battery = $LASTEXITCODE
         if ($battery -eq 3) { Stop-Land 3 "the battery was DEFERRED; nothing landed, rerun Land.ps1 later" }
-        if ($battery -ne 0) { Stop-Land 1 "the battery failed (exit $battery); nothing landed. A waiver landing is merged by hand (PROJECT_CONTEXT.md)" }
-        $body += "Complete RunTests.ps1 PASS on the tree at $head, run by Land.ps1."
-        $stamp = Get-TreeStamp -Root $wt -Kind "green" -Key $headKey
-        if ($stamp) { $body += @("Green stamp from $($stamp.time) at $($stamp.commit):") + @($stamp.stages | ForEach-Object { "  $_" }) }
+        if ($battery -ne 0) {
+            $suspects = if ($ran -eq "full" -and $owed.Count -gt 0) { " Landed on -Quick since the last complete run, so suspects too: $($owed -join '; ')." } else { "" }
+            Stop-Land 1 "the battery failed (exit $battery); nothing landed.$suspects A waiver landing is merged by hand (PROJECT_CONTEXT.md)"
+        }
+        if ($ran -eq "quick") {
+            $body += "RunTests.ps1 -Quick PASS on the tree at $head, run by Land.ps1 with $waiters landing(s) queued behind; the complete battery is owed to the last of them."
+        } else {
+            $body += "Complete RunTests.ps1 PASS on the tree at $head, run by Land.ps1."
+            if ($owed.Count -gt 0) { $body += "It covers the landings made on -Quick before it: $($owed -join '; ')." }
+            $stamp = Get-TreeStamp -Root $wt -Kind "green" -Key $headKey
+            if ($stamp) { $body += @("Green stamp from $($stamp.time) at $($stamp.commit):") + @($stamp.stages | ForEach-Object { "  $_" }) }
+        }
     }
 
     # --- Record, recheck main, merge ---------------------------------------------------------------
@@ -216,8 +278,11 @@ try {
         Stop-Land 2 "the merge into main failed; look at $mainRoot before anything else"
     }
     $landed = (Invoke-Git $mainRoot rev-parse --short HEAD) -join ""
+    if ($ran -eq "quick") { [IO.File]::AppendAllText($owedFile, "$landed $branch`n") }
+    if ($ran -eq "full") { Remove-Item -LiteralPath $owedFile -Force -ErrorAction SilentlyContinue }
     Stop-Land 0 "landed $branch on main as $landed"
 } finally {
+    Remove-Item -LiteralPath $ticket -Force -ErrorAction SilentlyContinue
     if ($held) {
         Remove-Item -LiteralPath $holderFile -Force -ErrorAction SilentlyContinue
         $mutex.ReleaseMutex()

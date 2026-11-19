@@ -146,7 +146,9 @@ it is queued behind while it waits):
 Its git calls into the main checkout happen inside the script, so a worktree-isolated session needs
 no `-C` redirect. A merged tree whose `CSVM/`, `CSVM.Tests/` and `analysis/goldens/` equal main's
 (documentation and tooling changes) lands without the battery, and one that matches a green stamp
-passes it at once.
+passes it at once. With other landings queued behind it, it runs `-Quick` instead and the last
+landing in the queue runs the complete battery for all of them; an exit 1 then lists the earlier
+`-Quick` landings as suspects too.
 
 | Exit | Meaning | Next |
 |---|---|---|
