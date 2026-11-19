@@ -650,9 +650,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Set while an Advance runs on a fresh sample; outside one, a gate asks the seam live.
     private bool _rangeSampled;
 
-    // The instance whose STOP_ANIMATION is running; StopCallees never cascades onto it.
-    private AnimInstance? _stopSpare;
-
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -2875,8 +2872,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             var callee = callees[^1].Callee;
             callees.RemoveAt(callees.Count - 1);
-            if (ReferenceEquals(callee, _stopSpare))
-                continue;
             int at = _instances.IndexOf(callee);
             if (at >= 0 && RemoveInstance(at, callee, tearDown: true) is { } more)
                 callees.AddRange(more);
@@ -3239,7 +3234,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             else if (ownCopy != null)
                                 _inputNodes.Remove((target, ownCopy));
                             Start(target, startAnchor);
-                            if (InstanceOf(def, anchor) is { } caller
+                            // ⚠ Only a call with a slot is reachable by a later stop: C2/M01's
+                            // path2_accelerate stops its slotless caller and must survive it (#367).
+                            if (ev.HasCallSlot && InstanceOf(def, anchor) is { } caller
                                 && InstanceOf(target, startAnchor) is { } callee
                                 && !ReferenceEquals(caller, callee))
                             {
@@ -3266,17 +3263,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopAnimation":
-                // ⚠ Spare the stopping instance from its caller's cascade: C2/M01's path2_accelerate
-                // stops path2_accel_test, its caller, and dying with it strands the goose (#367).
-                _stopSpare = InstanceOf(def, anchor);
-                try
-                {
-                    Stop(ev.Data.Str("name"));
-                }
-                finally
-                {
-                    _stopSpare = null;
-                }
+                Stop(ev.Data.Str("name"));
                 return true;
 
             case "InvalidateAnimation":
