@@ -70,6 +70,16 @@ public sealed partial class MissionRadio : Node
     /// <summary>The definition name on air, or null when the channel is silent.</summary>
     public string? OnAir => _lineLeft > 0f && _onAir != null ? _onAir.Current : null;
 
+    /// <summary>The WAV the line on air plays, which the subtitle table is keyed by, or null when
+    /// the channel is silent. ⚠ Do not drop the player test. The sim clock stops under a cutscene
+    /// while the voice plays on, and the caption must end with the voice.</summary>
+    public string? OnAirWav =>
+        _player.Playing && OnAir is { } name && _defs.TryGetValue(name, out var def) ? def.WavName : null;
+
+    /// <summary>Seconds the voice on air has played, by the player's own position, which times a
+    /// long clip's subtitle.</summary>
+    public double OnAirSeconds => _player.GetPlaybackPosition();
+
     /// <summary>How many calls are waiting for the channel.</summary>
     public int Pending => _queue.Count;
 

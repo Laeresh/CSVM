@@ -3234,7 +3234,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             else if (ownCopy != null)
                                 _inputNodes.Remove((target, ownCopy));
                             Start(target, startAnchor);
-                            if (InstanceOf(def, anchor) is { } caller
+                            // ⚠ Only a call with a slot is reachable by a later stop: C2/M01's
+                            // path2_accelerate stops its slotless caller and must survive it (#367).
+                            if (ev.HasCallSlot && InstanceOf(def, anchor) is { } caller
                                 && InstanceOf(target, startAnchor) is { } callee
                                 && !ReferenceEquals(caller, callee))
                             {

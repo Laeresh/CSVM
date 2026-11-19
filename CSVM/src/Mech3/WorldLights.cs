@@ -290,8 +290,9 @@ public sealed class WorldLights : IDisposable
     /// <paramref name="scalar"/> the light's ambient + diffuse (1 for a light authoring neither).
     /// The shader takes their product unconverted, as the factor the original adds to a vertex's
     /// light (docs/org/vertexLighting.md). The enhanced omnis take the colour linearised, times the
-    /// same scalar, over <see cref="OmniRange"/>.</summary>
-    public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax, float scalar = 1f)
+    /// same scalar, over <see cref="OmniRange"/>. <paramref name="rank"/> weighs its significance in
+    /// the set. A light below 1 never takes an authored lamp's slot.</summary>
+    public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax, float scalar = 1f, float rank = 1f)
     {
         // A degenerate or inverted range would divide by zero in the shader's weight. The data
         // is well-formed (min < max everywhere surveyed), but LIGHT_ANIMATION tweens ranges by
@@ -299,7 +300,7 @@ public sealed class WorldLights : IDisposable
         if (rangeMax <= rangeMin)
             rangeMax = rangeMin + 0.01f;
         _pending.Add(new Entry(pos, color * scalar, color.SrgbToLinear() * scalar, rangeMin, rangeMax,
-            OmniRange(rangeMin, rangeMax), 1f));
+            OmniRange(rangeMin, rangeMax), rank));
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than

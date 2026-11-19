@@ -12,6 +12,7 @@ volume and pitch curves, the sound archives, and the WAV container. The readers 
 - [Player curves](#player-curves)
 - [Enhanced Sound](#enhanced-sound)
 - [Sound packs](#sound-packs)
+- [Subtitles](#subtitles)
 - [The sound archives](#the-sound-archives)
 - [WAV format](#wav-format)
 ## Sound sets
@@ -413,6 +414,38 @@ loops, the crash and prop-stop one-shots and the world's sounds, change from the
 with an override starts from the shipped values with the override over them, and Save writes the
 override file alone: the fields it already held, and any field moved off the shipped value. An
 override inside a zip is read, and the lab's Save is off for it.
+
+## Subtitles
+
+The original captions no voice line, and its archives carry no transcript. The remake reads one
+from `<dataRoot>/Subtitles` (`config.json` key `subtitles`; a `--det` run reads none): every
+`*.json` file in that folder, loaded in name order, a later file's entry replacing an earlier one.
+Only loose files are read: unlike a sound pack, a zip or a subfolder is not. Each file is one
+object keyed by WAV name:
+
+```json
+{
+  "VO_c1-HA-m1_Betty_12.wav": { "speaker": "Betty", "text": "The words of this clip." },
+  "VO_id12_HIT.wav": { "text": "A combat bark, with no name shown." },
+  "c1-HA-m1_briefing.wav": { "segments": [
+    { "start": 0.0, "end": 2.4, "speaker": "Zachary", "text": "A first sentence." },
+    { "start": 2.6, "end": 3.4, "text": "A reply nobody is named for." } ] }
+}
+```
+
+A key matches as a pack's sound does: the file name's stem, without case or extension. `speaker`
+is optional. A clip with `segments` is captioned by the seconds it has played: a segment shows
+from its `start` until the next one starts, but no longer than one second past its own `end`. A
+segment without an `end` lasts until the next one starts, and one without a `speaker` takes the
+clip's. An entry with neither `text` nor `segments` is ignored.
+
+Two voices are captioned, with the speaker's name first, each timed by its own playback position
+so a caption ends with the voice. The mission radio covers the objective callouts, the VO dialogue
+chains and the combat voice, which share the one radio queue; every pane shows the line on air near
+its foot, the headset's HUD panel included. The briefing narration (`*_briefing.wav`, see
+[briefing.md](briefing.md)) is captioned over the map on the briefing board, so REPLAY BRIEFING
+restarts the captions with the voice. A campaign cinema's speech is inside the film and is not
+captioned.
 
 ## The sound archives
 

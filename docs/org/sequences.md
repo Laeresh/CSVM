@@ -920,6 +920,15 @@ Stopping only the named definition leaves the wind sway running under the climb,
 rungs back once `cabpkup_ladder`'s script ends. CSVM records each started callee on the calling
 instance (`AnimInstance.Callees`) and stops the live ones with it.
 
+**Only a call with a call-table slot is recorded.** Both start paths store the callee only when the
+event's slot index at `+0x32` is non-negative (`004eb54c`, `004eb9f3`). That index is the compiled
+event's 16-bit field the extraction reports as `wait_for_completion` when the wait flag (`+0x2e`
+bit `0x10`) is set and as `wait_for_raw` otherwise, with -1 meaning no slot. `drop_ladder`'s call
+carries slot 0, backed by its `CallObjectConnector` table entry. C2/M01's `pathN_accel_test` calls
+`pathN_accelerate` with no slot and no table, so when the callee's first event stops its own caller,
+the stop reaches nothing and the leg runs on (#367). `AnimEvent.HasCallSlot` carries the index for
+compiled events; a reader event has no index and records its callee as before.
+
 `drop_ladder` is only stoppable because the waited call is its last event. The original holds a
 waited call while the callee runs, last event included (`004eba0e`, above), so a caller whose
 `LOOP{-1}` callee never ends stays running. CSVM releases a wait on the last event (the section
