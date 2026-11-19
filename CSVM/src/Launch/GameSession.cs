@@ -802,6 +802,8 @@ public partial class GameSession : Node3D
                 return false;
             _sky?.AttachDeck(state);
             _labs!.BuildFreecam(state, _spawnPicker);
+            if (_labs.Spectator != null)
+                _labs.Spectator.ToggleGraphicsMode = _toggleGraphicsMode;
             LoadProgress.Report(LoadStep.WorldStage);
             if (_spec.Fly)
             {
