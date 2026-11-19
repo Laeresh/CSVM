@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using CSVM.Extraction;
+using CSVM.Flight.Hud;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
@@ -148,8 +149,9 @@ internal static class CampaignHudSuites
         + "none is a positional definition, a chain speaks all of its lines in order, a second "
         + "cue queues behind the one speaking instead of cutting in, the whole queue drains "
         + "without starting a positional player, STOP_QUEUED_SOUNDS drops a call that has "
-        + "not begun, and a line queued for a named speaker reports that one speaker as talking "
-        + "for its length and nobody else")]
+        + "not begun, a line queued for a named speaker reports that one speaker as talking "
+        + "for its length and nobody else, and a subtitle captions the line on air by its WAV "
+        + "and clears when the channel falls silent")]
     internal static void MissionRadioCallouts(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -244,6 +246,7 @@ internal static class CampaignHudSuites
         ctx.Same(0, radio.LinesStarted, $"nothing speaks before the channel is stepped");
         Pump(radio, MissionRadio.CueDelaySeconds + 0.2f);
         ctx.Same(1, radio.LinesStarted, $"the chain's first line started on air='{radio.OnAir}'");
+        var caption = Caption(ctx, radio);
 
         int queuedBefore = sounds.OneShotsStarted;
         ctx.Same(1, radio.Cue(lineCue, new System.Random(2)),
@@ -259,6 +262,9 @@ internal static class CampaignHudSuites
             $"every line of the chain and the line behind it spoke got={radio.LinesStarted}");
         ctx.Same(0, radio.Dropped, $"nothing waited past its QUEUE tolerance");
         ctx.Check(radio.OnAir == null, $"the channel falls silent once the queue drains");
+        caption._Process(0);
+        ctx.Check(caption.Caption == null, $"…and the subtitle clears with it: '{caption.Caption}'");
+        caption.QueueFree();
         ctx.Same(queuedBefore, sounds.OneShotsStarted,
             $"not one callout started a positional player while the radio was speaking");
 
@@ -281,6 +287,22 @@ internal static class CampaignHudSuites
         ctx.Check(!radio.IsSpeaking(pilot), $"…and is free again once the line's length has elapsed");
         report.AppendLine($"radio: {radio.LinesStarted} lines started, {radio.Dropped} dropped, "
             + $"{sounds.OneShotsStarted - queuedBefore} positional one-shots");
+    }
+
+    // A subtitle over the radio, from a table in the run's scratch folder naming the line on air.
+    private static SubtitleLine Caption(TestContext ctx, MissionRadio radio)
+    {
+        string wav = radio.OnAirWav ?? string.Empty;
+        string root = System.IO.Path.Combine(ctx.ScratchDir, "mission-radio-subtitles");
+        string dir = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(root, "Subtitles")).FullName;
+        var entry = new Dictionary<string, object> { [wav] = new { speaker = "Tester", text = "on air" } };
+        System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "t.json"), System.Text.Json.JsonSerializer.Serialize(entry));
+        var caption = new SubtitleLine(() => (radio.OnAirWav, radio.OnAirSeconds), Subtitles.Open(root, "Subtitles"));
+        ctx.Host.AddChild(caption);
+        caption._Process(0);
+        ctx.Check(caption.Caption == "Tester: on air",
+            $"the subtitle names the line on air by its WAV '{wav}': '{caption.Caption}'");
+        return caption;
     }
 
     private static void Pump(MissionRadio radio, float seconds)
