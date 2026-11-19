@@ -163,15 +163,15 @@
     {
       "name": "c5-city-night-enhanced",
       "frame": 120,
-      "hash": "2e5c68ed5bce61503344e87b17b59e66",
-      "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks on paved and green block floors lit out to their own fade, far towers darkening into the black fog from 1,400 m, TAA, outside the whiteout.",
+      "hash": "ff3629b7549e8f1248ddfd02f66af13c",
+      "exercises": "Enhanced night city from 178 m: pooled omni lights, sunlit facades, clutter blocks on paved and green block floors lit out to their own fade, far towers darkening into the black fog from 1,400 m, the street traffic, TAA, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c5-city-towers-enhanced",
       "frame": 120,
-      "hash": "c179def973e1bed10b64094951cf1cc7",
-      "exercises": "Enhanced night city from 165 m over the dense towers: script-built hulls in place of every building, near variants and far boxes, facade colours, seeded windows on the shader clock, the block floors and their dressing, outside the whiteout.",
+      "hash": "0153f780e18c7ee48209a52f23ab4203",
+      "exercises": "Enhanced night city from 165 m over the dense towers: script-built hulls, near variants and far boxes, facade colours, seeded windows on the shader clock, the block floors, their dressing and the street traffic, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-7124,165,-11732", "--lookat=-7424,5,-12032", "--det", "--mute", "--graphics=enhanced"]
     },
     {
