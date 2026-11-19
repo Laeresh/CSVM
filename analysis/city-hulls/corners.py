@@ -155,7 +155,8 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     opts = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "1") for a in sys.argv[1:] if a.startswith("--"))
     folder = opts.get("dir", os.path.join(REPO, "CSVM", "data", "city_models", "C5"))
-    names = args or sorted(f[:-8] for f in os.listdir(folder) if f.endswith(".glb.bin"))
+    # The gd_ ground dressing (c5_ground_dressing.py) has no windowed wall.
+    names = args or sorted(f[:-8] for f in os.listdir(folder) if f.endswith(".glb.bin") and not f.startswith("gd_"))
     total = 0
     print("%-6s %-6s %6s %7s %8s %5s" % ("model", "node", "edges", "shared", "stretch", "clear"))
     for m in names:

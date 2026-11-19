@@ -110,7 +110,9 @@ def deviations(Ho, Hn):
 
 def main():
     ch = C.Chapter()
-    names = sys.argv[1:] or sorted(f[:-8] for f in os.listdir(os.path.join(MODELS, "C5")) if f.endswith(".glb.bin"))
+    # The gd_ ground dressing (c5_ground_dressing.py) has no original to measure against.
+    names = sys.argv[1:] or sorted(f[:-8] for f in os.listdir(os.path.join(MODELS, "C5"))
+                                   if f.endswith(".glb.bin") and not f.startswith("gd_"))
     print("%-6s %-6s %6s %8s %8s %8s  %s" % ("model", "node", "tris", "in (m)", "above", "side", "inside the margin"))
     for m in names:
         node = next(i for i in ch.by_name[m + ".flt"] if ch.parts(i))

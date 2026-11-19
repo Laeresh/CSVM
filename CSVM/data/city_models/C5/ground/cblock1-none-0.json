@@ -1,0 +1,50 @@
+{
+  "about": "C5 block floor layout, cblock1 paint with the none set, variant 0, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12) from ground_layout.json; regenerate with that script, never edit by hand.",
+  "conventions": {
+    "uv": "as ground_layout.json: u along the image's columns, v down its rows, one unit per 256 m tile; a rect [u0, v0, u1, v1] or line can run past 1, so draw each again shifted by -1 in u and v",
+    "cells": "the surfaces in paint order, a later one over an earlier one; region verge (sidewalk between kerb and lot), apron (paving behind a building), yard (a ring lot behind its building, or a vacant one), core (behind the ring), alley, bed (planting inside a garden); lot is the ground_layout lot index the cell belongs to; a cell can run under a lot, so test a stamp against the lots",
+    "lines": "fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
+    "paths": "worn or paved footpaths as polylines, cut the same way"
+  },
+  "cells": [
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 0.5625, 1.4375, 0.57422]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 1.42188, 1.4375, 1.4336]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 0.57422, 0.57812, 1.42188]},
+    {"kind": "sidewalk", "region": "verge", "rect": [1.42578, 0.57422, 1.4375, 1.42188]},
+    {"kind": "lawn", "region": "core", "rect": [0.57812, 0.57422, 0.94581, 0.80475]},
+    {"kind": "flagstone", "region": "core", "rect": [0.7561, 0.57422, 0.76782, 0.80475]},
+    {"kind": "flagstone", "region": "core", "rect": [0.57812, 0.68363, 0.94581, 0.69534]},
+    {"kind": "flagstone", "region": "core", "rect": [0.73373, 0.66125, 0.7902, 0.71772]},
+    {"kind": "bed", "region": "bed", "rect": [0.75415, 0.68167, 0.76978, 0.6973]},
+    {"kind": "asphalt", "region": "core", "rect": [0.57812, 0.80475, 0.94581, 0.96329]},
+    {"kind": "concrete", "region": "core", "rect": [0.57812, 0.80475, 0.94581, 0.81647]},
+    {"kind": "asphalt", "region": "core", "rect": [0.94581, 0.57422, 1.13367, 0.76971]},
+    {"kind": "concrete", "region": "core", "rect": [1.12195, 0.57422, 1.13367, 0.76971]},
+    {"kind": "flagstone", "region": "core", "rect": [0.94581, 0.76971, 1.13367, 0.96329]},
+    {"kind": "lawn", "region": "core", "rect": [1.00217, 0.82893, 1.07731, 0.90407]},
+    {"kind": "bed", "region": "bed", "rect": [1.03193, 0.85869, 1.04755, 0.87431]},
+    {"kind": "lawn", "region": "core", "rect": [1.13367, 0.57422, 1.42578, 0.96329]},
+    {"kind": "flagstone", "region": "core", "rect": [1.27387, 0.57422, 1.28559, 0.96329]},
+    {"kind": "flagstone", "region": "core", "rect": [1.13367, 0.76289, 1.42578, 0.77461]},
+    {"kind": "flagstone", "region": "core", "rect": [1.25292, 0.74195, 1.30653, 0.79556]},
+    {"kind": "bed", "region": "bed", "rect": [1.27191, 0.76094, 1.28754, 0.77657]},
+    {"kind": "asphalt", "region": "core", "rect": [0.57812, 0.96329, 0.95545, 1.42188]},
+    {"kind": "concrete", "region": "core", "rect": [0.94373, 0.96329, 0.95545, 1.42188]},
+    {"kind": "lawn", "region": "core", "rect": [0.95545, 0.96329, 1.42578, 1.42188]},
+    {"kind": "flagstone", "region": "core", "rect": [1.18475, 0.96329, 1.19647, 1.42188]},
+    {"kind": "flagstone", "region": "core", "rect": [0.95545, 1.18673, 1.42578, 1.19844]},
+    {"kind": "flagstone", "region": "core", "rect": [1.16825, 1.17022, 1.21298, 1.21495]},
+    {"kind": "bed", "region": "bed", "rect": [1.1828, 1.18477, 1.19843, 1.2004]}
+  ],
+  "lines": [
+    {"kind": "fence", "line": [1.13367, 0.57422, 1.42578, 0.57422]},
+    {"kind": "fence", "line": [1.13367, 0.96329, 1.42578, 0.96329]},
+    {"kind": "fence", "line": [1.13367, 0.57422, 1.13367, 0.96329]},
+    {"kind": "fence", "line": [1.42578, 0.57422, 1.42578, 0.96329]},
+    {"kind": "fence", "line": [0.95545, 0.96329, 1.42578, 0.96329]},
+    {"kind": "fence", "line": [0.95545, 1.42188, 1.42578, 1.42188]},
+    {"kind": "fence", "line": [0.95545, 0.96329, 0.95545, 1.42188]},
+    {"kind": "fence", "line": [1.42578, 0.96329, 1.42578, 1.42188]}
+  ],
+  "paths": []
+}

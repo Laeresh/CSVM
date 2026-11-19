@@ -1,0 +1,84 @@
+{
+  "about": "C5 block floor variants per combination of visible paint and standing set, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12). Each file is a 512 x 512 sRGB PNG covering one 256 m tile in the template's UV, +U right, +V down; street and lot texels are don't-care. Beside each <name>.png.bin is <name>.json, its layout.",
+  "luma": 35.0,
+  "combinations": {
+    "cblock7-cblock7": {
+      "paint": "cblock7",
+      "set": "cblock7",
+      "variants": 4,
+      "files": ["cblock7-cblock7-0.png.bin", "cblock7-cblock7-1.png.bin", "cblock7-cblock7-2.png.bin", "cblock7-cblock7-3.png.bin"]
+    },
+    "cblock7-cblock4": {
+      "paint": "cblock7",
+      "set": "cblock4",
+      "variants": 2,
+      "files": ["cblock7-cblock4-0.png.bin", "cblock7-cblock4-1.png.bin"]
+    },
+    "cblock1-cblock1": {
+      "paint": "cblock1",
+      "set": "cblock1",
+      "variants": 4,
+      "files": ["cblock1-cblock1-0.png.bin", "cblock1-cblock1-1.png.bin", "cblock1-cblock1-2.png.bin", "cblock1-cblock1-3.png.bin"]
+    },
+    "cblock1-cblock4": {
+      "paint": "cblock1",
+      "set": "cblock4",
+      "variants": 3,
+      "files": ["cblock1-cblock4-0.png.bin", "cblock1-cblock4-1.png.bin", "cblock1-cblock4-2.png.bin"]
+    },
+    "cblock2-cblock2": {
+      "paint": "cblock2",
+      "set": "cblock2",
+      "variants": 3,
+      "files": ["cblock2-cblock2-0.png.bin", "cblock2-cblock2-1.png.bin", "cblock2-cblock2-2.png.bin"]
+    },
+    "cblock2-cblock5": {
+      "paint": "cblock2",
+      "set": "cblock5",
+      "variants": 3,
+      "files": ["cblock2-cblock5-0.png.bin", "cblock2-cblock5-1.png.bin", "cblock2-cblock5-2.png.bin"]
+    },
+    "cblock3-cblock3": {
+      "paint": "cblock3",
+      "set": "cblock3",
+      "variants": 2,
+      "files": ["cblock3-cblock3-0.png.bin", "cblock3-cblock3-1.png.bin"]
+    },
+    "cblock3-cblock6": {
+      "paint": "cblock3",
+      "set": "cblock6",
+      "variants": 3,
+      "files": ["cblock3-cblock6-0.png.bin", "cblock3-cblock6-1.png.bin", "cblock3-cblock6-2.png.bin"]
+    },
+    "cblock7-none": {
+      "paint": "cblock7",
+      "set": "none",
+      "variants": 3,
+      "files": ["cblock7-none-0.png.bin", "cblock7-none-1.png.bin", "cblock7-none-2.png.bin"]
+    },
+    "cblock1-none": {
+      "paint": "cblock1",
+      "set": "none",
+      "variants": 3,
+      "files": ["cblock1-none-0.png.bin", "cblock1-none-1.png.bin", "cblock1-none-2.png.bin"]
+    },
+    "cblock2-none": {
+      "paint": "cblock2",
+      "set": "none",
+      "variants": 3,
+      "files": ["cblock2-none-0.png.bin", "cblock2-none-1.png.bin", "cblock2-none-2.png.bin"]
+    },
+    "cblock3-none": {
+      "paint": "cblock3",
+      "set": "none",
+      "variants": 3,
+      "files": ["cblock3-none-0.png.bin", "cblock3-none-1.png.bin", "cblock3-none-2.png.bin"]
+    },
+    "cblock2-cblock4": {
+      "paint": "cblock2",
+      "set": "cblock4",
+      "variants": 3,
+      "files": ["cblock2-cblock4-0.png.bin", "cblock2-cblock4-1.png.bin", "cblock2-cblock4-2.png.bin"]
+    }
+  }
+}

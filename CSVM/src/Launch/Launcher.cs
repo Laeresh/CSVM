@@ -595,6 +595,9 @@ public partial class Launcher : Node3D
         Effects.Ocean.RegisterGlobal();
         Effects.TerrainShadow.RegisterGlobals();
         Effects.CloudShadow.RegisterGlobals();
+        Mech3.CityGround.RegisterGlobal();
+        Mech3.CityGround.Folder = _spec.CityGround;
+
         // After every global: a listed shader reading one compiles against it. A --det run keeps no
         // list unless --shader-list= names one, so no golden depends on what earlier loads wore.
         string? shaderList = _spec.ShaderList is { } named ? named : _spec.Det ? null : "user://shader_warm.json";

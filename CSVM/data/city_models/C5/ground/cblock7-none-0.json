@@ -1,0 +1,59 @@
+{
+  "about": "C5 block floor layout, cblock7 paint with the none set, variant 0, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12) from ground_layout.json; regenerate with that script, never edit by hand.",
+  "conventions": {
+    "uv": "as ground_layout.json: u along the image's columns, v down its rows, one unit per 256 m tile; a rect [u0, v0, u1, v1] or line can run past 1, so draw each again shifted by -1 in u and v",
+    "cells": "the surfaces in paint order, a later one over an earlier one; region verge (sidewalk between kerb and lot), apron (paving behind a building), yard (a ring lot behind its building, or a vacant one), core (behind the ring), alley, bed (planting inside a garden); lot is the ground_layout lot index the cell belongs to; a cell can run under a lot, so test a stamp against the lots",
+    "lines": "fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
+    "paths": "worn or paved footpaths as polylines, cut the same way"
+  },
+  "cells": [
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 0.5625, 1.42969, 0.57422]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 1.41406, 1.42969, 1.42578]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 0.57422, 0.58203, 1.41406]},
+    {"kind": "sidewalk", "region": "verge", "rect": [1.41797, 0.57422, 1.42969, 1.41406]},
+    {"kind": "asphalt", "region": "core", "rect": [0.58203, 0.57422, 0.9673, 0.97617]},
+    {"kind": "concrete", "region": "core", "rect": [0.58203, 0.57422, 0.59375, 0.97617]},
+    {"kind": "flagstone", "region": "core", "rect": [0.9673, 0.57422, 1.20412, 0.73012]},
+    {"kind": "lawn", "region": "core", "rect": [1.05453, 0.62099, 1.11689, 0.68335]},
+    {"kind": "bed", "region": "bed", "rect": [1.0779, 0.64436, 1.09352, 0.65998]},
+    {"kind": "flagstone", "region": "core", "rect": [0.9673, 0.73012, 1.20412, 0.97617]},
+    {"kind": "lawn", "region": "core", "rect": [1.03835, 0.80578, 1.13308, 0.90051]},
+    {"kind": "bed", "region": "bed", "rect": [1.0779, 0.84533, 1.09352, 0.86096]},
+    {"kind": "lawn", "region": "core", "rect": [1.20412, 0.57422, 1.41797, 0.97617]},
+    {"kind": "flagstone", "region": "core", "rect": [1.30519, 0.57422, 1.31691, 0.97617]},
+    {"kind": "flagstone", "region": "core", "rect": [1.20412, 0.76934, 1.41797, 0.78105]},
+    {"kind": "flagstone", "region": "core", "rect": [1.28586, 0.75001, 1.33623, 0.80038]},
+    {"kind": "bed", "region": "bed", "rect": [1.30324, 0.76738, 1.31886, 0.78301]},
+    {"kind": "lawn", "region": "core", "rect": [0.58203, 0.97617, 0.78256, 1.16854]},
+    {"kind": "flagstone", "region": "core", "rect": [0.67644, 0.97617, 0.68815, 1.16854]},
+    {"kind": "flagstone", "region": "core", "rect": [0.58203, 1.0665, 0.78256, 1.07821]},
+    {"kind": "flagstone", "region": "core", "rect": [0.65109, 1.04115, 0.7135, 1.10356]},
+    {"kind": "bed", "region": "bed", "rect": [0.67448, 1.06454, 0.69011, 1.08017]},
+    {"kind": "flagstone", "region": "core", "rect": [0.78256, 0.97617, 0.98875, 1.16854]},
+    {"kind": "lawn", "region": "core", "rect": [0.84718, 1.03388, 0.92413, 1.11083]},
+    {"kind": "bed", "region": "bed", "rect": [0.87784, 1.06454, 0.89347, 1.08017]},
+    {"kind": "dirt", "region": "core", "rect": [0.58203, 1.16854, 0.98875, 1.41406]},
+    {"kind": "lawn", "region": "core", "rect": [0.98875, 0.97617, 1.41797, 1.41406]},
+    {"kind": "flagstone", "region": "core", "rect": [1.1975, 0.97617, 1.20922, 1.41406]},
+    {"kind": "flagstone", "region": "core", "rect": [0.98875, 1.18926, 1.41797, 1.20098]},
+    {"kind": "flagstone", "region": "core", "rect": [1.17304, 1.16479, 1.23368, 1.22544]},
+    {"kind": "bed", "region": "bed", "rect": [1.19555, 1.1873, 1.21117, 1.20293]}
+  ],
+  "lines": [
+    {"kind": "fence", "line": [1.20412, 0.57422, 1.41797, 0.57422]},
+    {"kind": "fence", "line": [1.20412, 0.97617, 1.41797, 0.97617]},
+    {"kind": "fence", "line": [1.20412, 0.57422, 1.20412, 0.97617]},
+    {"kind": "fence", "line": [1.41797, 0.57422, 1.41797, 0.97617]},
+    {"kind": "fence", "line": [0.58203, 1.16854, 0.98875, 1.16854]},
+    {"kind": "fence", "line": [0.58203, 1.41406, 0.98875, 1.41406]},
+    {"kind": "fence", "line": [0.58203, 1.16854, 0.58203, 1.41406]},
+    {"kind": "fence", "line": [0.98875, 1.16854, 0.98875, 1.41406]},
+    {"kind": "fence", "line": [0.98875, 0.97617, 1.41797, 0.97617]},
+    {"kind": "fence", "line": [0.98875, 1.41406, 1.41797, 1.41406]},
+    {"kind": "fence", "line": [0.98875, 0.97617, 0.98875, 1.41406]},
+    {"kind": "fence", "line": [1.41797, 0.97617, 1.41797, 1.41406]}
+  ],
+  "paths": [
+    {"kind": "path", "line": [0.58203, 1.16854, 0.59779, 1.17739, 0.61356, 1.18624, 0.62933, 1.19509, 0.64509, 1.20393, 0.66086, 1.21278, 0.67662, 1.22163, 0.69239, 1.23048, 0.70815, 1.23933, 0.72392, 1.24818, 0.73968, 1.25703, 0.75545, 1.26587, 0.77122, 1.27472, 0.78498, 1.28293, 0.80065, 1.29302, 0.81633, 1.3031, 0.832, 1.31319, 0.84767, 1.32328, 0.86335, 1.33337, 0.87902, 1.34345, 0.8947, 1.35354, 0.91037, 1.36363, 0.92605, 1.37371, 0.94172, 1.3838, 0.9574, 1.39389, 0.97307, 1.40397, 0.98875, 1.41406]}
+  ]
+}

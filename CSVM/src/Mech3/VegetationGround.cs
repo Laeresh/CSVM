@@ -279,28 +279,9 @@ public static class VegetationGround
         return (w0 * a.Y) + (w1 * b.Y) + (w2 * c.Y);
     }
 
-    private static void AddLayers(GameZ gamez, GameZMesh mesh, Transform3D xf, Vector3 point, List<GroundLayer> into)
-    {
-        foreach (var poly in mesh.Polygons)
-        {
-            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
-                || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex)
-                continue;
-            for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
-            {
-                var (a, b, c) = Corners(poly, i);
-                if (HeightIn(xf * mesh.Vertices[a], xf * mesh.Vertices[b], xf * mesh.Vertices[c], point) is { } y)
-                {
-                    into.Add(new GroundLayer(tex, poly.NoClutter, y));
-                    break;
-                }
-            }
-        }
-    }
-
-    // The clutter's walk of the world node's tree: the same skipped nodes, the nearest LOD only, and
-    // past any subtree the prune predicate names.
-    private static void WalkWorld(GameZ gamez, string worldName, Action<GameZNode, GameZMesh, Transform3D> visit, Func<GameZNode, bool>? prune = null)
+    /// <summary>The clutter's walk of the world node's tree: the same skipped nodes, the nearest LOD only, and
+    /// past any subtree the prune predicate names.</summary>
+    internal static void WalkWorld(GameZ gamez, string worldName, Action<GameZNode, GameZMesh, Transform3D> visit, Func<GameZNode, bool>? prune = null)
     {
         GameZNode? world = gamez.Nodes.Find(n => n.Kind == "World" && string.Equals(n.Name, worldName, StringComparison.OrdinalIgnoreCase));
         if (world == null)
@@ -330,16 +311,35 @@ public static class VegetationGround
         }
     }
 
+    /// <summary>The same triangle's corner positions in the polygon, which its UVs and colours are indexed by.</summary>
+    internal static (int A, int B, int C) Positions(GameZPolygon poly, int i) =>
+        poly.TriangleStrip ? (i, i + 1, i + 2) : (0, i + 1, i + 2);
+
+    private static void AddLayers(GameZ gamez, GameZMesh mesh, Transform3D xf, Vector3 point, List<GroundLayer> into)
+    {
+        foreach (var poly in mesh.Polygons)
+        {
+            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex)
+                continue;
+            for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+            {
+                var (a, b, c) = Corners(poly, i);
+                if (HeightIn(xf * mesh.Vertices[a], xf * mesh.Vertices[b], xf * mesh.Vertices[c], point) is { } y)
+                {
+                    into.Add(new GroundLayer(tex, poly.NoClutter, y));
+                    break;
+                }
+            }
+        }
+    }
+
     // The clutter's own enumeration: a strip walks consecutive triples, a fan pivots on corner 0.
     private static (int A, int B, int C) Corners(GameZPolygon poly, int i)
     {
         var (a, b, c) = Positions(poly, i);
         return (poly.VertexIndices[a], poly.VertexIndices[b], poly.VertexIndices[c]);
     }
-
-    // The same triangle's corner positions in the polygon, which its UVs and colours are indexed by.
-    private static (int A, int B, int C) Positions(GameZPolygon poly, int i) =>
-        poly.TriangleStrip ? (i, i + 1, i + 2) : (0, i + 1, i + 2);
 
     /// <summary>Overlay triangles binned by square cell, so a query reads only the cell its foot stands in.</summary>
     public sealed class Overlays

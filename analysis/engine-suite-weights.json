@@ -152,6 +152,8 @@
     "chase-rig": 0.005,
     "chase-trail": 0.009,
     "city-buildings": 20.0,
+    "city-dressing": 9.0,
+    "city-ground": 7.5,
     "cloud-band-object-gate": 0.027,
     "cloud-band-point-gate": 0.17,
     "cloud-field-fade": 3.337,

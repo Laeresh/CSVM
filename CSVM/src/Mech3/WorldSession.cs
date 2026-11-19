@@ -43,6 +43,9 @@ public sealed class WorldSession
     /// the edge extender.</summary>
     public ClutterBuilder? Clutter { get; private set; }
 
+    /// <summary>The city's block dressing over its floor (<see cref="CityDressing"/>), null where none stands.</summary>
+    public CityDressing? Dressing { get; private set; }
+
     /// <summary>The world's cloudlayer overcast, if any, moved to follow the player by the
     /// caller.</summary>
     public Node3D? CloudDeck { get; private set; }
@@ -138,6 +141,9 @@ public sealed class WorldSession
         builder.HdChapter = o.Chapter;
         // The last chapter's replacement imports would otherwise stay for the rest of the run.
         HdModelMeshes.Current.KeepChapter(o.Chapter);
+        // Before the build: a paint's surfaces carry the floor's combination and take its arm (CityGround).
+        if (o.NodeSubtree == null)
+            builder.Scene.Ground = CityGround.Load(gamez, o.Chapter);
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only
@@ -223,6 +229,11 @@ public sealed class WorldSession
         StartupProfile.Record("clutter", mark);
         LoadProgress.Report(LoadStep.Clutter);
         s.Clutter = clutterBuilder;
+        // After the clutter, which reads the city facade with the chapter's posters first. It places itself on the first
+        // follow with the city on, so a session drawing the original city pays nothing.
+        s.Dressing = CityDressing.Create(gamez, builder.Scene.Ground, o.Chapter, name => textures.FindImage(name));
+        if (s.Dressing != null)
+            root.AddChild(s.Dressing.Root);
         // The transparency census a draw-order question is read against. It says which classes this
         // chapter carries, and which of them an isolation run left out.
         string hidden = o.HiddenAlpha == SceneBuilder.TransparencyClass.None
