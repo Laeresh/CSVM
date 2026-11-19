@@ -1,4 +1,4 @@
-"""Generates C5's low block dressing for the Enhanced ground (docs/PLAN-c5-ground.md, B14): the
+"""Generates C5's low block dressing for the Enhanced ground (PLAN-c5-ground B14): the
 courtyard walls, fences, box hedges, sheds, parked period cars, ash cans and benches that stand in the free
 area of the city blocks. Each kind is a model file like a building's (city_blender.py's
 conventions): mesh nodes near0 (near1 where a kind has a second shape on the same footprint) and

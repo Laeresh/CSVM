@@ -1,7 +1,7 @@
-"""Generates citytree, C5's deciduous city tree (a London plane or elm, plan Decision 14) for the
+"""Generates citytree, C5's deciduous city tree (a London plane or elm, PLAN-c5-ground Decision 14) for the
 gardens and parks of the Enhanced block floor, and citytree_far, its cheap stand-in at range. No
 card exists for it: the original city has no tree, so the model stands where the generated
-layout puts it (docs/PLAN-c5-ground.md, B14).
+layout puts it (PLAN-c5-ground B14).
 
 The near model is a clear trunk with mottled plane-tree bark, three limbs forking into the crown,
 and a crown of domes as canopytree's (a top dome and a ring of lower ones, each a leafy disc lit
