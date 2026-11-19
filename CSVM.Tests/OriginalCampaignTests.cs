@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
@@ -368,6 +369,38 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(OriginalCues.Click, host.TakeCues());
     }
 
+    // An open list hangs over the screen. Every other field still stands under it.
+    [Fact]
+    public void ClickingAnAmmoFieldOpenKeepsEveryOtherFieldDrawn()
+    {
+        var setup = new PlayerSetupFeature();
+        setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
+        setup.Join(new ScriptedMenuSeat());
+        var store = _store;
+        var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+            planes: _planes, campaign: new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}"),
+            profiles: () => store,
+            stock: () => StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json")));
+        store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        shell.Campaign.OpenCampaignOver(store);
+        Assert.True(shell.Campaign.ShowCabin("Zachary"));
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+
+        var fields = shell.Rows.Where(r => r.Kind == OriginalRowKind.Dropdown).ToList();
+        Assert.True(fields.Count > 1);
+        bool Drawn(ComposedBoard board, OriginalRow field) =>
+            board.Fills.Any(f => f.X == field.X && f.Y == field.Y);
+        Assert.All(fields, f => Assert.True(Drawn(shell.Compose(), f), $"{f.Key} closed"));
+
+        float x = fields[0].X + 2f, y = fields[0].Y + 2f;
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, true, true) });
+        shell.Step(new MenuCommands { Pointer = new MenuPointer(x, y, false, false) });
+        Assert.NotNull(shell.Campaign.OpenCombo);
+        var open = shell.Compose();
+        Assert.All(fields, f => Assert.True(Drawn(open, f), $"{f.Key} hidden while {fields[0].Key} is open"));
+    }
+
     /// <summary>PLANE CONSTRUCTION is the one door out of the campaign that comes back. The module
     /// asks the host for the hangar over the seated profile's own purse. The return the host makes
     /// re-reads that profile and lands on the plaque the door was pressed from.</summary>
@@ -642,7 +675,7 @@ public class OriginalCampaignTests : IDisposable
 
     // The module over the layout fixture, a scripted seat, no extraction, and a campaign feature
     // over this test's scratch stores.
-    private CampaignHost Host(out CampaignFeature campaign)
+    private CampaignHost Host(out CampaignFeature campaign, Func<StockLoadouts?>? stock = null)
     {
         var setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
@@ -651,7 +684,7 @@ public class OriginalCampaignTests : IDisposable
         var store = _store;
         var host = new CampaignHost();
         host.Module = new OriginalCampaignScreen(
-            campaign, setup, _planes, CampaignLayout.Over(MenuLayoutReaderTests.OriginalLayout()), host, () => store);
+            campaign, setup, _planes, CampaignLayout.Over(MenuLayoutReaderTests.OriginalLayout()), host, () => store, stock);
         return host;
     }
 
