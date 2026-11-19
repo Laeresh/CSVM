@@ -304,6 +304,7 @@
     "human-gunner-targeting": 0.33,
     "impact-building-surface": 2.594,
     "impact-orientation": 0.886,
+    "in-flight-round-lights": 0.15,
     "inert-aircraft": 0.386,
     "instant-action": 0.627,
     "instant-action-end": 2.499,
