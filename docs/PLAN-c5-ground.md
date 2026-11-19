@@ -66,6 +66,7 @@ Scenery off draw the original ground.
 | 24 | The open ground, from captures (C23) | **Kept as generated**: about a third green on average with a park and a parking lot on every block ("Right as is"), and half the parks fenced ("Keep half fenced"). Whether the plazas read as plazas at night is owed to the closing flight. |
 | 25 | The Deck's cost (C24) | **Kept as is**: the one-pane default holds at 60 fps or more on every view (lowest `C5-cb1`, 67.4 fps), and the Deck's overruns of the ms budget (GPU at two views, CPU at seven) and its +1.32 GB resident and about +410 MB video memory are accepted. The author chose "Keep as is". |
 | 26 | Distant draws at Extreme (C24) | **Accepted**: `C5-alt` draws 1,878.95 at Extreme against the original's 1,775.5. Extreme is opt-in, and the draw rule holds at Near (1,616.85). The author chose "Accept it". |
+| 27 | A golden over a `cblock7` block (C25) | **None added**: the two C5 Enhanced shots are re-pinned, and the `city-ground` and `city-dressing` suites cover the walk-up floor and dressing. The author chose "No, two are enough". |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -205,7 +206,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ The diagonal districts
 23. ☑ Open ground on the bare flagged blocks
 24. ☑ Measure the cost on the PC and the Deck
-25. ☐ Checks: suite and goldens
+25. ☑ Checks: suite and goldens
 
 ## Dependency and parallelism notes
 
@@ -737,7 +738,19 @@ closing commit, `git log --grep=PLAN-city-buildings`).
 
 **⚠ Traps.** The texture memory of the variant arrays counts on the Deck.
 
-## C25 ☐ Checks: suite and goldens
+## C25 ☑ Checks: suite and goldens
+
+**Landed.** `c5-city-night-enhanced` and `c5-city-towers-enhanced` are re-pinned on the plan tree
+with main merged in, and their `exercises` sentences name the block floors and their dressing. No
+`cblock7` golden is added (Decision 27).
+
+**Verified.** The complete `.\scripts\RunTests.ps1`: build, units (8,528 passed) and engine (688
+passed) pass, `net-coop-mission` included; goldens moved exactly the two C5 Enhanced shots, 0
+broken of 22. Every Faithful shot, `c5-city-night` included, and every other chapter's shot keeps
+main's pin. Each new hash rendered identically four times (the battery render, its serial
+re-render, the regen and a confirming goldens run, which passes 22 of 22).
+
+**Original approach (kept for reference).**
 
 **Goal.** The ground is pinned by a suite and goldens like the buildings (`city-buildings` suite,
 goldens `c5-city-night-enhanced` and `c5-city-towers-enhanced`).
