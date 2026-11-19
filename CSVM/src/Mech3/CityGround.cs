@@ -14,8 +14,8 @@ namespace CSVM.Mech3;
 /// A chapter folder's <c>ground_layout.json</c> names each paint's street bands, its variant cells and the
 /// building sets standing on it. A polygon takes the floor of its paint and set (<see cref="Resolve"/>). The world
 /// shader keeps the paint, authored levels and all, inside the street bands and draws a floor variant per cell of world
-/// XZ elsewhere. Ground laid in another frame, a set standing across its paint's streets and a combination with no
-/// floor image keep the paint. Module entry: docs/architecture/Mech3.md.
+/// XZ elsewhere. Ground laid in another frame and a combination with no floor image keep the paint. Module entry:
+/// docs/architecture/Mech3.md.
 /// </summary>
 public sealed class CityGround
 {
@@ -64,10 +64,6 @@ public sealed class CityGround
 
     // How far, in UV, a corner may sit off the U+X V+Z frame of one 256 m repeat with whole UVs on whole tiles.
     internal const float FrameSlack = 0.01f;
-
-    // A set with more of its footprint than this inside its paint's streets stands across them. A floor would cut
-    // its buildings, so it keeps the paint.
-    internal const float OnStreetMax = 0.01f;
 
     // Coplanar layers lie within this of each other (VegetationGround's rule).
     internal const float CoplanarM = 0.5f;
@@ -176,10 +172,8 @@ public sealed class CityGround
             var images = new Godot.Collections.Array<Image>();
             var sets = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase);
             var paths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (set, onStreet) in spec.Sets)
+            foreach (var (set, _) in spec.Sets)
             {
-                if (onStreet > OnStreetMax)
-                    continue;
                 int first = images.Count;
                 var read = new List<string>();
                 foreach (string file in index.TryGetValue($"{paint}-{set}", out var named) ? named : new List<string>())

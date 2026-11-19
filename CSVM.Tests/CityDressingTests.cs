@@ -27,7 +27,9 @@ public sealed class CityDressingTests
     public void ShippedSlotsStandOnFreeGround()
     {
         var files = Directory.GetFiles(Path.Combine(Folder, "ground"), "cblock*-*.json");
-        Assert.Contains(files, f => Path.GetFileName(f).StartsWith("cblock2-", StringComparison.Ordinal));
+        // The diagonal strips, and cblock4's set standing across cblock2's street (Decision 28).
+        foreach (string combination in new[] { "cblock2-", "cblock2-cblock4-" })
+            Assert.Contains(files, f => Path.GetFileName(f).StartsWith(combination, StringComparison.Ordinal));
         foreach (string file in files)
         {
             string[] combination = Path.GetFileNameWithoutExtension(file).Split('-');

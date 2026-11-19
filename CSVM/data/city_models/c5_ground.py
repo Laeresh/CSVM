@@ -20,7 +20,9 @@ docks, plazas and parking (Decision 18).
 The diagonal paints (cblock2, cblock3: one 45 degree street per tile, A2) are laid out the same
 way in each strip's own frame (generate_strip), a strip being 181 m between centrelines with no
 cross street, so it has two kerbed rings, a core and cross alleys; the engine picks a variant per
-strip (Decision 7), and the layout JSON carries the frame that turns it into UV.
+strip (Decision 7), and the layout JSON carries the frame that turns it into UV. A set standing
+across its paint's street (Decision 28) is laid out on the square tile instead, the street masked
+through it, since the set repeats with the tile and not with the strip.
 
 Every variant keeps the same buildings and streets and rolls its own ring depths, lot cuts, alley,
 core cuts and surfaces from a fixed seed, so a rerun writes the same bytes. The layout is built in a
@@ -125,7 +127,12 @@ COMBOS = (("cblock7", "cblock7", 4, WALKUP), ("cblock7", "cblock4", 2, WALKUP),
           ("cblock2", "cblock2", 3, DOWNTOWN), ("cblock2", "cblock5", 3, INNER_WALKUP),
           ("cblock3", "cblock3", 2, DOWNTOWN), ("cblock3", "cblock6", 3, INNER_WALKUP),
           ("cblock7", "none", 3, OPEN), ("cblock1", "none", 3, OPEN), ("cblock2", "none", 3, OPEN),
-          ("cblock3", "none", 3, OPEN))
+          ("cblock3", "none", 3, OPEN),
+          # Decision 28: cblock4's walk-ups stand across cblock2's diagonal street. They are laid out on the
+          # square tile, their own paint's street grid (grid) giving the blocks and its corridors paved as
+          # roads, with the diagonal street masked through. The strip pick still serves: its seams lie on
+          # the street centrelines, where the paint shows.
+          ("cblock2", "cblock4", 3, dict(INNER_WALKUP, grid="cblock4")),)
 
 
 def _pick(rng, table):
@@ -174,9 +181,8 @@ def street_mask(streets, shift):
     mask = np.zeros((SIZE, SIZE), bool)
     for st in streets:
         if st["family"] in FAMILY_AXES:
-            # A diagonal street, in the image frame only (shift 0).
             alpha = FAMILY_AXES[st["family"]][0]
-            d = (alpha[0] * c[None, :] + alpha[1] * c[:, None]) / SIZE - st["centre"]
+            d = (alpha[0] * (c[None, :] + shift[0]) + alpha[1] * (c[:, None] + shift[1])) / SIZE - st["centre"]
             mask |= np.abs(d - np.round(d)) <= st["half"]
             continue
         axis = {"u": 1, "v": 0}[st["family"]]
@@ -771,6 +777,8 @@ def write_layout(path, paint, bset, n, L, uv, blocked, pxm=PX, frame=None):
                    lines="fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
                    paths="worn or paved footpaths as polylines, cut the same way"),
                cells=cells, lines=lines, paths=paths)
+    if any(c["region"] == "road" for c in cells):
+        doc["conventions"]["cells"] += "; road (a corridor of the set's own street grid, which this paint paves)"
     if frame:
         doc["conventions"]["frame"] = (
             "the layout lies in the strip's own frame, x along the street, y across it from one centreline to the "
@@ -782,11 +790,12 @@ def write_layout(path, paint, bset, n, L, uv, blocked, pxm=PX, frame=None):
 
 
 def generate(layout_doc, paint, bset, n, luma, ch):
-    """One variant: the image (uint8, image frame), its layout, the free-floor mask, the roll."""
-    pdoc = layout_doc["paints"][paint]
-    streets = pdoc["streets"]
-    fam = {s["family"]: s for s in streets}
-    assert set(fam) == {"u", "v"}, "only the square districts (Wave C adds the diagonal ones)"
+    """One variant: the image (uint8, image frame), its layout, the free-floor mask, the roll. The
+    blocks lie between the streets of ch's grid paint, by default the paint itself; the paint's own
+    streets are masked wherever they run."""
+    streets = layout_doc["paints"][paint]["streets"]
+    fam = {s["family"]: s for s in layout_doc["paints"][ch.get("grid", paint)]["streets"]}
+    assert set(fam) == {"u", "v"}, "a square grid of blocks"
     lots = layout_doc["templates"].get(bset, {"lots": []})["lots"]  # none: flagged ground with no buildings
     shift = (int(round(fam["u"]["centre"] * SIZE)), int(round(fam["v"]["centre"] * SIZE)))
     rng = np.random.default_rng([zlib.crc32(("%s-%s" % (paint, bset)).encode()), n])
@@ -818,6 +827,10 @@ def generate(layout_doc, paint, bset, n, luma, ch):
         _gardens(L, yards, cores, free_px, rng, ch)
     if flip:
         L.flip()
+    if "grid" in ch:
+        # The grid's corridors are no street of this paint: unlit roads under the blocks, standing nothing.
+        L.cells[:0] = [dict(kind="asphalt", rect=list(r), region="road", lot=None) for r in
+                       ((0, 0, TILE_M, B0), (0, B1, TILE_M, TILE_M), (0, B0, A0, B1), (A1, B0, TILE_M, B1))]
     rel = paint_floor(L, rng)
     free = ~blocked
     k = luma / A.luma(rel)[free].mean()
@@ -947,7 +960,7 @@ def main():
     for paint_name, bset, count, ch in COMBOS:
         files = []
         for n in range(count):
-            diagonal = any(s["family"] in FAMILY_AXES for s in doc["paints"][paint_name]["streets"])
+            diagonal = any(s["family"] in FAMILY_AXES for s in doc["paints"][ch.get("grid", paint_name)]["streets"])
             g = (generate_strip if diagonal else generate)(doc, paint_name, bset, n, args.luma, ch)
             name = "%s-%s-%d" % (paint_name, bset, n)
             write_png(os.path.join(args.out, name + ".png.bin"), g["img"])

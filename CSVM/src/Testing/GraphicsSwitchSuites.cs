@@ -1483,7 +1483,8 @@ internal static class GraphicsSwitchSuites
     [Suite("city-dressing",
         "C5's block dressing over the shipped floor in an Enhanced flight at rich and near: the floor's variant pick run on "
         + "the GPU from the world shader's own text equals the CPU's over a lattice of world points; every dressing kind "
-        + "stands, each instance in a block of the variant that pick gives its cell, in nodes with no collider and no shadow "
+        + "stands, each instance in a block of the variant that pick gives its cell, the cblock2 tiles over cblock4's set "
+        + "among them, in nodes with no collider and no shadow "
         + "on the models' layer; the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
     internal static void CityDressingStands(TestContext ctx)
     {
@@ -1496,13 +1497,16 @@ internal static class GraphicsSwitchSuites
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
             Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
             var paints = Mech3.CityGround.Layout.Parse(FileAccess.GetFileAsString($"{CityModels.Root}/C5/ground_layout.json")).Paints;
-            // A square paint's block cells and a diagonal paint's strips.
-            foreach (string paint in new[] { "cblock7", "cblock2" })
+            // A square paint's block cells and a diagonal paint's strips. Then the strips from the least corner of the
+            // cblock2 tiles over cblock4's set, which stands across their street.
+            var lattice = new Vector2(-14000.37f, -13000.21f);
+            var acrossCblock4 = new Vector2(-9472f, -3584f);
+            foreach (var (paint, origin) in new[] { ("cblock7", lattice), ("cblock2", lattice), ("cblock2", acrossCblock4) })
             {
-                var (gpu, cpu) = FloorPicks(ctx, paints[paint]);
+                var (gpu, cpu) = FloorPicks(ctx, paints[paint], origin);
                 int same = gpu.Zip(cpu).Count(p => p.First == p.Second);
                 ctx.Check(gpu.Count == cpu.Count && cpu.Count > 0 && same == cpu.Count,
-                    $"{paint}: the world shader's pick on the GPU equals the CPU's at {same} of {cpu.Count} world points (first {gpu.FirstOrDefault():x6} against {cpu.FirstOrDefault():x6})");
+                    $"{paint} from {origin}: the world shader's pick on the GPU equals the CPU's at {same} of {cpu.Count} world points (first {gpu.FirstOrDefault():x6} against {cpu.FirstOrDefault():x6})");
             }
             var live = Open(ctx, true, 1, "C5");
             try
@@ -1520,6 +1524,10 @@ internal static class GraphicsSwitchSuites
                 int wrong = placed.Count(p => Mech3.CityGround.CellOf(p.Spec, p.Transform.Origin.X, p.Transform.Origin.Z) != p.Cell
                     || p.Variant != (int)(Mech3.CityGround.Pick(p.Cell.I, p.Cell.J) % (uint)p.Variants));
                 ctx.Check(placed.Count > 0 && wrong == 0, $"each of {placed.Count} instances stands in a block of the variant its cell picks ({wrong} wrong)");
+                // The two tiles run 512 m along Z.
+                int across = placed.Count(p => p.Transform.Origin.X >= acrossCblock4.X && p.Transform.Origin.X < acrossCblock4.X + 256f
+                    && p.Transform.Origin.Z >= acrossCblock4.Y && p.Transform.Origin.Z < acrossCblock4.Y + 512f);
+                ctx.Check(across > 0, $"the cblock2 tiles over cblock4's set, which stands across their street, are floored and dressed ({across} instances)");
                 List<MultiMeshInstance3D> CellsOf(Node root)
                 {
                     var found = new List<MultiMeshInstance3D>();
@@ -4006,11 +4014,10 @@ internal static class GraphicsSwitchSuites
     // The floor's 24-bit variant pick at a lattice of world points, on the GPU from the world shader's own text and on
     // the CPU. Each pixel holds three bits at 0 or 1, which pass any transfer curve. The index reads off X alone, so a
     // vertical flip moves nothing. The probe pane draws a batch of eight points across.
-    private static (List<uint> Gpu, List<uint> Cpu) FloorPicks(TestContext ctx, Mech3.CityGround.PaintLayout spec)
+    private static (List<uint> Gpu, List<uint> Cpu) FloorPicks(TestContext ctx, Mech3.CityGround.PaintLayout spec, Vector2 origin)
     {
         const int batches = 64, perBatch = 8, columns = 32, px = 8;
         const float step = 97.31f;
-        var origin = new Vector2(-14000.37f, -13000.21f);
         var cell = new Vector4(spec.Cells[0].Axis.X, spec.Cells[0].Axis.Y, spec.Cells.Count > 1 ? spec.Cells[1].Axis.X : 0f, spec.Cells.Count > 1 ? spec.Cells[1].Axis.Y : 0f);
         var shader = new Shader
         {

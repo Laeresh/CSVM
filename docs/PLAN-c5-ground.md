@@ -67,6 +67,7 @@ Scenery off draw the original ground.
 | 25 | The Deck's cost (C24) | **Kept as is**: the one-pane default holds at 60 fps or more on every view (lowest `C5-cb1`, 67.4 fps), and the Deck's overruns of the ms budget (GPU at two views, CPU at seven) and its +1.32 GB resident and about +410 MB video memory are accepted. The author chose "Keep as is". |
 | 26 | Distant draws at Extreme (C24) | **Accepted**: `C5-alt` draws 1,878.95 at Extreme against the original's 1,775.5. Extreme is opt-in, and the draw rule holds at Near (1,616.85). The author chose "Accept it". |
 | 27 | A golden over a `cblock7` block (C25) | **None added**: the two C5 Enhanced shots are re-pinned, and the `city-ground` and `city-dressing` suites cover the walk-up floor and dressing. The author chose "No, two are enough". |
+| 28 | The tiles whose buildings stand across the paint's street (C26) | **Floored on the square grid, street kept**: the generated floor surrounds the buildings, the paint's street runs through as on every other tile, and the buildings stand on it where the original places them. The author found the two `cblock2`-over-`cblock4` tiles in flight and chose "Floor, keep street"; from the captures, the building-free corridors stay plain asphalt ("Keep asphalt roads") and no sidewalk runs along the diagonal street there ("Keep as is"). Flagged `cblock1` over `cblock2` (0.066 km²) keeps the paint: its polygon is one mesh placed five times with only one placement over `cblock2`, so it needs floor data per placement, #366 ("Leave it, file issue"). |
 
 Settled as approach, not put to the author: each combination of visible paint and standing
 building set gets its own floor (the engine already splits `no_clutter` surfaces); the street band
@@ -207,6 +208,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ Open ground on the bare flagged blocks
 24. ☑ Measure the cost on the PC and the Deck
 25. ☑ Checks: suite and goldens
+26. ☑ Floor the tiles whose buildings stand across the paint's street
 
 ## Dependency and parallelism notes
 
@@ -771,3 +773,45 @@ be added, since neither C5 shot shows that district.>
 **Verify.** The complete `.\scripts\RunTests.ps1`.
 
 **⚠ Traps.** Tests never read modding folders; a golden must not move under external GPU load.
+
+## C26 ☑ Floor the tiles whose buildings stand across the paint's street
+
+**Landed.** `c5_ground.py` writes `cblock2-cblock4-0..2` (INNER_WALKUP, luma 35) in the square
+frame: `cblock4`'s grid gives the blocks, its 37 to 39 m building-free corridors are plain asphalt
+with no dressing, and the diagonal street is masked through as street. `CityGround` no longer keeps
+the paint for a set standing across its paint's streets (`OnStreetMax` is gone); a combination
+with no floor image still keeps it. The variant stays picked per strip: its seams fall on the
+diagonal street's centrelines, where the paint shows anyway. C5 floors 1,970 polygons (the one
+flagged polygon covers both tiles); the dressing is 1,077,109 instances. `cblock1-cblock2` keeps the
+paint (#366). `c5-city-night-enhanced`, whose camera stands over these tiles, is re-pinned.
+Verdicts: Decision 28.
+
+**Verified.** Every earlier floor file is byte-identical and a rerun is byte-identical.
+`ShippedSlotsStandOnFreeGround` requires the new layouts and fails on the old data; the
+`city-dressing` suite checks these tiles are floored and dressed with GPU and CPU picks agreeing.
+`city-ground`, `city-dressing` and `city-buildings` pass with the unit tests (8,528), and `-Quick`
+passes. Goldens: `c5-city-night-enhanced` moved d53ab3df to 2e5c68ed (re-render pixel-identical),
+`c5-city-towers-enhanced` held, 0 broken of 22. Captured at the author's pose and low over the
+tiles, with and without the HD pack.
+
+**Original approach (kept for reference).**
+
+**Goal.** The two combinations C22 left on the original paint draw a generated floor (Decision 28):
+`cblock2` paint partly over `cblock4`'s set (0.131 km², two flagged polygons, on_street 0.181) and
+flagged `cblock1` over clear `cblock2` (0.066 km², on_street 0.378).
+
+**Evidence (confidence: traced).** `analysis/c5-ground/FINDINGS.md:95` and `:134`; the author
+found the first in flight at `--pos="-9333.109,254.344,-2979.909"`. The paint's street and the
+standing set both repeat once per 256 m tile in UV, so a layout in the square (identity) frame
+fits both; the strip frame does not, because the set does not repeat with the 181 m strip.
+
+**Approach.** Generate these combinations' variants in the square frame: the paint's street
+(the diagonal band on `cblock2`, the cross on `cblock1`) kept as street, the standing set's
+footprints as lots, no floor change and no dressing on the street or under a footprint. The
+engine picks their variant per 256 m tile rather than per strip.
+
+**Verify.** Earlier floors byte-identical; the city suites with `-SkipGoldens`; captures at the
+author's pose with and without the HD pack; the goldens stage to show whether the C5 shots move.
+
+**⚠ Traps.** No building moves. The street drawn through under a building is the original's
+layout, kept.

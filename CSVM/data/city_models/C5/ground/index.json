@@ -73,6 +73,12 @@
       "set": "none",
       "variants": 3,
       "files": ["cblock3-none-0.png.bin", "cblock3-none-1.png.bin", "cblock3-none-2.png.bin"]
+    },
+    "cblock2-cblock4": {
+      "paint": "cblock2",
+      "set": "cblock4",
+      "variants": 3,
+      "files": ["cblock2-cblock4-0.png.bin", "cblock2-cblock4-1.png.bin", "cblock2-cblock4-2.png.bin"]
     }
   }
 }
