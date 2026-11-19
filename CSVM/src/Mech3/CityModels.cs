@@ -24,6 +24,16 @@ public static class CityModels
     /// so the edge moves no hand-over, only how many off-band stamps a drawn cell submits.</summary>
     public const float CellM = 2048f;
 
+    /// <summary>The material parameter that tones a hull's boards, rgb a gain and w their saturation. Only a hull put on
+    /// <see cref="Tone"/> reads it.</summary>
+    public const string BoardToneParam = "board_tone";
+
+    /// <summary>The toned shader's one addition, before a board returns: its colour desaturated to
+    /// <see cref="BoardToneParam"/>'s w and scaled by its rgb. Only a hull put on <see cref="Tone"/> takes it, so the
+    /// buildings keep their shader text.</summary>
+    internal const string ToneLine =
+        "board = mix(vec3(dot(board, vec3(0.299, 0.587, 0.114))), board, " + BoardToneParam + ".w) * " + BoardToneParam + ".rgb;\n                    ";
+
     // The facade atlas's layout, city_atlas.py's. Each family is a row of cells: its facade rows, its roof, its metal.
     // A cell is a tile inside a wrapped gutter, and a tile is two floors and about eight windows wide.
     private const int Atlas = 1024, Cell = 160, Gutter = 16, Tile = 128, Variants = 4, Floors = 2, WindowsPerTile = 8;
@@ -112,7 +122,7 @@ public static class CityModels
 
     private static readonly Dictionary<string, Hull?> Hulls = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Facade?> Facades = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<(bool Near, bool Cut), Shader> Shaders = new();
+    private static readonly Dictionary<(bool Near, bool Cut, bool Toned), Shader> Shaders = new();
 
     // Hull path -> its bytes reading on the thread pool, taken once by Load.
     private static readonly Dictionary<string, Task<byte[]>> ReadsAhead = new(StringComparer.OrdinalIgnoreCase);
@@ -168,6 +178,18 @@ public static class CityModels
         return hull;
     }
 
+    /// <summary>Puts <paramref name="hull"/>'s two materials on the toned twin of their shaders and sets
+    /// <see cref="BoardToneParam"/> to <paramref name="tone"/>: rgb a gain on its boards, w their saturation.</summary>
+    public static void Tone(Hull hull, Vector4 tone)
+    {
+        foreach (var (material, near) in new[] { (hull.BoxMaterial, false), (hull.NearMaterial, true) })
+        {
+            bool cut = material.Shader == ShaderFor(near, true, false) || material.Shader == ShaderFor(near, true, true);
+            material.Shader = ShaderFor(near, cut, true);
+            material.SetShaderParameter(BoardToneParam, tone);
+        }
+    }
+
     /// <summary>The cut-out shader's one addition: a board of the lattice format (class 4, format 4 and up) drops a
     /// texel darker than <see cref="CutLuma"/>. Only a hull whose material is named <c>*.cutout</c> takes it, so the
     /// buildings keep their shader text.</summary>
@@ -175,8 +197,8 @@ public static class CityModels
         $"if (UV2.y > 3.5 && UV2.x > 3.5 && dot(ALBEDO, vec3(0.299, 0.587, 0.114)) < {F(CutLuma)}) {{ discard; }}";
 
     /// <summary>The GLSL that expands a building's seed into its look. The box and the near model share it word for
-    /// word, so neither changes at the hand-over.</summary>
-    internal static string LookCode()
+    /// word, so neither changes at the hand-over. A <paramref name="toned"/> look tones its boards.</summary>
+    internal static string LookCode(bool toned = false)
     {
         var brown = Roofs[0].Rgb;
         var roofGains = Array.ConvertAll(Roofs, r => (Linear(r.Rgb) / Linear(brown), r.Share));
@@ -250,7 +272,7 @@ public static class CityModels
                     vec2 bk = vec2(size.x, -size.y) / {{Atlas}}.0;
                     glow = vec3(0.0);
                     vec3 board = textureGrad(facade_tex, (origin + vec2(f.x, 1.0 - f.y) * size) / {{Atlas}}.0, du * bk, dv * bk).rgb;
-                    return board * (family < 1.5 ? {{F(PosterGain)}} : 1.0);
+                    {{(toned ? ToneLine : "")}}return board * (family < 1.5 ? {{F(PosterGain)}} : 1.0);
                 }
                 if (roof && !metal && family > {{F(TileRoofFamily - 0.5f)}}) {
                     albedo *= csky_city_roof(csky_city_rand(s + 6u));
@@ -295,7 +317,7 @@ public static class CityModels
     // the night darkening through FOG. FOG darkens the lit windows too. The box fades out over the band by
     // ModelShare, and the near model keeps exactly the dither cells the box gives up. Both keep the kind's far fade.
     // ⚠ Never include csky_instance_uniforms: every near cell would take 16 slots of Godot's global buffer.
-    internal static string ShaderCode(bool near, bool cut = false)
+    internal static string ShaderCode(bool near, bool cut = false, bool toned = false)
     {
         bool shadow = ShadowQualitySetting.TerrainShadows;
         string keep = near ? "step(0.004, v_far - v_box)" : "step(0.004, v_box)";
@@ -315,13 +337,13 @@ public static class CityModels
             uniform vec2 {{VegetationModels.BandParam}};
             uniform sampler2D facade_tex : source_color, filter_linear_mipmap, repeat_enable;
             uniform sampler2D facade_ids : hint_default_black, filter_nearest, repeat_enable;
-            uniform vec2 poster_counts = vec2({{LandPosters}}.0, {{PortPosters}}.0);
+            uniform vec2 poster_counts = vec2({{LandPosters}}.0, {{PortPosters}}.0);{{(toned ? $"\n            uniform vec4 {BoardToneParam} = vec4(1.0);" : "")}}
             varying flat float v_far;
             varying flat float v_box;
             varying flat float v_dark;
             varying flat uint v_seed;
 
-            {{LookCode()}}
+            {{LookCode(toned)}}
 
             void vertex() {
                 vec3 origin = MODEL_MATRIX[3].xyz;
@@ -494,12 +516,19 @@ public static class CityModels
         return hull;
     }
 
+    private static Shader ShaderFor(bool near, bool cut, bool toned)
+    {
+        if (!Shaders.TryGetValue((near, cut, toned), out var shader))
+            Shaders[(near, cut, toned)] = shader = new Shader { Code = ShaderCode(near, cut, toned) };
+        return shader;
+    }
+
     // Without a facade the textures stay unset: the atlas reads white, so the flat grade draws, and the ids black, so
     // no window lights.
     private static ShaderMaterial Material(bool near, Color grade, Facade? facade, bool cut)
     {
-        if (!Shaders.TryGetValue((near, cut), out var shader))
-            Shaders[(near, cut)] = shader = new Shader { Code = ShaderCode(near, cut) };
+        // ⚠ Keep a building on the untoned text: its shader text is what the city's goldens pin.
+        var shader = ShaderFor(near, cut, false);
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("grade", new Vector3(grade.R, grade.G, grade.B));
         material.SetShaderParameter(VegetationModels.BandParam, VegetationModels.Band);

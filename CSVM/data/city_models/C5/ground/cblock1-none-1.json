@@ -1,0 +1,47 @@
+{
+  "about": "C5 block floor layout, cblock1 paint with the none set, variant 1, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12) from ground_layout.json; regenerate with that script, never edit by hand.",
+  "conventions": {
+    "uv": "as ground_layout.json: u along the image's columns, v down its rows, one unit per 256 m tile; a rect [u0, v0, u1, v1] or line can run past 1, so draw each again shifted by -1 in u and v",
+    "cells": "the surfaces in paint order, a later one over an earlier one; region verge (sidewalk between kerb and lot), apron (paving behind a building), yard (a ring lot behind its building, or a vacant one), core (behind the ring), alley, bed (planting inside a garden); lot is the ground_layout lot index the cell belongs to; a cell can run under a lot, so test a stamp against the lots",
+    "lines": "fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
+    "paths": "worn or paved footpaths as polylines, cut the same way"
+  },
+  "cells": [
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 0.5625, 1.4375, 0.57422]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 1.42188, 1.4375, 1.4336]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.5664, 0.57422, 0.57812, 1.42188]},
+    {"kind": "sidewalk", "region": "verge", "rect": [1.42578, 0.57422, 1.4375, 1.42188]},
+    {"kind": "asphalt", "region": "core", "rect": [0.57812, 0.57422, 0.83711, 0.85445]},
+    {"kind": "concrete", "region": "core", "rect": [0.82539, 0.57422, 0.83711, 0.85445]},
+    {"kind": "gravel", "region": "core", "rect": [0.57812, 0.85445, 0.83711, 1.01533]},
+    {"kind": "asphalt", "region": "core", "rect": [0.83711, 0.57422, 1.09175, 1.01533]},
+    {"kind": "concrete", "region": "core", "rect": [1.08004, 0.57422, 1.09175, 1.01533]},
+    {"kind": "asphalt", "region": "core", "rect": [1.09175, 0.57422, 1.42578, 0.7578]},
+    {"kind": "concrete", "region": "core", "rect": [1.09175, 0.74608, 1.42578, 0.7578]},
+    {"kind": "asphalt", "region": "core", "rect": [1.09175, 0.7578, 1.42578, 1.01533]},
+    {"kind": "concrete", "region": "core", "rect": [1.09175, 0.7578, 1.42578, 0.76952]},
+    {"kind": "lawn", "region": "core", "rect": [0.57812, 1.01533, 0.9731, 1.42188]},
+    {"kind": "flagstone", "region": "core", "rect": [0.76975, 1.01533, 0.78147, 1.42188]},
+    {"kind": "flagstone", "region": "core", "rect": [0.57812, 1.21275, 0.9731, 1.22447]},
+    {"kind": "flagstone", "region": "core", "rect": [0.75465, 1.19765, 0.79657, 1.23956]},
+    {"kind": "bed", "region": "bed", "rect": [0.7678, 1.2108, 0.78342, 1.22642]},
+    {"kind": "gravel", "region": "core", "rect": [0.9731, 1.01533, 1.17033, 1.42188]},
+    {"kind": "flagstone", "region": "core", "rect": [1.17033, 1.01533, 1.42578, 1.42188]},
+    {"kind": "lawn", "region": "core", "rect": [1.24696, 1.16752, 1.34914, 1.2697]},
+    {"kind": "bed", "region": "bed", "rect": [1.29024, 1.2108, 1.30587, 1.22642]}
+  ],
+  "lines": [
+    {"kind": "fence", "line": [0.57812, 0.85445, 0.83711, 0.85445]},
+    {"kind": "fence", "line": [0.57812, 1.01533, 0.83711, 1.01533]},
+    {"kind": "fence", "line": [0.57812, 0.85445, 0.57812, 1.01533]},
+    {"kind": "fence", "line": [0.83711, 0.85445, 0.83711, 1.01533]},
+    {"kind": "fence", "line": [0.9731, 1.01533, 1.17033, 1.01533]},
+    {"kind": "fence", "line": [0.9731, 1.42188, 1.17033, 1.42188]},
+    {"kind": "fence", "line": [0.9731, 1.01533, 0.9731, 1.42188]},
+    {"kind": "fence", "line": [1.17033, 1.01533, 1.17033, 1.42188]}
+  ],
+  "paths": [
+    {"kind": "path", "line": [0.57812, 0.85445, 0.59392, 0.86322, 0.60973, 0.872, 0.62553, 0.88077, 0.64134, 0.88955, 0.65714, 0.89832, 0.67295, 0.90709, 0.68875, 0.91587, 0.70456, 0.92464, 0.71841, 0.93389, 0.73423, 0.94475, 0.75006, 0.9556, 0.76589, 0.96646, 0.78171, 0.97732, 0.79754, 0.98818, 0.81337, 0.99904, 0.82919, 1.0099, 0.83711, 1.01533]},
+    {"kind": "path", "line": [0.9731, 1.01533, 0.97948, 1.03104, 0.98586, 1.04675, 0.99224, 1.06247, 0.99862, 1.07818, 1.00499, 1.09389, 1.01137, 1.1096, 1.01775, 1.12531, 1.02413, 1.14102, 1.03051, 1.15673, 1.03689, 1.17244, 1.04326, 1.18815, 1.04964, 1.20386, 1.05602, 1.21957, 1.06289, 1.23332, 1.07184, 1.24903, 1.0808, 1.26474, 1.08975, 1.28046, 1.0987, 1.29617, 1.10765, 1.31189, 1.11661, 1.3276, 1.12556, 1.34331, 1.13451, 1.35903, 1.14347, 1.37474, 1.15242, 1.39045, 1.16137, 1.40617, 1.17033, 1.42188]}
+  ]
+}

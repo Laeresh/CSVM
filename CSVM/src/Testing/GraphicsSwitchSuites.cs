@@ -1383,6 +1383,221 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("city-ground",
+        "C5's block floor from placeholder images in an Enhanced flight at rich and near: the paint's surfaces carry their "
+        + "combination in UV2 (two variants for its own set, one for none, zero to keep the paint), its materials sample the "
+        + "floor array with the layout's street and cell, a combination with no image keeps the paint and is named once; the "
+        + "floor global follows the city on a live move to Off and back, Faithful's text carries no floor and Enhanced's again "
+        + "after the switch back; no other texture takes the floor, and a folder with no index or a chapter with no layout "
+        + "builds none")]
+    internal static void CityGroundFloor(TestContext ctx)
+    {
+        RequireData(ctx, "C5");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        string? folder = Mech3.CityGround.Folder;
+        string floors = System.IO.Path.Combine(ctx.ScratchDir, "city-ground");
+        System.IO.Directory.CreateDirectory(floors);
+        var files = new (string Name, Color Fill)[]
+        {
+            ("cblock7-cblock7-0.png.bin", new Color(0.8f, 0.2f, 0.2f)), ("cblock7-cblock7-1.png.bin", new Color(0.2f, 0.2f, 0.8f)),
+            ("cblock7-none-0.png.bin", new Color(0.2f, 0.8f, 0.2f)),
+        };
+        foreach (var (name, fill) in files)
+        {
+            var image = Image.CreateEmpty(512, 512, false, Image.Format.Rgb8);
+            image.Fill(fill);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(floors, name), image.SavePngToBuffer());
+        }
+        System.IO.File.WriteAllText(System.IO.Path.Combine(floors, "index.json"), "{ \"combinations\": { "
+            + "\"cblock7-cblock7\": { \"files\": [\"cblock7-cblock7-0.png.bin\", \"cblock7-cblock7-1.png.bin\"] }, "
+            + "\"cblock7-none\": { \"files\": [\"cblock7-none-0.png.bin\"] } } }");
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            Mech3.CityGround.Folder = floors;
+            var live = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (!live.Built || live.Session.WorldScene is not { Ground: { } ground } scene)
+                {
+                    ctx.Check(false, $"the C5 session builds a city ground from the placeholder floors");
+                    return;
+                }
+                ctx.Check(ground.Floored > 0 && ground.Missing.Contains("cblock7-cblock4") && !ground.Missing.Contains("cblock7-cblock7"),
+                    $"{ground.Floored} polygons draw a floor, and the combination with no image keeps the paint ({string.Join(", ", ground.Missing)})");
+                var paint = scene.TexturedMaterials.Where(t => Mech3.CityGround.Stem(t.TextureName) == "cblock7").Select(t => t.Material).ToList();
+                var others = scene.TexturedMaterials.Where(t => Mech3.CityGround.Stem(t.TextureName) != "cblock7").Select(t => t.Material).ToList();
+                bool Floored(ShaderMaterial m) => m.Shader?.Code.Contains("city_floor_tex", StringComparison.Ordinal) == true;
+                var array = paint.Select(m => m.GetShaderParameter("city_floor_tex").As<Texture2DArray>()).FirstOrDefault(a => a != null);
+                ctx.Check(paint.Count > 0 && paint.All(Floored) && array?.GetLayers() == 3 && array.HasMipmaps()
+                        && paint.All(m => m.GetShaderParameter("city_floor_street0").AsVector4().IsEqualApprox(new Vector4(1f, 0f, 0.5f, 0.07031f))
+                            && m.GetShaderParameter("city_floor_cell").AsVector4() == new Vector4(1f, 0f, 0f, 1f)),
+                    $"each of the paint's {paint.Count} materials samples the three-layer floor array with the layout's street and cell ({paint.Count(Floored)} floored, {array?.GetLayers()} layers, street {paint[0].GetShaderParameter("city_floor_street0")}, cell {paint[0].GetShaderParameter("city_floor_cell")})");
+                ctx.Check(others.Count > 0 && !others.Any(Floored), $"none of the {others.Count} other textured materials takes the floor");
+                var uv2 = new HashSet<float>();
+                var paintSet = paint.Cast<Material>().ToHashSet();
+                Walk(live.Session, node =>
+                {
+                    if (node is not MeshInstance3D { Mesh: ArrayMesh mesh })
+                        return;
+                    for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                    {
+                        if (mesh.SurfaceGetMaterial(s) is { } m && paintSet.Contains(m))
+                            uv2.UnionWith(mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.TexUV2].AsVector2Array().Select(v => v.Y));
+                    }
+                });
+                ctx.Check(uv2.SetEquals(new[] { 0f, 1f, 2f }), $"the paint's surfaces carry UV2 counts of two, one and zero ({string.Join(", ", uv2.Order())})");
+                float Global() => Mech3.CityGround.Published;
+                ctx.Check(Global() == 1f, $"the floor global is on with the city");
+                Models(live, Utils.VegetationModelsSetting.Off);
+                ctx.Check(Global() == 0f, $"a live move to Off turns the floor global off");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                ctx.Check(Global() == 1f, $"and back to Near on");
+                Switch(live, enhanced: false);
+                ctx.Check(paint.All(m => !Floored(m) && m.Shader?.Code.Contains("UV2", StringComparison.Ordinal) == false) && Global() == 0f,
+                    $"under Faithful the paint's text carries no floor arm and the global is off");
+                Switch(live, enhanced: true);
+                ctx.Check(paint.All(Floored) && Global() == 1f, $"back under Enhanced the floor arm draws again");
+            }
+            finally
+            {
+                live.Close();
+            }
+            Mech3.CityGround.Folder = System.IO.Path.Combine(ctx.ScratchDir, "no-floor");
+            var gamez = ctx.ChapterGamez("C5");
+            ctx.Check(gamez != null && Mech3.CityGround.Load(gamez, "C5") == null && Mech3.CityGround.Load(gamez, "C1") == null,
+                $"a floor folder with no index and a chapter with no layout build no city ground");
+        }
+        finally
+        {
+            Mech3.CityGround.Folder = folder;
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("city-dressing",
+        "C5's block dressing over the shipped floor in an Enhanced flight at rich and near: the floor's variant pick run on "
+        + "the GPU from the world shader's own text equals the CPU's over a lattice of world points; every dressing kind "
+        + "stands, each instance in a block of the variant that pick gives its cell, the cblock2 tiles over cblock4's set "
+        + "among them, in nodes with no collider and no shadow "
+        + "on the models' layer; the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
+    internal static void CityDressingStands(TestContext ctx)
+    {
+        RequireData(ctx, "C5");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            var paints = Mech3.CityGround.Layout.Parse(FileAccess.GetFileAsString($"{CityModels.Root}/C5/ground_layout.json")).Paints;
+            // A square paint's block cells and a diagonal paint's strips. Then the strips from the least corner of the
+            // cblock2 tiles over cblock4's set, which stands across their street.
+            var lattice = new Vector2(-14000.37f, -13000.21f);
+            var acrossCblock4 = new Vector2(-9472f, -3584f);
+            foreach (var (paint, origin) in new[] { ("cblock7", lattice), ("cblock2", lattice), ("cblock2", acrossCblock4) })
+            {
+                var (gpu, cpu) = FloorPicks(ctx, paints[paint], origin);
+                int same = gpu.Zip(cpu).Count(p => p.First == p.Second);
+                ctx.Check(gpu.Count == cpu.Count && cpu.Count > 0 && same == cpu.Count,
+                    $"{paint} from {origin}: the world shader's pick on the GPU equals the CPU's at {same} of {cpu.Count} world points (first {gpu.FirstOrDefault():x6} against {cpu.FirstOrDefault():x6})");
+            }
+            var live = Open(ctx, true, 1, "C5");
+            try
+            {
+                if (!live.Built || live.Session.WorldScene is not { Ground: { } ground } || live.Session.Vegetation?.Dressing is not { } dressing)
+                {
+                    ctx.Check(false, $"the C5 session builds a city ground and its dressing");
+                    return;
+                }
+
+                var placed = dressing.Placements;
+                var kinds = new[] { "gd_wall", "gd_fence", "gd_hedge", "gd_shed", "gd_sedan", "gd_truck", "gd_ashcans", "gd_bench", Mech3.CityDressing.Tree };
+                ctx.Check(kinds.All(k => dressing.Counts.GetValueOrDefault(k) > 0),
+                    $"every kind stands ({string.Join(", ", kinds.Select(k => $"{k} {dressing.Counts.GetValueOrDefault(k)}"))})");
+                int wrong = placed.Count(p => Mech3.CityGround.CellOf(p.Spec, p.Transform.Origin.X, p.Transform.Origin.Z) != p.Cell
+                    || p.Variant != (int)(Mech3.CityGround.Pick(p.Cell.I, p.Cell.J) % (uint)p.Variants));
+                ctx.Check(placed.Count > 0 && wrong == 0, $"each of {placed.Count} instances stands in a block of the variant its cell picks ({wrong} wrong)");
+                // The two tiles run 512 m along Z.
+                int across = placed.Count(p => p.Transform.Origin.X >= acrossCblock4.X && p.Transform.Origin.X < acrossCblock4.X + 256f
+                    && p.Transform.Origin.Z >= acrossCblock4.Y && p.Transform.Origin.Z < acrossCblock4.Y + 512f);
+                ctx.Check(across > 0, $"the cblock2 tiles over cblock4's set, which stands across their street, are floored and dressed ({across} instances)");
+                List<MultiMeshInstance3D> CellsOf(Node root)
+                {
+                    var found = new List<MultiMeshInstance3D>();
+                    Walk(root, n =>
+                    {
+                        if (n is MultiMeshInstance3D m)
+                            found.Add(m);
+                    });
+                    return found;
+                }
+                var nearCells = CellsOf(dressing.NearRoot);
+                var farCells = CellsOf(dressing.FarRoot);
+                var cells = nearCells.Concat(farCells).ToList();
+                bool Small(MultiMeshInstance3D c) => c.Name.ToString().StartsWith("gd_bench", StringComparison.Ordinal) || c.Name.ToString().StartsWith("gd_ashcans", StringComparison.Ordinal);
+                int small = dressing.Counts.GetValueOrDefault("gd_bench") + dressing.Counts.GetValueOrDefault("gd_ashcans");
+                ctx.Check(nearCells.Sum(c => c.Multimesh.InstanceCount) == placed.Count && farCells.Sum(c => c.Multimesh.InstanceCount) == placed.Count - small
+                        && !farCells.Any(Small)
+                        && !HasCollider(dressing.Root)
+                        && cells.All(c => c.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off && c.Layers == Mech3.VegetationModels.Layer && c.VisibilityRangeEnd > 0f),
+                    $"{nearCells.Count} near nodes hold every instance and {farCells.Count} far nodes every one but the bench and ash cans, ranged, on the models' layer with no collider and no shadow");
+                // The blocks' fade at the launch scale: a far node reaches as far as a block's box does, a near one to the band.
+                float blocks = Mathf.Sqrt(300f * 300f / EffectsLevel.RegisteredScaleSq);
+                float band = Mech3.VegetationModels.Band.Y;
+                ctx.Check(farCells.All(c => c.VisibilityRangeEnd >= blocks) && nearCells.All(c => c.VisibilityRangeEnd >= Mathf.Min(band, Mathf.Sqrt(150f * 150f / EffectsLevel.RegisteredScaleSq))),
+                    $"the far nodes range past the blocks' {blocks:0} m and the near ones past the band's {band:0} m or their own fade (far from {farCells.Min(c => c.VisibilityRangeEnd):0} m, near from {nearCells.Min(c => c.VisibilityRangeEnd):0} m, scale {EffectsLevel.RegisteredScaleSq})");
+                Models(live, Utils.VegetationModelsSetting.Extreme);
+                float extreme = Mech3.VegetationModels.Band.Y;
+                ctx.Check(nearCells.Where(c => c.Name.ToString().StartsWith("gd_wall", StringComparison.Ordinal)).All(c => c.VisibilityRangeEnd >= Mathf.Min(extreme, blocks)),
+                    $"Extreme ranges the near nodes out with its band ({extreme:0} m), no further than the fade");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                var tree = (ShaderMaterial)farCells.First(c => c.Name.ToString().StartsWith(Mech3.CityDressing.Tree, StringComparison.Ordinal)).MaterialOverride;
+                ctx.Check(tree.Shader.Code.Contains("float keep = live * step(0.004, v_card);", StringComparison.Ordinal)
+                        && tree.Shader.Code.Contains("if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_card)) {", StringComparison.Ordinal),
+                    $"the far tree keeps the dither cells the near tree gives up across the band");
+                Variant Param(string kind, string param) =>
+                    ((ShaderMaterial)nearCells.First(c => c.Name.ToString().StartsWith(kind, StringComparison.Ordinal)).MaterialOverride).GetShaderParameter(param);
+                var wallTone = Param("gd_wall", CityModels.BoardToneParam);
+                var shedTone = Param("gd_shed", CityModels.BoardToneParam);
+                float treeGain = Param(Mech3.CityDressing.Tree, Mech3.VegetationModels.GainParam).AsSingle();
+                ctx.Check(wallTone.VariantType == Variant.Type.Vector4 && wallTone.AsVector4().W < 1f && shedTone.VariantType == Variant.Type.Nil
+                        && treeGain < 1f && tree.GetShaderParameter(Mech3.VegetationModels.GainParam).AsSingle() == treeGain,
+                    $"the walls' boards are toned ({wallTone}) and a shed's are not, and both tree materials take the gain {treeGain}");
+                ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
+
+                bool Shown() => dressing.Root.IsVisibleInTree();
+                ctx.Check(Shown(), $"the dressing draws with the city");
+                Models(live, Utils.VegetationModelsSetting.Off);
+                ctx.Check(!Shown(), $"a live move to Off hides it");
+                Models(live, Utils.VegetationModelsSetting.Near);
+                ApplyVegetation(live, VegetationQualitySetting.Original);
+                ctx.Check(!Shown(), $"a live move to Original hides it");
+                ApplyVegetation(live, VegetationQualitySetting.Rich);
+                Switch(live, enhanced: false);
+                ctx.Check(!Shown(), $"a live switch to Faithful hides it");
+                Switch(live, enhanced: true);
+                ctx.Check(Shown() && dressing.Placements.Count == placed.Count, $"and back under Enhanced at near it draws the same instances");
+            }
+            finally
+            {
+                live.Close();
+            }
+        }
+        finally
+        {
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("canopy-models",
         "the near crown models over C3's painted canopy in an Enhanced flight at rich: they stand under the clumps' root, "
         + "outside the clutter root, with no collider and no instance uniform, every one on a painted point, drawn in cells "
@@ -3795,6 +4010,61 @@ internal static class GraphicsSwitchSuites
     // The band each modelled card's Rich material carries.
     private static IEnumerable<Vector2> CardBands(IEnumerable<Mech3.ClutterBuilder.KindExport> kinds) =>
         kinds.Select(k => ((ShaderMaterial)k.Rich!.Material!).GetShaderParameter(Mech3.VegetationModels.BandParam).AsVector2());
+
+    // The floor's 24-bit variant pick at a lattice of world points, on the GPU from the world shader's own text and on
+    // the CPU. Each pixel holds three bits at 0 or 1, which pass any transfer curve. The index reads off X alone, so a
+    // vertical flip moves nothing. The probe pane draws a batch of eight points across.
+    private static (List<uint> Gpu, List<uint> Cpu) FloorPicks(TestContext ctx, Mech3.CityGround.PaintLayout spec, Vector2 origin)
+    {
+        const int batches = 64, perBatch = 8, columns = 32, px = 8;
+        const float step = 97.31f;
+        var cell = new Vector4(spec.Cells[0].Axis.X, spec.Cells[0].Axis.Y, spec.Cells.Count > 1 ? spec.Cells[1].Axis.X : 0f, spec.Cells.Count > 1 ? spec.Cells[1].Axis.Y : 0f);
+        var shader = new Shader
+        {
+            Code = "shader_type spatial;\nrender_mode unshaded;\nuniform vec4 city_floor_cell;\nuniform vec2 city_floor_origin;\nuniform vec2 probe_origin;\nuniform float probe_first;\n"
+                + Mech3.CityGround.PickCode
+                + $"\nvoid fragment() {{\n    float i = probe_first + floor(floor(FRAGCOORD.x) / {px}.0);\n    uint k = uint(mod(floor(FRAGCOORD.x), {px}.0));\n    vec2 xz = probe_origin + vec2(mod(i, {columns}.0), floor(i / {columns}.0)) * {step.ToString("0.0###", CultureInfo.InvariantCulture)};\n"
+                + "    uint p = csky_city_floor_pick(xz / 256.0);\n"
+                + "    uint b = (p >> (3u * k)) & 7u;\n    ALBEDO = vec3(float(b & 1u), float((b >> 1u) & 1u), float((b >> 2u) & 1u));\n}\n",
+        };
+        var material = new ShaderMaterial { Shader = shader };
+        material.SetShaderParameter("city_floor_cell", cell);
+        material.SetShaderParameter("city_floor_origin", new Vector2(spec.Cells[0].Origin, spec.Cells.Count > 1 ? spec.Cells[1].Origin : 0f));
+        material.SetShaderParameter("probe_origin", origin);
+        var (view, quad) = ProbeView(ctx.Host);
+        quad.MaterialOverride = material;
+        try
+        {
+            var gpu = new List<uint>();
+            var cpu = new List<uint>();
+            for (int batch = 0; batch < batches; batch++)
+            {
+                material.SetShaderParameter("probe_first", (float)(batch * perBatch));
+                ProbePixel(view);
+                if (view.GetTexture()?.GetImage() is not { } image || image.IsEmpty())
+                    return (gpu, cpu);
+                image.Convert(Image.Format.Rgba8);
+                var data = image.GetData();
+                int row = (image.GetHeight() / 2) * image.GetWidth() * 4;
+                for (int i = 0; i < perBatch; i++)
+                {
+                    uint read = 0;
+                    for (int b = 0; b < 3 * px; b++)
+                        read |= data[row + (4 * ((i * px) + (b / 3))) + (b % 3)] > 127 ? 1u << b : 0u;
+                    gpu.Add(read);
+                    int at = (batch * perBatch) + i;
+                    float x = origin.X + ((at % columns) * step), z = origin.Y + ((at / columns) * step);
+                    var (ci, cj) = Mech3.CityGround.CellOf(spec, x, z);
+                    cpu.Add(Mech3.CityGround.Pick(ci, cj) & 0xFFFFFFu);
+                }
+            }
+            return (gpu, cpu);
+        }
+        finally
+        {
+            view.QueueFree();
+        }
+    }
 
     // Whether any collider stands under a node.
     private static bool HasCollider(Node root)

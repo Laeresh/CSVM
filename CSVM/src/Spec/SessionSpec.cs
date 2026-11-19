@@ -1278,6 +1278,10 @@ public sealed record SessionSpec
     /// (<see cref="ModdingFolder"/>), beating the saved one. Empty names none. Null when absent.</summary>
     public string? ModFolder { get; private set; }
 
+    /// <summary><c>--city-ground=</c>: the folder the city's block floor images and their <c>index.json</c> are read
+    /// from instead of the chapter's shipped <c>ground</c> folder. Null when absent.</summary>
+    public string? CityGround { get; private set; }
+
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
@@ -1865,6 +1869,7 @@ public sealed record SessionSpec
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
             else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }
             else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
+            else if (arg.StartsWith("--city-ground=")) { s.CityGround = arg["--city-ground=".Length..]; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =

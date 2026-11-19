@@ -1,0 +1,46 @@
+{
+  "about": "C5 block floor layout, cblock7 paint with the none set, variant 1, written by CSVM/data/city_models/c5_ground.py (PLAN-c5-ground B12) from ground_layout.json; regenerate with that script, never edit by hand.",
+  "conventions": {
+    "uv": "as ground_layout.json: u along the image's columns, v down its rows, one unit per 256 m tile; a rect [u0, v0, u1, v1] or line can run past 1, so draw each again shifted by -1 in u and v",
+    "cells": "the surfaces in paint order, a later one over an earlier one; region verge (sidewalk between kerb and lot), apron (paving behind a building), yard (a ring lot behind its building, or a vacant one), core (behind the ring), alley, bed (planting inside a garden); lot is the ground_layout lot index the cell belongs to; a cell can run under a lot, so test a stamp against the lots",
+    "lines": "fence or wall (a courtyard or rear wall), cut where it crosses a lot or a street",
+    "paths": "worn or paved footpaths as polylines, cut the same way"
+  },
+  "cells": [
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 0.5625, 1.42969, 0.57422]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 1.41406, 1.42969, 1.42578]},
+    {"kind": "sidewalk", "region": "verge", "rect": [0.57031, 0.57422, 0.58203, 1.41406]},
+    {"kind": "sidewalk", "region": "verge", "rect": [1.41797, 0.57422, 1.42969, 1.41406]},
+    {"kind": "flagstone", "region": "core", "rect": [0.58203, 0.57422, 0.82478, 0.90971]},
+    {"kind": "lawn", "region": "core", "rect": [0.65485, 0.69341, 0.75196, 0.79051]},
+    {"kind": "bed", "region": "bed", "rect": [0.69559, 0.73415, 0.71122, 0.74978]},
+    {"kind": "lawn", "region": "core", "rect": [0.82478, 0.57422, 1.10611, 0.90971]},
+    {"kind": "flagstone", "region": "core", "rect": [0.95959, 0.57422, 0.97131, 0.90971]},
+    {"kind": "flagstone", "region": "core", "rect": [0.82478, 0.7361, 1.10611, 0.74782]},
+    {"kind": "flagstone", "region": "core", "rect": [0.93988, 0.7164, 0.99101, 0.76753]},
+    {"kind": "bed", "region": "bed", "rect": [0.95763, 0.73415, 0.97326, 0.74978]},
+    {"kind": "gravel", "region": "core", "rect": [1.10611, 0.57422, 1.41797, 0.90971]},
+    {"kind": "asphalt", "region": "core", "rect": [0.58203, 0.90971, 0.92386, 1.0935]},
+    {"kind": "concrete", "region": "core", "rect": [0.58203, 0.90971, 0.92386, 0.92143]},
+    {"kind": "asphalt", "region": "core", "rect": [0.58203, 1.0935, 0.92386, 1.41406]},
+    {"kind": "concrete", "region": "core", "rect": [0.58203, 1.40234, 0.92386, 1.41406]},
+    {"kind": "lawn", "region": "core", "rect": [0.92386, 0.90971, 1.41797, 1.41406]},
+    {"kind": "flagstone", "region": "core", "rect": [1.16506, 0.90971, 1.17678, 1.41406]},
+    {"kind": "flagstone", "region": "core", "rect": [0.92386, 1.15603, 1.41797, 1.16774]},
+    {"kind": "flagstone", "region": "core", "rect": [1.14009, 1.13106, 1.20174, 1.19271]},
+    {"kind": "bed", "region": "bed", "rect": [1.1631, 1.15407, 1.17873, 1.1697]}
+  ],
+  "lines": [
+    {"kind": "fence", "line": [1.10611, 0.57422, 1.41797, 0.57422]},
+    {"kind": "fence", "line": [1.10611, 0.90971, 1.41797, 0.90971]},
+    {"kind": "fence", "line": [1.10611, 0.57422, 1.10611, 0.90971]},
+    {"kind": "fence", "line": [1.41797, 0.57422, 1.41797, 0.90971]},
+    {"kind": "fence", "line": [0.92386, 0.90971, 1.41797, 0.90971]},
+    {"kind": "fence", "line": [0.92386, 1.41406, 1.41797, 1.41406]},
+    {"kind": "fence", "line": [0.92386, 0.90971, 0.92386, 1.41406]},
+    {"kind": "fence", "line": [1.41797, 0.90971, 1.41797, 1.41406]}
+  ],
+  "paths": [
+    {"kind": "path", "line": [1.10611, 0.57422, 1.1198, 0.58994, 1.13349, 0.60567, 1.14717, 0.62139, 1.16086, 0.63711, 1.17455, 0.65284, 1.18823, 0.66856, 1.20192, 0.68428, 1.21561, 0.70001, 1.22929, 0.71573, 1.24298, 0.73145, 1.25583, 0.74518, 1.27127, 0.76085, 1.28672, 0.77652, 1.30216, 0.79219, 1.3176, 0.80786, 1.33304, 0.82353, 1.34848, 0.8392, 1.36393, 0.85487, 1.37937, 0.87054, 1.39481, 0.88621, 1.41025, 0.90187, 1.41797, 0.90971]}
+  ]
+}
