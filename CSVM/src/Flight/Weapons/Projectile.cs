@@ -234,6 +234,22 @@ public sealed partial class ProjectilePool : Node3D
     private const float MuzzleLightLife = 0.03f;   // s
     private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy; Godot's omni needs one
 
+    // ---- the Enhanced in-flight lights (SubmitInFlight, #368), one TUNE block ----
+
+    // Near and far ranges in metres, the scalar on the colour, and the rank in the set. Each rank
+    // sits under an authored lamp's 1, so a burst of fire never takes a beacon's slot.
+    private const float TracerGlowNear = 2f;
+    private const float TracerGlowFar = 14f;
+    private const float TracerGlowScalar = 0.6f;
+    private const float TracerGlowRank = 0.3f;
+    private const float RocketGlowNear = 4f;
+    private const float RocketGlowFar = 30f;
+    private const float RocketGlowScalar = 1.2f;
+    private const float RocketGlowRank = 0.5f;
+
+    // An ordnance round at or under this speed has no motor to light: the rear flash, released at 1 m/s.
+    private const float RocketGlowMinSpeed = 1f;
+
     // The authored water-splash playback, verbatim from splash1.flt/bsplsh.flt (identical shapes).
     // See docs/formats/weapon-effects/ordnance.md "Water splash playback" for the source events.
     private const float SplashRunTime = 2.0f;      // s, the def's sequence length
@@ -307,6 +323,16 @@ public sealed partial class ProjectilePool : Node3D
     // streak is `tracer_armorpierce` (American).
     private static readonly string[] TipTextures =
         { "slugtip", "dumdumtip", "armourpiercetip", "magnesiumtip" };
+
+    // Enhanced only (#368): each gun round's light in flight, index-parallel to TracerTextures. Each
+    // is the bright core of that ammo's streak texture, measured in C1, so light and streak match.
+    private static readonly Color[] TracerGlow =
+    {
+        new(1f, 1f, 0.57f), new(0.84f, 0.54f, 0.9f), new(1f, 0.49f, 0.49f), new(1f, 1f, 0.92f),
+    };
+
+    // TUNE (#368): a rocket motor's light in flight, a deep red-orange.
+    private static readonly Color RocketGlow = new(1f, 0.35f, 0.15f);
 
     // The disabling wash's colours (docs/org/ordnanceTypes.md "SONIC and FLASH"): red for SONIC,
     // white for FLASH.
@@ -1010,6 +1036,7 @@ public sealed partial class ProjectilePool : Node3D
         _pointLights = lights;
         _aircraftLights ??= WorldLights.ForAircraft();
         lights.AddSource(SubmitWorldFlashes);
+        lights.AddSource(SubmitInFlight);
     }
 
     /// <summary>The shot lights the world set's point term holds now: world position, near and far
@@ -3052,6 +3079,24 @@ public sealed partial class ProjectilePool : Node3D
 
     // The world set's per-commit call (BindPointLights registers it as a source).
     private void SubmitWorldFlashes(WorldLights lights) => SubmitPointFlashes(_pointFlashes, lights);
+
+    // Enhanced only (#368): a light on every round in flight, which the world, the aircraft and the
+    // volumetric clouds all take. The original lights no round, so the faithful path submits none.
+    private void SubmitInFlight(WorldLights lights)
+    {
+        if (!GraphicsMode.Enhanced)
+            return;
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (!p.Alive || (p.Weapon.IsRocket && p.Weapon.Velocity is <= RocketGlowMinSpeed))
+                continue;
+            if (p.Weapon.IsRocket)
+                lights.Add(p.Pos, RocketGlow, RocketGlowNear, RocketGlowFar, RocketGlowScalar, RocketGlowRank);
+            else
+                lights.Add(p.Pos, TracerGlow[p.TracerIdx], TracerGlowNear, TracerGlowFar, TracerGlowScalar, TracerGlowRank);
+        }
+    }
 
     // The aircraft set has no world runtime to commit it, so the pool does, once it has placed its
     // anchored lights. Committed in either mode, so a switch to original zeroes its count.
