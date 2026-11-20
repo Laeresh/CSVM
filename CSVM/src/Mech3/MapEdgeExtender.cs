@@ -23,11 +23,15 @@ public sealed partial class MapEdgeExtender : Node3D
     /// information.</summary>
     internal const float TintStrength = 0.2f;
 
-    // Window radius in cells around the focus. Sized to cover the weather fog-far
-    // (C1 zone2: 4000 m ≈ 4 × 1024 m tiles) plus one margin ring, so the fog border never
-    // creeps onto the void even mid-cell. TUNE. ⚠ The ring sits against the FULL authored far;
-    // the chapter with the longest authored far is C1B at 4,700 m, still inside 5 × 1024 m.
-    private const int Rings = 5;
+    // The least window radius in cells around the focus. It covers the longest authored fog far
+    // in 1024 m tiles with a margin, so the fog border never reaches the void mid-cell.
+    private const int BaseRings = 5;
+
+    // The most, the fog_far tune's 16 km in tiles plus the margin ring.
+    private const int MaxRings = 17;
+
+    // Rings past this one build ground only, with no collider: clutter and clumps fade inside it.
+    private const int ClutterRings = BaseRings;
 
     // The ground-tile span gate, as fractions of a cell: the floor admits the split half-tiles,
     // the ceiling keeps multi-cell sheets out. ⚠ Named, not inlined, because they are delicate: a
@@ -86,6 +90,9 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly IReadOnlyList<ClutterBuilder.KindExport>? _clutter;
 
     private readonly Dictionary<(int, int), Node3D> _live = new();
+
+    // The live cells built as ground alone, rebuilt whole once a focus comes within ClutterRings.
+    private readonly HashSet<(int, int)> _groundOnly = new();
 
     // The map's stamp activation, which each copy follows, and the live copies per extension cell.
     private readonly ClutterActivation? _activation;
@@ -174,6 +181,9 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Extension cells currently instantiated (diagnostics).</summary>
     public int LiveCellCount => _live.Count;
 
+    /// <summary>The window radius in cells the next <see cref="Update(IReadOnlyList{Vector3})"/> builds.</summary>
+    public int Rings { get; private set; } = BaseRings;
+
     /// <summary>How many border cells deep the repeated block is; per chapter, see
     /// <see cref="DefaultBlockCells"/>.</summary>
     public int BlockCells => _blockCells;
@@ -221,6 +231,11 @@ public sealed partial class MapEdgeExtender : Node3D
         "C1" or "C2" or "C4" => 2,
         _ => 1,
     };
+
+    /// <summary>The window radius for a fog far of <paramref name="fogFarM"/> metres over tiles of
+    /// <paramref name="tileM"/>: that many tiles, rounded up, plus one margin ring. Clamped and pure.</summary>
+    public static int RingsFor(float fogFarM, float tileM) =>
+        Math.Clamp((int)MathF.Ceiling(fogFarM / tileM) + 1, BaseRings, MaxRings);
 
     /// <summary>Which repetition band an out-of-map index falls in: 0 inside the map, then ±1, ±2…
     /// outward, one step per <paramref name="block"/> cells. The overlay colours by this, not by
@@ -322,6 +337,17 @@ public sealed partial class MapEdgeExtender : Node3D
         DropWindow();
     }
 
+    /// <summary>Sizes the window to a fog far of <paramref name="fogFarM"/> metres (<see cref="RingsFor"/>).
+    /// The next Update builds or drops the difference.</summary>
+    public void SetReach(float fogFarM)
+    {
+        int rings = RingsFor(fogFarM, Mathf.Min(_tileX, _tileZ));
+        if (rings == Rings)
+            return;
+        Rings = rings;
+        _centerCells.Clear();
+    }
+
     /// <summary>Show or hide the tile-grid tints on the extension cells. Cheap, it re-stamps a
     /// per-instance shader parameter on what is already built and never rebuilds a cell. New cells
     /// pick the state up in <see cref="BuildCell"/> as they are born, which is why this lives here
@@ -358,6 +384,7 @@ public sealed partial class MapEdgeExtender : Node3D
             _centerCells.Add(CellOf(f));
 
         var wanted = new HashSet<(int, int)>();
+        var near = new HashSet<(int, int)>();
         foreach (var (fx, fz) in _centerCells)
             for (int dx = -Rings; dx <= Rings; dx++)
                 for (int dz = -Rings; dz <= Rings; dz++)
@@ -367,11 +394,14 @@ public sealed partial class MapEdgeExtender : Node3D
                     if (c.Item1 >= 0 && c.Item1 < _cols && c.Item2 >= 0 && c.Item2 < _rows)
                         continue;
                     wanted.Add(c);
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dz)) <= ClutterRings)
+                        near.Add(c);
                 }
 
         List<(int, int)>? drop = null;
         foreach (var (cell, node) in _live)
-            if (!wanted.Contains(cell))
+            // A ground-only cell a focus has come near is dropped too, and built whole below.
+            if (!wanted.Contains(cell) || (near.Contains(cell) && _groundOnly.Contains(cell)))
             {
                 node.QueueFree();
                 (drop ??= new List<(int, int)>()).Add(cell);
@@ -382,6 +412,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 _live.Remove(cell);
                 _copies.Remove(cell);
                 _draws.Remove(cell);
+                _groundOnly.Remove(cell);
             }
 
         // A fold change (F15/F16) drops the whole window and rebuilds it here, which is ~10x a
@@ -392,7 +423,10 @@ public sealed partial class MapEdgeExtender : Node3D
         foreach (var cell in wanted)
             if (!_live.ContainsKey(cell))
             {
-                var node = BuildCell(cell.Item1, cell.Item2);
+                bool groundOnly = !near.Contains(cell);
+                var node = BuildCell(cell.Item1, cell.Item2, groundOnly);
+                if (groundOnly)
+                    _groundOnly.Add(cell);
                 AddChild(node);
                 _live[cell] = node;
                 built++;
@@ -446,6 +480,8 @@ public sealed partial class MapEdgeExtender : Node3D
         _clumps = clumps;
         foreach (var (at, cell) in _live)
         {
+            if (_groundOnly.Contains(at))
+                continue;
             if (cell.GetNodeOrNull(CanopyClumps.Field.CopyName) is { } old)
             {
                 cell.RemoveChild(old);
@@ -558,6 +594,7 @@ public sealed partial class MapEdgeExtender : Node3D
             node.QueueFree();
         }
         _live.Clear();
+        _groundOnly.Clear();
         _copies.Clear();
         _draws.Clear();
         _centerCells.Clear();
@@ -595,7 +632,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // so edge buildings/props are never duplicated) under a reflection-transform holder,
     // plus the source cell's clutter sprites at mirrored positions (billboards re-face the
     // camera by shader, so mirroring a sprite is just mirroring its planted point).
-    private Node3D BuildCell(int ix, int iz)
+    private Node3D BuildCell(int ix, int iz, bool groundOnly = false)
     {
         var (sx, fx) = FoldAxis(ix, _cols, _blockCells, _repeat);
         var (sz, fz) = FoldAxis(iz, _rows, _blockCells, _repeat);
@@ -610,7 +647,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 // zoneGate: inherit the source tile's zone_id culling, or the base map's ground
                 // vanishes above the deck while its mirrored continuation keeps drawing.
                 var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node),
-                    zoneGate: true);
+                    collisionSkip: groundOnly ? _ => true : null, zoneGate: true);
                 if (leaf == null)
                     continue;
                 if (parentXf != Transform3D.Identity)
@@ -627,13 +664,14 @@ public sealed partial class MapEdgeExtender : Node3D
             cell.AddChild(ground);
         }
 
-        if (_clutter != null && _sprites.TryGetValue((sx, sz), out var sprites))
+        if (!groundOnly && _clutter != null && _sprites.TryGetValue((sx, sz), out var sprites))
         {
             var draws = new List<EdgeDraw>();
             _copies[(ix, iz)] = AddCellClutter(cell, mirror, sprites, draws);
             _draws[(ix, iz)] = draws;
         }
-        AddClumps(cell, ix, iz);
+        if (!groundOnly)
+            AddClumps(cell, ix, iz);
         if (_tinted)
             ApplyTint(cell, ix, iz);
         return cell;

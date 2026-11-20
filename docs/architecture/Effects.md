@@ -82,7 +82,7 @@ key and its order, skipping comments as the read does, and refusing a file it ca
 One weather zone's Enhanced lighting tune: sun and ambient energy multipliers in place of the
 conversion factors, sun, ambient and sky tints over the decoded colours, a bearing offset, the AgX
 exposure and white, the Post-processing grade, a cloud tint, and the shadow softness, distance, biases, splits, fade start and strength.
-Four fields read only under an option: `god_rays` (Volumetric Clouds), `ambient_floor`, `self_lit_emission` and `sdfgi_energy` (Global Illumination), saved in the matching `clouds` or `gi` layer of `LightingTable.cs` and never another (`Field.Layer`).
+Five fields read only under an option: `god_rays` and `fog_far` (Volumetric Clouds), `ambient_floor`, `self_lit_emission` and `sdfgi_energy` (Global Illumination), saved in the matching `clouds` or `gi` layer of `LightingTable.cs` and never another (`Field.Layer`).
 The defaults are the untuned Enhanced look, which `Launch/EnhancedLook.cs` and `Session/World/WeatherRig.cs` read.
 Its field table drives the lighting lab's sliders and the file's keys. `LightingDebug` beside it is
 the `--debug-lighting` grammar, below `Spec` so `SessionSpec` can filter it. `LightingTableTests`.
