@@ -419,8 +419,9 @@ override inside a zip is read, and the lab's Save is off for it.
 
 The original captions no voice line, and its archives carry no transcript. The remake reads one
 from `<dataRoot>/Subtitles` (`config.json` key `subtitles`; a `--det` run reads none): every
-`*.json` file in that folder, loaded in name order, a later file's entry replacing an earlier one.
-Only loose files are read: unlike a sound pack, a zip or a subfolder is not. Each file is one
+`*.json` file in that folder, and every `*.json` inside a `*.zip` there (at any depth, so a zip may
+keep its own top folder). Files and zips load in name order, and a zip's files in name order
+within it; a later file's entry replaces an earlier one. A subfolder is not read. Each file is one
 object keyed by WAV name:
 
 ```json

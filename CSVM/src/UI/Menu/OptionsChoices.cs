@@ -78,6 +78,10 @@ public sealed class OptionsChoices
     /// as 100.</summary>
     public string? SpyglassScale { get; set; }
 
+    /// <summary>The <see cref="SubtitlesSetting.Words"/> word, null while never set, which reads as
+    /// low.</summary>
+    public string? Subtitles { get; set; }
+
     /// <summary>The Keep Camera Zoom switch (<see cref="CameraZoomMemory"/>), null while never set,
     /// which reads as on.</summary>
     public bool? KeepCameraZoom { get; set; }
@@ -227,6 +231,7 @@ public sealed class OptionsChoices
         HudMode = saved?.HudMode;
         HudLayout = saved?.HudLayout;
         SpyglassScale = saved?.SpyglassScale;
+        Subtitles = saved?.Subtitles;
         KeepCameraZoom = saved?.KeepCameraZoom;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
         Words = saved?.Words.Copy() ?? new WordValues();
@@ -265,7 +270,7 @@ public sealed class OptionsChoices
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
             LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale, KeepCameraZoom, HudMode,
-            SoundMode, HitConfirm, HudLayout);
+            SoundMode, HitConfirm, HudLayout, Subtitles);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

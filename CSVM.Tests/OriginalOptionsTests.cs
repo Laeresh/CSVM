@@ -1015,6 +1015,37 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
     }
 
+    /// <summary>The Subtitles row stands only while a subtitle table is loaded, and its word rides
+    /// the options file.</summary>
+    [Fact]
+    public void TheSubtitlesRowStandsOnlyWithASubtitleTable()
+    {
+        var before = CSVM.Extraction.Subtitles.Current;
+        string dir = System.IO.Directory.CreateDirectory(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "csvm-subtitles-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var host = Host();
+            host.Module.GameOptions.Open();
+            Assert.DoesNotContain(host.Rows, r => r.Key == OriginalGameOptionsPage.SubtitlesKey);
+
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "c1.json"), "{\"a.wav\":{\"text\":\"Hello\"}}");
+            CSVM.Extraction.Subtitles.Current = CSVM.Extraction.Subtitles.Open(dir, ".");
+            host.Module.GameOptions.OpenOn(OriginalGameOptionsPage.SubtitlesKey);
+            Assert.Equal("Low", Row(host, OriginalGameOptionsPage.SubtitlesKey).Label);
+            StepX(host, 1);
+            Assert.Equal(SubtitlesSetting.High, host.Module.GameOptions.SubtitlesChoice);
+            Assert.Equal(SubtitlesSetting.High,
+                OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Subtitles = SubtitlesSetting.High }))!.Subtitles);
+            Assert.Null(OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Subtitles = "loud" }))!.Subtitles);
+        }
+        finally
+        {
+            CSVM.Extraction.Subtitles.Current = before;
+            System.IO.Directory.Delete(dir, true);
+        }
+    }
+
     /// <summary>Opening a page shows back the saved words, not what this process resolved. A flag
     /// or the config key can have decided the running mode. The rows owe the player the choices
     /// their own ACCEPT CHANGES saved. The module never writes the options file.</summary>

@@ -1294,19 +1294,15 @@ public partial class GameSession : Node3D
         Log.Info("world", $"volumetric clouds: removed, the originals restored");
     }
 
-    /// <summary>The Global Illumination word on the world's Environment and each cockpit pass's copy,
-    /// then the zone, whose flat ambient steps aside while SDFGI stands. A standing word moves nothing.</summary>
+    /// <summary>The Global Illumination word on the world's Environment, then the zone, whose flat ambient
+    /// steps aside while SDFGI stands. A cockpit pass's copy keeps GI off (<c>CockpitOverlay</c>). A
+    /// standing word moves nothing.</summary>
     internal void FollowGlobalIllumination()
     {
         bool enhanced = GraphicsMode.Enhanced;
         if (_env == null || _env.SdfgiEnabled == (enhanced && GlobalIlluminationSetting.Enabled))
             return;
         Effects.GlobalIllumination.Apply(_env, enhanced);
-        foreach (var rig in _rigs)
-        {
-            if (rig.Controller?.Dressing.Pass?.Env is { } env)
-                Effects.GlobalIllumination.Apply(env, enhanced);
-        }
         _sky?.Weather?.ReapplyZone();
     }
 

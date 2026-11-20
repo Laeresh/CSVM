@@ -264,7 +264,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
             // The sky stays: a transparent viewport never paints its background, and clearing it
             // leaves the pass's reflected light with no radiance map. Duplicated so the pass owns
             // its copy, whose ambient RegisterExtraLighting then keeps on the flown zone's value.
-            view.World3D.Environment = (Godot.Environment)env.Duplicate();
+            var copy = (Godot.Environment)env.Duplicate();
+            // ⚠ No GI here: SDFGI over a world holding only the interior replaces the flat ambient
+            // with near black, which blacks out the panel (#353).
+            copy.SdfgiEnabled = false;
+            copy.SsilEnabled = false;
+            view.World3D.Environment = copy;
         }
         // Every layer, since a body cockpit's panel wears the pilot's flare band, past Godot's default 20.
         var camera = new Camera3D { Name = "interior_camera", Near = 0.01f, Far = 100f, Current = true, CullMask = uint.MaxValue };

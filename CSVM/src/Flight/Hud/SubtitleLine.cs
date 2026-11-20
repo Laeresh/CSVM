@@ -1,20 +1,24 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Extraction;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
 
-/// <summary>A voice subtitle: the words of the clip sounding, centred near the foot of the pane
-/// with the speaker's name before them. The mission radio and the briefing narration each feed one.
-/// The original captions nothing, so this is remake-only. It draws, and shows, only a clip the
+/// <summary>A voice subtitle: the clip's words after the speaker's name, centred at the foot of the
+/// pane, its top, or nowhere (<see cref="CSVM.Utils.SubtitlesSetting"/>).
+/// The mission radio and the briefing narration each feed one. It draws, and shows, only a clip the
 /// subtitle table carries, so a launch with no subtitle folder draws nothing. Every pane carries
 /// its own copy over the one shared radio. Table format: docs/formats/sounds.md "Subtitles".</summary>
 public sealed partial class SubtitleLine : Control
 {
     // TUNE: remake layout, nothing to decode. The last line sits at 86 % of the pane height and
     // wraps at 70 % of its width. The font is the respawn prompt's 16 px cell less a fifth.
+    // Under High the first line's top sits at 8 % of the height. That is under the compass tape
+    // (35 to 75 of 1440) and above the kill messages at 20 %.
     private const float BaseFraction = 0.86f;
+    private const float TopFraction = 0.08f;
     private const float WidthFraction = 0.7f;
     private const int RefFontSize = 40;
     private const int RefOutline = 6;
@@ -27,6 +31,7 @@ public sealed partial class SubtitleLine : Control
     private readonly Func<(string? Wav, double At, string? Speaker)> _playing;
     private readonly Subtitles _table;
     private Subtitles.Line? _line;
+    private bool _top;
 
     /// <summary>A subtitle worded from <paramref name="table"/>. The source gives the WAV sounding
     /// (null for none), the seconds played into it, and who speaks it where the table names nobody.
@@ -98,13 +103,15 @@ public sealed partial class SubtitleLine : Control
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
         var (wav, at, speaker) = _playing();
-        var line = Named(_table.At(wav, at), speaker);
-        if (line == _line)
+        var line = SubtitlesSetting.Word == SubtitlesSetting.Off ? null : Named(_table.At(wav, at), speaker);
+        bool top = Area == null && SubtitlesSetting.Word == SubtitlesSetting.High;
+        if (line == _line && top == _top)
         {
             return;
         }
 
         _line = line;
+        _top = top;
         // Hidden while silent: the headset's HUD panel shows while any layer on it holds a visible item.
         Visible = line != null;
         QueueRedraw();
@@ -126,7 +133,8 @@ public sealed partial class SubtitleLine : Control
             ?? new Rect2(Size.X * (1f - WidthFraction) / 2f, 0f, Size.X * WidthFraction, Size.Y * BaseFraction);
         var lines = Wrap(Compose(line), area.Size.X, Width);
         float pitch = font.GetHeight(size);
-        float y = area.End.Y - ((lines.Count - 1) * pitch);
+        // Low ends on the area's bottom edge and grows up; High hangs from TopFraction and grows down.
+        float y = _top ? (Size.Y * TopFraction) + font.GetAscent(size) : area.End.Y - ((lines.Count - 1) * pitch);
         float middle = area.Position.X + (area.Size.X / 2f);
         string head = line.Speaker is { } who ? who + ":" : string.Empty;
         for (int i = 0; i < lines.Count; i++, y += pitch)
