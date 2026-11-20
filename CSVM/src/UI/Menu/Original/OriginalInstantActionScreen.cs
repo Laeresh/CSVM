@@ -95,6 +95,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// a stunt run in a chapter with courses, whatever the join board holds.</summary>
     public const string CourseKey = "IA_D_COURSE";
 
+    /// <summary>The remake-only door onto the join board, which opens it under Instant Action's bot
+    /// rule (<see cref="InstantActionFeature.AdmitsBot"/>) and comes back here.</summary>
+    public const string JoinBoardKey = "IA_B_JOINBOARD";
+
     /// <summary>The layout section the loadout screen is composed from.</summary>
     public const string LoadoutSection = "OrdinanceLayout";
 
@@ -171,6 +175,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const float CourseWidth = 210f;
     private const string CourseLabelText = "Course:";
 
+    // The join board door, written in the "[continued ...]" note's idiom on that note's line, at
+    // the title column. The setup stack has no clear line left for it.
+    private const string JoinBoardLabelText = "[join board ...]";
+    private const string ContinuedKey = "IA_T_CONTINUED";
+    private const float JoinBoardWidth = 82f;
+
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
     private const float FallbackDropWidth = 160f;
@@ -190,6 +200,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private readonly Func<string, (int Width, int Height)?> _measure;
     private readonly IOriginalScreenHost _host;
     private readonly Func<StockLoadouts?>? _stock;
+    private readonly Action<Func<int, bool>>? _openJoinBoard;
     private readonly string?[] _loadoutBefore = new string?[LoadoutChoice.MaxGunSlot + LoadoutChoice.MaxPylon];
     private IReadOnlyList<MenuAircraft> _iaPilotRoster = OriginalRosters.Roster(Array.Empty<CustomPlaneDef>());
     private string? _iaPilotBuild;
@@ -214,12 +225,14 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <paramref name="setup"/> holds and the build store its Pilot Plane list reads. It composes
     /// <paramref name="layout"/>'s own sections and calls back into <paramref name="host"/> for the
     /// state and the seams every screen family shares. The table <paramref name="stock"/> answers
-    /// the stock weapons the loadout screen's fields stand over.</summary>
+    /// the stock weapons the loadout screen's fields stand over. <paramref name="openJoinBoard"/>
+    /// opens the join board under the bot rule it is handed. Without it the page has no door there.</summary>
     public OriginalInstantActionScreen(
         InstantActionFeature instantAction, PlayerSetupFeature setup, CustomPlaneStore? planes, MenuLayout layout,
         Func<string, (int Width, int Height)?> measure, IOriginalScreenHost host,
-        Func<StockLoadouts?>? stock = null)
+        Func<StockLoadouts?>? stock = null, Action<Func<int, bool>>? openJoinBoard = null)
     {
+        _openJoinBoard = openJoinBoard;
         _instantAction = instantAction ?? throw new ArgumentNullException(nameof(instantAction));
         _setup = setup ?? throw new ArgumentNullException(nameof(setup));
         _planes = planes;
@@ -891,6 +904,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             {
                 ReadAcross(rows, HiddenRemakeKey == LivesKey ? RaceTimeKey : LivesKey);
             }
+
+            if (_openJoinBoard != null && screen.Widget(ContinuedKey) is { } note)
+            {
+                rows.Add(new OriginalRow(JoinBoardKey, JoinBoardLabelText, OriginalRowKind.TextButton, LivesTitleX(screen), note.Int("Y"),
+                    JoinBoardWidth, note.Int("Height", (int)FallbackItemHeight), true, 1, null));
+            }
         }
         else
         {
@@ -1365,6 +1384,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             case WeaponLoadoutKey:
                 OpenLoadout();
                 return null;
+            case JoinBoardKey:
+                _openJoinBoard?.Invoke(_instantAction.AdmitsBot);
+                return null;
             case FlyMissionKey:
                 // A course keeps seat 0's refused pick, as a lobby keeps a pilot's. It refuses this
                 // press as the lobby refuses Ready, in the words a refused launch shows.
@@ -1506,7 +1528,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             }
 
             AddText(screen, lines, "IA_T_ENEMY0", LabelFont);
-            AddText(screen, lines, "IA_T_CONTINUED", InstructionFont);
+            AddText(screen, lines, ContinuedKey, InstructionFont);
         }
         else
         {
@@ -1625,7 +1647,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             }
 
             // A marquee line, so a value wider than its row (a long course title) keeps to the row.
-            panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
+            panelLines.Add(new BoardLine(item.Label, item.X + 4f, BoardLine.InkCentredTop(item.Y, item.Height, itemFont), item.Width - 8f, itemFont,
                 item.Enabled ? BoardInk.Row : BoardInk.Detail, i)
             { Marquee = true });
         }
@@ -1673,7 +1695,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 // a row a keyboard or pad walked onto, so the two never land together.
                 if (focused && !lit)
                 {
-                    fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+                    fills.Add(Wash(row));
                 }
 
                 fills.Add(lit
@@ -1690,7 +1712,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 }
 
                 // A marquee line: a plain one wider than the box would wrap below it.
-                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
+                lines.Add(new BoardLine(row.Label, row.X + 4f, BoardLine.InkCentredTop(row.Y, row.Height, itemFont), Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
                     focused ? BoardInk.RowFocused : BoardInk.Row, index)
                 { Marquee = true });
                 break;
@@ -1699,6 +1721,15 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 bool checkedRadio = (row.Key == PlayerRadioKey) == (_iaRadio == 0);
                 int state = row.Enabled ? (pressed ? 3 : focused ? 2 : 1) : 0;
                 layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, (checkedRadio ? 4 : 0) + state, string.Empty, BoardInk.LabelNormal));
+                break;
+            case OriginalRowKind.TextButton when row.Key == JoinBoardKey:
+                // A note has no printed outline to redraw in cream, so the wash is its rollover too.
+                if (focused || lit)
+                {
+                    fills.Add(Wash(row));
+                }
+
+                lines.Add(new BoardLine(row.Label, row.X, row.Y, 0f, InstructionFont, BoardInk.Heading, index));
                 break;
             case OriginalRowKind.TextButton when row.Art != null:
                 int labelFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
@@ -1711,6 +1742,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 break;
         }
     }
+
+    // The faint wash a row the keyboard or pad walked onto takes.
+    private static BoardFill Wash(OriginalRow row) => new(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f);
 
     // The contents list's slider thumb, on the track between its two arrows. It is placed by how
     // far the window has scrolled and stretched to the length the window gives it. That length is

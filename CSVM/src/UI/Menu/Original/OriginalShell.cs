@@ -447,13 +447,14 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _campaignLayout = CampaignLayout.Over(layout);
         _box = new OriginalShellDialog(_campaignLayout, Measure, () => MenuStrings, FocusBox);
         NetInfo = new OriginalNetInfoBox(this, dataRoot, RememberNetInfo);
-        InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
+        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster, _setup, dataRoot, _stock);
+        InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock,
+            admits => JoinBoard.Open(admits, OriginalScreen.InstantAction));
         Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls, () => Spec.ModdingFolder.Offered(dataRoot, Data.ModFolder));
         Campaign = new OriginalCampaignScreen(
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
-        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster, _setup, dataRoot, _stock);
         Lobby = new OriginalLobbyScreen(
             () => _net, this, dataRoot, _stock,
             local => local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>(),

@@ -299,6 +299,10 @@ public sealed record BoardLine(
     /// its size. A plaque's label is centred in its frame by it.</summary>
     public const float CapsMiddle = 0.38f;
 
+    /// <summary>How far below a line's baseline a descender's ink reaches, as a share of its size:
+    /// the board face's g, p and y.</summary>
+    public const float DescenderDepth = 0.24f;
+
     /// <summary>The authored box height a wrapped block is asked to fit inside, 0 for a line
     /// drawn at its own size whatever it comes to. A block taller than this is stepped down a
     /// point at a time by the renderer, which is the only half that can measure it.</summary>
@@ -325,6 +329,13 @@ public sealed record BoardLine(
     /// baseline, its top plus its size, and stands in the middle of the box.</summary>
     public static float CapsBoxTop(float lineY, float size, float height) =>
         lineY + size - (size * CapsMiddle) - (height / 2f);
+
+    /// <summary>The line top that centres a word's ink in a box <paramref name="height"/> tall at
+    /// <paramref name="boxY"/>: its capitals' top, twice <see cref="CapsMiddle"/> up, to its
+    /// descenders' foot, <see cref="DescenderDepth"/> down. A field's word sits here, since a
+    /// fixed drop under a larger face hangs its descenders through the box's bottom edge.</summary>
+    public static float InkCentredTop(float boxY, float height, float size) =>
+        boxY + (height / 2f) + (size * (CapsMiddle - (DescenderDepth / 2f))) - size;
 }
 
 /// <summary>

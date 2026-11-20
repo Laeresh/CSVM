@@ -502,7 +502,17 @@ the stamp stands unless the quarry is the gunner's `PrimaryTargetName`. `Pursue`
 both skipped for the primary, and re-arm the stamp to now + `not_pursuit_dwell` (15 s for a
 non-vehicle). A lost target re-arms `not_pursuit_dwell`. The 20/15 s condition is the pursuer's
 `jet`/`wingman` mode in the original, which every shipped aeroplane def is, so the port tests the
-quarry's class alone. Where it still diverges:
+quarry's class alone.
+
+**Remake-only rule for bot seats.** The original seats no bots, so nothing decoded says how long a
+bot chases. A bot seat (`AiModeMachine.IsBotSeat`, copied each step from
+`FlightController.IsBotSeat`) does not count down the 20 s non-vehicle dwell while its quarry lies
+beyond the wingman slot's 900 m engagement edge (`Loadout.WingmanMaxRangeM`, `FUN_00444300`). A
+torpedo bot's long approach to a gas bag therefore stays in pursue, where its rocketeer fires, and
+the dwell counts normally inside the band, so the break-off after a pass is kept. The return-range
+leash is unchanged. Campaign and Instant Action AI keep the decoded dwell.
+
+Where it still diverges:
 
 - The per-frame revert during an evasive program is deferred to the moment the program ends.
 - The `player_attack_time_factor` term is not ported. `+0x8f4` is def `+0x294` (parsed at

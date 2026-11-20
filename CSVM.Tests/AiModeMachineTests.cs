@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -128,6 +129,30 @@ public class AiModeMachineTests
         Assert.Equal(AiModeMachine.NonVehicleAttackDwellS, t.DwellRemainingS, 3);
         Assert.Equal(AiMode.Patrol, t.Update(strayed, Level, target, null, 0.1f, quarryIsVehicle: false));
         Assert.Equal(AiModeMachine.NonVehicleNotPursuitDwellS, t.DwellRemainingS, 3);
+    }
+
+    /// <summary>A bot seat's chase of a structure beyond launch range holds the 20 s dwell, and it
+    /// counts once inside. Any other pilot, or an aircraft quarry, keeps the decoded dwell.</summary>
+    [Fact]
+    public void ABotSeatHoldsAStructureDwellUntilInsideLaunchRange()
+    {
+        var far = Home + new Vector3(Loadout.WingmanMaxRangeM + 100f, 0f, 0f);
+        var near = Home + new Vector3(Loadout.WingmanMaxRangeM - 100f, 0f, 0f);
+        var bot = Machine();
+        bot.IsBotSeat = true;
+        Assert.Equal(AiMode.Pursue, StepStructure(bot, far, 60f));
+        Assert.Equal(AiModeMachine.NonVehicleAttackDwellS, bot.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Pursue, StepStructure(bot, near, AiModeMachine.NonVehicleAttackDwellS - 0.2f));
+        Assert.Equal(AiMode.Patrol, StepStructure(bot, near, 0.5f));
+
+        var wingman = Machine();
+        Assert.Equal(AiMode.Pursue, StepStructure(wingman, far, AiModeMachine.NonVehicleAttackDwellS - 0.2f));
+        Assert.Equal(AiMode.Patrol, StepStructure(wingman, far, 0.5f));
+
+        var aircraft = Machine();
+        aircraft.IsBotSeat = true;
+        PursueFrom(aircraft, far);
+        Assert.Equal(AiMode.Patrol, Step(aircraft, far, aircraft.AttackDwellS + 0.3f));
     }
 
     /// <summary>A lost target re-arms not_pursuit_dwell, with no 15 s variant.</summary>
@@ -1115,6 +1140,14 @@ public class AiModeMachineTests
         var mode = m.Mode;
         for (float t = 0f; t < seconds - 1e-4f; t += 0.1f)
             mode = m.Update(Home, Level, target, null, 0.1f);
+        return mode;
+    }
+
+    private static AiMode StepStructure(AiModeMachine m, Vector3 target, float seconds)
+    {
+        var mode = m.Mode;
+        for (float t = 0f; t < seconds - 1e-4f; t += 0.1f)
+            mode = m.Update(Home, Level, target, null, 0.1f, quarryIsVehicle: false);
         return mode;
     }
 

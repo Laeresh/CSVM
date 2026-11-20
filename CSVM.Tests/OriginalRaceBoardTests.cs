@@ -253,6 +253,49 @@ public class OriginalRaceBoardTests
     }
 
     [Fact]
+    public void ACoursePastTwentyTwoZonesKeysTheRunTheSplitsShowAndNineteenKeepTheirKey()
+    {
+        static List<string> Key(RaceResultsSheet sheet, int zonesTop) => OriginalRaceResults
+            .Compose(sheet, UiStrings.Empty, 0, false, zonesTop: zonesTop).Lines
+            .Where(l => l.X < 310f && l.Y >= 83f && l.Y < 320f)
+            .Select(l => $"{l.Text}@{l.X},{l.Y}").ToList();
+
+        // Thirty zones: the key holds 22, from the splits' first zone, so the last scroll names zone 30.
+        var thirty = SheetOf(30);
+        var head = Key(thirty, 0);
+        Assert.Equal(22, head.Count);
+        Assert.Equal("1  Z1@36,83", head[0]);
+        Assert.Equal("22  Z22@174,283", head[^1]);
+        var tops = (0, 0, 0);
+        for (int i = 0; i < 40; i++)
+        {
+            tops = OriginalRaceResults.Scrolled(thirty, OriginalRaceResults.ZonesRightRow, tops);
+        }
+
+        Assert.Equal(30 - OriginalRaceResults.ZoneColumns, tops.Item3);
+        var tail = Key(thirty, tops.Item3);
+        Assert.Equal(22, tail.Count);
+        Assert.Equal("9  Z9@36,83", tail[0]);
+        Assert.Equal("30  Z30@174,283", tail[^1]);
+
+        // Every zone the splits show across is named on the key at every scroll.
+        for (int top = 0; top <= tops.Item3; top++)
+        {
+            var keyed = Key(thirty, top);
+            Assert.All(Enumerable.Range(top + 1, OriginalRaceResults.ZoneColumns),
+                zone => Assert.Contains(keyed, k => k.StartsWith($"{zone}  Z{zone}@", System.StringComparison.Ordinal)));
+        }
+
+        // ABLE-TO-FAIL CONTROL: nineteen zones, the longest shipped course, keep one key at every scroll.
+        var nineteen = SheetOf(19);
+        var still = Key(nineteen, 0);
+        Assert.Equal(19, still.Count);
+        Assert.Equal("10  Z10@36,263", still[9]);
+        Assert.Equal("11  Z11@174,83", still[10]);
+        Assert.All(Enumerable.Range(1, 19 - OriginalRaceResults.ZoneColumns), top => Assert.Equal(still, Key(nineteen, top)));
+    }
+
+    [Fact]
     public void ThePlaquesAreTheLobbysCreateTeamSendAndLeaveGameSlotsInTheirStates()
     {
         var sheet = RaceResultsSheet.Of(EndedRace(), new[] { "a", "b", "c" }, "", "Back");
@@ -375,6 +418,16 @@ public class OriginalRaceBoardTests
         race.Advance(61f);
         Assert.True(race.Ended);
         return race;
+    }
+
+    // The sheet of an ended `zones`-zone course one pilot raced, its zones named Z1, Z2 and on.
+    private static RaceResultsSheet SheetOf(int zones)
+    {
+        var race = new StuntRace(60f, zones);
+        race.Add(0, "Fury");
+        race.BeginOpening(0f);
+        race.Advance(61f);
+        return RaceResultsSheet.Of(race, Enumerable.Range(1, zones).Select(i => $"Z{i}").ToList(), "", "Back");
     }
 
     private static void FlyRun(StuntRace race, int index, IReadOnlyList<float> at)

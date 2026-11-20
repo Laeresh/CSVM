@@ -8,14 +8,10 @@ namespace CSVM.Extraction;
 /// German disc. <see cref="GameFileCopy"/> copies them and <c>--dump</c> reads them.</summary>
 public static class ZbdManifest
 {
-    /// <summary>Every expected archive's path under <c>ZBD</c>, <c>/</c>-separated, in
-    /// <see cref="ZbdTree"/>'s case.</summary>
-    public static readonly IReadOnlyList<string> Expected = Build();
-
-    private static List<string> Build()
-    {
-        // Chapter, its top texture tier, its mission folders. Every chapter also holds tiers 2 to 8.
-        var chapters = new (string Chapter, int TopTier, string[] Missions)[]
+    /// <summary>Every chapter, its top texture tier and its mission folders. Every chapter also holds
+    /// tiers 2 to 8.</summary>
+    public static readonly IReadOnlyList<(string Chapter, int TopTier, string[] Missions)> Chapters =
+        new (string Chapter, int TopTier, string[] Missions)[]
         {
         ("C1", 15, new[] { "IA1", "M02", "M04", "M05", "MP1", "MP2", "MP3" }),
         ("C1B", 11, new[] { "IA1", "M03", "MP1", "MP3" }),
@@ -26,8 +22,15 @@ public static class ZbdManifest
         ("C4", 14, new[] { "IA1", "M01", "M02", "M03", "M04", "M05", "MP1", "MP2", "MP3" }),
         ("C5", 14, new[] { "IA1", "M01", "M02", "M03", "M04", "MP1", "MP2", "MP3" }),
         };
+
+    /// <summary>Every expected archive's path under <c>ZBD</c>, <c>/</c>-separated, in
+    /// <see cref="ZbdTree"/>'s case.</summary>
+    public static readonly IReadOnlyList<string> Expected = Build();
+
+    private static List<string> Build()
+    {
         var paths = new List<string> { "interp.zbd", "planes.zbd", "rimage.zbd", "soundsh.zbd", "soundsl.zbd", "zrdr.zbd" };
-        foreach (var (chapter, top, missions) in chapters)
+        foreach (var (chapter, top, missions) in Chapters)
         {
             paths.AddRange(new[] { "cam_anim", "gamez", "texture", "zrdr", "rtexture2", "rtexture4", "rtexture6", "rtexture8", "rtexture" + top.ToString(CultureInfo.InvariantCulture) }
                 .Select(name => $"{chapter}/{name}.zbd"));

@@ -29,7 +29,7 @@ public sealed class WeatherState
 
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
-    private const float SunIncidence = 0.46f;
+    internal const float SunIncidence = 0.46f;
     private const float MinWorldLight = 0.15f;
 
     // SunIncidence/MinWorldLight are a TUNE for the world-brightness scalar the original derives

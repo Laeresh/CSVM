@@ -568,6 +568,9 @@ public partial class Launcher : Node3D
         // ambient 1 fills to 1, so the default agrees with the ambient default above.
         RenderingServer.GlobalShaderParameterAdd("csky_sun_fill_rgb",
             RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        // The Enhanced cockpit interior's fill below its floor (WeatherRig.InteriorLift), none until a zone apply writes it.
+        RenderingServer.GlobalShaderParameterAdd(Mech3.SceneBuilder.InteriorLiftParam,
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",
@@ -606,9 +609,9 @@ public partial class Launcher : Node3D
         // After every global: a listed shader reading one compiles against it. A --det run keeps no
         // list unless --shader-list= names one, so no golden depends on what earlier loads wore.
         string? shaderList = _spec.ShaderList is { } named ? named : _spec.Det ? null : "user://shader_warm.json";
-        int warming = Mech3.ShaderTwins.WarmAtLaunch(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
+        int warming = Mech3.ShaderTwins.LoadWarmList(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
         if (warming > 0)
-            Log.Info("world", $"shader warm-up: {warming} listed shader(s) compiling in the background");
+            Log.Info("world", $"shader warm-up: {warming} listed shader(s), compiled behind the first load screen");
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump

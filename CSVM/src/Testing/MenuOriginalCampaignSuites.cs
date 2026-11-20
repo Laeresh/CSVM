@@ -55,7 +55,9 @@ internal static class MenuOriginalCampaignSuites
         + "press on the book's unselected results tab switches the half the card reads and a press "
         + "on the one it swapped with reads Most Recent again, the cabin "
         + "return lands on the cabin, the fourth and eighth loss of one mission ask the skip offer "
-        + "over the book where No leaves the position and Yes advances it, ammo selection and plane selection write their picks through "
+        + "over the book where No leaves the position and Yes advances it, an open ammunition field's word and its "
+        + "list's entry keep a descender's ink inside their boxes and centred, which the old one-pixel drop "
+        + "misses, ammo selection and plane selection write their picks through "
         + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
         + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
         + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
@@ -528,6 +530,19 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.FocusedKey == "ReturnToCabin", $"the pointer over the way out takes the focus back ({shell.FocusedKey})");
     }
 
+    // The open field's word and its list's first entry, each against the box it draws in. The
+    // control is the one-pixel drop the field once took, which hung its descenders low.
+    private static void FieldInk(TestContext ctx, OriginalShell shell, int field, int firstEntry)
+    {
+        var box = shell.Rows[field];
+        var board = shell.Compose();
+        MenuSuiteHost.InkInBox(ctx, "the ammunition field",
+            board.Lines.FirstOrDefault(l => l.Text == box.Label && l.X > box.X && l.X < box.X + 8f), box, 1f);
+        var entry = firstEntry < shell.Rows.Count ? shell.Rows[firstEntry] : null;
+        MenuSuiteHost.InkInBox(ctx, "the open list's entry",
+            board.Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => entry != null && l.Text == entry.Label), entry, 1f);
+    }
+
     // With a group's list open, a click on a rocket field closes that list and opens the rocket
     // field's own, so one list stands. The pad then walks only the rows that draw a field.
     private static void ClickAnotherField(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int group)
@@ -622,6 +637,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(store.Load(Pilot)!.Planes[0].Ammo[group] == 0, $"nothing is written before ACCEPT");
         Press(host, seat, Accept);
         ctx.Check(shell.Rows.Count > rows.Count && shell.Focus == field, $"Accept on the field opens its list under the box, the focus staying on the field ({shell.Rows.Count} rows)");
+        FieldInk(ctx, shell, field, rows.Count);
         ClickAnotherField(ctx, host, seat, shell, fit, group);
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignAmmo && shell.Rows.Count == rows.Count, $"Back closes the list and stays ({shell.Rows.Count} rows)");

@@ -400,6 +400,29 @@ The `fvol` cards take the same ramp over their own AUTHORED band (1,000 to 1,800
 is a remake-only rule: the original never draws the cards past their band. Day zones and the
 faithful path keep the authored fade.
 
+Enhanced also gives the vegetation the zone's light: the Rich cards, their near models, the canopy
+clumps and a listed card at Vegetation Quality Original. It draws unshaded, so the real sun never
+reaches it. It multiplies in `csky_vegetation_light` (`WeatherRig.VegetationLightOf`), the linear
+light a level surface takes from the scene sun and ambient at the world light's mean incidence, times
+`VegetationLightGain` (3.6) and clamped to one per channel. A white day light clamps to one, so
+there is no step at the night key. Three day zones author their light in colour and keep one channel
+under one: C1's M02 and M05 `ZONE1` (blue 0.75 and 0.91) and C4's `ZONE2` (red 0.76), the cast
+their ground takes. CM08's moonlight (diffuse colour 0.6, 0.6, 1.0) gives
+0.71, 0.71, 1.0. The gain is set where CM08's
+trees stand against the ground behind them as C1's day trees do, measured as the trees' mean linear
+luminance over the ground's in a render:
+
+| View (Enhanced, `--det`) | trees / ground | trees' blue / green |
+|---|---|---|
+| C1 IA1, day, at the lake | 0.445 | 0.58 (ground 0.68) |
+| CM08 at the lighthouse island, no light term | 0.526 | 0.54 (ground 1.01) |
+| CM08, the level ground's light alone (gain 1) | 0.189 | 0.83 |
+| CM08, gain 3.6 | 0.412 | 0.69 |
+| C1B IA1 at the same island, white moonlight | 0.376 | 0.50 |
+
+C1B IA1's white moonlight at the capped pair clamps to one, so its vegetation is unchanged. The
+faithful path keeps the original's unlit cards.
+
 **The volume approach.** Under Enhanced a view's fog blends toward the fog volume's zone (C5's
 `ZONE3`, 16 grey at 50 to 250 m) over the camera's last 100 m to the nearest armed volume's wall
 (`VolumeApproachMetres`). `WeatherRig.BlendFog` mixes the colour linearly and the range in

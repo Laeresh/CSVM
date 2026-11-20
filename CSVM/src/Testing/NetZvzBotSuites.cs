@@ -82,9 +82,9 @@ internal static class NetZvzBotSuites
         + "cannon it picked, and the host maps a kill of that cannon in the bot's name to the bot's "
         + "seat on both machines, while no part of its own hull is ever its target or carries its "
         + "rounds; a Black Hat Warhawk bot carrying torpedoes takes the enemy hull's nearest gas bag, "
-        + "flies in until its rocketeer launches a torpedo at it, guns a cannon, turret or engine of "
-        + "that hull while the torpedo is locked out, sees a gun of that hull take the torpedo and "
-        + "shoot it down, and takes a gas bag again once it is ready; an enemy's hit on the bots' "
+        + "pursues it all the way in until its rocketeer launches a torpedo at it, guns a cannon, turret or engine of "
+        + "that hull while the torpedo is locked out, sees a gun of that hull take the torpedo, "
+        + "and takes a gas bag again once it is ready; an enemy's hit on the bots' "
         + "own hull turns the gun bot onto that enemy; and the "
         + "ABLE-TO-FAIL CONTROL, the gun bot from the same start with the objective off, takes no "
         + "hull part")]
@@ -201,6 +201,10 @@ internal static class NetZvzBotSuites
         var host = peers[0];
         var bot = host.SeatRigs[TorpedoBot].Controller!;
         var gunner = bot.Pilot!.Gunner!;
+        var modes = new List<(AiMode To, string Line)>();
+        Action<AiMode, AiMode, string> trace = (from, to, why) => modes.Add((to, string.Create(CultureInfo.InvariantCulture,
+            $"{AiModeMachine.NameOf(from)}>{AiModeMachine.NameOf(to)} ({why}) at {bot.WorldPosition.DistanceTo(Where(gunner.Target)):0} m")));
+        bot.Pilot.Machine!.ModeChanged += trace;
         gunner.AutoTarget = true;
         Start(host, bot);
         Lockstep(1, peers);
@@ -223,6 +227,12 @@ internal static class NetZvzBotSuites
 
         ctx.Check(Torpedoes(bot) < carried && launchedAt is DestructibleRegistry.Instance { Gasbag: true },
             $"and flies in until its rocketeer launches a torpedo at {TargetPool.TargetLabel(launchedAt)} from {launchRange:0} m, in {steps} step(s) ({carried} to {Torpedoes(bot)})");
+        // A bot seat's dwell holds beyond launch range, so the long approach never drops to patrol,
+        // directly or through a reaction's return.
+        var approach = modes.ToList();
+        ctx.Check(approach.Any(m => m.To == AiMode.Pursue)
+                && approach.SkipWhile(m => m.To != AiMode.Pursue).All(m => m.To != AiMode.Patrol),
+            $"and pursues the bag all the way in ({string.Join("; ", approach.Select(m => m.Line))})");
         // The gasbag gate hides the bags while the torpedo is locked out, so the bot guns the hull.
         // It is kept whole. The nose guns' rockets fired at its torpedo also strike it, and a hurt bot
         // breaks off to rearm. That is Defends' note, not what this reading tests.
@@ -247,8 +257,9 @@ internal static class NetZvzBotSuites
 
         ctx.Check(watched > 0 && gunned != null,
             $"and while its torpedo is locked out it guns a cannon, turret or engine of {EnemyHull} ({TargetPool.TargetLabel(gunned)} in {watched} step(s) of lockout)");
-        ctx.Check(gunTook && launched is { Destroyed: true, Live: false },
-            $"and a gun of {EnemyHull} takes the torpedo it launched as its target, and the torpedo is shot down ({TargetPool.TargetLabel(launched)}, taken {gunTook}, health {launched?.Health:0.#}, gone {launched?.Live == false})");
+        // Whether the guns finish the round depends on the hull's route; torpedo-intercept pins the kill.
+        ctx.Check(gunTook,
+            $"and a gun of {EnemyHull} takes the torpedo it launched as its target ({TargetPool.TargetLabel(launched)}, health {launched?.Health:0.#} of {launched?.HealthMax:0.#}, gone {launched?.Live == false})");
         int back = 0;
         for (; back < ReturnSteps && gunner.Target is not DestructibleRegistry.Instance { Gasbag: true }; back++)
         {
@@ -258,6 +269,8 @@ internal static class NetZvzBotSuites
 
         ctx.Check(gunner.Target is DestructibleRegistry.Instance { Gasbag: true },
             $"and once its torpedo is ready again it is back on a gas bag, in {back} step(s) ({TargetPool.TargetLabel(gunner.Target)})");
+        bot.Pilot.Machine.ModeChanged -= trace;
+        ctx.Note($"the torpedo bot's modes on the approach: {string.Join("; ", approach.Select(m => m.Line))}; after the launch: {string.Join("; ", modes.Skip(approach.Count).Select(m => m.Line))}");
     }
 
     // The gun bot starts past its attack radius and takes the enemy hull's first standing class of

@@ -324,7 +324,7 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 since those cancel between eye and panel, so the projection is the main world's exactly. The
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
 lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig` where `InteriorInPass` holds, which a stereo session never does, through `FirstPersonDressing.BuildPass`; `Sync` follows
-the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync` (`Mech3/BodyTwins.cs` `Mirror`), the original joining `CockpitVisibility.Reseat`.
+the interior `Visible` and sets each material's `light_origin` to the eye for the point lights. `BuildBody` takes a flat body cockpit's panel instead, placed from its model root's pose less the `cockpit_camera` eye and turned about the shake pivot, and each `Mech3/PlaneBuilder.cs` `FlatBody` twin takes its original's plane-frame pose and visibility per `Sync` (`Mech3/BodyTwins.cs` `Mirror`), the original joining `CockpitVisibility.Reseat`. With Global Illumination on, SDFGI replaces the pass Environment's colour ambient as it does the world's (`Effects/GlobalIllumination.cs`), so `WeatherRig.InteriorLift`, which counts that ambient, lifts the interior too little there rather than twice.
 
 ## src/Flight/Hud/XrCockpit.cs
 The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it
@@ -465,7 +465,7 @@ sequence interpreter with the pool standing in as the `ISequenceHost`: `StartFly
 each sim step once the round has moved. `Dispatch` covers the kinds these defs author (node
 visibility and scale, from-to tweens, opacity fades through `OpacityWriter`, spins, puffer trails, sounds, sequence and animation calls)
 and logs anything else once. The trail puffers, the sonic's body roll and the torpedo's launch look
-all come off this instance; `PoseAtResetState` gives every `BuildFlyoutBody` body the reset pose. Decode: [../org/ordnanceTypes.md](../org/ordnanceTypes.md).
+all come off this instance; `PoseAtResetState` gives every `BuildFlyoutBody` and `BuildPylonBody` body the reset pose. Decode: [../org/ordnanceTypes.md](../org/ordnanceTypes.md).
 
 ## src/Flight/Hud/WarningShotCue.cs
 The incoming-fire shield's shipped accumulator (player.json `warning_shot_max` / `_dissipation` /
@@ -605,7 +605,7 @@ makes the hold a weave rather than a tight join. Engine-free and deterministic; 
 ## src/Flight/Ai/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list and
 vocabulary are the engine's own debug-readout dispatch. It carries the three decoded cylinders as mutable fields: `AttackRange` is the decoded admission volume a picker is handed, `ReturnRange` is the chase leash, tested as a cylinder about `PursuitAnchor` (the pursuer's own pose where the promotion began) and the only geometry that ends a pursuit, and `ActivationRange` is the engine's simulation gate, which nothing in the machine reads.
-Decoded and wired are the promotion into pursue on whatever quarry the selection hands over, paced by one dwell stamp (`AttackDwellS`/`NotPursuitDwellS`, 20/15 s for a non-vehicle quarry) that refuses a promotion while it stands, ends a chase when it passes and is lifted for the assigned target, the steady-hand roll a hit provokes as a power law over the bite it takes of
+Decoded and wired are the promotion into pursue on whatever quarry the selection hands over, paced by one dwell stamp (`AttackDwellS`/`NotPursuitDwellS`, 20/15 s for a non-vehicle quarry) that refuses a promotion while it stands, ends a chase when it passes and is lifted for the assigned target (a remake-only `IsBotSeat`, set each step by `FlightController`, holds the non-vehicle dwell while the quarry lies beyond `Loadout.WingmanMaxRangeM`), the steady-hand roll a hit provokes as a power law over the bite it takes of
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
 weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until
@@ -650,7 +650,7 @@ raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pa
 the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the traverse
 clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
 in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
-numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. A bot seat's launcher takes `UseWingmanRule` (1 to 900 m and 20 s over every pylon's own numbers) and `FiresOnFailedRoll` (the original's `Network` override); every other AI keeps the roll. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
+numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. A bot seat's launcher takes `UseWingmanRule` (1 to 900 m and 20 s over every pylon's own numbers) and `FiresOnFailedRoll` (the original's `Network` override), and its `IsBotSeat`, set each step by `FlightController`, holds a `DAMAGES_ZEPPELIN` launch until the predicted intercept path lies within `ReachFraction` of the round's `RANGE` (`RocketPylonView.RoundRangeM`, a remake-only rule); every other AI keeps the roll and the decoded gates. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Ai/AiWeaponsDrive.cs
 One AI aircraft's weapons tick, run on the sim step before the fire step reads the triggers. The
@@ -1461,8 +1461,8 @@ the blink cycle; `Advance` skips it. Advanced each `_Process`, frozen while paus
 
 ## src/Flight/Weapons/PylonOrdnance.cs
 The rockets mounted under a plane's wings. `Build` instances ONE flyout model body per loaded pylon
-through `ProjectilePool.BuildFlyoutBody` (the same gamez prototype the round flies, posed at its
-def's `RESET_STATE`) and parents it to that pylon marker at identity local transform, which is the
+through `ProjectilePool.BuildPylonBody` (the same gamez prototype the round flies, posed at its
+def's `RESET_STATE`, but drawn through the airframe's builder settings, so it is lit and shadowed as the wing is) and parents it to that pylon marker at identity local transform, which is the
 launch pose; `Update` shows or hides each per its live `Hardpoint.Ammo`, the root's only owner. `FlightController` drives `Update` after the rockets, and the
 mounted body rides the plane and is freed with it. `Unmount` takes the set back off, detaching each
 body from its pylon immediately rather than queueing it, so the weapon lab's rebuild-on-swap cannot

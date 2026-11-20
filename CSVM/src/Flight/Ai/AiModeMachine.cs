@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using Godot;
 
@@ -195,6 +196,12 @@ public sealed class AiModeMachine
     /// <summary>vehicle.json's <c>not_pursuit_dwell</c>, seconds (5 shipped): how long a revert or a
     /// lost target keeps the pilot on its net before it may promote again.</summary>
     public float NotPursuitDwellS = 5f;
+
+    /// <summary>A bot seat (<c>FlightController.IsBotSeat</c>), a remake-only rule since the original
+    /// seats no bots. Its chase of a turret or structure holds the dwell while the quarry lies beyond
+    /// <see cref="Loadout.WingmanMaxRangeM"/>, so a long approach stays in pursue. ⚠ Do not set it for
+    /// campaign or Instant Action AI; they keep the decoded dwell (docs/org/aiPilot.md).</summary>
+    public bool IsBotSeat;
 
     /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). Decoded as
     /// a CYLINDER about the pursuit anchor. The squared horizontal radius sits at <c>+0x334</c>,
@@ -491,6 +498,10 @@ public sealed class AiModeMachine
 
         UpdateAvoidCrash(pos, velocity, dt);
         UpdateEvadeFlag(pos, targetPos, targetNose);
+        // The deadline moves with the clock, so the dwell starts counting at the launch band's edge.
+        if (IsBotSeat && !_quarryIsVehicle && _pursuitAnchor is not null && targetPos is { } quarry
+            && pos.DistanceSquaredTo(quarry) > Loadout.WingmanMaxRangeM * Loadout.WingmanMaxRangeM)
+            _dwellUntil += dt;
 
         switch (Mode)
         {

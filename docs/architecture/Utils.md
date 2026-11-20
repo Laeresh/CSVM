@@ -406,7 +406,7 @@ description says so. The VIDEO page shows it as the Cloud Shadows dropdown under
 ## src/Utils/CloudGlowSetting.cs
 Whether Enhanced's volumetric clouds glow round the point lights inside them (`Session/World/VolumetricClouds.cs`): `off`
 or `on`. It resolves as `SpeedWispsSetting` does: `--cloud-glow=`, the saved `cloudGlow` word, the `graphics.cloudGlow`
-key, then `on`. It has no live-apply hook: the clouds read `Drawn` every frame and glow round the first
+key, then `on`, or `off` on an integrated GPU (`FallbackFor`, as `GlobalIlluminationSetting` does). It has no live-apply hook: the clouds read `Drawn` every frame and glow round the first
 `WorldLights.RankedHead` lights of the ranked texture, or none. The VIDEO page shows it as the Cloud Glow dropdown under
 Volumetric Clouds.
 

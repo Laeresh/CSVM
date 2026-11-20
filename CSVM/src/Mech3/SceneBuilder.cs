@@ -333,6 +333,10 @@ public sealed class SceneBuilder
     // fade out whole wherever the ocean draws (FadeFor). The procedural sea replaces the painted one.
     internal const float ShallowsCrossing = 65536f;
 
+    /// <summary>The global the interior adds on its albedo, the linear grey fill that raises its zone's
+    /// light to the floor (<c>WeatherRig.InteriorLift</c>). Zero leaves it as lit.</summary>
+    internal const string InteriorLiftParam = "csky_interior_lift";
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -387,6 +391,11 @@ public sealed class SceneBuilder
     /// In the main world the airframe's shadow over its dashboard must not dim them either. Set
     /// before building: it keys the shader.</summary>
     internal bool NoShadowReceive;
+
+    /// <summary>Enhanced mode only: this builder's shaded surfaces take <see cref="InteriorLiftParam"/> on
+    /// their albedo as emission, the cockpit interior's floor of ambient light. Set on the interior's
+    /// builder alone. Set before building: it keys the shader.</summary>
+    internal bool InteriorAmbientFloor;
 
     /// <summary>The lighting tune's tint that bias surfaces built while it is set take under Enhanced.
     /// It is the dome's sky tint or the cloud deck's cloud tint. <c>WorldBuilder</c> sets it around those builds.
@@ -2642,7 +2651,7 @@ void light() {{
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade. 2^27, 2^28 the tint, 2^29 the city floor. Then
-    // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
+    // 4096 DebugClutterFlag, 8192 the interior floor, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage, 262144 race ghost, 524288 base sea. Then
     // 1048576 stereo interior, 2097152 stereo ghost, 4194304 under the interior, 8388608 pack surface, 16777216 no shadow, 33554432 surf ring, 67108864 painted coast.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
@@ -2669,9 +2678,10 @@ void light() {{
         bool stereoGhost = raceGhost && StereoFacing.Live;
         // Only the fullbright or world-lit arms of the dome and the deck take a tune's tint.
         var tint = shaded ? SurfaceTint.None : Tint;
+        bool interiorFloor = shaded && InteriorAmbientFloor;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0) | (interiorFloor ? 8192 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (oceanBase ? 524288 : 0)
             | (xrInterior ? 1048576 : 0)
@@ -2685,7 +2695,7 @@ void light() {{
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
                 debugClutter, noAlphaCoverage, raceGhost, oceanBase, xrInterior, stereoGhost, underInterior, replacement,
-                noShadowReceive, oceanSurf, paintedCoast, tint, cityFloor),
+                noShadowReceive, oceanSurf, paintedCoast, tint, cityFloor, interiorFloor),
                 "world", $"world:{key:x}");
         }
         return twins;
@@ -2701,7 +2711,7 @@ void light() {{
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
         bool oceanBase, bool xrInterior, bool stereoGhost, bool underInterior = false, bool replacement = false,
         bool noShadowReceive = false, bool oceanSurf = false, bool paintedCoast = false, SurfaceTint tint = SurfaceTint.None,
-        bool cityFloor = false)
+        bool cityFloor = false, bool interiorFloor = false)
     {
         // Enhanced only, so the Original text of a paint is the text it always was.
         bool floorArm = cityFloor && GraphicsMode.Enhanced && textured && !xrInterior;
@@ -2829,6 +2839,9 @@ void light() {{
             if (!xrInterior)
                 sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
         }
+        bool liftedInterior = interiorFloor && GraphicsMode.Enhanced;
+        if (liftedInterior)
+            sb.AppendLine($"global uniform vec3 {InteriorLiftParam};");
         if (aircraftPoint)
         {
             sb.AppendLine("varying vec3 v_aircraft_point;");
@@ -3076,6 +3089,10 @@ void fragment() {{");
                 ? $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain} * (1.0 - csky_fog_on * fog_amt);"
                 : $"    EMISSION = csky_srgb_to_linear(v_aircraft_point) * base_col.rgb * {gain};");
         }
+        // The fill a dark zone lacks, on the albedo Godot's ambient multiplies. Emission, so no N.L
+        // or shadow dims it, which is what an ambient term is.
+        if (liftedInterior)
+            sb.AppendLine($"    EMISSION += col.rgb * {InteriorLiftParam};");
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
         // fogged texture, which C5's night art would otherwise swallow whole.
