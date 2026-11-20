@@ -158,6 +158,11 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.False(host.Module.GameOptions.KeepCameraZoomChoice);
 
+        // The remake-only Capture the Flag markers, ON while nothing is saved, so its first press turns it off.
+        Down(host);
+        Assert.Equal(OriginalGameOptionsPage.FlagMarksKey, host.FocusedKey);
+        Accept(host);
+
         // The remake-only Modding Folder row, Off while nothing is saved and nothing is offered.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.ModFolderKey, host.FocusedKey);
@@ -174,6 +179,7 @@ public class OriginalOptionsTests
         Assert.Equal("sides", exit.HudLayout);
         Assert.Equal("125", exit.SpyglassScale);
         Assert.False(exit.KeepCameraZoom);
+        Assert.Equal(FlagMarksSetting.Off, exit.Words[FlagMarksSetting.Lookup]);
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
@@ -1074,7 +1080,7 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
                 OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
                 OriginalGameOptionsPage.HudLayoutKey, OriginalGameOptionsPage.SpyglassScaleKey,
-                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.FlagMarksKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,
@@ -1736,7 +1742,7 @@ public class OriginalOptionsTests
                 OriginalGameOptionsPage.LeadingAimAssistKey, OriginalGameOptionsPage.LeadMarkerKey,
                 OriginalGameOptionsPage.ThrottlePlateKey, OriginalGameOptionsPage.HudModeKey,
                 OriginalGameOptionsPage.HudLayoutKey, OriginalGameOptionsPage.SpyglassScaleKey,
-                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.ModFolderKey,
+                OriginalGameOptionsPage.KeepCameraZoomKey, OriginalGameOptionsPage.FlagMarksKey, OriginalGameOptionsPage.ModFolderKey,
                 OriginalGameOptionsPage.AcceptKey, OriginalGameOptionsPage.CancelKey,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.UpSuffix,
                 OriginalGameOptionsPage.WindowKey + ":" + OriginalDropLists.DownSuffix,

@@ -58,6 +58,12 @@ public sealed partial class TargetHud : Control
     /// spyglass. Off everywhere but a race session.</summary>
     public bool RaceMarks;
 
+    /// <summary>A Capture the Flag pane's passive marks, set by <c>FlagRuntime</c> and drawn while
+    /// <see cref="Utils.FlagMarksSetting"/> is on. The flags and bases <see cref="Modes.FlagMarkers.Passive"/>
+    /// keeps take a tag in their side's colour, read off <see cref="Own"/>'s objective feed. The
+    /// selection is left to its own marker.</summary>
+    public bool FlagMarks;
+
     /// <summary>This pane's own aircraft: the side every team test here runs against
     /// (<see cref="OwnTeam"/>), and the plane excluded from <see cref="MarkAll"/>'s sweep. Null
     /// marks everything the pool lists, which is what the suite wants and what a pane with no
@@ -156,6 +162,7 @@ public sealed partial class TargetHud : Control
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
     private readonly List<(TargetRef Target, bool Friendly)> _marks = new(); // --debug-markers
     private readonly List<FlightController> _racePilots = new(); // RaceMarks, refilled per draw
+    private readonly List<AimCandidate> _flagSites = new(); // FlagMarks, refilled per draw
 
     private Camera3D _camera = null!;
     private SpyglassView? _spyglass;
@@ -780,6 +787,11 @@ public sealed partial class TargetHud : Control
             }
         }
 
+        if (FlagMarks && Utils.FlagMarksSetting.Drawn && Own?.TargetObjectives is { } feed)
+        {
+            AddFlagMarks(feed, into);
+        }
+
         // The tracked AI hostile, a FALLBACK: a pilot who has a selection marks that one target and
         // nothing else, so this draws only where no selection exists at all. The validity guard
         // covers a hostile freed between UpdateHostile's scan and this draw.
@@ -934,6 +946,39 @@ public sealed partial class TargetHud : Control
         MarkerDraw.Text(into, font, p + Vector2.One, text, fontSize, Shadow);
         MarkerDraw.Text(into, font, p, text, fontSize, color);
     }
+
+    // The flag and base sites FlagMarkers.Passive keeps for this pane, each as a tag reading its
+    // category line by side. The site the pilot has selected draws as the selection alone.
+    private void AddFlagMarks(System.Action<List<AimCandidate>> feed, List<WorldMark> into)
+    {
+        _flagSites.Clear();
+        feed(_flagSites);
+        bool carrying = false;
+        foreach (var c in _flagSites)
+        {
+            carrying |= c.Source is ObjectiveSite { Side: { } held } && CarriedHere(held);
+        }
+
+        var selected = Selected?.Source;
+        int stagger = 0;
+        foreach (var c in _flagSites)
+        {
+            if (c.Source is not ObjectiveSite { Side: { } side } site || ReferenceEquals(site, selected)
+                || Modes.FlagMarkers.MarkerOf(site.Node) is not { } marker)
+            {
+                continue;
+            }
+
+            bool friendly = AimAssist.Friendly(OwnTeam, side.Team);
+            if (Modes.FlagMarkers.Passive(marker.Marker, friendly, carrying, carriesThisFlag: CarriedHere(side)))
+            {
+                into.Add(new WorldMark(WorldMarkStyle.Tagged, c.Position, friendly ? HudGreen : HudRed,
+                    site.CategoryFor(OwnTeam) ?? site.DisplayName, default, false, stagger++));
+            }
+        }
+    }
+
+    private bool CarriedHere(SiteSide side) => side.Carrier != null && ReferenceEquals(side.Carrier, Own);
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
     // _Draw. Both latch, and a latch that advanced per repaint would depend on how often the pane
