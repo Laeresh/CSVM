@@ -279,6 +279,10 @@ public sealed class SceneBuilder
     internal const string SlabVeilLine = "    if (over_slab) { ALPHA *= csky_pc_veil_at(CAMERA_POSITION_WORLD, "
         + "(INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz); }";
 
+    /// <summary>A fogged surface's line after <see cref="SlabVeilLine"/>. The slab draws the scene past the
+    /// fog as sky, so a surface over it fades out with the fog.</summary>
+    internal const string SlabFogLine = "    if (over_slab) { ALPHA *= 1.0 - csky_fog_on * fog_amt; }";
+
     /// <summary>The global uniform holding the left eye of the frame being drawn. It is the eye's
     /// offset from the XR origin in world axes, written by <c>Launch/XrEyeFeed.cs</c>.</summary>
     internal const string XrEyeLeftGlobal = "csky_xr_eye_left";
@@ -618,6 +622,11 @@ void fragment() {
     private readonly Dictionary<string, ImageTexture> _keyedBackdrops = new(StringComparer.OrdinalIgnoreCase);
     // Every material KeyedBackdropTexture names, with its look under both modes (FollowGraphicsMode).
     private readonly List<KeyedSwap> _keyedSwaps = new();
+
+    // One edge-filled copy per soft-alpha world texture (EdgeFilled), and every material that draws
+    // one under Enhanced with the archive's texture it draws under Original.
+    private readonly Dictionary<string, ImageTexture> _edgeFilled = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(ShaderMaterial Material, ImageTexture Plain, ImageTexture Filled)> _edgeFilledSwaps = new();
 
     // Every placed cloud's billboard, drawn from the rendered pool under Enhanced (DrawPool).
     private readonly List<PooledSwap> _pooledSwaps = new();
@@ -1124,6 +1133,19 @@ void light() {{
         return TextureUpload.Create(img);
     }
 
+    /// <summary>A copy of soft-alpha <paramref name="tex"/> whose clear texels take its solid texels' mean
+    /// colour, with a mip chain built from that. Their black darkens a soft edge in every smaller level.</summary>
+    internal static ImageTexture EdgeFilled(ImageTexture tex)
+    {
+        // ⚠ A copy, as in ColorKeyed.
+        var img = (Image)tex.GetImage().Duplicate();
+        img.ClearMipmaps();
+        img.Convert(Image.Format.Rgba8);
+        CanopyClumps.Bleed(img);
+        img.GenerateMipmaps();
+        return TextureUpload.Create(img);
+    }
+
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
     /// cache with its materials, for <see cref="ClutterBuilder"/>'s 3D-decoration MultiMesh. The
     /// transform, <c>node_bias</c> and collider are the caller's.
@@ -1183,6 +1205,8 @@ void light() {{
             swap.Material.SetShaderParameter("albedo_tex", enhanced ? swap.KeyedTex : swap.PlainTex);
             NoteAlpha(swap.Material, enhanced || swap.PlainBlend, !enhanced && swap.PlainScissor);
         }
+        foreach (var (material, plain, filled) in _edgeFilledSwaps)
+            material.SetShaderParameter("albedo_tex", enhanced ? filled : plain);
         foreach (var swap in _pooledSwaps)
         {
             if (enhanced)
@@ -2473,6 +2497,14 @@ void light() {{
             bool scissor = _textures.LastHadAlpha && !blend;
             var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
             var keyed = KeyedBackdrop(texName, tex);
+            // Enhanced draws a soft-alpha world surface from an edge-filled copy. The faithful path and
+            // the camera-facing sprites keep the archive's texture.
+            ImageTexture? filled = null;
+            if (keyed == null && blend && _textures.LastAlphaIsSoft && !(_billboardTexture != null && _billboardTexture(texName))
+                && !_edgeFilled.TryGetValue(texName, out filled))
+            {
+                _edgeFilled[texName] = filled = EdgeFilled(tex);
+            }
             if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
@@ -2502,8 +2534,12 @@ void light() {{
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
             bool oceanSurf = water && IsSurfTexture(texName);
             bool paintedCoast = IsPaintedCoastTexture(texName);
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
+            var drawn = filled != null && GraphicsMode.Enhanced ? filled : tex;
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, drawn, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
                 oceanSurf: oceanSurf, paintedCoast: paintedCoast, floor: floor ? texName : null);
+            // The texture alone follows the mode. The shader is the surface's own under either.
+            if (filled != null)
+                _edgeFilledSwaps.Add((textured, tex, filled));
             // Opaque under Original, where a priority only orders the opaque pass.
             if (paintedCoast && !water && !blend && !scissor)
                 textured.RenderPriority = CoastRampRenderPriority;
@@ -3123,6 +3159,8 @@ void fragment() {{");
         }
         if (slabVeil)
             sb.AppendLine(SlabVeilLine);
+        if (slabVeil && fogged)
+            sb.AppendLine(SlabFogLine);
         if (scissor)
             sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)

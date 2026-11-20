@@ -180,6 +180,20 @@ public class MapEdgeFoldTests
         }
     }
 
+    // ---- the window radius: the fog far in tiles plus a margin ring, inside its two bounds ----
+
+    [Theory]
+    [InlineData(0f, 5)]
+    [InlineData(4000f, 5)]
+    [InlineData(4700f, 6)]
+    [InlineData(8000f, 9)]
+    [InlineData(16000f, 17)]
+    [InlineData(1e9f, 17)]
+    public void TheWindowCoversTheFogFarWithOneMarginRing(float fogFarM, int rings)
+    {
+        Assert.Equal(rings, MapEdgeExtender.RingsFor(fogFarM, 1024f));
+    }
+
     // ---- the overlay's band index: constant across a block, alternating between them ----
 
     [Theory]

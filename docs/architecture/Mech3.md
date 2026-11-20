@@ -301,7 +301,7 @@ parts' UV2, the city floor's combination per polygon (`CityGround.cs`). Read `Sc
 
 ## src/Mech3/MapEdgeExtender.cs
 A rolling window of repeated border tiles and clutter continuing the world past the map edge, one
-window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
+window per session shared by every player camera and diffed only on a cell crossing. `SetReach` sizes it to the longest Enhanced fog far a pane writes (`RingsFor`), and a cell past the base five rings is ground alone, with no collider, until a camera comes within them. Clutter copies
 grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade thresholds and
 drawing only while `ClutterActivation` shows that stamp; under Enhanced each copied kind's node
 stops at its farthest fade (`ClutterInstances.RangeEnd`, `FollowClutterFade`). Under `VegetationQualitySetting.RichOn` a listed kind's copies take its Rich variant, a stamp the brush mask dropped included (a zero basis, never sampled again), a live move rebuilds only those copies in each live cell, and `FollowVegetation` bins the stamps again and rebuilds the window after a re-bake. An added kind (`KindExport.Added`) is copied only under Rich. A Rich copy of a kind with a near model (`KindExport.Near`) gains a model copy over the same stamps, one node per cell and kind, ranged at the word's far edge and hidden at `off` and following the activation as the card copy does. While `CityModels.On`, a copy of a building with a hull (`KindExport.City`) draws its far box whole at every distance, under a copy of the box material with no band, and a copy of a further mesh of it draws nothing; `FollowClutterFade` swaps the mesh back on a live move, and the colliders never change.
