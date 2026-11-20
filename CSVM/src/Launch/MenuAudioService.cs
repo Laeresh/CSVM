@@ -46,6 +46,9 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
     // How many narrations have begun since the last end, so the log reads 1 on entry and 2 on
     // REPLAY BRIEFING, as the launchscreen's own counter did.
     private int _starts;
+    // The narration's WAV name, which the subtitle table is keyed by; "" while none is sounding.
+    private string _narrationWav = string.Empty;
+    private CanvasLayer? _subtitles;
 
     /// <summary>A service over <paramref name="music"/> (null for a silent install) resolving
     /// narration WAVs through <paramref name="sounds"/> and menu cues under <paramref name="cues"/>'
@@ -180,6 +183,8 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
             _narration.Play();
         }
 
+        _narrationWav = wavName;
+        AddSubtitles(Extraction.Subtitles.Current);
         _starts++;
         // Through the sink, not GD.Print: a scripted run at --volume=0 has no sound to hear, and
         // this line is what says the narration started at all.
@@ -201,6 +206,30 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
         }
 
         _narration.Stream = null;
+        _narrationWav = string.Empty;
+    }
+
+    // The narration's subtitle, built on the first briefing a table captions. It sits over the
+    // board the briefing draws on, timed by the narration's playback position so REPLAY restarts it.
+    private void AddSubtitles(Extraction.Subtitles table)
+    {
+        if (_subtitles != null || table.Count == 0)
+        {
+            return;
+        }
+
+        _subtitles = Flight.Hud.SubtitleLine.OnLayer(UI.Boards.HudLayers.BriefingSubtitles, "briefing_subtitles",
+            () => (_narration.Playing ? _narrationWav : null, _narration.GetPlaybackPosition(), null), table,
+            BriefingCaptionArea);
+        AddChild(_subtitles);
+    }
+
+    // The map right of the parchment and above the buttons, in the briefing's authored 800x600.
+    // It maps onto the window as the board does (docs/formats/briefing.md "Dialog chrome").
+    private Rect2 BriefingCaptionArea(Vector2 size)
+    {
+        var fit = UI.Boards.BoardFit.For(size.X, size.Y);
+        return new Rect2(fit.X(250f), fit.Y(0f), fit.Length(540f), fit.Length(550f));
     }
 
     // The clip a moved level is judged by, decoded once and cached like a cue. The two files are
