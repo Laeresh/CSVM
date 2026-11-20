@@ -246,6 +246,29 @@ public class SunlightEnergyTests
             WeatherRig.PhotographFill(zone with { SunBicolored = true }));
     }
 
+    // The volumetric clouds light a night zone as day (NightOff) and draw their cloud shadows on its ground. The
+    // unshaded vegetation takes no shadow, so it keeps the night's capped light, or CM08's bushes glow on dark cliffs.
+    [Fact]
+    public void AVegetationLightKeepsTheNightCapUnderNightOff()
+    {
+        var night = Zone(diffuse: 1.5f, ambient: 0.5f, fog: Colors.Black) with
+        {
+            SunColorDiffuse = new Color(0.3f, 0.3f, 0.6f),
+            SunColorAmbient = new Color(0.3f, 0.3f, 0.6f),
+        };
+        var lit = WeatherRig.VegetationLightOf(night, ZoneLighting.Default);
+        try
+        {
+            WeatherRig.NightOff = true;
+            Assert.Equal(lit, WeatherRig.VegetationLightOf(night, ZoneLighting.Default));
+        }
+        finally
+        {
+            WeatherRig.NightOff = false;
+        }
+        Assert.True(lit.X < lit.Z && lit.Z < 1f);
+    }
+
     // The default fog is the install's modal DAY colour, so a case that says nothing about the
     // sky gets the day arm of the night rule.
     private static WeatherState.ZoneWeather Zone(float diffuse, float ambient, Color? fog = null)

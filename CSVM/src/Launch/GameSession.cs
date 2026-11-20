@@ -565,6 +565,8 @@ public partial class GameSession : Node3D
         _masterSeed = _wire.JoinedSeed ?? _masterSeed;
         _wire.WireClock();
         _wire.WireStartGate();
+        // First thing, so the warm list compiles beside the whole build.
+        Mech3.ShaderTwins.StartWarm();
         // Published as the ambient Current so WorldSession, which the test harness also drives with
         // no session around it, can record its phases blind.
         _startup = new StartupProfile(_spec.ModeName, Time.GetTicksMsec())
@@ -911,6 +913,10 @@ public partial class GameSession : Node3D
         if (_sessionTextures?.ReleaseHdAhead() is > 0 and var untaken)
         {
             Log.Info("world", $"HD decode ahead: {untaken} untaken by the load, dropped");
+        }
+        if (Mech3.ShaderTwins.WaitWarm() is > 0 and var waited)
+        {
+            Log.Info("world", $"shader warm-up: the build waited {waited:0} ms for it");
         }
         Mech3.ShaderTwins.SaveWarmList();
         _startup?.EndBuild();

@@ -65,6 +65,15 @@ public class VolumetricCloudsAndGiSettingTests
         Assert.Equal((GlobalIlluminationSetting.Off, GlobalIlluminationSetting.DetRule), Rule(GlobalIlluminationSetting.FallbackFor(det: true, integrated: true)));
     }
 
+    /// <summary>Cloud Glow falls back on for a discrete GPU and under <c>--det</c>, off for an integrated one.</summary>
+    [Fact]
+    public void CloudGlowFallsBackOffOnAnIntegratedGpuOnly()
+    {
+        Assert.Equal((CloudGlowSetting.On, (string?)null), Rule(CloudGlowSetting.FallbackFor(integrated: false)));
+        Assert.Equal((CloudGlowSetting.Off, CloudGlowSetting.IntegratedRule), Rule(CloudGlowSetting.FallbackFor(integrated: true)));
+        Assert.Equal(CloudGlowSetting.On, CloudGlowSetting.Lookup.Fallback(new SettingContext(Det: true, Enhanced: true, Panes: 1)).Word);
+    }
+
     /// <summary>The flag beats the saved word, which beats the config key, which beats the fallback.</summary>
     [Theory]
     [MemberData(nameof(Settings))]
