@@ -214,6 +214,11 @@ shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The diffe
   marker, which the world index cannot find, stands where the carried flag is. Its name line is
   the team's name in place of the missing row 7055. The carrier's tag replaces the airframe name
   the remake's aircraft marker prints, and names the pilot by its callsign.
+- The original marks a flag or base only as the selected target. The remake also tags the ones
+  that matter on every pane, the Flag Markers option, on by default (`Utils/FlagMarksSetting.cs`):
+  the enemy flag unless this pane carries it, its own flag while away, and its own base while it
+  carries a flag (`FlagMarkers.Passive`). Each is a tag in its side's colour, green or red, beside
+  the selection's own marker, flat and headset alike.
 - `ejectflag` has no console window to be typed into, so the in-flight chat entry takes it: a line
   whose first word is `ejectflag` runs the command for the typing seat and is neither posted nor
   sent (`Session/World/NetChatLink.cs`). It floats the flag through the host on every machine,
