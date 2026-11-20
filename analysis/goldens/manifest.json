@@ -156,7 +156,7 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "f6a286ce289c8a9613a987247aee0f08",
+      "hash": "1cb679dfadfbfd1b1d599e8bb36cdf61",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean with surf and swash to the painted cliff foot and spray puffs there, blurred SSR, Rich swaying conifers handing over to canopy clumps past 1 km, SSAO, settled TAA; frame-sensitive 48.93 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
