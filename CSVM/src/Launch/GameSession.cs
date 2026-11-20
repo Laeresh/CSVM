@@ -306,6 +306,7 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
+    private Node3D? _interiorFill;
     // The world's vegetation, null before the world build ends and on a stage with no world.
     private VegetationStage? _vegetation;
     // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
@@ -952,6 +953,7 @@ public partial class GameSession : Node3D
         _volumetricClouds?.Follow(enhanced);
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
+        Effects.InteriorFill.Follow(_interiorFill);
         SwitchProfile.Mark("lights");
         _worldEffectsFactory?.FollowGraphicsMode();
         SwitchProfile.Mark("effects");
@@ -1812,6 +1814,7 @@ public partial class GameSession : Node3D
         state.WorldScene = session.Builder.Scene;
         _worldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        _interiorFill = Effects.InteriorFill.Build(state.Gamez, session.Runtime);
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
         // as the mission does and a new launch starts on uncratered ground.
