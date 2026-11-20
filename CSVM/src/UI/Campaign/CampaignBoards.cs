@@ -100,7 +100,6 @@ public static class CampaignBoards
     // shorter one stops reading as a grip, and where a field's words sit inside its box.
     private const float ScrollThumbHeight = 12f;
     private const float ComboTextInset = 4f;
-    private const float ComboTextDrop = 1f;
 
     // The panes in draw order, which is also the order a screen authors them in.
     private static readonly BoardDetailPane[] DetailPanes = { BoardDetailPane.Upper, BoardDetailPane.Lower };
@@ -615,7 +614,7 @@ public static class CampaignBoards
             combo.X + combo.Width - ComboArrowWidth,
             combo.Y + ((ComboFieldHeight - ComboArrowHeight) / 2f),
             ArrowNormal));
-        lines.Add(FieldText(combo.Text, combo.X, combo.Y, combo.Width - ComboArrowWidth,
+        lines.Add(FieldText(combo.Text, combo.X, combo.Y, combo.Width - ComboArrowWidth, ComboFieldHeight,
             focused ? BoardInk.RowFocused : BoardInk.Row));
         if (combo.Open)
         {
@@ -648,7 +647,7 @@ public static class CampaignBoards
                     ComboPicked[0], ComboPicked[1], ComboPicked[2]));
             }
 
-            lines.Add(FieldText(combo.Entries[entry], combo.X, y, combo.Width, combo.IsAllowed(entry) ? BoardInk.Row : BoardInk.Detail));
+            lines.Add(FieldText(combo.Entries[entry], combo.X, y, combo.Width, combo.RowHeight, combo.IsAllowed(entry) ? BoardInk.Row : BoardInk.Detail));
         }
 
         if (combo.Scrolls)
@@ -678,10 +677,10 @@ public static class CampaignBoards
         ListWindow.ThumbHeightFor(
             height - (ScrollArrowHeight * 2f), combo.RowsDisplayed, combo.Entries.Count, ScrollThumbHeight);
 
-    // A field's words, inset from its left edge and sat on the row's own baseline the way the
-    // reference draws them: the text is vertically centred in a 16-pixel field at an 11-pixel face.
-    private static BoardLine FieldText(string text, float x, float y, float width, BoardInk ink) =>
-        new(text, x + ComboTextInset, y + ComboTextDrop, width - ComboTextInset, ComboFont, ink);
+    // A field's words, inset from its left edge, their ink centred in the box or list row
+    // <paramref name="height"/> tall, so a descender stays inside it.
+    private static BoardLine FieldText(string text, float x, float y, float width, float height, BoardInk ink) =>
+        new(text, x + ComboTextInset, BoardLine.InkCentredTop(y, height, ComboFont), width - ComboTextInset, ComboFont, ink);
 
     // A filled rectangle and its one-pixel outline, which is what every field and list box on these
     // screens is: the engine's own list class draws no art for either.

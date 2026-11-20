@@ -1647,7 +1647,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             }
 
             // A marquee line, so a value wider than its row (a long course title) keeps to the row.
-            panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 2f, item.Width - 8f, itemFont,
+            panelLines.Add(new BoardLine(item.Label, item.X + 4f, BoardLine.InkCentredTop(item.Y, item.Height, itemFont), item.Width - 8f, itemFont,
                 item.Enabled ? BoardInk.Row : BoardInk.Detail, i)
             { Marquee = true });
         }
@@ -1712,7 +1712,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 }
 
                 // A marquee line: a plain one wider than the box would wrap below it.
-                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
+                lines.Add(new BoardLine(row.Label, row.X + 4f, BoardLine.InkCentredTop(row.Y, row.Height, itemFont), Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
                     focused ? BoardInk.RowFocused : BoardInk.Row, index)
                 { Marquee = true });
                 break;

@@ -8,6 +8,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 
@@ -136,6 +137,86 @@ internal static class MenuSuiteHost
         if (Directory.Exists(dir))
         {
             Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>Checks that a field's word sits with its ink inside the box's one-pixel outline and
+    /// centred in it, to a pixel. The ink is the issue's own "Slug", measured glyph by glyph in the
+    /// board face, standing on the baseline the renderer gives the line. The same word at <paramref name="oldDrop"/> below the box top
+    /// is the able-to-fail control, which must miss.</summary>
+    internal static void InkInBox(TestContext ctx, string what, BoardLine? line, OriginalRow? box, float oldDrop)
+    {
+        ctx.Check(line != null && box != null, $"{what} draws its word");
+        if (line == null || box == null)
+        {
+            return;
+        }
+
+        var view = new ComposedBoardView();
+        try
+        {
+            // Measured at twice the authored size and halved. At 1x the hinting rounds a 12-pixel
+            // face's ascender up a whole pixel, which no window a pilot runs draws.
+            var (top, bottom) = Ink(view.GetThemeDefaultFont(), "Slug", (int)MathF.Round(line.Size * 2f));
+            (top, bottom) = (top / 2f, bottom / 2f);
+            string Margins(float lineY) =>
+                $"{lineY + line.Size + top - box.Y:0.0} px of top, {box.Y + box.Height - (lineY + line.Size + bottom):0.0} px of foot";
+            bool Fits(float lineY)
+            {
+                float above = lineY + line.Size + top - box.Y;
+                float below = box.Y + box.Height - (lineY + line.Size + bottom);
+                return above >= 1f && below >= 1f && MathF.Abs(above - below) <= 1f;
+            }
+
+            ctx.Check(bottom > 0f, $"the measured word hangs a descender below its baseline ({top:0.0} to {bottom:0.0})");
+            ctx.Check(!Fits(box.Y + oldDrop),
+                $"ABLE-TO-FAIL CONTROL: {what}'s word {oldDrop:0} px under the box top misses ({Margins(box.Y + oldDrop)} in {box.Height:0})");
+            ctx.Check(Fits(line.Y), $"{what}'s word keeps its ink inside the box and centred ({Margins(line.Y)} in {box.Height:0})");
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // A word's ink against the baseline: its glyphs' rows at least half covered, read off the font
+    // cache's own atlas. The glyph rectangle alone is padded past the ink.
+    private static (float Top, float Bottom) Ink(Godot.Font font, string text, int points)
+    {
+        var server = Godot.TextServerManager.GetPrimaryInterface();
+        var shaped = server.CreateShapedText();
+        try
+        {
+            server.ShapedTextAddString(shaped, text, font.GetRids(), points, font.GetOpentypeFeatures());
+            float top = float.MaxValue, bottom = float.MinValue;
+            var size = new Godot.Vector2I(points, 0);
+            foreach (var glyph in server.ShapedTextGetGlyphs(shaped))
+            {
+                var rid = glyph["font_rid"].AsRid();
+                long index = glyph["index"].AsInt64();
+                var offset = server.FontGetGlyphOffset(rid, size, index);
+                var uv = server.FontGetGlyphUVRect(rid, size, index);
+                var atlas = server.FontGetTextureImage(rid, size, server.FontGetGlyphTextureIdx(rid, size, index));
+                for (int y = (int)uv.Position.Y; atlas != null && y < (int)uv.End.Y; y++)
+                {
+                    for (int x = (int)uv.Position.X; x < (int)uv.End.X; x++)
+                    {
+                        if (atlas.GetPixel(x, y).A >= 0.5f)
+                        {
+                            float row = offset.Y + y - uv.Position.Y;
+                            top = MathF.Min(top, row);
+                            bottom = MathF.Max(bottom, row + 1f);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return (top, bottom);
+        }
+        finally
+        {
+            server.FreeRid(shaped);
         }
     }
 

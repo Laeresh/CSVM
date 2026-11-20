@@ -28,6 +28,10 @@ internal static class MenuInstantActionSuites
     private const string RefusingTitle = "Studio Lot Dash";
     private const string RefusedPlane = "player_balmoral";
 
+    // How far under its box's top a dropdown's line once stood, the place whose descenders hung
+    // through the box's foot.
+    private const float OldDrop = 2f;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -52,7 +56,8 @@ internal static class MenuInstantActionSuites
         + "airframe's stock node with the def riding the seat, survives a return, and leaves the "
         + "list with its file (the wingman list stays stock), Weapon Loadout with the radio on "
         + "Wingman opens the decoded ammo chrome over the wingmen's shared fit whose CANCEL restores "
-        + "and ACCEPT keeps a stepped pick, and Build Custom Plane opens the wallet-free hangar whose "
+        + "and ACCEPT keeps a stepped pick, its first ammunition field and an open pylon list's row each keeping a "
+        + "descender's ink inside the box and centred where the old two-pixel drop misses, and Build Custom Plane opens the wallet-free hangar whose "
         + "Back and Purchase Now both return to the screen, the purchase's plane in the Pilot Plane list, "
         + "and a second pilot joined on the screen is named by the seat strip and walked through its own "
         + "aircraft screen by Fly Mission before the launch carries both seats, the remake-only race time box hidden "
@@ -126,7 +131,8 @@ internal static class MenuInstantActionSuites
     [Suite("menu-instant-action-course",
         "Instant Action's Course option through Original's screen over the install's layout, the shipped "
         + "courses and a scratch copy of the sample titled far wider than the Course box: that title stays on one line "
-        + "inside its box both as an open list row and picked in the closed box; "
+        + "inside its box both as an open list row and picked in the closed box, each keeping a descender's ink "
+        + "inside the box and centred where the old two-pixel drop misses; "
         + "stunt flying on the airfield (C1) opens a Course list of Danger Zones then "
         + "sample_out_and_back by its title, a click picks the sample and blanks the wingman, enemy and lives boxes, Fly "
         + "Mission leaves as a LaunchExit naming the course by file name with no def whose session spec matches "
@@ -526,7 +532,9 @@ internal static class MenuInstantActionSuites
     {
         ctx.Check(shell.InstantAction.PoseCourse(), $"stunt flying opens the Course list ({ia.MissionType.Key})");
         var item = shell.Rows.FirstOrDefault(r => r.Label == LongTitle);
-        StaysInBox(ctx, "the open list's row", shell.Compose().Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => l.Text == LongTitle), item);
+        var listed = shell.Compose().Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => l.Text == LongTitle);
+        StaysInBox(ctx, "the open list's row", listed, item);
+        MenuSuiteHost.InkInBox(ctx, "the open Course list's row", listed, item, OldDrop);
         if (item == null)
         {
             return;
@@ -535,7 +543,9 @@ internal static class MenuInstantActionSuites
         Click(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
         var box = Row(shell, OriginalInstantActionScreen.CourseKey);
         ctx.Check(ia.Course == LongCourse && box?.Label == LongTitle, $"a click picks the long-titled course ({ia.Course})");
-        StaysInBox(ctx, "the closed Course box", shell.Compose().Lines.FirstOrDefault(l => l.Text == LongTitle), box);
+        var closed = shell.Compose().Lines.FirstOrDefault(l => l.Text == LongTitle);
+        StaysInBox(ctx, "the closed Course box", closed, box);
+        MenuSuiteHost.InkInBox(ctx, "the closed Course box", closed, box, OldDrop);
         // Back to the Danger Zones, so the steps after start where a fresh screen does.
         ia.SelectCourse(0);
     }
@@ -1159,6 +1169,9 @@ internal static class MenuInstantActionSuites
         ctx.Check(backdrop.Length > 0 && board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == backdrop,
             $"the screen's background is the section's own ({board.Backdrop.Count})");
         ctx.Check(board.Lines.Any(l => l.Text == ia.WingmanPlane.Name), $"and the fitted aircraft is named on it");
+        int ammoRow = shell.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.LoadoutAmmoPrefix + "0");
+        MenuSuiteHost.InkInBox(ctx, "the first ammunition field", board.Lines.FirstOrDefault(l => ammoRow >= 0 && l.Row == ammoRow),
+            ammoRow >= 0 ? shell.Rows[ammoRow] : null, OldDrop);
 
         OriginalRow? rocket = null;
         foreach (var row in shell.Rows)
@@ -1190,6 +1203,8 @@ internal static class MenuInstantActionSuites
         Click(host, seat, Pointer(fit, rocket.X + 5f, rocket.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.InstantAction.OpenDropdown == rocket.Key && shell.Rows.Count == StockLoadouts.Load().Options.PylonOrdnance.Count,
             $"a click on the field opens its list over the ordnance roster ({shell.InstantAction.OpenDropdown}, {shell.Rows.Count})");
+        var listRow = shell.Compose().Overlays.SelectMany(p => p.Lines).FirstOrDefault(l => l.Row >= 0 && l.Row < shell.Rows.Count);
+        MenuSuiteHost.InkInBox(ctx, "the open pylon list's row", listRow, listRow != null ? shell.Rows[listRow.Row] : null, OldDrop);
         Press(host, seat, Down);
         Press(host, seat, Accept);
         string? picked = ia.WingmanFit.PylonFor(pylon);
