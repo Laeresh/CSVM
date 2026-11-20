@@ -1296,11 +1296,15 @@ public partial class GameSession : Node3D
 
     /// <summary>The Global Illumination word on the world's Environment, then the zone, whose flat ambient
     /// steps aside while SDFGI stands. A cockpit pass's copy keeps GI off (<c>CockpitOverlay</c>). A
-    /// standing word moves nothing.</summary>
+    /// standing word moves nothing once <c>SkyLightLive</c> agrees with it.</summary>
     internal void FollowGlobalIllumination()
     {
         bool enhanced = GraphicsMode.Enhanced;
-        if (_env == null || _env.SdfgiEnabled == (enhanced && GlobalIlluminationSetting.Enabled))
+        bool on = enhanced && GlobalIlluminationSetting.Enabled;
+        // ⚠ The launcher's Environment outlives a session, and the session's exit clears SkyLightLive
+        // (WeatherRig.ResetProcessState). Skipping on the Environment alone leaves the next flight with
+        // SDFGI on and no ambient fill, and ground facing away from the sun draws black.
+        if (_env == null || (_env.SdfgiEnabled == on && Effects.GlobalIllumination.SkyLightLive == on))
             return;
         Effects.GlobalIllumination.Apply(_env, enhanced);
         _sky?.Weather?.ReapplyZone();

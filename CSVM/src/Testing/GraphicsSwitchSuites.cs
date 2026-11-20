@@ -1178,7 +1178,8 @@ internal static class GraphicsSwitchSuites
         + "C1's day trees draw as at a light of one; CM08's (C1B/M03, night) trees at rich draw under 0.85 of a light of one's "
         + "ratio and no darker against their ground than C1's day trees, and under the volumetric clouds too; every day zone of every shipped mission and tune layer "
         + "lights it at about one (luminance 0.9, no channel under 0.75); every Rich card, near model and listed Original card "
-        + "multiplies it in, and an Original flight writes one")]
+        + "multiplies it in, and an Original flight writes one; a flight that finds SDFGI standing from an earlier one takes "
+        + "its sky light, so the zone writes the ambient fill")]
     internal static void VegetationLight(TestContext ctx)
     {
         RequireData(ctx, "C1B");
@@ -1187,6 +1188,7 @@ internal static class GraphicsSwitchSuites
         string launched = VegetationQualitySetting.Word;
         string launchedModels = Utils.VegetationModelsSetting.Word;
         var wasClouds = VolumetricCloudsSetting.Lookup.Current;
+        var wasGi = GlobalIlluminationSetting.Lookup.Current;
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
@@ -1237,6 +1239,16 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(cloudy.Ratio >= dayRead.Ratio * 0.88f,
                     $"and no darker against the ground than C1's day trees, {cloudy.Ratio:0.000} against {dayRead.Ratio:0.000}");
                 ApplyOption(night, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
+
+                // The launcher's Environment outlives a flight, so the next one finds SDFGI standing after the last one's
+                // exit cleared the sky light. Without the sky light the zone writes no ambient fill and CM08's cliffs draw
+                // black under the lit bushes.
+                ApplyOption(night, GlobalIlluminationSetting.Lookup, GlobalIlluminationSetting.On);
+                WeatherRig.ResetProcessState();
+                night.Session.FollowGlobalIllumination();
+                ctx.Check(night.Env.SdfgiEnabled && GlobalIllumination.SkyLightLive,
+                    $"ABLE-TO-FAIL CONTROL: a flight that finds SDFGI standing takes its sky light, so the zone writes the ambient fill (sdfgi {night.Env.SdfgiEnabled}, sky light {GlobalIllumination.SkyLightLive})");
+                ApplyOption(night, GlobalIlluminationSetting.Lookup, GlobalIlluminationSetting.Off);
             }
             finally
             {
@@ -1305,6 +1317,7 @@ internal static class GraphicsSwitchSuites
         finally
         {
             ApplyOption(null, VolumetricCloudsSetting.Lookup, wasClouds.Word ?? VolumetricCloudsSetting.Default);
+            ApplyOption(null, GlobalIlluminationSetting.Lookup, wasGi.Word ?? GlobalIlluminationSetting.Off);
             Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
