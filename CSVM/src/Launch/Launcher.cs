@@ -504,6 +504,9 @@ public partial class Launcher : Node3D
         {
             Subtitles.Current = Subtitles.Open(dataRoot, Config.GetString(Subtitles.ConfigKey, Subtitles.DefaultFolder));
         }
+
+        // Here rather than per session: a briefing captions before its mission launches.
+        SubtitlesSetting.ApplySaved(_spec.Det);
         // Before any texture loads. A deterministic run reads no pack, so no golden depends on what
         // one machine dropped in; --hd= survives it, for a probe.
         if ((_spec.Hd ?? (_spec.Det ? null : Config.GetString("textures.hd", "HD"))) is { } hdFolder)
