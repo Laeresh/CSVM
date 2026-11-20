@@ -198,6 +198,10 @@ public sealed class OptionsDef
     /// "never set" and reads as 100.</summary>
     public string? SpyglassScale { get; set; }
 
+    /// <summary>Where the subtitles show, one of <see cref="SubtitlesSetting.Words"/>. Null is
+    /// "never set" and reads as low.</summary>
+    public string? Subtitles { get; set; }
+
     /// <summary>Whether the external-view zoom is kept through the original's resets and remembered in
     /// <see cref="CameraZoom"/> (<see cref="CameraZoomMemory"/>). Null is "never set" and reads as ON.</summary>
     public bool? KeepCameraZoom { get; set; }
@@ -419,6 +423,7 @@ public sealed class OptionsStore
             Write(w, "hudLayout", def.HudLayout);
             Write(w, "hudLayoutCustom", def.HudLayoutCustom);
             Write(w, "spyglassScale", def.SpyglassScale);
+            Write(w, "subtitles", def.Subtitles);
             WriteFlag(w, "keepCameraZoom", def.KeepCameraZoom);
             WriteNumber(w, "cameraZoom", def.CameraZoom);
             Write(w, "monitorIndex", def.MonitorIndex);
@@ -504,6 +509,7 @@ public sealed class OptionsStore
                 HudLayout = ReadShaped(root, "hudLayout", HudLayoutSetting.Lookup.IsWord),
                 HudLayoutCustom = ReadShaped(root, "hudLayoutCustom", Utils.HudLayout.IsValid),
                 SpyglassScale = ReadShaped(root, "spyglassScale", SpyglassScaleSetting.Lookup.IsWord),
+                Subtitles = ReadShaped(root, "subtitles", SubtitlesSetting.Lookup.IsWord),
                 KeepCameraZoom = ReadFlag(root, "keepCameraZoom"),
                 CameraZoom = ReadZoom(root, "cameraZoom"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),

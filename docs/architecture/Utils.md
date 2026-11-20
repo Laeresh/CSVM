@@ -555,6 +555,13 @@ The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the fact
 `--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
 reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
 
+## src/Utils/SubtitlesSetting.cs
+Where the voice subtitles show as a word, `off`, `low` or `high`, saved as `subtitles` (null reads
+low). `SavedWord` holds the `--det` guard. The launcher reads it at startup, before any briefing,
+and every options apply stores it again. `Flight/Hud/SubtitleLine.cs` reads `Word` each frame: off
+draws nothing, high moves the flight caption to the top of the pane, and a briefing's caption keeps
+its own area at low and high. The Game Options row shows only while a subtitle table is loaded.
+
 ## src/Utils/HudModeSetting.cs
 The HUD mode of the outside views (`HudMode`: Full, Minimal, None) as a word, `full`, `minimal`
 or `none`, saved as `hudMode` (null reads Full). `Resolve` takes the saved word over Full and
