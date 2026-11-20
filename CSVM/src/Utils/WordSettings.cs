@@ -28,6 +28,7 @@ public static class WordSettings
         CloudShadowSetting.Lookup,
         PostProcessingSetting.Lookup,
         VolumetricCloudsSetting.Lookup,
+        CloudGlowSetting.Lookup,
         GlobalIlluminationSetting.Lookup,
         SpeedWispsSetting.Lookup,
     };

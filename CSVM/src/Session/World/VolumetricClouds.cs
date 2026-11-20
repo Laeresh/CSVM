@@ -65,6 +65,7 @@ internal sealed partial class VolumetricClouds : Node3D
     // The bubble's reach past the hull's bounding radius: room to fly an attack in clear air.
     private const float BubbleMarginM = 400f;
 
+    private static readonly StringName PointLightsParam = "point_lights";
     private static readonly StringName MarchOnParam = "march_on";
     private static readonly StringName MarchShaftsOnlyParam = "march_shafts_only";
     private static readonly StringName ShaftsOnlyParam = "shafts_only";
@@ -348,15 +349,18 @@ internal sealed partial class VolumetricClouds : Node3D
         // The world's point lights glowing in the clouds (#368): bursts, fires, tracers and rockets. It
         // runs here per pixel, so the temporal resolve never holds a moving light in its history.
         #include "res://shaders/csky_lights.gdshaderinc"
-        uniform float point_gain = 1.5;
+        uniform float point_gain = 0.35;
         // A light reaches this many times its far range inside a cloud, which scatters it wide.
         uniform float point_reach = 3.0;
+        // The head of the ranked light list that glows, 0 with Cloud Glow off. Each light costs a veil
+        // and a chord march per pixel, so all sixteen tripled the GPU time while firing in cloud.
+        uniform int point_lights = 4;
 
         // The point lights' glow along the ray from `t0` to `t1`, premultiplied. Each light's chord
-        // takes eight steps of the cloud, lit by its falloff and dimmed by the cloud before them.
+        // takes four steps of the cloud, lit by its falloff and dimmed by the cloud before them.
         vec3 pc_point_glow(vec3 eye, vec3 dir, float t0, float t1) {
             vec3 sum = vec3(0.0);
-            for (int i = 0; i < csky_light_count; i++) {
+            for (int i = 0; i < min(csky_light_count, point_lights); i++) {
                 vec4 pr = texelFetch(csky_light_data, ivec2(0, i), 0);
                 vec4 cr = texelFetch(csky_light_data, ivec2(1, i), 0);
                 float r = pr.w * point_reach;
@@ -372,10 +376,17 @@ internal sealed partial class VolumetricClouds : Node3D
                 if (b <= a) {
                     continue;
                 }
-                float dt = (b - a) / 8.0;
-                float trans = csky_pc_veil_at(eye, eye + dir * a);
+                // Two steps of the same density dim the light by the cloud before its chord. The
+                // shared veil took fifteen per light, the larger share of the glow's cost.
+                float trans = 1.0;
+                float vt = (a - t0) * 0.5;
+                for (int k = 0; k < 2 && vt > 0.0; k++) {
+                    vec3 q = eye + dir * (t0 + vt * (float(k) + 0.5));
+                    trans *= exp(-pc_density(q, layer_bottom, layer_top) * density_gain * vt);
+                }
+                float dt = (b - a) / 4.0;
                 float acc = 0.0;
-                for (int k = 0; k < 8; k++) {
+                for (int k = 0; k < 4; k++) {
                     vec3 q = eye + dir * (a + dt * (float(k) + 0.5));
                     float sigma = pc_density(q, layer_bottom, layer_top) * density_gain;
                     if (sigma <= 0.0) {
@@ -425,7 +436,7 @@ internal sealed partial class VolumetricClouds : Node3D
         // the cap. The shafts and the sky or fog behind follow.
         void pc_resolve(vec3 eye, vec3 dir, vec2 span, float scene, vec4 trace, inout vec3 albedo, inout float alpha) {
             vec4 m = vec4(pc_colour(trace.xy, eye), trace.z);
-            if (csky_light_count > 0 && span.y >= 0.0) {
+            if (point_lights > 0 && csky_light_count > 0 && span.y >= 0.0) {
                 m.rgb += pc_point_glow(eye, dir, span.x, min(span.y, scene));
             }
             float t0 = 0.0;
@@ -1472,6 +1483,7 @@ internal sealed partial class VolumetricClouds : Node3D
         float frameOffset = (float)(_ditherFrame++ * 0.6180339887 % 1.0);
         _material.SetShaderParameter("frame_offset", frameOffset);
         _march.SetShaderParameter("frame_offset", frameOffset);
+        _material.SetShaderParameter(PointLightsParam, CloudGlowSetting.Drawn ? WorldLights.RankedHead : 0);
         if (!on)
             return;
         var view = camera!.GetCameraTransform();

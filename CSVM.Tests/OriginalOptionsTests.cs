@@ -570,9 +570,9 @@ public class OriginalOptionsTests
         Assert.Equal(0, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.MonitorKey).Visible);
         Wheel(host, 200f, 300f, 12);
-        Assert.Equal(11, host.Module.Video.Top);
+        Assert.Equal(12, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
-        Wheel(host, 200f, 300f, -10);
+        Wheel(host, 200f, 300f, -11);
         Assert.Equal(1, host.Module.Video.Top);
         Assert.Equal(OriginalVideoPage.ViewDistanceKey, host.FocusedKey);
 
@@ -598,7 +598,7 @@ public class OriginalOptionsTests
         // Down scrolls every dropdown under View Distance in, stopping on VR Mode where live, then crosses both checkboxes.
         // Under the window the column holds only value rows, so Down from the checkbox leaves for ACCEPT CHANGES, with
         // CANCEL CHANGES under it.
-        for (int i = 0; i < (OperatingSystem.IsWindows() ? 12 : 11); i++)
+        for (int i = 0; i < (OperatingSystem.IsWindows() ? 13 : 12); i++)
         {
             Down(host);
         }
@@ -639,7 +639,7 @@ public class OriginalOptionsTests
 
         host.Module.Video.OpenOn(OriginalVideoPage.VrModeKey);
         Assert.Equal(OriginalVideoPage.VrModeKey, host.FocusedKey);
-        Assert.Equal(11, host.Module.Video.Top);
+        Assert.Equal(12, host.Module.Video.Top);
         Assert.Equal("On", Row(host, OriginalVideoPage.VrModeKey).Label);
         StepX(host, 1);
         Assert.False(host.Module.Video.VrModeChoice);
@@ -989,6 +989,8 @@ public class OriginalOptionsTests
         Down(host);
         Assert.Equal(OriginalVideoPage.VolumetricCloudsKey, host.FocusedKey);
         Down(host);
+        Assert.Equal(OriginalVideoPage.CloudGlowKey, host.FocusedKey);
+        Down(host);
         Assert.Equal(OriginalVideoPage.GlobalIlluminationKey, host.FocusedKey);
         Down(host);
         Assert.Equal(OriginalVideoPage.SpeedWispsKey, host.FocusedKey);
@@ -1272,7 +1274,7 @@ public class OriginalOptionsTests
     /// <summary>The dropdown window's scroll column ends on the widest description's right edge (the
     /// fixture's 350 + 310). The window's descriptions wrap short of it.
     /// The D rows' own arrows stand at its two ends, each live only towards more rows. Their thumb
-    /// spans seven fourteenths of the track. A click on the down arrow scrolls one line.</summary>
+    /// spans seven nineteenths of the track. A click on the down arrow scrolls one line.</summary>
     [Fact]
     public void TheVideoDropdownWindowCarriesItsOwnScrollColumn()
     {
@@ -1287,7 +1289,7 @@ public class OriginalOptionsTests
         Assert.True(down.Enabled);
         var window = Assert.Single(Lists(host)).Window;
         Assert.Equal(up.X, window.ThumbX);
-        Assert.Equal(7f / 18f * window.TrackHeight, window.ThumbHeight, 3);
+        Assert.Equal(7f / 19f * window.TrackHeight, window.ThumbHeight, 3);
         var composed = Compose(host);
         Assert.Contains(composed.Pictures, p => p.X == window.ThumbX && p.Y == window.ThumbY);
         var monitorDesc = Assert.Single(composed.Lines, l => l.Y == 245f && l.X == 350f);
@@ -1299,16 +1301,16 @@ public class OriginalOptionsTests
         // Resolution stands on Monitor's line now but keeps its own box, not Monitor's wider one.
         Assert.Equal((260f, 245f, 70f, 17f), Rect(Row(host, OriginalVideoPage.ResolutionKey)));
         Assert.True(Row(host, OriginalVideoPage.WindowKey + ":up").Enabled);
-        // Ten more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
-        for (int i = 0; i < 10; i++)
+        // Eleven more clicks reach the foot, VR Mode on the bottom line, where down goes dead.
+        for (int i = 0; i < 11; i++)
         {
             Click(host, OriginalVideoPage.WindowKey + ":down");
         }
 
-        Assert.Equal(11, host.Module.Video.Top);
+        Assert.Equal(12, host.Module.Video.Top);
         Assert.True(Row(host, OriginalVideoPage.VrModeKey).Visible);
         Assert.False(Row(host, OriginalVideoPage.WindowKey + ":down").Enabled);
-        for (int i = 0; i < 11; i++)
+        for (int i = 0; i < 12; i++)
         {
             Click(host, OriginalVideoPage.WindowKey + ":up");
         }
@@ -1763,8 +1765,8 @@ public class OriginalOptionsTests
                 OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.ViewDistanceKey,
                 OriginalVideoPage.VegetationQualityKey, OriginalVideoPage.VegetationModelsKey, OriginalVideoPage.GroundCoverKey,
                 OriginalVideoPage.CloudShadowsKey, OriginalVideoPage.ShadowDistanceKey, OriginalVideoPage.PostProcessingKey,
-                OriginalVideoPage.VolumetricCloudsKey, OriginalVideoPage.GlobalIlluminationKey, OriginalVideoPage.SpeedWispsKey,
-                OriginalVideoPage.VrModeKey, OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
+                OriginalVideoPage.VolumetricCloudsKey, OriginalVideoPage.CloudGlowKey, OriginalVideoPage.GlobalIlluminationKey,
+                OriginalVideoPage.SpeedWispsKey, OriginalVideoPage.VrModeKey, OriginalVideoPage.WaterQualityKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
                 OriginalVideoPage.WindowKey + ":up", OriginalVideoPage.WindowKey + ":down",
             },
