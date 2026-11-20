@@ -15,7 +15,7 @@ namespace CSVM.Mech3;
 /// them. Godot compiles each <see cref="Shader"/> object on its own, so two cache keys whose texts
 /// agree share one. A material keeps the key it was made for. A live switch moves it onto that key's
 /// shader for the other mode, and no text changes (<see cref="Regenerate"/>).
-/// Main thread only, but for the launch warm-up's compiles (<see cref="WarmAtLaunch"/>).
+/// Main thread only, but for the warm-up's compiles (<see cref="StartWarm"/>).
 /// Process-lifetime in the game, like the caches.
 /// </summary>
 internal static class ShaderTwins
@@ -54,7 +54,7 @@ internal static class ShaderTwins
     private static int _pinnedAt;
 
     // The warm list's file (null when this process keeps none) and the list as last read or written.
-    // Then the launch warm-up's thread, and the flag that stops it at quit.
+    // Then the first load's warm-up thread, and the flag that stops it at quit.
     private static string? _warmListPath;
     private static List<WarmEntry> _warmList = new();
     private static Task? _warm;
@@ -275,12 +275,9 @@ internal static class ShaderTwins
         return $"keys={All.Count} sharing=[{string.Join(" ", byFamily)}] e.g.=[{string.Join(" ", examples)}]";
     }
 
-    /// <summary>Makes every shader the warm list at <paramref name="path"/> names and compiles them
-    /// in list order on one background thread, while the menu stands. A load then finds them made.
-    /// Returns how many it queued. A null path keeps no list.
-    /// ⚠ Keep it one thread. Godot creates one shader at a time whatever the caller count, and
-    /// parallel callers held the main thread's own server calls up for longer.</summary>
-    public static int WarmAtLaunch(string? path)
+    /// <summary>Reads the warm list at <paramref name="path"/> at launch, compiling nothing yet
+    /// (<see cref="StartWarm"/>). Returns how many entries it holds. A null path keeps no list.</summary>
+    public static int LoadWarmList(string? path)
     {
         _warmListPath = path;
         if (path == null || !File.Exists(path))
@@ -294,6 +291,18 @@ internal static class ShaderTwins
             Log.Warn("world", $"shader warm list {path} unreadable, starting a new one: {e.Message}");
             return 0;
         }
+        return _warmList.Count;
+    }
+
+    /// <summary>Compiles every listed shader not made yet on one background thread, beside the first
+    /// load's build, which <see cref="WaitWarm"/>s for it. Once per process; returns how many it queued.
+    /// ⚠ Never while a menu stands. Each compile holds a lock the render thread's frame waits on.
+    /// ⚠ Keep it one thread. Godot creates one shader at a time whatever the caller count, and
+    /// parallel callers held the main thread's own server calls up for longer.</summary>
+    public static int StartWarm()
+    {
+        if (_warm != null || _warmList.Count == 0)
+            return 0;
         var shaders = _warmList.Where(e => !ByText.ContainsKey(e.Text)).Select(e => Pooled(e.Text, e.Family)).ToList();
         long start = Stopwatch.GetTimestamp();
         _warm = Task.Factory.StartNew(() =>
@@ -309,7 +318,18 @@ internal static class ShaderTwins
         return shaders.Count;
     }
 
-    /// <summary>Stops the launch warm-up after the compile in hand. ⚠ Call it before the engine tears
+    /// <summary>Waits for the warm-up <see cref="StartWarm"/> began, as the load ends, so no compile
+    /// is left to stall the mission's first frames. Returns the milliseconds waited.</summary>
+    public static double WaitWarm()
+    {
+        if (_warm is not { IsCompleted: false } warm)
+            return 0;
+        long start = Stopwatch.GetTimestamp();
+        warm.Wait();
+        return Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+    }
+
+    /// <summary>Stops the warm-up after the compile in hand. ⚠ Call it before the engine tears
     /// down: a compile still running would reach a freed server.</summary>
     public static void StopWarm()
     {

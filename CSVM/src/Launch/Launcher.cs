@@ -609,9 +609,9 @@ public partial class Launcher : Node3D
         // After every global: a listed shader reading one compiles against it. A --det run keeps no
         // list unless --shader-list= names one, so no golden depends on what earlier loads wore.
         string? shaderList = _spec.ShaderList is { } named ? named : _spec.Det ? null : "user://shader_warm.json";
-        int warming = Mech3.ShaderTwins.WarmAtLaunch(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
+        int warming = Mech3.ShaderTwins.LoadWarmList(string.IsNullOrEmpty(shaderList) ? null : ProjectSettings.GlobalizePath(shaderList));
         if (warming > 0)
-            Log.Info("world", $"shader warm-up: {warming} listed shader(s) compiling in the background");
+            Log.Info("world", $"shader warm-up: {warming} listed shader(s), compiled behind the first load screen");
 
         // --dump-markers: a pure-data report, print the marker rig tables and quit. Runs
         // whether or not a content arg was given; --headless makes it windowless. Each dump
