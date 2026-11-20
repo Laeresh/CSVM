@@ -55,6 +55,7 @@ internal sealed partial class CloudLab : Node
         ("ms_c", "Light: multi-scatter c", 0f, 1f, 0.01f),
         ("point_gain", "Light: point glow gain", 0f, 5f, 0.05f),
         ("point_reach", "Light: point glow reach", 0.5f, 6f, 0.1f),
+        ("burst_reach", "Light: burst glow reach", 0.5f, 6f, 0.1f),
         ("amb_gain", "Ambient: gain", 0f, 3f, 0.05f),
         ("amb_floor", "Ambient: floor", 0f, 1f, 0.01f),
         ("amb_occ", "Ambient: occlusion", 0f, 1f, 0.01f),
