@@ -320,7 +320,7 @@ public static class OriginalRaceResults
         layers.Lines.Add(Line(strings, 10046, Title, 60f, 22f, 0f));
         layers.Lines.Add(Line(strings, 10507, MultiplayerBoardText.Word(strings, 10507, "Game Scores"),
             ScoresTabX, 30f, ScoresTabWidth, BoardJustify.Center));
-        ComposeZoneKey(sheet, strings, layers);
+        ComposeZoneKey(sheet, strings, tops.Zones, layers);
         ComposeSplits(sheet, strings, tops.Splits, tops.Zones, layers);
         var face = MultiplayerBoardText.Regular(strings, 10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
@@ -351,18 +351,21 @@ public static class OriginalRaceResults
     };
 
     // The zone key on the player list's lines, number and name. A course the list holds takes one
-    // column, a longer one two side by side.
-    private static void ComposeZoneKey(RaceResultsSheet sheet, UiStrings strings, BoardLayers layers)
+    // column, a longer one two side by side. A course past both columns keys the run from the splits'
+    // first zone, so every zone the splits show is named.
+    private static void ComposeZoneKey(RaceResultsSheet sheet, UiStrings strings, int zonesTop, BoardLayers layers)
     {
         layers.Lines.Add(Line(strings, 10048, ZoneHeading, ListX, 54f, 0f));
         int count = sheet.ZoneNames.Count;
         int columns = count > ZoneRows ? 2 : 1;
         int perColumn = Math.Min(ZoneRows, (count + columns - 1) / columns);
+        int first = Math.Clamp(zonesTop, 0, Math.Max(0, count - (perColumn * columns)));
         float width = ListWidth / columns;
-        for (int zone = 0; zone < count && zone < perColumn * columns; zone++)
+        for (int slot = 0; first + slot < count && slot < perColumn * columns; slot++)
         {
-            float x = ListX + 2f + (width * (zone / perColumn));
-            float y = ListY + (OriginalRaceTable.RowPitch * (zone % perColumn));
+            int zone = first + slot;
+            float x = ListX + 2f + (width * (slot / perColumn));
+            float y = ListY + (OriginalRaceTable.RowPitch * (slot % perColumn));
             layers.Lines.Add(Line(strings, 10575, $"{zone + 1}  {sheet.ZoneNames[zone]}", x, y, width - 6f));
         }
     }

@@ -127,6 +127,7 @@ public sealed class AiWeaponsDrive
                 MountPos = hp.Pylon.GlobalPosition,
                 RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
                 RoundAccel = hp.Weapon.Acceleration ?? 0f,
+                RoundRangeM = hp.Weapon.Range ?? 0f,
                 MinRangeM = hp.MinRangeM,
                 MaxRangeM = hp.MaxRangeM,
                 RefireSeconds = hp.RefireSeconds,

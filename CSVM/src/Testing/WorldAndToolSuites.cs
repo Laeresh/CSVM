@@ -2797,6 +2797,102 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Able to fail: a floor that reaches the airframe, misses the gauges, moves the Original text or
+    // lifts a day zone. Also one that lifts the darkest night zone too little to see.
+    [Suite("cockpit-ambient-floor",
+        "the Enhanced cockpit interior, gauges and needles included, takes the ambient floor and the airframe and Original text do not; every flown day zone lifts nothing and the darkest night zone does")]
+    internal static void CockpitAmbientFloor(TestContext ctx)
+    {
+        if (ctx.SyntheticData)
+            throw new SuiteSkippedException("the sweep reads every flown world's weather");
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string line = $"EMISSION += col.rgb * {SceneBuilder.InteriorLiftParam};";
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var textures = new TextureArchive(texturesPath);
+        var sun = new DirectionalLight3D { Name = "ambient-floor-sun" };
+        ctx.Host.AddChild(sun);
+        var built = new List<Node3D>();
+        try
+        {
+            foreach (bool enhanced in new[] { true, false })
+            {
+                GraphicsMode.Set(enhanced);
+                var builder = new PlaneBuilder(ctx.Planes, textures, cockpitInterior: true);
+                var model = builder.Build(ctx.PlaneName);
+                built.Add(model);
+                if (builder.CockpitInterior is not { } interior)
+                {
+                    ctx.Check(false, $"the build carries a cockpit interior");
+                    return;
+                }
+                var inside = ShadersUnder(interior);
+                var airframe = ShadersUnder(model).Except(inside).ToList();
+                int shaded = inside.Count(s => s.Code.Contains("ROUGHNESS = 0.85", System.StringComparison.Ordinal));
+                int lifted = inside.Count(s => s.Code.Contains(line, System.StringComparison.Ordinal));
+                if (enhanced)
+                {
+                    ctx.Check(shaded > 0 && lifted == shaded, $"every shaded interior shader takes the floor shaded={shaded} lifted={lifted}");
+                    var gauges = FindNamed(interior, "gauges") is { } g ? ShadersUnder(g) : new HashSet<Shader>();
+                    ctx.Check(gauges.Count > 0 && gauges.All(s => s.Code.Contains(line, System.StringComparison.Ordinal)),
+                        $"the gauge faces and needles take it with the panel shaders={gauges.Count}");
+                }
+                else
+                {
+                    ctx.Check(lifted == 0, $"the Original interior's text has no floor lifted={lifted} of {inside.Count}");
+                }
+                ctx.Check(airframe.Count > 0 && airframe.All(s => !s.Code.Contains(SceneBuilder.InteriorLiftParam, System.StringComparison.Ordinal)),
+                    $"{(enhanced ? "Enhanced" : "Original")}: the airframe's shaders carry none of it airframe={airframe.Count}");
+            }
+
+            // The lift every zone's Enhanced apply writes, through the shipped lighting tune, over every flown world.
+            GraphicsMode.Set(true);
+            float dimmestDay = float.MaxValue, darkestLift = 0f;
+            string dimmestAt = "", darkestAt = "";
+            foreach (var (chapter, _, missions) in ZbdManifest.Chapters)
+            {
+                foreach (var mission in missions)
+                {
+                    ZrdrSet zrdr = ctx.MissionZrdr(chapter, mission);
+                    ctx.RequireData(zrdr, $"{chapter}/{mission} mission zrdr");
+                    var env = new Godot.Environment();
+                    var rig = new WeatherRig(SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}" }), ctx.Host, sun, env: env);
+                    rig.Build(zrdr, System.Array.Empty<PlayerRig>(), System.Array.Empty<HorizonZone>(), _ => { });
+                    foreach (var zone in rig.ZoneNames.Where(z => z.StartsWith("ZONE", System.StringComparison.OrdinalIgnoreCase)))
+                    {
+                        rig.ForceZone(zone);
+                        float lift = rig.InteriorLiftWritten.X;
+                        float light = WeatherRig.ZoneLight(env.AmbientLightColor, env.AmbientLightEnergy, sun.LightColor, sun.LightEnergy);
+                        string at = $"{chapter}/{mission} {zone}";
+                        ctx.Note($"{at}: {(rig.NightApplied ? "night" : "day")}, light {light:0.###}, lift {lift:0.###}, ambient {env.AmbientLightEnergy:0.###}, sun {sun.LightEnergy:0.###}");
+                        if (!rig.NightApplied)
+                        {
+                            ctx.Check(lift == 0f, $"the day zone {at} lifts nothing lift={lift:0.###}");
+                            if (light < dimmestDay)
+                                (dimmestDay, dimmestAt) = (light, at);
+                        }
+                        else if (lift > darkestLift)
+                        {
+                            (darkestLift, darkestAt) = (lift, at);
+                        }
+                    }
+                }
+            }
+            ctx.Note($"dimmest day zone {dimmestAt} at {dimmestDay:0.###}, darkest night zone {darkestAt} lifted {darkestLift:0.###}");
+            ctx.Check(darkestLift > 0.05f, $"the darkest night zone is lifted by a visible share of the floor {darkestAt} lift={darkestLift:0.###}");
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+            WeatherRig.ResetProcessState();
+            foreach (var model in built)
+                model.Free();
+            sun.QueueFree();
+            textures.Dispose();
+        }
+    }
+
     // The whiteout is the air OUTSIDE the canopy: the original applies it as a fog term on the
     // world draw, which the interior never takes, so the window whites out and the panel does not.
     // Both are canvas layers here, so the order between them is what decides it, and the drawn

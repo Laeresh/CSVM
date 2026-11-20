@@ -31,6 +31,9 @@ global uniform vec3 csky_tune_cloud_tint = vec3(1.0);
 // world's gain hands its own colour to SDFGI as emission.
 global uniform vec3 csky_gi_ambient_fill = vec3(0.0);
 global uniform float csky_gi_self_lit = 0.0;
+// The zone's light on the unshaded Enhanced vegetation, linear (WeatherRig.VegetationLightOf). One under
+// Original and in a white-lit day zone; a coloured day zone tints it (docs/org/weather.md).
+global uniform vec3 csky_vegetation_light = vec3(1.0);
 
 // The per-view fog table (Session/World/FogViewTable.cs). Splitscreen panes and spyglass pictures
 // each sit in their own camera weather state, so each wears its own zone's fog, world light and

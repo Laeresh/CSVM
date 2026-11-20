@@ -314,6 +314,7 @@ public static class SuiteCatalog
         "stunt-race-bot-menu",
         "vegetation-added-stamps",
         "vegetation-lab",
+        "vegetation-light",
         "vegetation-models",
         "versus-local-bot",
         "versus-local-crash-respawn",

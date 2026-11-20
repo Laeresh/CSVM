@@ -36,6 +36,26 @@ internal sealed partial class CloudShadow : Node
     public static readonly StringName TopsLatticeParam = "csky_pc_tops_lat";
     public static readonly StringName FogParam = "csky_pc_fog";
 
+    // The march's per-pixel trace for the sprites over the slab (MultiMeshEmitterRenderer.SlabTraceDecl).
+    // Two fixed targets hold it: the temporal resolve's pair, or the reduced march twice. No frame re-points them.
+    // Then the traced eye with the trace's U scale, the back axis with the target read, and the lens.
+    public static readonly StringName TraceAParam = "csky_pc_trace_a";
+    public static readonly StringName TraceBParam = "csky_pc_trace_b";
+    public static readonly StringName TraceEyeParam = "csky_pc_trace_eye";
+    public static readonly StringName TraceBackParam = "csky_pc_trace_back";
+    public static readonly StringName TraceLensParam = "csky_pc_trace_lens";
+
+    // The reduced march's target, whose right half holds the light shafts' quarters, and the shafts' gain,
+    // reach and the share of the target they fill.
+    public static readonly StringName MarchParam = "csky_pc_march";
+    public static readonly StringName TraceShaftParam = "csky_pc_trace_shaft";
+
+    // The slab's light and fog as its uniforms stand. First the ambient's top colour and fog share, then the
+    // sun's colour and gain, then the ambient gain, haze_near_m, far_m and cloud_fog.
+    public static readonly StringName TraceAmbParam = "csky_pc_trace_amb";
+    public static readonly StringName TraceSunParam = "csky_pc_trace_sun";
+    public static readonly StringName TraceLookParam = "csky_pc_trace_look";
+
     // The globals the include declares: offset X/Z, one over the cell, darkness; the edge band; the
     // lab's tint; and the ambient share.
     private static readonly StringName Param = "csky_cloud_shadow";
@@ -45,6 +65,7 @@ internal sealed partial class CloudShadow : Node
     private static readonly StringName BandParam = "csky_cloud_shadow_band";
 
     private static bool _registered;
+    private static ImageTexture? _noTrace;
     private static Vector2 _publishedEdge;
     private static Vector3 _publishedTint;
     private static float _publishedAmbient;
@@ -75,6 +96,10 @@ internal sealed partial class CloudShadow : Node
         Tune = Saved;
         _drift = Tune.Drift(authored);
     }
+
+    /// <summary>Gets what <see cref="TraceAParam"/>, <see cref="TraceBParam"/> and <see cref="MarchParam"/> hold with no trace published: one texel, never read
+    /// while the eye global's U scale is zero.</summary>
+    public static ImageTexture NoTrace => _noTrace ??= TextureUpload.Create(1, 1, Image.Format.Rgba8, new byte[] { 0, 0, 255, 255 });
 
     /// <summary>The node whose state the globals carry, null while the off state stands.</summary>
     public static CloudShadow? Live { get; private set; }
@@ -152,6 +177,16 @@ internal sealed partial class CloudShadow : Node
         RenderingServer.GlobalShaderParameterAdd(TopsLatticeParam, RenderingServer.GlobalShaderParameterType.Sampler2D, default);
         foreach (var bubble in BubbleParams)
             RenderingServer.GlobalShaderParameterAdd(bubble, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(TraceAParam, RenderingServer.GlobalShaderParameterType.Sampler2D, NoTrace);
+        RenderingServer.GlobalShaderParameterAdd(TraceBParam, RenderingServer.GlobalShaderParameterType.Sampler2D, NoTrace);
+        RenderingServer.GlobalShaderParameterAdd(TraceEyeParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(TraceBackParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(TraceLensParam, RenderingServer.GlobalShaderParameterType.Vec2, Vector2.One);
+        RenderingServer.GlobalShaderParameterAdd(TraceAmbParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(TraceSunParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(TraceLookParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
+        RenderingServer.GlobalShaderParameterAdd(MarchParam, RenderingServer.GlobalShaderParameterType.Sampler2D, NoTrace);
+        RenderingServer.GlobalShaderParameterAdd(TraceShaftParam, RenderingServer.GlobalShaderParameterType.Vec4, Vector4.Zero);
         _registered = true;
         Published = OffValue;
         _publishedEdge = CloudShadowPattern.Edge;

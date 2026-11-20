@@ -683,7 +683,7 @@ public static class CanopyClumps
                 discard;
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
-            ALBEDO = col.rgb * grade;
+            ALBEDO = col.rgb * grade * csky_vegetation_light;
             vec2 halves = v_mirror < 0.0 ? texture(side_tex, UV).gr : texture(side_tex, UV).rg;
             float v_side = (v_sun >= 0.0 ? halves.x : -halves.y) / 3.0;
         {{ClutterBuilder.RichFragmentLines}}{{ClutterBuilder.FogLines}}{{SceneBuilder.TintLine}}

@@ -446,16 +446,32 @@ a pylon that passes the gasbag gate, the host sets `AiPilot.TorpedoLeadSpeed` to
 the first such pylon (`GunnerAcquisition.ReadyGasbagPylon`, the same walk the gate runs). Pursuing a
 gas bag, the law then solves that round's lead against the bag's world velocity, the frame the
 rocketeer leads a motorless round in. The residual closes from any angle, and the launch comes as
-soon as the band and the quick-draw cone allow. The rocketeer takes the first pylon that clears its
+soon as the band, the quick-draw cone and the reach hold below allow. The rocketeer takes the first pylon that clears its
 own walk, which is that same pylon whenever every gasbag pylon carries one weapon, as every shipped
 fit does; a fit with two `DAMAGES_ZEPPELIN` weapons of different speeds could steer on one and fire
 the other. The gate keeps its decoded numbers, and the rule does not vary with skill. Every AI off a bot
 seat, the campaign's and Instant Action's included, keeps the decoded law. The `bot-torpedo-lead`
 suite pins both sides.
 
-The rule only steers a bot that is pursuing. A Zeppelin vs Zeppelin bot approaching from far off
-loses pursuit to the decoded attack dwell about 1.6 km out and flies past the bag on patrol, so in
-`net-zvz-bot` it launches at 333 m after turning back.
+The rule only steers a bot that is pursuing. A bot seat holds its attack dwell while a turret or
+structure quarry lies beyond the band's 900 m edge (docs/org/aiPilot.md, "What CSVM ports of the
+dwell and the leash"), so a Zeppelin vs Zeppelin bot approaching from far off stays in pursue, and in
+`net-zvz-bot` it launches at the band's edge on its first approach.
+
+A bot seat also holds a `DAMAGES_ZEPPELIN` launch until the predicted intercept is in reach, a
+remake-only rule (`AiRocketeer.IsBotSeat`). The intercept is the rocketeer's own lead solve against
+the target's world velocity, and its path, `VELOCITY` times the solved flight time, must lie within
+`AiRocketeer.ReachFraction` (0.75) of the round's `RANGE`, 900 m for `wep_14`. The quarter left is for
+a hull that turns off the straight-line prediction; a gun's hits spend a round's health, never its
+range. A round with a motor reports no flight time and is not held, and no shipped
+`DAMAGES_ZEPPELIN` weapon has one. Every AI off a bot seat keeps the decoded gates.
+
+In `net-zvz-bot` the hold does not engage: at the 898 m launch the bag's reported velocity, which
+matches its finite-difference velocity, puts the intercept at 762 m of path. The round flies that
+lead to within 0.4 degrees. The hull has just passed a route node and keeps turning, about 110 degrees
+over the round's flight, so at the predicted time the bag is 269 m from the predicted point. The
+round chases it for its whole 1200 m `RANGE`, ends 47 m from the bag at its closest and does no
+damage. No constant-velocity lead or range margin sees that turn coming.
 
 ## What the shipped data amounts to
 

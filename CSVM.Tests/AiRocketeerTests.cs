@@ -34,6 +34,35 @@ public class AiRocketeerTests
         Assert.Equal(0, r.SelectedPylon);
     }
 
+    /// <summary>A bot seat holds a torpedo whose intercept on a receding gas bag lies past its reach,
+    /// and launches once inside it. Any other pilot keeps the decoded gates.</summary>
+    [Theory]
+    [InlineData(true, 800f, false)]  // 1600 m of path, past the 900 m reach
+    [InlineData(true, 400f, true)]   // 800 m of path
+    [InlineData(false, 800f, true)]  // the decoded rule launches inside the band
+    public void ABotSeatLaunchesATorpedoOnlyInReach(bool botSeat, float separation, bool fires)
+    {
+        var r = Rocketeer(rollsPass: true);
+        r.UseWingmanRule();
+        r.IsBotSeat = botSeat;
+        var ownPos = new Vector3(0f, 0f, separation);
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            DamagesZeppelin = true,
+            Armed = true,
+            MountPos = ownPos,
+            RoundSpeed = 60f,
+            RoundRangeM = 1200f,
+        };
+        r.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
+            TargetPos, new Vector3(0f, 0f, -30f), TargetForward, targetIsGasbag: true,
+            new List<RocketPylonView> { pylon });
+        Assert.Equal(fires, r.WantsFire);
+        if (!fires)
+            Assert.Equal("reach:0", r.LastVerdictKey);
+    }
+
     // The breadcrumb's text and its change key, which the host logs by and the torpedo suite reads.
     [Fact]
     public void TheVerdictNamesTheGateAndAKeyWithoutItsNumbers()

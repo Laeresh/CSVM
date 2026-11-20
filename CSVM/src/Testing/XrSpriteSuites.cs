@@ -39,6 +39,14 @@ internal static class XrSpriteSuites
                         MultiMeshEmitterRenderer.VariantCode(mix, soft, enhanced, stereo: false),
                         MultiMeshEmitterRenderer.VariantCode(mix, soft, enhanced, stereo: true)));
                 }
+
+                // The text a headset's mix layers wear while the volumetric slab stands.
+                if (mix)
+                {
+                    texts.Add(($"emitter mix{(soft ? " soft" : "")} enhanced over the slab",
+                        MultiMeshEmitterRenderer.VariantCode(true, soft, enhanced: true, stereo: false, overSlab: true),
+                        MultiMeshEmitterRenderer.VariantCode(true, soft, enhanced: true, stereo: true, overSlab: true)));
+                }
             }
         }
         foreach (bool lit in new[] { false, true })

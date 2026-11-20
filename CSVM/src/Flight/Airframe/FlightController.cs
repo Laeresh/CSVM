@@ -3932,14 +3932,22 @@ public partial class FlightController : Node3D
         // The mode machine's two host seams, the obstacle probe (D11 avoid crash) and the nitro
         // cull, are this node's own state. They are wired lazily, so a machine assigned after spawn
         // still gets them, and never overwrite what a test injected.
-        if (Pilot!.Machine is { } machine && IsInsideTree())
+        if (Pilot!.Machine is { } machine)
         {
-            machine.ProbeBlocked ??= AvoidCrashBlocksLine;
-            // The maneuver picker's injector cull: a nitro-flagged entry is drawable only on an
-            // aircraft that can actually boost.
-            machine.NitroUsable ??= () => Nitro.Installed && !_model.EngineDead;
+            // Copied each step, not at spawn, since a suite flips IsBotSeat on a flying controller.
+            machine.IsBotSeat = IsBotSeat;
+            if (IsInsideTree())
+            {
+                machine.ProbeBlocked ??= AvoidCrashBlocksLine;
+                // The maneuver picker's injector cull: a nitro-flagged entry is drawable only on an
+                // aircraft that can actually boost.
+                machine.NitroUsable ??= () => Nitro.Installed && !_model.EngineDead;
+            }
         }
-        // A bot seat alone steers on its ready torpedo's lead; every other AI keeps the decoded law.
+        // A bot seat alone steers on its ready torpedo's lead and launches it only in reach; every
+        // other AI keeps the decoded law.
+        if (Pilot!.Rocketeer is { } rocketeer)
+            rocketeer.IsBotSeat = IsBotSeat;
         Pilot!.TorpedoLeadSpeed = IsBotSeat && GunnerAcquisition.ReadyGasbagPylon(Loadout, Pilot.Rocketeer, InfiniteAmmo) is { } torpedo
             ? torpedo.Weapon.Velocity ?? ProjectilePool.DefaultVelocity
             : null;

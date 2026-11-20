@@ -568,6 +568,9 @@ public partial class Launcher : Node3D
         // ambient 1 fills to 1, so the default agrees with the ambient default above.
         RenderingServer.GlobalShaderParameterAdd("csky_sun_fill_rgb",
             RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        // The Enhanced cockpit interior's fill below its floor (WeatherRig.InteriorLift), none until a zone apply writes it.
+        RenderingServer.GlobalShaderParameterAdd(Mech3.SceneBuilder.InteriorLiftParam,
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",

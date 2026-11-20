@@ -150,8 +150,9 @@ carries per seat. Each presentation signs pads on at one screen only, its join b
 `PrimeBoard` and `ScanBoard`: the first A takes the captain's chair beside the keyboard, A on any
 other pad signs it onto the next open seat, B on a seated pad gives that seat back, and the
 captain's Start casts off. Steering a screen with a pad claims nothing. Original's board is
-`OriginalJoinBoard`, behind the top level's JOIN BOARD door, and `OriginalShell.JoiningOpen` is true
-on it alone. The screens that launch a flight (Free Flight, Dogfight, Instant Action, the campaign)
+`OriginalJoinBoard`, behind the top level's JOIN BOARD door and Instant Action's "[join board ...]"
+note, which opens it under `InstantActionFeature.AdmitsBot`; the board's CONTINUE and BACK then
+return to Instant Action. `OriginalShell.JoiningOpen` is true on it alone. The screens that launch a flight (Free Flight, Dogfight, Instant Action, the campaign)
 and the rebinding screen only read the roster the board wrote. Once a second seat has signed on,
 Original draws a seat strip over every campaign board and over the Instant Action screen as an
 overlay; a solo campaign shows the authored board alone. That strip is a chip row, the player tags
@@ -586,7 +587,8 @@ Time box focused (shown only beside `--debug-join=1` or more, since a solo run h
 `instant-action:race-bots` on stunt flying with a bot row put on the join board and the
 remake-only Race Bots toggle standing on and focused beside the Race Time box on the lives box's line,
 `instant-action:course` on stunt flying on the airfield with the remake-only Course list standing
-open over the shipped sample course,
+open over the shipped sample course, `instant-action:join-board-door` on the race bots pose with the
+cursor on the remake-only "[join board ...]" door instead,
 `instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
