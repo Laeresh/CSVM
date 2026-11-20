@@ -107,7 +107,7 @@ internal sealed class StuntRaceDirector
         }
 
         var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
-        race.BestImproved += racer => RecordBest(bests, racer);
+        race.BestImproved += racer => RecordBest(bests, racer, course: _spec.Course != null);
         race.BeginOpening(OpeningSeconds(inputs.FirstCount));
         Log.Info("flight", $"stunt race: {_field.SeatRigs.Count} pilots over {race.ZoneCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks{(race.Replicated ? ", the host's board and window replicated here" : "")}");
     }
@@ -148,10 +148,11 @@ internal sealed class StuntRaceDirector
         phases?.Sum(phase => phase.Seconds) ?? 0f;
 
     // A race run that is its pilot's best so far records under the solo run's key, the same store
-    // and the same never-worsen rule. A pilot with no key records nothing.
-    private static void RecordBest(ScoreStore store, Racer racer)
+    // and the same never-worsen rule. A course run's carries its splits. A pilot with no key records nothing.
+    private static void RecordBest(ScoreStore store, Racer racer, bool course)
     {
-        if (racer.ScoreKey.Length > 0 && racer.BestTime is { } best && store.RecordIfBest(racer.ScoreKey, best))
+        float[]? splits = course && racer.Splits.All(t => t != null) ? racer.Splits.Select(t => t!.Value).ToArray() : null;
+        if (racer.ScoreKey.Length > 0 && racer.BestTime is { } best && store.RecordIfBest(racer.ScoreKey, best, splits: splits))
         {
             Log.Info("flight", $"stunt race: {racer.Tag} set a new best {StuntMission.FormatTime(best)} for '{racer.ScoreKey}'");
         }

@@ -43,7 +43,8 @@ public sealed class ScoreStore
     /// <summary>The key <paramref name="run"/> records under. A Danger Zone run's is
     /// <c>chapter/mission/plane</c>. A course run's is <c>course/</c> plus the course's chapter, name
     /// and <see cref="Course.Hash"/>, then the plane, so a renamed or edited course starts a fresh
-    /// board. Its entry adds <c>penalties</c> and <c>splits</c> beside the best.</summary>
+    /// board. Its entry adds <c>penalties</c>, <c>splits</c> and <c>segments</c> beside the best, and
+    /// holds the segments alone while no run under it has finished.</summary>
     public static string KeyFor(StuntMission run, string chapter, string mission, string plane) =>
         run.Course is { } c ? $"course/{c.Chapter}/{c.Name}/{c.Hash}/{plane}" : $"{chapter}/{mission}/{plane}";
 
@@ -55,6 +56,28 @@ public sealed class ScoreStore
     /// entry, penalties so far included, in sequence order. A Danger Zone run's is null.</summary>
     public static float[]? SplitsOf(StuntMission run) =>
         run.Course != null ? run.Zones.Select(z => z.CompletedAt).ToArray() : null;
+
+    /// <summary>The time each sequence entry took from the one before, the first's from the clock's
+    /// start: the steps between <paramref name="splits"/>. A penalty counts in the segment it landed in.</summary>
+    public static float[] SegmentsOf(float[] splits) =>
+        splits.Select((t, i) => i > 0 ? t - splits[i - 1] : t).ToArray();
+
+    /// <summary>The faster of <paramref name="stored"/> and <paramref name="flown"/> segment by
+    /// segment, any segment past the stored ones taken as flown. Null when the run improves none.</summary>
+    public static float[]? FasterSegments(float[]? stored, float[] flown)
+    {
+        stored ??= System.Array.Empty<float>();
+        var faster = new float[System.Math.Max(stored.Length, flown.Length)];
+        bool improved = false;
+        for (int i = 0; i < faster.Length; i++)
+        {
+            bool better = i < flown.Length && (i >= stored.Length || flown[i] < stored[i]);
+            faster[i] = better ? flown[i] : stored[i];
+            improved |= better;
+        }
+
+        return improved ? faster : null;
+    }
 
     /// <summary>The stored best total, seconds, for this run key, or null if none is recorded yet.</summary>
     public float? GetBest(string key) => Field(key, "best")?.AsSingle();
@@ -68,13 +91,36 @@ public sealed class ScoreStore
     public float[]? GetSplits(string key) =>
         Field(key, "splits")?.AsFloat32Array() is { Length: > 0 } splits ? splits : null;
 
+    /// <summary>The fastest each segment (<see cref="SegmentsOf"/>) has been flown in any run under
+    /// this key, finished or not, or null for none. A key with splits and no segments reads its
+    /// best's own.</summary>
+    public float[]? GetSegments(string key) =>
+        Field(key, "segments")?.AsFloat32Array() is { Length: > 0 } segments ? segments
+        : GetSplits(key) is { } splits ? SegmentsOf(splits) : null;
+
+    /// <summary>Records each segment of <paramref name="splits"/>, a run's clock at the entries flown
+    /// so far, that beats the stored one, persisting immediately when any does.</summary>
+    public void RecordSegments(string key, float[] splits)
+    {
+        Reread();
+        if (FasterSegments(GetSegments(key), SegmentsOf(splits)) is not { } faster)
+            return;
+        var entry = _data.TryGetValue(key, out var v) && v.VariantType == Variant.Type.Dictionary
+            ? v.AsGodotDictionary()
+            : new Godot.Collections.Dictionary();
+        entry["segments"] = faster;
+        _data[key] = entry;
+        Save();
+    }
+
     /// <summary>Records <paramref name="total"/> as the new best for <paramref name="key"/> if it
     /// beats the stored one (or there is none), persisting immediately, with
     /// <paramref name="penalties"/> and <paramref name="splits"/> beside it when given. Returns true
     /// when it was a new best (the scoreboard flags NEW BEST), false when a stored time stands,
-    /// never worsens a record.</summary>
+    /// never worsens a record. The best segments stand as they were.</summary>
     public bool RecordIfBest(string key, float total, int? penalties = null, float[]? splits = null)
     {
+        Reread();
         var prev = GetBest(key);
         if (prev.HasValue && total >= prev.Value)
             return false;
@@ -87,6 +133,8 @@ public sealed class ScoreStore
             entry["penalties"] = count;
         if (splits != null)
             entry["splits"] = splits;
+        if (Field(key, "segments") is { } segments)
+            entry["segments"] = segments;
         _data[key] = entry;
         Save();
         return true;
@@ -110,7 +158,11 @@ public sealed class ScoreStore
     /// <summary>Loads the store at <paramref name="storePath"/>, or an empty one if the file is
     /// absent, unreadable or malformed. A suite points it at a path under its own scratch
     /// directory, never at the player's own <c>user://stunt_scores.json</c>.</summary>
-    internal static ScoreStore Load(string storePath)
+    internal static ScoreStore Load(string storePath) =>
+        new(storePath, ReadData(storePath) ?? new Godot.Collections.Dictionary());
+
+    // The file's records, or null when it is absent, unreadable or malformed.
+    private static Godot.Collections.Dictionary? ReadData(string storePath)
     {
         if (FileAccess.FileExists(storePath))
         {
@@ -119,17 +171,29 @@ public sealed class ScoreStore
             {
                 var parsed = Json.ParseString(f.GetAsText());
                 if (parsed.VariantType == Variant.Type.Dictionary)
-                    return new ScoreStore(storePath, parsed.AsGodotDictionary());
+                    return parsed.AsGodotDictionary();
             }
             else
                 Log.Warn("flight", $"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
         }
-        return new ScoreStore(storePath, new Godot.Collections.Dictionary());
+        return null;
     }
 
     private Variant? Field(string key, string field) =>
         _data.TryGetValue(key, out var v) && v.VariantType == Variant.Type.Dictionary
             && v.AsGodotDictionary().TryGetValue(field, out var value) ? value : (Variant?)null;
+
+    // A board's store lives the whole session while a run HUD writes segments through its own. A
+    // write therefore starts from the file as it stands, or this older copy would undo theirs. ⚠ Do
+    // not drop the copy on a failed read: an empty one written back erases every record.
+    private void Reread()
+    {
+        if (_storePath != null && ReadData(_storePath) is { } current)
+        {
+            _data.Clear();
+            _data.Merge(current);
+        }
+    }
 
     private void Save()
     {

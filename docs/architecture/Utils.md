@@ -417,6 +417,12 @@ It has no live-apply hook: the cue reads `Drawn` every step, which is always tru
 its live wisps on the step the word turns them off. The VIDEO page shows it as the Speed Wisps dropdown under Global
 Illumination.
 
+## src/Utils/FlagMarksSetting.cs
+Whether a Capture the Flag pane marks the flags and bases that matter beside its target (`Flight/Hud/TargetHud.cs`,
+`Flight/Modes/FlagMarkers.Passive`): `off` or `on`, a remake-only aid. It resolves as `SpeedWispsSetting` does:
+`--flag-marks=`, the saved `flagMarks` word, the `hud.flagMarks` key, then `on`. It has no live-apply hook: the HUD
+reads `Drawn` every frame. The GAME OPTIONS page shows it as the Flag Markers checkbox under Keep Camera Zoom.
+
 ## src/Utils/ShadowDistanceSetting.cs
 How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
 (2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the
