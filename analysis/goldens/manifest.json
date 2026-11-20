@@ -194,7 +194,7 @@
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "e1cebdb0cece39d46382531683bcf94c",
+      "hash": "482dab89c6d702f04bb4fcc06ed21b65",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
@@ -210,7 +210,7 @@
     {
       "name": "c1-cockpit-xr-sim-enhanced",
       "frame": 120,
-      "hash": "8f63f62a5feda78abcf8e8463e7a2a76",
+      "hash": "e2828b7019c1afdaf23a38be06ddc9d5",
       "exercises": "Enhanced through the stand-in headset on the VR quality profile: no temporal anti-aliasing over the project's MSAA, the sun's hard-edged low shadow on the stereo interior, SSAO, SSR and glow per eye; frame-sensitive 27.16 %.",
       "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute", "--graphics=enhanced"]

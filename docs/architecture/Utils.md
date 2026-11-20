@@ -446,7 +446,7 @@ Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIlluminat
 `graphics.globalIllumination` key, then `FallbackFor(det, integrated)`: `on` on a discrete GPU, `off` on an integrated one
 (`default_integrated_gpu`, the GPU test `ShadowQualitySetting` holds) until the Steam Deck measures SDFGI, and `off` under `--det`
 (`default_det`), so a golden lights without GI unless its command line asks. Its live-apply hook follows the session, which writes GI on the world's
-Environment and each cockpit pass's copy, then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
+Environment alone (a cockpit pass's copy keeps it off), then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
 lighting lab's toggle, unsaved as the cloud lab's is. The VIDEO page shows it as the Global Illumination dropdown under
 Volumetric Clouds.
 
