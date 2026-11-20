@@ -257,6 +257,46 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Enhanced draws a soft-alpha world surface from a copy whose clear texels hold the texture's own
+    // colour. Able to fail: an unfilled copy keeps them black, and a fill in the archive moves the faithful texture.
+    [Suite("soft-alpha-edge-fill",
+        "C1's cliff02_trans1 keeps black clear texels in the archive, and its Enhanced copy fills them "
+        + "with colour and leaves every alpha as it was")]
+    internal static void SoftAlphaEdgeFill(TestContext ctx)
+    {
+        var path = ctx.ChapterTextures("C1");
+        const string name = "cliff02_trans1.tif";
+        ctx.RequireData(path, $"C1 textures");
+        using var textures = new TextureArchive(path);
+        var tex = textures.Find(name);
+        ctx.Check(tex != null && textures.LastAlphaIsSoft, $"C1 {name} resolves with a soft alpha");
+        if (tex == null)
+        {
+            return;
+        }
+        var plain = (Image)tex.GetImage().Duplicate();
+        plain.ClearMipmaps();
+        plain.Convert(Image.Format.Rgba8);
+        var filled = SceneBuilder.EdgeFilled(tex).GetImage();
+        filled.ClearMipmaps();
+        byte[] a = plain.GetData(), b = filled.GetData();
+        int clear = 0, blackBefore = 0, blackAfter = 0, alphaMoved = 0;
+        for (int i = 0; i < a.Length; i += 4)
+        {
+            alphaMoved += a[i + 3] != b[i + 3] ? 1 : 0;
+            if (a[i + 3] != 0)
+            {
+                continue;
+            }
+            clear++;
+            blackBefore += a[i] + a[i + 1] + a[i + 2] == 0 ? 1 : 0;
+            blackAfter += b[i] + b[i + 1] + b[i + 2] == 0 ? 1 : 0;
+        }
+        // The four-bit alpha clears some faint coloured texels too, so not every clear texel is black.
+        ctx.Check(blackBefore > 0, $"the archive's texture keeps black clear texels ({blackBefore} of {clear} clear)");
+        ctx.Check(blackAfter == 0 && alphaMoved == 0, $"the Enhanced copy fills every clear texel and moves no alpha (black {blackAfter}, alpha moved {alphaMoved})");
+    }
+
     // Faithful graphics keeps four bits of an alpha-plane texture's alpha, as the original's ARGB4444
     // upload does. Able to fail: without the truncation flare_green keeps its corner alpha of 7, and
     // with bit 3 ignored cloud1 loses its 8-bit alpha.

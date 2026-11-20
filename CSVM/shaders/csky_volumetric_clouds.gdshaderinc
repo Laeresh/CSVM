@@ -191,9 +191,10 @@ vec3 csky_pc_shaft_colour(float light, vec3 eye, vec3 dir, vec3 sun_rgb, float s
     return sun * light * shaft_gain * 0.00006 * phase;
 }
 
-// The lit cloud `rgb` of coverage `a`, fogged at its entry point as the slab writes it.
+// The lit cloud `rgb` of coverage `a`, fogged at its entry point as the slab writes it. `cloud_fog` thins
+// the zone's fog alone: the cloud's own haze stays whole, so a far cloud too small to resolve dissolves.
 vec3 csky_pc_cloud_fogged(vec3 rgb, float a, vec3 entry, vec3 cam, float haze_near_m, float far_m, float cloud_fog) {
-    float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam))) * cloud_fog;
+    float fog = max(csky_fog_amount(entry, cam) * cloud_fog, smoothstep(haze_near_m, far_m, distance(entry, cam)));
     return mix(rgb, csky_fog_color_at(cam) * a, fog);
 }
 

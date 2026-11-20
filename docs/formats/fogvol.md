@@ -150,7 +150,7 @@ map-spanning `fvol1`–`fvol9` pass; C1C's twelve build-up frusta and C5's seven
 both fail test (2), the shortest build-up is 299.7 m (ratio 2.27 against the 1.5× cut) and the
 shallowest strip is 646 m (ratio 9.23), so neither is ever extended.
 
-**How far.** `MapEdgeExtender`'s rolling terrain window covers `Rings` (5) tiles of 1,024 m past
+**How far.** `MapEdgeExtender`'s rolling terrain window covers at least `BaseRings` (5) tiles of 1,024 m past
 whatever cell the camera occupies, **5,120 m**, but a full precomputed ring to that radius would
 place an estimated **~21,250** extra sprites for C1/C2B/C4 (≈2.0× the 10,524-sprite base field,
 extrapolated from the ring-area ratio at the measured radius below), past a sane budget for a

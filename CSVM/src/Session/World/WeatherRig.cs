@@ -595,16 +595,21 @@ public sealed class WeatherRig
     }
 
     /// <summary>The fog range as written. Enhanced mode pushes the authored pair out by
-    /// <c>EnhancedFogRangeScale</c>, so shadowed ground is not already grey. Pure and identity in
-    /// original mode, which keeps that path byte-for-byte the authored one. A night
-    /// <paramref name="zone"/> keeps its authored range in both modes. Its fog is near black, and a
-    /// pushed range leaves lit walls standing far out over ground already gone dark. A view with
-    /// no zone takes the push.</summary>
-    public static Vector2 FogRangeFor(Vector2 authored, WeatherState.ZoneWeather? zone)
-        => GraphicsMode.Enhanced && !(zone is { } night && IsNightZone(night)) ? authored * EnhancedFogRangeScale : authored;
+    /// <c>EnhancedFogRangeScale</c>, so shadowed ground is not already grey. The pushed far reaches at
+    /// least <paramref name="farFloor"/> metres (<see cref="ZoneLighting.FogFar"/>). Pure and identity in
+    /// original mode. A night <paramref name="zone"/> keeps its authored range in both modes: a pushed
+    /// range leaves lit walls standing far out over ground already gone dark. A view with no zone
+    /// takes the push.</summary>
+    public static Vector2 FogRangeFor(Vector2 authored, WeatherState.ZoneWeather? zone, float farFloor = 0f)
+    {
+        if (!GraphicsMode.Enhanced || (zone is { } night && IsNightZone(night)))
+            return authored;
+        var pushed = authored * EnhancedFogRangeScale;
+        return new Vector2(pushed.X, Mathf.Max(pushed.Y, farFloor));
+    }
 
-    /// <summary>One zone's own authored fog range, as <see cref="FogRangeFor(Vector2, WeatherState.ZoneWeather?)"/>
-    /// writes it.</summary>
+    /// <summary>One zone's own authored fog range, as <see cref="FogRangeFor(Vector2, WeatherState.ZoneWeather?, float)"/>
+    /// writes it with no floor.</summary>
     public static Vector2 FogRangeFor(WeatherState.ZoneWeather zone)
         => FogRangeFor(new Vector2(zone.FogNear, zone.FogFar), zone);
 
@@ -1650,13 +1655,14 @@ public sealed class WeatherRig
     {
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
-        var fogLinear = SkyTinted(fog.FogColor, Tuning(fog)).SrgbToLinear();
+        var tune = Tuning(fog);
+        var fogLinear = SkyTinted(fog.FogColor, tune).SrgbToLinear();
         // ⚠ Do not scale the authored fog ranges in the FAITHFUL path: VIEWING_RANGE ships
         // FOG_SCALE 1.0 at HIGH in every chapter and no screenshot residual licenses re-opening it
         // (docs/org/weather.md). FogRangeFor is identity there; only enhanced mode pushes them out.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
-            : FogRangeFor(fog);
+            : FogRangeFor(new Vector2(fog.FogNear, fog.FogFar), fog, tune.FogFar);
         // FOG_ALTITUDE: the fog cylinder's vertical extent, full fog below FogLow, fading to
         // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original,
         // see csky_atmosphere.gdshaderinc and docs/org/weather.md).
@@ -1681,7 +1687,7 @@ public sealed class WeatherRig
         if (over.Range is { } range && !_spec.NoFog)
             // Through the same push the zone's range takes. Otherwise a FOG_STATE edge in enhanced
             // mode would snap the haze back to the authored distance mid-flight.
-            fog = fog with { Range = FogRangeFor(range, zone) };
+            fog = fog with { Range = FogRangeFor(range, zone, zone is { } tuned ? Tuning(tuned).FogFar : 0f) };
         if (over.Altitude is { } altitude)
             fog = fog with { Altitude = altitude };
         return fog;

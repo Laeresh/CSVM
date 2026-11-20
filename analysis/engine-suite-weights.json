@@ -562,6 +562,7 @@
     "shootable-flyout": 0.125,
     "sky-sprite-backdrop-key": 0.124,
     "smoke-screen": 0.102,
+    "soft-alpha-edge-fill": 0.11,
     "sonic-ground-ring": 0.022,
     "sound-lab": 0.399,
     "sound-pack": 0.09,

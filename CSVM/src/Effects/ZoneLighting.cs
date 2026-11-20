@@ -69,6 +69,8 @@ public sealed record ZoneLighting
             "the terrain bake's share and the sun's shadow-map opacity, 1 fully shaded"),
         new("god_rays", "God-ray intensity", Clouds, 0f, 4f, 0.01f, l => l.GodRays, (l, v) => l with { GodRays = v },
             "over the mission's haze gain; draws only with Volumetric Clouds on"),
+        new("fog_far", "Fog far, at least (m)", Clouds, 0f, 16000f, 250f, l => l.FogFar, (l, v) => l with { FogFar = v },
+            "the zone's pushed fog far reaches at least this far; 0 leaves it; the ground past the map edge follows"),
         new("ambient_floor", "Ambient fill under SDFGI", Gi, 0f, 2f, 0.01f, l => l.AmbientFloor, (l, v) => l with { AmbientFloor = v },
             "the zone's flat ambient added back on lit world surfaces, which SDFGI replaces; 1 is the GI-off fill"),
         new("self_lit_emission", "Self-lit glow into SDFGI", Gi, 0f, 8f, 0.05f, l => l.SelfLitEmission, (l, v) => l with { SelfLitEmission = v },
@@ -196,6 +198,10 @@ public sealed record ZoneLighting
 
     /// <summary>The volumetric clouds' light shafts over the mission's haze gain, a <c>clouds</c> layer field.</summary>
     public float GodRays { get; init; } = 1f;
+
+    /// <summary>The least fog far in metres the zone writes under the volumetric clouds, a <c>clouds</c> layer
+    /// field. The clouds read far past the authored fog, so the ground under them does too. 0 leaves the push.</summary>
+    public float FogFar { get; init; }
 
     /// <summary>The share of the zone's flat ambient added back as emission on the lit world while SDFGI
     /// stands, a <c>gi</c> layer field. SDFGI replaces the Environment's ambient inside its cascades, so

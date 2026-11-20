@@ -279,6 +279,10 @@ public sealed class SceneBuilder
     internal const string SlabVeilLine = "    if (over_slab) { ALPHA *= csky_pc_veil_at(CAMERA_POSITION_WORLD, "
         + "(INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz); }";
 
+    /// <summary>A fogged surface's line after <see cref="SlabVeilLine"/>. The slab draws the scene past the
+    /// fog as sky, so a surface over it fades out with the fog.</summary>
+    internal const string SlabFogLine = "    if (over_slab) { ALPHA *= 1.0 - csky_fog_on * fog_amt; }";
+
     /// <summary>The global uniform holding the left eye of the frame being drawn. It is the eye's
     /// offset from the XR origin in world axes, written by <c>Launch/XrEyeFeed.cs</c>.</summary>
     internal const string XrEyeLeftGlobal = "csky_xr_eye_left";
@@ -1120,6 +1124,19 @@ void light() {{
                 c.A = Mathf.Clamp(d / ramp, 0f, 1f);
                 img.SetPixel(x, y, c);
             }
+        img.GenerateMipmaps();
+        return TextureUpload.Create(img);
+    }
+
+    /// <summary>A copy of soft-alpha <paramref name="tex"/> whose clear texels take its solid texels' mean
+    /// colour, with a mip chain built from that. Their black darkens a soft edge in every smaller level.</summary>
+    internal static ImageTexture EdgeFilled(ImageTexture tex)
+    {
+        // ⚠ A copy, as in ColorKeyed.
+        var img = (Image)tex.GetImage().Duplicate();
+        img.ClearMipmaps();
+        img.Convert(Image.Format.Rgba8);
+        CanopyClumps.Bleed(img);
         img.GenerateMipmaps();
         return TextureUpload.Create(img);
     }
@@ -2473,6 +2490,13 @@ void light() {{
             bool scissor = _textures.LastHadAlpha && !blend;
             var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
             var keyed = KeyedBackdrop(texName, tex);
+            // Enhanced draws a soft-alpha world surface from an edge-filled copy. The faithful path and
+            // the camera-facing sprites keep the archive's texture.
+            if (keyed == null && blend && _textures.LastAlphaIsSoft && !(_billboardTexture != null && _billboardTexture(texName)))
+            {
+                if (!_keyedBackdrops.TryGetValue(texName, out keyed))
+                    _keyedBackdrops[texName] = keyed = EdgeFilled(tex);
+            }
             if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
@@ -3123,6 +3147,8 @@ void fragment() {{");
         }
         if (slabVeil)
             sb.AppendLine(SlabVeilLine);
+        if (slabVeil && fogged)
+            sb.AppendLine(SlabFogLine);
         if (scissor)
             sb.AppendLine(replacement ? "    ALPHA_SCISSOR_THRESHOLD = alpha_cutoff;" : "    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (coverage)

@@ -1186,8 +1186,16 @@ public partial class GameSession : Node3D
         if (_edgeExtender != null || _vegetation?.GroundCoverCards != null)
         {
             _focusPoints.Clear();
+            // The window reaches as far as the longest fog any pane writes. Original keeps the base
+            // window, and so does --no-fog, whose range is out of reach.
+            float fogFar = 0f;
             foreach (var rig in _rigs)
+            {
                 _focusPoints.Add(rig.Camera.Position);
+                if (GraphicsMode.Enhanced && _sky?.Weather?.FogOf(rig.Index).Range.Y is { } far and < 1e6f)
+                    fogFar = Mathf.Max(fogFar, far);
+            }
+            _edgeExtender?.SetReach(fogFar);
             _edgeExtender?.Update(_focusPoints);
             _vegetation?.Update(_focusPoints);
         }

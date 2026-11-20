@@ -39,6 +39,7 @@ public sealed class LightingTableTests
         Assert.Equal((1f, 1f, 1f), (d.CloudR, d.CloudG, d.CloudB));
         Assert.Equal((1f, 1f, 1f), (d.SkyR, d.SkyG, d.SkyB));
         Assert.Equal((1f, 1f, 1f, 1f, 0.5f), (d.ShadowStrength, d.GodRays, d.AmbientFloor, d.SelfLitEmission, d.SdfgiEnergy));
+        Assert.Equal(0f, d.FogFar);
         Assert.Equal(d, LightingTable.Parse("{}").For("C1", "M01", "zone1", LightingTable.Layers));
         Assert.False(d.TurnsSun);
         Assert.False(d.TunesEnvironment);
@@ -240,7 +241,7 @@ public sealed class LightingTableTests
         var based = (JsonObject)JsonNode.Parse(LightingTable.WithZone("{}", new("C1", null, "zone1"), edit, none))!;
         Assert.Equal(new[] { "exposure" }, Keys((JsonObject)based["C1"]!["ZONE1"]!));
 
-        Assert.Equal(new[] { "god_rays", "ambient_floor", "self_lit_emission", "sdfgi_energy" },
+        Assert.Equal(new[] { "god_rays", "fog_far", "ambient_floor", "self_lit_emission", "sdfgi_energy" },
             ZoneLighting.Fields.Where(f => f.Layer != null).Select(f => f.Key));
         Assert.True(LightingTable.Belongs(ZoneLighting.Find("shadow_strength")!, null));
     }
