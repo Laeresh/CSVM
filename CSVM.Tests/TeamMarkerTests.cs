@@ -59,6 +59,37 @@ public sealed class TeamMarkerTests
         Assert.True(Side(FlagMarker.Base, held).Shown);
     }
 
+    [Fact]
+    public void APaneKeepsTheEnemyFlagItsOwnFlagAwayAndItsBaseWhileCarrying()
+    {
+        // The enemy flag, at its base or away, unless this pane carries it.
+        Assert.True(FlagMarkers.Passive(FlagMarker.AtBase, friendly: false, carrying: false, carriesThisFlag: false));
+        Assert.True(FlagMarkers.Passive(FlagMarker.Away, friendly: false, carrying: false, carriesThisFlag: false));
+        Assert.False(FlagMarkers.Passive(FlagMarker.Away, friendly: false, carrying: true, carriesThisFlag: true));
+
+        // The own flag only away from its base.
+        Assert.False(FlagMarkers.Passive(FlagMarker.AtBase, friendly: true, carrying: false, carriesThisFlag: false));
+        Assert.True(FlagMarkers.Passive(FlagMarker.Away, friendly: true, carrying: false, carriesThisFlag: false));
+
+        // The own base only while carrying, and never the enemy base.
+        Assert.True(FlagMarkers.Passive(FlagMarker.Base, friendly: true, carrying: true, carriesThisFlag: false));
+        Assert.False(FlagMarkers.Passive(FlagMarker.Base, friendly: true, carrying: false, carriesThisFlag: false));
+        Assert.False(FlagMarkers.Passive(FlagMarker.Base, friendly: false, carrying: true, carriesThisFlag: false));
+    }
+
+    [Fact]
+    public void AHeldFlagsAwayMarkerNamesItsCarrier()
+    {
+        var carrier = new object();
+        var held = FlagMarkers.Side(FlagMarker.Away, new FlagRow(1, FlagState.Held, 2), Red, "Red Squadron", "Ace", null,
+            Vector3.Zero, carrier);
+        var floating = FlagMarkers.Side(FlagMarker.Away, new FlagRow(1, FlagState.Floating, FlagMatch.NoHolder), Red,
+            "Red Squadron", "Ace", null, Vector3.Zero, carrier);
+
+        Assert.Same(carrier, held.Carrier);
+        Assert.Null(floating.Carrier);
+    }
+
     [ExtractedDataFact]
     public void EveryMarkerReadsYourToItsTeamAndEnemyToTheOther()
     {

@@ -57,9 +57,9 @@ public static class FlagMarkers
     /// <paramref name="sideTeam"/>, the hostility id of its lobby team. The at-base marker is on
     /// while the flag is home (<c>0x49a5ee</c>..<c>0x49a60a</c>). The away marker is on while it is
     /// not (<c>0x49aaad</c>, <c>0x49ad65</c>). A held flag's away marker names its holder,
-    /// <paramref name="holder"/>.</summary>
+    /// <paramref name="holder"/>, and carries its aircraft, <paramref name="carrier"/>.</summary>
     public static SiteSide Side(FlagMarker marker, FlagRow row, int sideTeam, string teamName,
-        string holder, Messages? strings, Vector3? at = null)
+        string holder, Messages? strings, Vector3? at = null, object? carrier = null)
     {
         return marker switch
         {
@@ -70,7 +70,8 @@ public static class FlagMarkers
                 Shown: row.State == FlagState.Home),
             _ when row.State == FlagState.Held => new SiteSide(sideTeam, teamName,
                 Messages.Fill(Text(strings, CapturedByKey), Text(strings, YourKey), holder),
-                Messages.Fill(Text(strings, CapturedByKey), Text(strings, EnemyKey), holder), At: at),
+                Messages.Fill(Text(strings, CapturedByKey), Text(strings, EnemyKey), holder), At: at,
+                Carrier: carrier),
             _ when row.State == FlagState.Floating => new SiteSide(sideTeam, teamName,
                 Text(strings, "MSG_YOUR_FLAG_FLOAT"), Text(strings, "MSG_ENEMY_FLAG_FLOAT"), At: at),
             _ => new SiteSide(sideTeam, teamName,
@@ -78,6 +79,18 @@ public static class FlagMarkers
                 Shown: false, At: at),
         };
     }
+
+    /// <summary>Whether a pane draws <paramref name="marker"/> as a passive mark beside its target,
+    /// a remake-only aid (<c>FlagMarksSetting</c>). It keeps the enemy flag unless it carries that flag
+    /// itself (<paramref name="carriesThisFlag"/>), its own flag while away, and its own base while
+    /// <paramref name="carrying"/> any flag. A <see cref="FlagMarker"/> whose state is off never
+    /// reaches it.</summary>
+    public static bool Passive(FlagMarker marker, bool friendly, bool carrying, bool carriesThisFlag) => marker switch
+    {
+        FlagMarker.Base => friendly && carrying,
+        FlagMarker.AtBase => !friendly,
+        _ => !carriesThisFlag,
+    };
 
     /// <summary>The carrier's name line as a pane on <paramref name="ownTeam"/> reads it. It is the
     /// holder's name, then "Holds Your flag" on the flag's side and "Holds Enemy flag" otherwise.

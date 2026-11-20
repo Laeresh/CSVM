@@ -176,6 +176,14 @@ internal sealed class FlagRuntime
 
         runtime.Wire();
         inputs.Lights?.AddSource(runtime.SubmitGlow);
+        foreach (var pane in inputs.Panes)
+        {
+            if (pane.Controller?.PilotHud.TargetHud is { } hud)
+            {
+                hud.FlagMarks = true;
+            }
+        }
+
         Log.Info("flight", $"ctf: {homes.Count} flag(s) for teams {string.Join(",", props.Keys)}, {(inputs.Net.IsHost ? "host (deciding every ask)" : "guest (asking the host)")}{(inputs.FlagHomeToCapture ? ", own flag home to capture" : "")}");
         return runtime;
     }
@@ -280,8 +288,9 @@ internal sealed class FlagRuntime
         Vector3? at = marker.Marker != FlagMarker.Away ? null
             : prop.Carried is { } flag && flag.IsInsideTree() ? flag.GlobalPosition
             : _flags.FloatingAt(team) ?? HolderAt(row.Holder) ?? _flags.HomeOf(team);
+        var carrier = row.Holder >= 0 && row.Holder < _in.SeatRigs.Count ? _in.SeatRigs[row.Holder].Controller : null;
         return FlagMarkers.Side(marker.Marker, row, SideTeam(team), _in.Match.TeamName(team),
-            CallsignOf(row.Holder), _in.Strings, at);
+            CallsignOf(row.Holder), _in.Strings, at, carrier);
     }
 
     /// <summary>A seat went down on this machine's copy of the match: the flag it carried floats

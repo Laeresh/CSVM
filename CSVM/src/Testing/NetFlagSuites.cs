@@ -887,6 +887,8 @@ internal static class NetFlagSuites
             m => $"{Side(m, 1, "Your Flag At Base", "Enemy Flag At Base")}|Red Squadron");
         Reads(ctx, peers, "and no pane has an away marker for a flag at home", "cs_flg_light1", _ => "off");
         NetTeamSuites.PilotNames(ctx, peers, "with no flag taken, every pane reads every other seat's aeroplane by its callsign");
+        Passive(ctx, peers, "with both flags home, every pane marks the enemy flag at its base and nothing else, unselected",
+            _ => new[] { rows.Get("MSG_MP_ENEMY_FLAG_BASE") + "|red" });
     }
 
     // Team 1's flag held by seat 2. Its at-base marker is off and its away marker names the carrier
@@ -918,6 +920,36 @@ internal static class NetFlagSuites
         var near = NetTeamSuites.RefOf(NetTeamSuites.Cycles(peers[0], 0),
             s => s is ObjectiveSite { Node: "cs_flg_light1" })?.Position.DistanceTo(peers[0].SeatRigs[2].Controller!.WorldPosition);
         ctx.Check(near is < 30f, $"and the away marker stands on the carrier ({near?.ToString("0.0") ?? "none"} m)");
+
+        string taken = Messages.Fill(rows.Get(FlagMarkers.CapturedByKey), your, carrier);
+        Passive(ctx, peers, "team 1's panes mark their flag on its carrier and the enemy flag at its base, "
+            + "and the carrier's pane marks its own base and not the flag it carries",
+            m => m < 2 ? new[] { rows.Get("MSG_MP_ENEMY_FLAG_BASE") + "|red", taken + "|green" } : new[] { rows.Get("MSG_MP_YOUR_BASE") + "|green" });
+        var context = new SettingContext(Det: true, Enhanced: false, Panes: 1);
+        FlagMarksSetting.Lookup.ResolveFrom(FlagMarksSetting.Off, null, context);
+        try
+        {
+            Passive(ctx, peers, "ABLE-TO-FAIL CONTROL: with Flag Markers off no pane marks a flag or base", _ => Array.Empty<string>());
+        }
+        finally
+        {
+            FlagMarksSetting.Lookup.ResolveFrom(null, null, context);
+        }
+    }
+
+    // The passive flag marks each machine's own pane draws beside its target, as "tag|side colour".
+    private static void Passive(TestContext ctx, GameSession[] peers, string what, Func<int, string[]> want)
+    {
+        var got = peers.Select((p, m) =>
+        {
+            var marks = new List<Flight.Hud.WorldMark>();
+            p.SeatRigs[m].Controller?.PilotHud.TargetHud?.WorldMarks(marks);
+            return marks.Where(k => k.Style == Flight.Hud.WorldMarkStyle.Tagged)
+                .Select(k => $"{k.Tag}|{(k.Color == Flight.Hud.TargetHud.HudGreen ? "green" : "red")}")
+                .OrderBy(t => t, StringComparer.Ordinal).ToArray();
+        }).ToArray();
+        ctx.Check(got.Select((g, m) => g.SequenceEqual(want(m).OrderBy(t => t, StringComparer.Ordinal))).All(ok => ok),
+            $"{what} ({string.Join(" | ", got.Select(g => string.Join(", ", g)))})");
     }
 
     // The carrier down: the away marker reads floating by side and the carrier's tag is gone.

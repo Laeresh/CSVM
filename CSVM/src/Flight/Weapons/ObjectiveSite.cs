@@ -6,9 +6,10 @@ namespace CSVM.Flight.Weapons;
 /// the side's team, the name line, and the category lines a friend and a foe read. The reading
 /// pane's own team picks between them through <see cref="AimAssist.Friendly"/>. A site with
 /// <see cref="Shown"/> off leaves the cycle, and <see cref="At"/> places one the world index cannot
-/// find (docs/org/targeting.md "Friend or foe").</summary>
+/// find. A held flag's marker names the aircraft it hangs on as <see cref="Carrier"/>, compared by
+/// reference only (docs/org/targeting.md "Friend or foe").</summary>
 public readonly record struct SiteSide(int Team, string Name, string FriendCategory, string FoeCategory,
-    bool Shown = true, Vector3? At = null);
+    bool Shown = true, Vector3? At = null, object? Carrier = null);
 
 /// <summary>One live objective site as the targeting path sees it. It carries the world node the
 /// mission flagged, the two label lines its marker prints, and where the site is this frame. There
