@@ -1209,7 +1209,7 @@ internal static class MenuOriginalConnectionSuites
 
     [Suite("menu-original-connection-build",
         "The Original games list's Build Custom Plane over a scratch plane store: it is live, the "
-        + "keyboard's walk goes down from Create Game onto Join by Code and right onto it, and Enter opens the wallet-free name "
+        + "keyboard's walk crosses the plaque line to Auto refresh and goes down onto it, and Enter opens the wallet-free name "
         + "screen, Back and the hub's CANCEL each land back on the games list on the button with "
         + "nothing saved, and a purchase saves an exported build on the default airframe and lands back "
         + "there too. Create Game then opens a lobby with Allow Custom Planes ticked, whose Custom Planes tab "
@@ -2400,14 +2400,15 @@ internal static class MenuOriginalConnectionSuites
                   && shell.FocusedKey == OriginalConnectionScreen.CreateKey,
             $"Build Custom Plane is live on the empty games list, which opens on Create Game ({shell.Screen}, {Row(shell, OriginalConnectionScreen.BuildKey)?.Enabled}, {shell.FocusedKey})");
         var walked = new List<string>();
-        foreach (var move in new[] { new MenuCommands { MoveY = 1 }, new MenuCommands { MoveX = 1 } })
+        // Join Game is greyed on the empty list, so the walk steps over it.
+        foreach (var move in new[] { new MenuCommands { MoveX = 1 }, new MenuCommands { MoveX = -1 }, new MenuCommands { MoveX = -1 }, new MenuCommands { MoveY = 1 } })
         {
             Press(end, move);
             walked.Add(shell.FocusedKey ?? "none");
         }
 
-        ctx.Check(walked.SequenceEqual(new[] { OriginalConnectionScreen.CodeKey, OriginalConnectionScreen.BuildKey }),
-            $"the keyboard's walk goes down from Create Game onto Join by Code and right onto it ({string.Join(" > ", walked)})");
+        ctx.Check(walked.SequenceEqual(new[] { OriginalConnectionScreen.CodeKey, OriginalConnectionScreen.CreateKey, OriginalConnectionScreen.RefreshKey, OriginalConnectionScreen.BuildKey }),
+            $"the keyboard's walk crosses the plaque line to Auto refresh and goes down onto Build ({string.Join(" > ", walked)})");
         Press(end, new MenuCommands { Accept = true });
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
             $"Enter on it opens the name screen over a wallet-free build ({shell.Screen}, {hangar.IsOpen})");

@@ -97,9 +97,8 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private const string SortHighlightArt = "MP_GAMESALPHA.PNG";
     private const float RadioSize = 18f;
 
-    // ⚠ Do not move Join by Code into the plaque line's gap left of Create Game; the install's Auto
-    // refresh label runs across it. A second line, where the Connection page drew Exit Multiplayer,
-    // holds Join by Code and Build Custom Plane instead.
+    // ⚠ The install's Auto refresh label runs to about x 325. The three large plaques start past it
+    // and end on the list's right edge. Build Custom Plane and Exit stand on a second line.
     private const float HeaderY = 141f;
     private const float ListX = 53f;
     private const float ListY = 175f;
@@ -107,8 +106,10 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private const float ListPitch = 25f;
     private const float ButtonLineY = 507f;
     private const float SecondLineY = 559f;
-    private const float CodeX = 394f;
-    private const float BuildX = 529f;
+    private const float CreateX = 340f;
+    private const float PlaquePitch = 135f;
+    private const float RefreshX = 47f;
+    private const float ExitX = ListX + ListWidth - 74f;
     private const float StatusY = ListY + (2f * ListPitch);
     private const float SortHighlightAlpha = 80f / 255f;
     private const float PickedAlpha = 0x80 / 255f;
@@ -542,13 +543,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 true, 0, new BoardArt(BoardArtLibrary.Ui, RadioArt, 4)));
         }
 
-        rows.Add(new OriginalRow(RefreshKey, string.Empty, OriginalRowKind.Radio, 47f, ButtonLineY, 200f, 37f, true, 0,
+        rows.Add(new OriginalRow(RefreshKey, string.Empty, OriginalRowKind.Radio, RefreshX, ButtonLineY, 200f, 37f, true, 0,
             new BoardArt(BoardArtLibrary.Ui, CheckboxArt, 8)));
-        rows.Add(_text.Strip(CodeKey, LargeArt, CodeX, SecondLineY, true, 1, 131f, 37f));
-        rows.Add(_text.Strip(CreateKey, LargeArt, 394f, ButtonLineY, _net() != null, 1, 131f, 37f));
-        rows.Add(_text.Strip(JoinKey, LargeArt, 529f, ButtonLineY, PickedGame() is { } game && CoopDoorText.Joinable(game.Advert), 1, 131f, 37f));
-        rows.Add(_text.Strip(ExitKey, SmallArt, 665f, ButtonLineY, true, 1, 74f, 37f));
-        rows.Add(_text.Strip(BuildKey, BuildArt, BuildX, SecondLineY + 2f, _host.CanBuildPlane, 0, 200f, 32f));
+        rows.Add(_text.Strip(CreateKey, LargeArt, CreateX, ButtonLineY, _net() != null, 1, 131f, 37f));
+        rows.Add(_text.Strip(JoinKey, LargeArt, CreateX + PlaquePitch, ButtonLineY, PickedGame() is { } game && CoopDoorText.Joinable(game.Advert), 1, 131f, 37f));
+        rows.Add(_text.Strip(CodeKey, LargeArt, CreateX + (2f * PlaquePitch), ButtonLineY, true, 1, 131f, 37f));
+        rows.Add(_text.Strip(BuildKey, BuildArt, RefreshX, SecondLineY + 2f, _host.CanBuildPlane, 0, 200f, 32f));
+        rows.Add(_text.Strip(ExitKey, SmallArt, ExitX, SecondLineY, true, 1, 74f, 37f));
         var listed = Listed;
         for (int i = 0; i < listed.Count; i++)
         {

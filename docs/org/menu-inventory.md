@@ -301,12 +301,12 @@ constants rather than reading a layout.
   version of CSVM is too old for the master server. Update CSVM to find internet games."), or when
   the master server does not answer (its fault, capitalised). Auto refresh starts checked and keeps
   its state for the session. The cursor opens on Create Game and moves to the first game when the
-  first answers arrive, unless the player moved it. A second line under the plaque line, where the
-  Connection page drew Exit Multiplayer, holds two plaques of ours: Join by Code (`MPG_B_CODE`,
-  `MP_B_LARGE.PNG` in Create Game's face) at (394, 559) under Create Game, since the install's
-  Auto refresh label ("Automatically refresh the games list") runs across the plaque line's gap,
-  and Build Custom Plane (`GN_B_BUILDCUSTOMPLANE.PNG`, 200 x 32) at (529, 561), greyed only on a
-  shell with no hangar. Join by Code raises a box of ours in the CREATE TEAM box's art and corners
+  first answers arrive, unless the player moved it. The remake places the plaques itself, since the
+  install's Auto refresh label ("Automatically refresh the games list") runs to about x 325. The
+  plaque line at y 507 holds Create Game (340), Join Game (475) and Join by Code (`MPG_B_CODE`,
+  `MP_B_LARGE.PNG` in Create Game's face, 610), the last ending on the list's right edge. A second
+  line holds Build Custom Plane (`GN_B_BUILDCUSTOMPLANE.PNG`, 200 x 32) at (47, 561) under the
+  checkbox, greyed only on a shell with no hangar, and Exit (`MP_B_SMALL.PNG`) at (669, 559). Join by Code raises a box of ours in the CREATE TEAM box's art and corners
   (`MP_CREATETEAMBACKGROUND.PNG` at (234, 99)): the title JOIN BY CODE in 10552's face, the Join
   code box (`MPG_E_CODE`, 272 x 24) at (265, 200) under "Join code:", the words "Join an internet
   game with the code its host shares, such as K7Q-X3M. No router setup needed." under it, and OK
