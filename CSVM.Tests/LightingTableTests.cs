@@ -247,6 +247,30 @@ public sealed class LightingTableTests
     }
 
     [Fact]
+    public void ACloudsFieldEditedUnderTheGiLayerLandsInTheCloudsBlockAndNothingElseMoves()
+    {
+        const string file = """
+            { "C1": { "ZONE1": { "exposure": 1.05, "gi": { "white": 6.1 },
+                                  "clouds": { "exposure": 1, "god_rays": 0.5 } },
+                      "M01": { "ZONE1": { "sun_energy": 0.7 } } } }
+            """;
+        var edit = ZoneLighting.Default with { FogFar = 8000f, GodRays = 0.5f, Exposure = 3f, SdfgiEnergy = 0.9f };
+
+        var root = (JsonObject)JsonNode.Parse(LightingTable.WithLayerOwn(file, "C1", "zone1", LightingTable.CloudsLayer, edit))!;
+        var zone = (JsonObject)root["C1"]!["ZONE1"]!;
+        // The clouds block keeps its exposure, an override of the base at the default value, and gains fog_far.
+        Assert.Equal(new[] { "exposure", "god_rays", "fog_far" }, Keys((JsonObject)zone["clouds"]!));
+        Assert.Equal((1d, 0.5d, 8000d), ((double)zone["clouds"]!["exposure"]!, (double)zone["clouds"]!["god_rays"]!, (double)zone["clouds"]!["fog_far"]!));
+        Assert.Equal((1.05d, 6.1d, 0.7d), ((double)zone["exposure"]!, (double)zone["gi"]!["white"]!, (double)root["C1"]!["M01"]!["ZONE1"]!["sun_energy"]!));
+
+        // A clouds field back at its default leaves the block, and a block left empty goes with it.
+        string cleared = LightingTable.WithLayerOwn("""{ "C1": { "ZONE1": { "clouds": { "fog_far": 8000 } } } }""",
+            "C1", "zone1", LightingTable.CloudsLayer, ZoneLighting.Default);
+        Assert.Empty((JsonObject)JsonNode.Parse(cleared)!);
+        Assert.Throws<System.IO.InvalidDataException>(() => LightingTable.WithLayerOwn("[]", "C1", "zone1", LightingTable.CloudsLayer, edit));
+    }
+
+    [Fact]
     public void TheDebugGrammarKeepsWhatTheLabReads()
     {
         var rejected = new List<string>();

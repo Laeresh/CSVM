@@ -461,6 +461,12 @@ public sealed partial class LightingLab : Node
         try
         {
             LightingTable.Save(SavePath, new(_chapter, _mission, zone, Layer), chapter, mission, _weather.Moonlit, Under(zone));
+            // The gi layer cannot hold a clouds field, so one edited under it goes to the chapter's clouds block.
+            if (Layer == LightingTable.GiLayer && _layers.Contains(LightingTable.CloudsLayer))
+            {
+                File.WriteAllText(SavePath, LightingTable.WithLayerOwn(File.ReadAllText(SavePath, Encoding.UTF8),
+                    _chapter, zone, LightingTable.CloudsLayer, edit), new UTF8Encoding(false));
+            }
             var table = LightingTable.Parse(File.ReadAllText(SavePath, Encoding.UTF8));
             _weather.ReloadLighting(table);
             _overrides[zone] = new HashSet<string>(table.MissionFields(_chapter, _mission, zone, Layer).Keys, StringComparer.OrdinalIgnoreCase);
