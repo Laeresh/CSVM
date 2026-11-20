@@ -105,8 +105,10 @@ reds.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
 back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
-budget, since only cutting features shortens it. There is no total budget: one set by the same
-rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine
+budget, since only cutting features shortens it. **The landing gate's total is held to the lane's
+`totalLimit`, 300 seconds**, a stated limit and not a measurement: a complete run past it prints
+`over budget` (never a failure), and the answer is to move suites, unit tests or golden shots to
+the release tier, which `-Release` runs with no limit. The engine
 budget is capped at 80 % of a shard's 1200 s ceiling, so no budget written into the file sits at
 the kill line, where a stage would go red without printing `over budget` first.
 
@@ -192,7 +194,17 @@ line, an allowance over its cap, an unscreened log, a FAIL, a missing or stale r
 exit fails the run. It refuses to start on Linux without `libfontconfig.so.1`, for the reason the
 Linux release check gives.
 
-**The engine stage runs the full catalog in concurrent Godot processes of three kinds**, which the
+**The complete run is the landing gate, and `-Release` is the whole catalog.** The gate passes the
+harness the `lane:gate` term, which leaves out `SuiteCatalog.ReleaseTier` (long scenarios and the
+longer suites of seldom-used features) and runs the `headlessShaders` suites headless, or
+synthetic when the ci tier holds them, so its windowed shard holds only the suites that need a
+renderer. `-Release` runs every suite as the paragraphs below describe, with the shader-text check,
+and the release-only golden shots; the gate prints what it left out as `not checked:`. A suite
+joins the release tier when it costs the gate more than about 8 seconds and it is not the one
+suite a core path (campaign, combat, joining a game) depends on. A `-Suite`/`-Filter` selection runs what it names, release tier
+included.
+
+**The engine stage runs its catalog in concurrent Godot processes of three kinds**, which the
 harness's `render:<kind>` term selects (`SuiteRender`). **Windowed** runs every suite the
 `headlessOnly`, `headlessDiffers` and `headlessShaders` maps of `analysis/headless-limits.json` name:
 the suites that need a renderer, every suite that switches graphics modes (a switch makes texts for
@@ -206,18 +218,18 @@ kinds run `--render-thread safe`: under the project's separate render thread the
 RID owners race (godot#121949), which prints a spread of engine errors at no fixed count. **`-RealData`**
 also runs the ci tier on the real extraction, inside the headless shards, with the synthetic
 process kept as an extra pass: pass it before a push, at a plan's close and on a merge to main.
-`-Shards <n>` sets how many headless shards divide their share; the default is 6 for a full run and
+`-Shards <n>` sets how many headless shards divide their share; the default is 7 for a full run and
 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
 as `not checked:`. **A suite the file lists under `alone` gets a windowed process of its own**,
 which keeps `graphics-retext-compiles`'s first TAA frame out of a shard holding worlds: a full
-run's default is one windowed shard, the alone shard, six headless shards and the synthetic
-process, nine processes. A selection keeps one process per kind, since it never holds a full
+run's default is one windowed shard, the alone shard, seven headless shards and the synthetic
+process, ten processes, which is every net port block a run holds. A selection keeps one process per kind, since it never holds a full
 shard's worlds. Regenerate the weights from the shard reports of one warm full run, as its
 `readme` says.
 
-**A full run fails when a headless process made a shader text no windowed process compiled**, and
+**A `-Release` run fails when a headless process made a shader text no windowed process compiled**, and
 names the suite: each report lists every suite's shader texts as hashes (`ShaderCensus`), and the
 merge holds the headless shards' texts against the windowed ones'. The fix is to add that suite to
 `headlessShaders`. The synthetic process is not held to it, since invented data makes texts the
@@ -1170,14 +1182,17 @@ enough free.
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
   `history.json`; the estimate is the highest of the kind's last 20 peaks plus 10 percent, and
-  never below the kind's seed. An `engine-shard` or `engine-headless` peak is recorded only from
-  the windowed shard or a headless shard of a complete-catalog `RunTests.ps1` run under the default
+  never below the kind's seed. An `engine-*` kind's peak is recorded only from
+  the windowed shard or a headless shard of a complete `RunTests.ps1` run under the default
   shard plan (the default `-Shards`, gaming mode off, no `-RealData`): a filtered shard stays small,
   any other plan hands a shard a different share of the catalog, and the alone shard and the
   synthetic process hold little. A launch the engine refused records nothing. The seed table is
-  `$MemSeedGB` in `MemoryLedgerCore.ps1`; the kinds are `engine-shard`, `engine-headless` (the
-  `RunTests.ps1` engine stage names it per launch; any other `--run-tests` launch is
-  `engine-shard`), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
+  `$MemSeedGB` in `MemoryLedgerCore.ps1`; the kinds are `engine-shard` (`-Release`'s windowed
+  shard), `engine-windowed` (the landing gate's), `engine-headless` (the `RunTests.ps1` engine
+  stage names these per launch), `engine-suites` (any other `--run-tests` launch: a selection, an
+  alone suite, a probe; never learned, so a full shard's peak cannot reserve its size for one
+  suite), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`, an
+  Enhanced golden shot included) and
   `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
   first used, is what the engine reads.
 - **DEFERRED.** A launch still waiting after `$MemMaxWaitSec` (1800 s) ends its run

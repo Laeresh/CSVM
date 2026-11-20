@@ -78,7 +78,9 @@ public sealed class NetMessageFuzzTests
         }
     }
 
+    // About 33 s; the truncation and plain random-bytes tests keep the decoders in the gate.
     [Fact]
+    [Trait("Tier", "Release")]
     public void A_valid_header_over_random_bytes_is_refused_or_reads_back_whole()
     {
         var rng = new Random(FuzzSeed + 1);

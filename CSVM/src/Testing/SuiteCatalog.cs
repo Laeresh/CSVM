@@ -255,6 +255,70 @@ public static class SuiteCatalog
         "world-sound-falloff",
     };
 
+    // The suites the landing gate leaves to `RunTests.ps1 -Release`. They are long scenarios: bots
+    // flying whole courses, long matches, the Enhanced vegetation and city generators. A suite joins
+    // when it costs the gate more than about 8 seconds and no core path depends on it alone. The
+    // gate's total has a limit (analysis/verification-budgets.json). One name per line, sorted.
+    public static readonly IReadOnlyList<string> ReleaseTier = new[]
+    {
+        "alpha-coverage-text",
+        "campaign-coop-hangar-owner",
+        "canopy-activation",
+        "canopy-clumps",
+        "canopy-mask",
+        "canopy-models",
+        "city-buildings",
+        "city-dressing",
+        "city-ground",
+        "course-race-local",
+        "graphics-coast-hide",
+        "graphics-flare-switch",
+        "graphics-ocean-switch",
+        "graphics-vegetation-quality",
+        "graphics-view-distance",
+        "graphics-water-quality",
+        "ground-cover-cards",
+        "ground-cover-shells",
+        "lighting-lab",
+        "net-bot-rearm",
+        "net-bot-seat-lossy",
+        "net-bot-seeks",
+        "net-bot-yield",
+        "net-coop-cabbie-delivered",
+        "net-coop-intro-field",
+        "net-coop-persist-log",
+        "net-coop-restart",
+        "net-coop-scripted-break",
+        "net-course-from-host",
+        "net-course-long-race",
+        "net-ctf-bot",
+        "net-director-follow",
+        "net-player-voice",
+        "net-stunt-race-bot",
+        "net-stunt-race-end",
+        "net-stunt-race-photo",
+        "net-stunt-race-respawn",
+        "net-stunt-race-wire",
+        "net-zeppelin-vs-zeppelin",
+        "net-zvz-bot",
+        "net-zvz-turrets",
+        "ocean-harbour-ramp",
+        "spyglass-sun",
+        "stunt-race-bot",
+        "stunt-race-bot-course",
+        "stunt-race-bot-course-balmoral",
+        "stunt-race-bot-course-examples",
+        "stunt-race-bot-course-world",
+        "stunt-race-bot-final-run",
+        "stunt-race-bot-gate",
+        "stunt-race-bot-menu",
+        "vegetation-added-stamps",
+        "vegetation-lab",
+        "vegetation-models",
+        "versus-local-bot",
+        "versus-local-crash-respawn",
+    };
+
     /// <summary>The tier carrying that name, or null when none does (which a selector must treat
     /// as a miss, not as an empty selection).</summary>
     public static SuiteTier? Tier(string name)
