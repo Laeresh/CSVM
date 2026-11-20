@@ -45,10 +45,10 @@ public sealed class WeatherRig
     /// linear, times the tune's <see cref="ZoneLighting.AmbientFloor"/>. Zero otherwise.</summary>
     public const string GiAmbientFillParam = "csky_gi_ambient_fill";
 
-    /// <summary>The Enhanced zone light, as <see cref="ZoneLight"/> measures it, the cockpit interior is
-    /// at least lit by. Linear light. Just under the dimmest flown day zone, C4's in-cloud ZONE2 at
-    /// 0.379, so no day cockpit moves.</summary>
-    public const float InteriorLightFloor = 0.375f;
+    /// <summary>The Enhanced ambient, as <see cref="ZoneLight"/> measures it, the cockpit interior is at
+    /// least lit by. Linear light. Every night zone and the dimmer day zones (C1's, C1C's and C2's ZONE1,
+    /// C4's in-cloud ZONE2) fall below it. The bright day zones' ambient already reaches it.</summary>
+    public const float InteriorLightFloor = 0.35f;
 
     /// <summary>The global gain the self-lit world hands SDFGI its colour at, the tune's
     /// <see cref="ZoneLighting.SelfLitEmission"/> while SDFGI stands. Zero otherwise.</summary>
@@ -507,20 +507,21 @@ public sealed class WeatherRig
     }
 
     /// <summary>One zone's light for the interior floor: the Rec. 709 luminance of the colour ambient
-    /// plus the sun, in linear light. Each colour arrives in sRGB, as Godot is handed it, and is
-    /// linearised before its energy scales it. Pure.</summary>
-    public static float ZoneLight(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    /// alone, in linear light. The panel sits under the airframe facing aft, so the sun barely reaches
+    /// it. The colour arrives in sRGB, as Godot is handed it, and is linearised before its energy
+    /// scales it. Pure.</summary>
+    public static float ZoneLight(Color ambient, float ambientEnergy)
     {
-        var light = (ambient.SrgbToLinear() * ambientEnergy) + (sun.SrgbToLinear() * sunEnergy);
+        var light = ambient.SrgbToLinear() * ambientEnergy;
         return (0.2126f * light.R) + (0.7152f * light.G) + (0.0722f * light.B);
     }
 
     /// <summary>The linear grey ambient the interior adds on its albedo (<c>SceneBuilder.InteriorLiftParam</c>)
-    /// so its zone's light reaches <see cref="InteriorLightFloor"/>: max(floor - light, 0). Zero where
-    /// the zone already does, so a bright mission's cockpit stays as lit. Pure.</summary>
-    public static Vector3 InteriorLift(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    /// so its zone's ambient reaches <see cref="InteriorLightFloor"/>: max(floor - <see cref="ZoneLight"/>, 0).
+    /// Zero where the ambient already does. Pure.</summary>
+    public static Vector3 InteriorLift(Color ambient, float ambientEnergy)
     {
-        float lift = MathF.Max(InteriorLightFloor - ZoneLight(ambient, ambientEnergy, sun, sunEnergy), 0f);
+        float lift = MathF.Max(InteriorLightFloor - ZoneLight(ambient, ambientEnergy), 0f);
         return new Vector3(lift, lift, lift);
     }
 
@@ -1873,7 +1874,7 @@ public sealed class WeatherRig
         RenderingServer.GlobalShaderParameterSet(SkyTintParam, SkyTint);
         RenderingServer.GlobalShaderParameterSet(CloudTintParam, CloudTint);
         WriteGiGlobals(tune, ambientColor, ambientEnergy);
-        InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy, sunColor, sunEnergy);
+        InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy);
         RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, InteriorLiftWritten);
         VegetationLight = VegetationLightOf(fog, tune);
         RenderingServer.GlobalShaderParameterSet(VegetationLightParam, VegetationLight);
