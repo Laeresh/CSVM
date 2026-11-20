@@ -50,6 +50,16 @@ public sealed class SuiteRenderTests
     }
 
     [Fact]
+    public void The_gate_lane_keeps_windowed_only_what_needs_a_renderer()
+    {
+        Assert.Equal("windowed", SuiteRender.KindOf("display-mode", Limits, gate: true));
+        Assert.Equal("windowed", SuiteRender.KindOf("course-hud", Limits, gate: true));
+        // Windowed for their shader texts alone, so the gate runs them where they otherwise would.
+        Assert.Equal("synthetic", SuiteRender.KindOf("wind-streaks", Limits, gate: true));
+        Assert.Equal("headless", SuiteRender.KindOf("ocean-wake", Limits, gate: true));
+    }
+
+    [Fact]
     public void The_headless_engine_errors_are_uncapped_allowances()
     {
         Assert.NotEmpty(Limits.EngineErrors);

@@ -120,7 +120,7 @@ if ($SelfTest) {
         }
         Assert-Mem (@((Read-MemHistory)["engine-shard"]).Count -eq 1) "an unmarked engine-shard peak is not recorded, a full shard's is"
 
-        Assert-Mem ((Get-MemKind @("--run-tests=quick")) -eq "engine-shard" -and (Get-MemKind @("--det", "--graphics=enhanced", "--frames=9")) -eq "capture-enhanced") "kinds classify from the user arguments"
+        Assert-Mem ((Get-MemKind @("--run-tests=quick")) -eq "engine-suites" -and (Get-MemKind @("--det", "--graphics=enhanced", "--frames=9")) -eq "capture-enhanced") "kinds classify from the user arguments"
         Assert-Mem ((Test-MemNonInteractive @("--frames=9")) -and -not (Test-MemNonInteractive @("--plane=player_bhawk"))) "interactive play is not admitted"
 
         # The quiet census: scripted launches by worktree (a quoted tree with a space, a bare one,

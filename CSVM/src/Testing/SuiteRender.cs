@@ -19,9 +19,14 @@ public static class SuiteRender
     public const string Headless = "headless";
     public const string Synthetic = "synthetic";
 
-    /// <summary>The maps of <c>headless-limits.json</c> whose suites run windowed.</summary>
-    internal static readonly string[] WindowedMaps = { "headlessOnly", "headlessDiffers", "headlessShaders" };
+    /// <summary>The term that narrows a run to the landing gate: no
+    /// <see cref="SuiteCatalog.ReleaseTier"/> suite, and no windowed process for shader texts alone.</summary>
+    public const string GateLane = "lane:gate";
 
+    /// <summary>The maps of <c>headless-limits.json</c> whose suites run windowed.</summary>
+    internal static readonly string[] WindowedMaps = { "headlessOnly", "headlessDiffers", ShaderMap };
+
+    private const string ShaderMap = "headlessShaders";
     private const string Prefix = "render:";
     private static readonly string[] Kinds = { Windowed, Headless, Synthetic };
 
@@ -62,9 +67,20 @@ public static class SuiteRender
         return error == null ? found : null;
     }
 
-    /// <summary>The kind of process that runs <paramref name="name"/>.</summary>
-    public static string KindOf(string name, HeadlessLimits limits) =>
-        limits.Windowed.Contains(name) ? Windowed
+    /// <summary>Pulls the <see cref="GateLane"/> term out of a <c>--run-tests=</c> value, leaving the
+    /// other terms in <paramref name="remainder"/>. True when it was there.</summary>
+    public static bool TakeGate(string spec, out string remainder)
+    {
+        var terms = spec.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+        bool gate = terms.RemoveAll(t => t.Equals(GateLane, StringComparison.OrdinalIgnoreCase)) > 0;
+        remainder = string.Join(",", terms);
+        return gate;
+    }
+
+    /// <summary>The kind of process that runs <paramref name="name"/>. In the landing gate a suite
+    /// that is windowed only for its shader texts runs where it otherwise would.</summary>
+    public static string KindOf(string name, HeadlessLimits limits, bool gate = false) =>
+        limits.Windowed.Contains(name) && !(gate && limits.ShaderOnly.Contains(name)) ? Windowed
         : SuiteCatalog.CiTier.Contains(name, StringComparer.OrdinalIgnoreCase) ? Synthetic
         : Headless;
 
@@ -77,17 +93,21 @@ public static class SuiteRender
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
             var windowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var shaderOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string map in WindowedMaps)
             {
                 if (root.TryGetProperty(map, out var entries))
                 {
-                    windowed.UnionWith(entries.EnumerateObject().Select(e => e.Name));
+                    var names = entries.EnumerateObject().Select(e => e.Name).ToList();
+                    (map == ShaderMap ? shaderOnly : windowed).UnionWith(names);
                 }
             }
+            shaderOnly.ExceptWith(windowed);
+            windowed.UnionWith(shaderOnly);
             var errors = root.TryGetProperty("headlessEngineErrors", out var patterns)
                 ? patterns.EnumerateObject().Select(p => new ErrorAllowance(p.Name, int.MaxValue, p.Value.GetString() ?? "")).ToList()
                 : new List<ErrorAllowance>();
-            return new HeadlessLimits(windowed, errors);
+            return new HeadlessLimits(windowed, shaderOnly, errors);
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidOperationException)
         {
@@ -96,6 +116,8 @@ public static class SuiteRender
     }
 }
 
-/// <summary>What <c>analysis/headless-limits.json</c> says: the suites that run windowed, and the
-/// engine error lines a headless process prints that a windowed one does not.</summary>
-public sealed record HeadlessLimits(IReadOnlySet<string> Windowed, IReadOnlyList<ErrorAllowance> EngineErrors);
+/// <summary>What <c>analysis/headless-limits.json</c> says. <c>Windowed</c> is every suite that runs
+/// windowed. <c>ShaderOnly</c> is those that pass headless and need a renderer for their shader
+/// texts alone. <c>EngineErrors</c> is the error lines only a headless process prints.</summary>
+public sealed record HeadlessLimits(
+    IReadOnlySet<string> Windowed, IReadOnlySet<string> ShaderOnly, IReadOnlyList<ErrorAllowance> EngineErrors);

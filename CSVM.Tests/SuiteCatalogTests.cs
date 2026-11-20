@@ -79,6 +79,25 @@ public sealed class SuiteCatalogTests
     }
 
     [Fact]
+    public void The_release_tier_is_a_sorted_registered_subset_the_gate_lane_leaves_out()
+    {
+        var names = Names.ToHashSet();
+
+        Assert.NotEmpty(SuiteCatalog.ReleaseTier);
+        Assert.All(SuiteCatalog.ReleaseTier, name => Assert.Contains(name, names));
+        Assert.Equal(SuiteCatalog.ReleaseTier.OrderBy(n => n, StringComparer.Ordinal).Distinct().ToArray(),
+            SuiteCatalog.ReleaseTier.ToArray());
+        // The quick tier and CI run their suites whatever the lane, so neither may hold one.
+        Assert.All(SuiteCatalog.ReleaseTier, name => Assert.DoesNotContain(name, SuiteCatalog.QuickTier));
+        Assert.All(SuiteCatalog.ReleaseTier, name => Assert.DoesNotContain(name, SuiteCatalog.CiTier));
+
+        Assert.True(SuiteRender.TakeGate("tier:quick, LANE:gate,weapons", out string rest));
+        Assert.Equal("tier:quick,weapons", rest);
+        Assert.False(SuiteRender.TakeGate("stunt-race-bot-gate", out rest));
+        Assert.Equal("stunt-race-bot-gate", rest);
+    }
+
+    [Fact]
     public void The_headless_limits_name_registered_suites_off_the_ci_tier()
     {
         string path = Path.Combine(TestData.RepoRoot, "analysis", "headless-limits.json");

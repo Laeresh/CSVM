@@ -255,6 +255,51 @@ public static class SuiteCatalog
         "world-sound-falloff",
     };
 
+    // The suites the landing gate leaves to `RunTests.ps1 -Release`. They are long scenarios: bots
+    // flying whole courses, long matches, the Enhanced vegetation and city generators. A suite joins
+    // when it costs the gate more than about 10 seconds and a cheaper one covers its feature's
+    // wiring. One name per line, sorted.
+    public static readonly IReadOnlyList<string> ReleaseTier = new[]
+    {
+        "campaign-coop-hangar-owner",
+        "canopy-clumps",
+        "canopy-models",
+        "city-buildings",
+        "city-dressing",
+        "graphics-vegetation-quality",
+        "ground-cover-cards",
+        "ground-cover-shells",
+        "net-bot-rearm",
+        "net-bot-seat-lossy",
+        "net-bot-seeks",
+        "net-bot-yield",
+        "net-coop-intro-field",
+        "net-coop-persist-log",
+        "net-coop-restart",
+        "net-coop-scripted-break",
+        "net-course-long-race",
+        "net-ctf-bot",
+        "net-director-follow",
+        "net-stunt-race-bot",
+        "net-stunt-race-photo",
+        "net-stunt-race-respawn",
+        "net-stunt-race-wire",
+        "net-zvz-bot",
+        "net-zvz-turrets",
+        "stunt-race-bot",
+        "stunt-race-bot-course",
+        "stunt-race-bot-course-balmoral",
+        "stunt-race-bot-course-examples",
+        "stunt-race-bot-course-world",
+        "stunt-race-bot-final-run",
+        "stunt-race-bot-menu",
+        "vegetation-added-stamps",
+        "vegetation-lab",
+        "vegetation-models",
+        "versus-local-bot",
+        "versus-local-crash-respawn",
+    };
+
     /// <summary>The tier carrying that name, or null when none does (which a selector must treat
     /// as a miss, not as an empty selection).</summary>
     public static SuiteTier? Tier(string name)
