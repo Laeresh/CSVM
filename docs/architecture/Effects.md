@@ -180,6 +180,14 @@ at which the self-lit (`lighting: false`) arm hands SDFGI its own colour. An uns
 Both globals are zero otherwise. It also writes the tune's `sdfgi_energy` into `Energy`, which a later `Apply` takes too. Off, or on the faithful path, every field takes a fresh
 Environment's value. Read `Session/World/VolumetricClouds.cs` next, the cloud option it stands beside.
 
+## src/Effects/InteriorFill.cs
+The Enhanced-only work lamps inside C1's `hangar_3`, the hangar CM07's pilot takes the Bloodhawk from (#371). The data authors no lamp there, and
+under SDFGI the roofed shell `g306` admits no sky light, so the interior drew nearly black; with GI off the Environment's flat ambient already
+lights it as the original does. `Build` finds `hangar_3` and `h3_interior` in the built world and hangs a 2 × 3 grid of shadowed `OmniLight3D`s
+over the interior mesh's box, at `WorldLights.OmniAttenuation` and with a distance fade. The shadows keep the light inside the walls. A cull
+mask cannot: the floor is the chapter's shared terrain tile, one mesh inside and outside the hangar. `GameSession` builds them with the world and `Follow`s a live graphics switch; the faithful path hides them. The
+`hangar-interior-lamps` suite pins the build, placement and switch.
+
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
 `BuildCloudShadow`: one object per chapter with `darkness`, `ambient`, `size`, `coverage`, `softness`, `speed`,

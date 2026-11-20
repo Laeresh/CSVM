@@ -886,6 +886,44 @@ internal static class CampaignSuites
         }
     }
 
+    /// <summary>#371: C1's world hangs shadowed work lamps inside <c>hangar_3</c>, drawn under Enhanced
+    /// and hidden under Original, and a live switch follows the mode.</summary>
+    [Suite("hangar-interior-lamps",
+        "C1's world hangs six shadowed omni lamps inside hangar_3's interior, visible under Enhanced, "
+        + "hidden under Original, and InteriorFill.Follow moves them with a live graphics-mode switch (#371)")]
+    internal static void HangarInteriorLamps(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            foreach (bool enhanced in new[] { true, false })
+            {
+                GraphicsMode.Set(enhanced);
+                ctx.WithWorld("C1", collision: false, "M02", world =>
+                {
+                    var lamps = Effects.InteriorFill.Build(world.Gamez, world.Runtime);
+                    ctx.Check(lamps != null, $"{(enhanced ? "Enhanced" : "Original")}: the lamps are built");
+                    if (lamps == null)
+                        return;
+                    var omnis = lamps.GetChildren().OfType<OmniLight3D>().ToList();
+                    ctx.Check(omnis.Count == 6 && omnis.All(l => l.ShadowEnabled), $"{omnis.Count} lamp(s), all shadowed");
+                    var interior = world.Runtime.FindNodeByIndex(world.Gamez.FindByName(Effects.InteriorFill.HangarInterior)!.Index)!;
+                    var box = Mech3.SubtreeBounds.WorldAabb(interior);
+                    ctx.Check(omnis.All(l => box.HasPoint(l.GlobalPosition)), $"every lamp hangs inside the interior's box {box}");
+                    ctx.Check(lamps.Visible == enhanced, $"drawn only under Enhanced (visible={lamps.Visible})");
+                    GraphicsMode.Set(!enhanced);
+                    Effects.InteriorFill.Follow(lamps);
+                    ctx.Check(lamps.Visible == !enhanced, $"a live switch moves them with the mode (visible={lamps.Visible})");
+                    GraphicsMode.Set(enhanced);
+                });
+            }
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+        }
+    }
+
     /// <summary>The cutscene host over the shipped intro definition: the codes the definition
     /// raises reach it through the runtime's own dispatch, the world and the objectives update
     /// stop while it holds them, and the handoff puts every piece of session state back.</summary>
