@@ -418,6 +418,18 @@ as colour is exact for a black stack but adds, rather than mixes, for a light so
 white mist sprites (the `c1-waterfall` golden) saturates to a flat glowing blob. The convex form bounds
 every layer between its source and what is behind it. The cockpit panel's
 `SceneBuilder.GammaBlendAlpha` is the same correction in the light-over-dark case.
+⚠ **Over the volumetric slab the screen copy is not the background.** Godot copies the screen
+before the transparent pass, so the copy holds the scene without the slab's cloud, and a zeppelin
+the cloud hides stamps its outline into every mixed sprite that crosses it. While the slab stands,
+the Enhanced mix text (`SlabMixComposite`) takes its background from the march's trace at the pixel
+(the `csky_pc_trace_a`/`_b` globals, the temporal resolve's pair or the reduced march's layer half):
+the cloud as the slab draws it from that trace, lit, with the layer past the march's cap, the fog at
+its entry point and the light shafts, plus the screen copy scaled by what the cloud lets through.
+The slab and the sprite call the same functions in `csky_volumetric_clouds.gdshaderinc`, so the two
+cannot drift. It does so only where the scene stands past the first cloud, so a hull in clear air
+keeps the copy. The point lights' glow in the cloud is left out, and a scene inside the layer, which
+the slab marches per pixel, takes the whole layer's trace. A view the march did not trace (a headset,
+a pane, the spyglass) keeps the screen copy, and so keeps the outline.
 
 ⚠ **The exhaust ramp's colour is byte 1, not `7, 7, 9`.** `FUN_004afbc0` installs `7/255, 7/255,
 9/255` into a ramp every other caller fills with bytes, so the rounding above turns each channel

@@ -177,6 +177,24 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private const string EnhancedMixComposite =
         "vec3 hdr_over = max(ALBEDO - vec3(1.0), vec3(0.0));\n" + GammaMixComposite + "\n    ALBEDO += hdr_over;";
 
+    // Enhanced, over the slab only: the march's trace in its two fixed targets and the camera it traced.
+    // Then the slab's light and fog. VolumetricClouds.FollowCamera publishes them and CloudShadow names them.
+    private const string SlabTraceDecl = """
+        global uniform sampler2D csky_pc_trace_a : filter_linear, repeat_disable;
+        global uniform sampler2D csky_pc_trace_b : filter_linear, repeat_disable;
+        global uniform vec4 csky_pc_trace_eye;
+        global uniform vec4 csky_pc_trace_back;
+        global uniform vec2 csky_pc_trace_lens;
+        global uniform vec4 csky_pc_trace_amb;
+        global uniform vec4 csky_pc_trace_sun;
+        global uniform vec4 csky_pc_trace_look;
+        global uniform sampler2D csky_pc_march : filter_linear, repeat_disable;
+        global uniform vec4 csky_pc_trace_shaft;
+        """;
+
+    // The line of GammaMixComposite that reads the background, which the slab text replaces.
+    private const string ScreenBackground = "vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);";
+
     // The flat pose and sun projection read the camera's basis, which under a headset is the head's.
     // The quad would lie in the head's view plane and turn as the head looks about. The stereo text
     // swaps these exact lines for Mech3.StereoFacing's pose; the xr-sprite-facing suite pins each swap.
@@ -194,6 +212,53 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         """;
 
     private const string AtmosphereLine = "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
+
+    // ⚠ Do not composite against the screen copy alone over the slab. The copy predates the slab, so a
+    // hull the cloud hides would stamp its outline into the sprite. The background is the slab's cloud as
+    // the slab draws it from the trace, lit, with the unmarched rest and the fog (csky_volumetric_clouds.gdshaderinc).
+    // Under it shows the share of the copy it lets through. A view the march did not trace keeps the copy (docs/org/puffer.md).
+    private static readonly string SlabMixComposite = """
+        vec3 slab_bg = vec3(0.0);
+            float slab_t = 1.0;
+            bool slab_traced = false;
+            vec4 trace_eye = csky_pc_trace_eye;
+            if (trace_eye.w > 0.0 && csky_pc_traced_view(CAMERA_POSITION_WORLD, INV_VIEW_MATRIX, INV_PROJECTION_MATRIX,
+                    trace_eye.xyz, csky_pc_trace_back.xyz, csky_pc_trace_lens)) {
+                float edge = 1.0 / float(max(textureSize(csky_pc_trace_a, 0).x, 1));
+                vec2 trace_uv = vec2(trace_eye.w < 1.0 ? clamp(SCREEN_UV.x, edge, 1.0 - edge) * trace_eye.w : SCREEN_UV.x, SCREEN_UV.y);
+                vec4 trace = csky_pc_trace_back.w < 0.5 ? texture(csky_pc_trace_a, trace_uv) : texture(csky_pc_trace_b, trace_uv);
+                float scene = csky_pc_slab_scene(scene_raw, SCREEN_UV, INV_PROJECTION_MATRIX);
+                // A scene nearer than the first cloud stands in front of it, as the slab draws it.
+                if (scene > trace.a) {
+                    vec3 cam = CAMERA_POSITION_WORLD;
+                    vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
+                    vec2 span = csky_pc_slab_span(cam, dir, csky_pc_veil.x, csky_pc_veil.y);
+                    vec4 look = csky_pc_trace_look;
+                    vec4 m = vec4(csky_pc_cloud_light(trace.xy, cam, csky_pc_trace_amb.rgb, csky_pc_trace_amb.w, look.x,
+                        csky_pc_trace_sun.rgb, csky_pc_trace_sun.w), trace.z);
+                    float t0 = 0.0;
+                    if (span.y >= 0.0) {
+                        t0 = span.x;
+                        m = csky_pc_unmarched(m, cam, dir, span, scene, csky_pc_march_end(span, scene, look.z), look.y, look.z);
+                    }
+                    float a = 1.0 - m.a;
+                    bool behind = csky_pc_fog_behind(scene, span, dir);
+                    vec4 shaft = csky_pc_trace_shaft;
+                    float march_edge = 1.0 / float(max(textureSize(csky_pc_march, 0).x, 1));
+                    float shaft_light = csky_pc_reduced_shafts(csky_pc_march, SCREEN_UV, clamp(SCREEN_UV.x, march_edge, 1.0 - march_edge) * 0.5,
+                        span, scene, shaft.y, shaft.x, shaft.z);
+                    slab_bg = csky_pc_cloud_fogged(m.rgb, a, cam + dir * t0, cam, look.y, look.z, look.w)
+                        + csky_pc_shaft_colour(shaft_light, cam, dir, csky_pc_trace_sun.rgb, shaft.x)
+                        + (behind ? (1.0 - a) * csky_fog_color_at(cam) : vec3(0.0));
+                    slab_t = behind ? 0.0 : 1.0 - a;
+                    slab_traced = true;
+                }
+            }
+
+        """ + "    " + EnhancedMixComposite.Replace(ScreenBackground, """
+            vec3 dst_copy = texture(screen_texture, SCREEN_UV).rgb;
+                vec3 dst_l = clamp(slab_traced ? slab_bg + dst_copy * slab_t : dst_copy, 0.0, 1.0);
+            """, System.StringComparison.Ordinal);
 
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
@@ -222,11 +287,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         "thickblksmoke01", "thickblksmoke02", "thickblksmoke03",
     };
 
-    // One compiled Shader per code variant (blend × soft × stereo), shared by every renderer. A Shader per
+    // One compiled Shader per code variant (blend × soft × stereo × over the slab), shared by every renderer. A Shader per
     // emitter cost about 6 ms to compile, on every live miss and on each emitter a crash rig builds
     // ahead. ⚠ Keep the graphics mode out of the key. Each variant holds one shader per mode
     // (ShaderTwins), and a live switch moves the materials between them.
-    private static readonly Dictionary<(bool Mix, bool Soft, bool Stereo), Mech3.ModeShader> ShaderVariants = new();
+    private static readonly Dictionary<(bool Mix, bool Soft, bool Stereo, bool OverSlab), Mech3.ModeShader> ShaderVariants = new();
 
     // One quad for every layer in the process: the mesh is a unit billboard and the per-instance
     // scale lives in the MultiMesh transforms, so nothing about it is per emitter. The material
@@ -309,7 +374,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     /// <summary>Gets or sets the render priority every layer draws at: 0, or past the volumetric slab while
     /// one draws (<c>Session.World.VolumetricClouds</c>). The slab reads opaque depth alone, so drawn later
-    /// it would paint its cloud over a puffer in front of it. Each layer takes a change on its next publish.</summary>
+    /// it would paint its cloud over a puffer in front of it. Each layer takes a change, and a mix layer its slab text, on its next publish.</summary>
     internal static int DrawPriority { get; set; }
 
     private bool AnyAdditive
@@ -398,11 +463,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         _addAbove?.Publish(above);
     }
 
-    // One variant's text under a graphics mode, a pure function of its four arguments. The stereo
+    // One variant's text under a graphics mode, a pure function of its five arguments. The stereo
     // text is the flat one with its pose and sun projection swapped, so the flat text never moves.
-    internal static string VariantCode(bool mix, bool soft, bool enhanced, bool stereo)
+    internal static string VariantCode(bool mix, bool soft, bool enhanced, bool stereo, bool overSlab = false)
     {
-        string code = VariantCode(mix, soft, enhanced);
+        string code = VariantCode(mix, soft, enhanced, overSlab);
         if (!stereo)
             return code;
         bool shaded = enhanced && mix;
@@ -424,22 +489,26 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     {
         Mech3.ShaderTwins.EnsureCurrent();
         bool stereo = Mech3.StereoFacing.Live;
-        if (!ShaderVariants.TryGetValue((mix, soft, stereo), out var twins))
+        // Only the mix text changes over the slab, so an additive layer keeps one key.
+        bool overSlab = mix && DrawPriority != 0;
+        if (!ShaderVariants.TryGetValue((mix, soft, stereo, overSlab), out var twins))
         {
-            ShaderVariants[(mix, soft, stereo)] = twins = Mech3.ShaderTwins.Make(
-                () => VariantCode(mix, soft, GraphicsMode.Enhanced, stereo), "emitter",
-                $"emitter:{(mix ? "mix" : "add")}{(soft ? "-soft" : "")}{(stereo ? "-stereo" : "")}");
+            ShaderVariants[(mix, soft, stereo, overSlab)] = twins = Mech3.ShaderTwins.Make(
+                () => VariantCode(mix, soft, GraphicsMode.Enhanced, stereo, overSlab), "emitter",
+                $"emitter:{(mix ? "mix" : "add")}{(soft ? "-soft" : "")}{(stereo ? "-stereo" : "")}{(overSlab ? "-slab" : "")}");
         }
         return twins;
     }
 
-    // One variant's flat text under a graphics mode, a pure function of its three arguments.
-    private static string VariantCode(bool mix, bool soft, bool enhanced)
+    // One variant's flat text under a graphics mode, a pure function of its four arguments.
+    private static string VariantCode(bool mix, bool soft, bool enhanced, bool overSlab)
     {
         // The sun grade is the mix variant's alone, since the smoke sprites all alpha-mix. An
         // additive quad only brightens what is behind it: darkening its far side would subtract
         // nothing, and lighting its near side would double the glow.
         bool shaded = enhanced && mix;
+        // The faithful text and every text drawn with no slab standing stay byte for byte.
+        bool traced = shaded && overSlab;
         // A mixed quad stands in for the background, so full fog leaves the sky's fog colour,
         // the world's own answer. An additive one only brightens a background that already
         // carries that colour, so full fog leaves nothing to add.
@@ -447,7 +516,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             .Replace("BLEND_MODE", mix ? "blend_mix" : "blend_add")
             .Replace("SCREEN_UNIFORM", mix
                 ? "uniform sampler2D screen_texture : hint_screen_texture, filter_nearest;" : "")
-            .Replace("COMPOSITE", !mix ? "" : enhanced ? EnhancedMixComposite : GammaMixComposite)
+            .Replace("COMPOSITE", !mix ? "" : traced ? SlabMixComposite : enhanced ? EnhancedMixComposite : GammaMixComposite)
             .Replace("FOG_TARGET", mix ? "csky_fog_color_at(CAMERA_POSITION_WORLD)" : "vec3(0.0)")
             .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0")
             // The faithful text carries no gain at all, not a gain of one: the presentation
@@ -455,6 +524,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // before the fog mix, so a fogged fireball dims instead of blooming through the wall.
             .Replace("GAIN_DECL", enhanced
                 ? "varying flat float v_gain;" + (shaded ? "\nvarying flat float v_shade;" : "") + "\n" + VeilDecl
+                    + (traced ? "\n" + SlabTraceDecl : "")
                 : "")
             .Replace("GAIN_SET", enhanced
                 ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "") + "\n    " + VeilSet
@@ -492,6 +562,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // The priority the material last took, kept so a frame asks the engine nothing.
         private int _priority;
 
+        // Whether this list mixes, and whether its particles fade softly into the scene: the key its text answers to.
+        private bool _mixes;
+        private bool _soft;
+
         // The frame's instances, handed to the engine in one call by Publish. Three engine calls per
         // particle cost a busy dogfight's opening seconds about 2.4 ms a frame.
         private float[] _buffer = [];
@@ -519,7 +593,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             mat.SetShaderParameter("atlas", owner._atlas);
             mat.SetShaderParameter("frame_count", (float)owner._frameCount);
             mat.RenderPriority = DrawPriority;
-            var layer = new Layer { _material = mat, _priority = DrawPriority };
+            var layer = new Layer { _material = mat, _priority = DrawPriority, _mixes = !additive, _soft = owner._softParticles };
             layer._mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
@@ -600,6 +674,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             {
                 _priority = DrawPriority;
                 _material.RenderPriority = _priority;
+                // The mix text answers whether a slab stands (ShaderFor).
+                if (_mixes)
+                    Mech3.ShaderTwins.Follow(_material, ShaderFor(true, _soft));
             }
             // Written only on a change, like the count below, and never over another system's mask.
             if (_mmi != null && OwnsLayers && _mmi.Layers != layers)

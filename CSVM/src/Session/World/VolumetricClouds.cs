@@ -190,6 +190,9 @@ internal sealed partial class VolumetricClouds : Node3D
     /// C# copy drifts from it.</summary>
     internal static IReadOnlyDictionary<string, float> UniformDefaults { get; } = ParseDefaults(MarchCode() + ResolveShader());
 
+    // The march's colour uniform defaults, read from its text as UniformDefaults reads the floats.
+    private static IReadOnlyDictionary<string, Vector3> ColourDefaults { get; } = ParseColourDefaults(MarchCode());
+
     // The chapter's cloud tune, the cloud lab's live copy: the heads' taper and the deck's shares.
     private static CloudShadowPattern.Tune Tune => CloudShadow.Live?.Tune.Clamped() ?? CloudShadowPattern.Tune.Default;
 
@@ -314,6 +317,16 @@ internal sealed partial class VolumetricClouds : Node3D
     private static string Pair(string name, float value) =>
         string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name}={value:R}");
 
+    // Every `uniform vec3 name = vec3(r, g, b);` in `code`, hints and all.
+    private static Dictionary<string, Vector3> ParseColourDefaults(string code)
+    {
+        var defaults = new Dictionary<string, Vector3>();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(code, @"uniform vec3 (\w+)\s*(?::[^=;]*)?=\s*vec3\(\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\)\s*;"))
+            defaults[m.Groups[1].Value] = new Vector3(float.Parse(m.Groups[2].Value, inv), float.Parse(m.Groups[3].Value, inv), float.Parse(m.Groups[4].Value, inv));
+        return defaults;
+    }
+
     // Every `uniform float name = value;` in `code`, hints and all.
     private static Dictionary<string, float> ParseDefaults(string code)
     {
@@ -391,14 +404,9 @@ internal sealed partial class VolumetricClouds : Node3D
             return sum * point_gain;
         }
 
-        // Whether this view is the camera the reduced march traced. TAA's jitter leaves the lens
-        // diagonal alone, and the eye test fails for a headset's eyes and every other camera.
+        // Whether this view is the camera the reduced march traced (csky_pc_traced_view).
         bool pc_reduced(vec3 eye, mat4 inv_view, mat4 inv_projection) {
-            if (!march_on || distance(eye, march_eye) > 0.01 || dot(inv_view[2].xyz, march_back) < 0.99999) {
-                return false;
-            }
-            vec2 lens = abs(vec2(inv_projection[0][0], inv_projection[1][1]));
-            return all(lessThan(abs(lens - march_lens), march_lens * 0.001));
+            return march_on && csky_pc_traced_view(eye, inv_view, inv_projection, march_eye, march_back, march_lens);
         }
 
         // Fogs the march's result at the entry point and writes it premultiplied. The light shafts in
@@ -409,16 +417,12 @@ internal sealed partial class VolumetricClouds : Node3D
             if (alpha <= 0.002 && max(shafts.r, max(shafts.g, shafts.b)) <= 0.0005) {
                 discard;
             }
-            float fog = max(csky_fog_amount(entry, cam), smoothstep(haze_near_m, far_m, distance(entry, cam))) * cloud_fog;
-            albedo = mix(marched.rgb, csky_fog_color_at(cam) * a, fog) + shafts + (1.0 - a) * behind.rgb;
+            albedo = csky_pc_cloud_fogged(marched.rgb, a, entry, cam, haze_near_m, far_m, cloud_fog) + shafts + (1.0 - a) * behind.rgb;
         }
 
         // The shafts' light gathered over share `f` of their ray, between the quarters pc_shaft_light keeps.
         float pc_shaft_at(vec4 quarters, float f) {
-            float u = clamp(f, 0.0, 1.0) * 4.0;
-            int k = min(int(u), 3);
-            vec4 before = vec4(0.0, quarters.xyz);
-            return mix(before[k], quarters[k], u - float(k));
+            return csky_pc_shaft_at(quarters, f);
         }
 
         // Writes the pixel from its trace (pc_trace): the cloud lit and fogged, then the layer past
@@ -431,40 +435,19 @@ internal sealed partial class VolumetricClouds : Node3D
             float t0 = 0.0;
             if (span.y >= 0.0) {
                 t0 = span.x;
-                // A march cut off inside the layer leaves the rest of it to the fog, not the dome, by
-                // the layer left unmarched. A ray leaving just past the cap takes little.
-                float t1 = pc_march_end(span, scene);
-                float unmarched = min(span.y, scene) - t1;
-                if (unmarched > 1.0) {
-                    float rest = max(csky_fog_amount(eye + dir * t1, eye), smoothstep(haze_near_m, far_m, t1))
-                        * (1.0 - exp(-unmarched / 5000.0));
-                    m.rgb += m.a * rest * csky_fog_color_at(eye);
-                    m.a *= 1.0 - rest;
-                }
+                m = csky_pc_unmarched(m, eye, dir, span, scene, pc_march_end(span, scene), haze_near_m, far_m);
             }
             vec3 shafts = pc_shaft_colour(trace.w, eye, dir);
             vec4 behind = vec4(0.0);
-            // At or below the horizon, a sky pixel past the clipped sea shows the fog, not the dome's lower band.
-            if (scene >= 1e8 && span.y < 0.0 && dir.y <= 0.02) {
+            if (csky_pc_fog_behind(scene, span, dir)) {
                 behind = vec4(csky_fog_color_at(eye), 1.0);
             }
             pc_write(m, eye + dir * t0, eye, shafts, behind, albedo, alpha);
         }
 
-        // The shafts' light at this pixel's depth from the target's right half, at column `x` of the
-        // left half (the shafts' quarters, pc_shaft_at).
+        // The shafts' light at this pixel's depth from the target's right half (csky_pc_reduced_shafts).
         float pc_reduced_shafts(vec2 uv, float x, vec2 span, float scene) {
-            float l0 = min(span.y >= 0.0 ? span.x : shaft_far_m, shaft_far_m);
-            if (l0 <= 1.0 || shaft_gain <= 0.0) {
-                return 0.0;
-            }
-            // Neighbouring texels start their steps at different dithers. Four half-texel taps average
-            // them, which TAA cannot: it rejects a thin beam's lone bright sample.
-            vec2 px = 1.0 / vec2(textureSize(march_texture, 0));
-            vec2 c = vec2(0.5, 0.0) + clamp(vec2(x, uv.y) * shaft_scale, px * 2.0, vec2(0.5, 1.0) * shaft_scale - px * 2.0);
-            vec4 quarters = 0.25 * (texture(march_texture, c + px * vec2(0.5, 0.5)) + texture(march_texture, c + px * vec2(-0.5, 0.5))
-                + texture(march_texture, c + px * vec2(0.5, -0.5)) + texture(march_texture, c + px * vec2(-0.5, -0.5)));
-            return pc_shaft_at(quarters, min(scene, l0) / l0);
+            return csky_pc_reduced_shafts(march_texture, uv, x, span, scene, shaft_far_m, shaft_gain, shaft_scale);
         }
 
         void vertex() {
@@ -474,11 +457,7 @@ internal sealed partial class VolumetricClouds : Node3D
         void fragment() {
             vec3 eye = CAMERA_POSITION_WORLD;
             vec3 dir = csky_pc_ray_dir(SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX);
-            float scene = csky_pc_scene_distance(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
-            // Past the full fog nothing is seen, so the dome, which writes depth, reads as open sky.
-            if (scene > csky_fog_range.y) {
-                scene = 1e9;
-            }
+            float scene = csky_pc_slab_scene(texture(depth_texture, SCREEN_UV).r, SCREEN_UV, INV_PROJECTION_MATRIX);
             vec2 span = csky_pc_slab_span(eye, dir, layer_bottom, layer_top);
             vec4 trace;
             // The reduced march ignored the scene, so it serves every pixel whose scene stands outside
@@ -950,13 +929,9 @@ internal sealed partial class VolumetricClouds : Node3D
             return od;
         }
 
-        // The lit cloud body from the march's two weights, the sky's and the sun's, before fog. Their colours
-        // are the same along a ray, so they apply once per pixel. The sun's phase is in w.y already (pc_sun_ms).
-        // The mission's SUNLIGHT dims the body and the zone tune tints it.
+        // The lit cloud body from the march's two weights (csky_pc_cloud_light). The sun's phase is in w.y already (pc_sun_ms).
         vec3 pc_colour(vec2 w, vec3 cam) {
-            vec3 amb = mix(amb_top_rgb, csky_fog_color_at(cam), amb_fog_mix) * amb_gain;
-            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * sun_gain;
-            return (amb * w.x + sun * w.y) * csky_world_light_at(cam) * csky_tune_cloud_tint;
+            return csky_pc_cloud_light(w, cam, amb_top_rgb, amb_fog_mix, amb_gain, sun_rgb, sun_gain);
         }
 
         // The sun's share reaching a point under the layer. Along the sun ray: the deck's span, then
@@ -999,9 +974,7 @@ internal sealed partial class VolumetricClouds : Node3D
 
         // The shafts' colour from the light pc_shaft_light gathered along `dir`.
         vec3 pc_shaft_colour(float light, vec3 eye, vec3 dir) {
-            float phase = csky_pc_phase(dot(dir, csky_sun_dir), 0.5) * 4.0 * 3.14159265;
-            vec3 sun = sun_rgb * max(csky_sun_light.y, 0.35) * csky_world_light_at(eye);
-            return sun * light * shaft_gain * 0.00006 * phase;
+            return csky_pc_shaft_colour(light, eye, dir, sun_rgb, shaft_gain);
         }
 
         // The march's step at distance `t`: the span's share, but never more than grows with distance
@@ -1176,9 +1149,9 @@ internal sealed partial class VolumetricClouds : Node3D
             return vec3(w, trans);
         }
 
-        // Where the march along a ray through the layer's `span` ends: the exit, the scene or the cap.
+        // Where the march along a ray through the layer's `span` ends (csky_pc_march_end).
         float pc_march_end(vec2 span, float scene) {
-            return min(min(span.y, scene), span.x + far_m);
+            return csky_pc_march_end(span, scene, far_m);
         }
 
         // A pixel's march through the layer before the fog: the light's weights and the transmittance.
@@ -1465,6 +1438,12 @@ internal sealed partial class VolumetricClouds : Node3D
             _march.SetShaderParameter("dither_phase", new Vector2(-1f, -1f));
             MarchTime = on ? _marchTime : null;
             ResolveTime = temporal ? _resolveTime : null;
+            // The trace's targets stand while the mode does. Every write of a texture global re-queues every material
+            // reading it, so each frame picks between two fixed targets by the back global's w.
+            var traced = temporal ? _resolveViews[0]!.GetTexture() : _marchView.GetTexture();
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceAParam, traced);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceBParam, temporal ? _resolveViews[1]!.GetTexture() : traced);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.MarchParam, _marchView.GetTexture());
             string what = !on ? "full resolution" : temporal ? $"1/{resolution} resolution, temporal over a 1/{divisor} march, {size.X / 2}x{size.Y}" : shaftsOnly ? $"full resolution, shafts at 1/{divisor}, {size.X / 2}x{size.Y}" : $"1/{divisor} resolution, {size.X / 2}x{size.Y}";
             Log.Info("world", $"volumetric clouds: march at {what}");
         }
@@ -1473,21 +1452,55 @@ internal sealed partial class VolumetricClouds : Node3D
         _material.SetShaderParameter("frame_offset", frameOffset);
         _march.SetShaderParameter("frame_offset", frameOffset);
         if (!on)
+        {
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceEyeParam, Vector4.Zero);
             return;
+        }
         var view = camera!.GetCameraTransform();
         var inverse = camera.GetCameraProjection().Inverse();
-        if (temporal)
-            StepTemporal(camera.GetCameraProjection() * new Projection(view.AffineInverse()), new Projection(view), inverse, new Vector2I(size.X, size.Y * 2));
+        int due = temporal ? StepTemporal(camera.GetCameraProjection() * new Projection(view.AffineInverse()), new Projection(view), inverse, new Vector2I(size.X, size.Y * 2)) : 0;
         _march.SetShaderParameter(ViewCameraParam, new Projection(view));
         _march.SetShaderParameter(ViewInvProjectionParam, inverse);
         _material.SetShaderParameter(MarchEyeParam, view.Origin);
         _material.SetShaderParameter(MarchBackParam, view.Basis.Z);
-        _material.SetShaderParameter(MarchLensParam, new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y)));
+        var lens = new Vector2(Mathf.Abs(inverse.X.X), Mathf.Abs(inverse.Y.Y));
+        _material.SetShaderParameter(MarchLensParam, lens);
+        // The sprites over the slab rebuild their background from the trace this view reads (MultiMeshEmitterRenderer.SlabMixComposite).
+        // The temporal resolve takes the whole target, the reduced march its left half; a shafts-only target holds no layer.
+        var eye = view.Origin;
+        var back = view.Basis.Z;
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceEyeParam, new Vector4(eye.X, eye.Y, eye.Z, shaftsOnly ? 0f : temporal ? 1f : 0.5f));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceBackParam, new Vector4(back.X, back.Y, back.Z, due));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceLensParam, lens);
+        // The slab's light and fog, every frame, since the cloud lab edits them live.
+        var ambTop = SlabColour("amb_top_rgb");
+        var sun = SlabColour("sun_rgb");
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceAmbParam, new Vector4(ambTop.X, ambTop.Y, ambTop.Z, SlabFloat("amb_fog_mix")));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceSunParam, new Vector4(sun.X, sun.Y, sun.Z, SlabFloat("sun_gain")));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceLookParam,
+            new Vector4(SlabFloat("amb_gain"), SlabFloat("haze_near_m"), SlabFloat("far_m"), SlabFloat("cloud_fog")));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceShaftParam,
+            new Vector4(SlabFloat("shaft_gain"), SlabFloat("shaft_far_m"), SlabFloat("shaft_scale"), 0f));
+    }
+
+    // A float uniform as the slab draws it: the value set on the material, else the look's or the text's.
+    private float SlabFloat(string name)
+    {
+        var value = _material!.GetShaderParameter(name);
+        return value.VariantType == Variant.Type.Float ? value.AsSingle() : LookOr(name);
+    }
+
+    // A colour uniform as the slab draws it: the value set on the material, else the shader text's default.
+    // ⚠ Do not ask the RenderingServer for the default; that read stalls on the render thread every frame.
+    private Vector3 SlabColour(string name)
+    {
+        var value = _material!.GetShaderParameter(name);
+        return value.VariantType == Variant.Type.Vector3 ? value.AsVector3() : ColourDefaults[name];
     }
 
     // One temporal frame. The march traces this frame's pixel of each 2x2 block. The
-    // resolve target due draws once over the other's history, and the quad reads it.
-    private void StepTemporal(Projection viewProjection, Projection camera, Projection inverse, Vector2I grid)
+    // resolve target due draws once over the other's history, and the quad reads it. Returns that target's index.
+    private int StepTemporal(Projection viewProjection, Projection camera, Projection inverse, Vector2I grid)
     {
         var phase = Phases[_temporalFrame & 3];
         int due = _temporalFrame & 1;
@@ -1506,6 +1519,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _prevViewProjection = viewProjection;
         _prevEye = new Vector3(camera.W.X, camera.W.Y, camera.W.Z);
         _historyOk = true;
+        return due;
     }
 
     // The world structures the chapter's cloud entry names, first, so a zeppelin past the four slots loses its
@@ -1649,6 +1663,11 @@ internal sealed partial class VolumetricClouds : Node3D
             MultiMeshEmitterRenderer.DrawPriority = 0;
             SceneBuilder.OverSlabPriority = 0;
             Precipitation.DrawPriority = 0;
+            // The trace's target goes with the slab.
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceEyeParam, Vector4.Zero);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceAParam, CloudShadow.NoTrace);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.TraceBParam, CloudShadow.NoTrace);
+            RenderingServer.GlobalShaderParameterSet(CloudShadow.MarchParam, CloudShadow.NoTrace);
         }
         _material = null;
         _march = null;

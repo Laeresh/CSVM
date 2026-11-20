@@ -505,7 +505,7 @@ internal static class GraphicsSwitchSuites
         "the Volumetric Clouds and Global Illumination options follow a live apply in an Enhanced C1C flight: "
         + "clouds off, quarter, full, half and off build the clouds node holding the zone, night off and the deck hidden, "
         + "keep the same node at the word's march divisor between resolutions, take every placed zeppelin hull to leave a bubble round, move a puffer's draw past the slab "
-        + "and back with its Enhanced text dimmed by the slab's transmittance, "
+        + "and back with its Enhanced text dimmed by the slab's transmittance and its mix background rebuilt from the march's trace there alone, "
         + "swap the tracers and gun smoke to veiled twins at the puffers' priority and back to their own materials, "
         + "move the rain past them and back, give the cloud shadows the chapter's clouds layer and back, "
         + "and draw both band zones with the camera state held across the band; "
@@ -576,6 +576,12 @@ internal static class GraphicsSwitchSuites
                     int wantPriority = on ? UI.Boards.HeadLockedQuads.OverSlabPriority : 0;
                     ctx.Check(pufferMaterial.RenderPriority == wantPriority,
                         $"at {word} a puffer draws at priority {wantPriority}, {(on ? "after the slab and before the rain" : "among the world's transparents")} ({pufferMaterial.RenderPriority})");
+                    // The screen copy predates the slab, so over it the mix background must answer the march's trace.
+                    string wantMix = MultiMeshEmitterRenderer.VariantCode(true, false, enhanced: true, stereo: false, overSlab: on);
+                    bool faithfulSame = MultiMeshEmitterRenderer.VariantCode(true, false, enhanced: false, stereo: false, overSlab: true)
+                        == MultiMeshEmitterRenderer.VariantCode(true, false, enhanced: false, stereo: false);
+                    ctx.Check(pufferMaterial.Shader.Code == wantMix && wantMix.Contains("dst_copy", StringComparison.Ordinal) == on && faithfulSame,
+                        $"ABLE-TO-FAIL CONTROL: at {word} a puffer's mix text {(on ? "composites against the cloud rebuilt from the march's trace" : "is its text with no slab, byte for byte")}, and the faithful text is one text both ways (worn matches {pufferMaterial.Shader.Code == wantMix}, faithful same {faithfulSame})");
                     int wantRain = on ? UI.Boards.HeadLockedQuads.RainOverSlabPriority : 0;
                     ctx.Check(Precipitation.DrawPriority == wantRain,
                         $"at {word} the rain draws at priority {wantRain}, {(on ? "after the puffers over the slab" : "among the world's transparents")} ({Precipitation.DrawPriority})");
