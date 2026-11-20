@@ -275,8 +275,8 @@ one step per rendered frame, and a screen with no session reports the rendered f
 waited, read off Godot's own counter rather than off the countdown itself. Both answer the same
 question, so one manifest number covers a flight shot and a menu shot alike.
 
-**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, in
-registry-order batches, each with its own watchdog, process, log and PNG. The default is
+**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, the Enhanced
+ones first since they run longest, each with its own watchdog, process, log and PNG. The default is
 the fastest worker count that stayed bit-identical on the one machine measured, and
 **`-GoldenWorkers 1`** is the serial reference path.
 

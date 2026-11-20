@@ -180,7 +180,7 @@
     How many golden shots launch at once. Default 4: an A/B of 1/2/3/4 workers, three repeats each,
     found the complete 16-shot manifest bit-identical (raw-pixel hash, captured frame, size, adapter) at
     every count with no GPU/driver contention observed on the machine measured, and 4 was the
-    fastest of them (~29s against ~87s serial). Shots run in registry-order batches of this size;
+    fastest of them (~29s against ~87s serial). Shots run this many at once, the Enhanced ones first, then in registry order;
     a shot's own process, log, .out/.err and PNG stay exactly as unique as the serial path, and the
     silent-death --verbose retry still happens, serially, after the whole batch has reported. Pass
     1 for the serial reference path. This was measured on one machine only, so a hash that moves
@@ -1873,8 +1873,10 @@ if ($SkipGoldensNow) {
         Remove-GoldenShotFiles -State $state
         $states += $state
     }
+    # The Enhanced shots launch first: they run longest, so behind the others they are the stage's tail.
+    $states = @($states | Where-Object { $_.Kind -eq "capture-enhanced" }) + @($states | Where-Object { $_.Kind -ne "capture-enhanced" })
 
-    # First pass: every shot's attempt 1 in registry order, at most $goldenWorkerCount in flight,
+    # First pass: every shot's attempt 1, at most $goldenWorkerCount in flight,
     # each admitted by memory on its own. At 1 this is the serial loop, one launch, one wait, repeat.
     # Each shot keeps its own per-launch watchdog, so one hung shot fails only itself.
     foreach ($state in $states) {
