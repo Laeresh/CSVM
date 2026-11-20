@@ -499,12 +499,7 @@ public sealed class WeatherRig
     /// <summary>The enhanced energies under a zone tune: its multipliers in place of the default
     /// conversion factors, over the night-capped authored pair. Pure.</summary>
     public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog, ZoneLighting tune)
-    {
-        bool night = IsNightZone(fog);
-        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
-        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
-        return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
-    }
+        => EnhancedEnergies(fog, tune, IsNightZone(fog));
 
     /// <summary>One zone's light for the interior floor: the Rec. 709 luminance of the colour ambient
     /// plus the sun, in linear light. Each colour arrives in sRGB, as Godot is handed it, and is
@@ -571,11 +566,7 @@ public sealed class WeatherRig
     /// Enhanced its world is a moonlit mission (<see cref="LightingTable.Night"/>). It is what caps
     /// the enhanced energies and aims the light at the moon. Public so the rule can be pinned and a
     /// log line can say which side of it a zone fell on.</summary>
-    public static bool IsNightZone(WeatherState.ZoneWeather fog)
-        => !NightOff
-           && ((fog.Moonlit && GraphicsMode.Enhanced)
-               || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
-                   < NightFogLuminance));
+    public static bool IsNightZone(WeatherState.ZoneWeather fog) => !NightOff && IsNightSky(fog);
 
     /// <summary>The light's Euler rotation whose +Z is <paramref name="dir"/>, the inverse of the
     /// authored euler-to-direction mapping (docs/org/weather.md).</summary>
@@ -647,10 +638,11 @@ public sealed class WeatherRig
     /// <summary>What the unshaded Enhanced vegetation multiplies in under one zone. It is the linear light a level surface
     /// takes from the scene sun and ambient at the world light's mean incidence. It is scaled by
     /// <see cref="VegetationLightGain"/> and clamped to one per channel. A white day light clamps to one, so a dim zone
-    /// darkens it with no step at the night key. A day light authored in colour keeps that cast. Pure.</summary>
+    /// darkens it with no step at the night key. A day light authored in colour keeps that cast. A night zone keeps its
+    /// capped light under <see cref="NightOff"/>, whose day energies would clamp it to one over cloud-shadowed ground.</summary>
     public static Vector3 VegetationLightOf(WeatherState.ZoneWeather fog, ZoneLighting tune)
     {
-        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune, IsNightSky(fog));
         var sun = (fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB)).SrgbToLinear();
         var ambient = (fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB)).SrgbToLinear();
         float level = sunEnergy * WeatherState.SunIncidence;
@@ -1235,6 +1227,18 @@ public sealed class WeatherRig
         float fill = live ? ambientEnergy * tune.AmbientFloor : 0f;
         RenderingServer.GlobalShaderParameterSet(GiAmbientFillParam, new Vector3(linear.R, linear.G, linear.B) * fill);
         RenderingServer.GlobalShaderParameterSet(GiSelfLitParam, live ? tune.SelfLitEmission : 0f);
+    }
+
+    // The night test without NightOff: what the zone authors, whatever the volumetric clouds hold.
+    private static bool IsNightSky(WeatherState.ZoneWeather fog)
+        => (fog.Moonlit && GraphicsMode.Enhanced)
+           || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B) < NightFogLuminance);
+
+    private static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog, ZoneLighting tune, bool night)
+    {
+        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
+        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
+        return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class

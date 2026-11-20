@@ -1176,7 +1176,7 @@ internal static class GraphicsSwitchSuites
     [Suite("vegetation-light",
         "the unshaded Enhanced vegetation takes the zone's light, measured in a render of trees against the ground behind them: "
         + "C1's day trees draw as at a light of one; CM08's (C1B/M03, night) trees at rich draw under 0.85 of a light of one's "
-        + "ratio and no darker against their ground than C1's day trees; every day zone of every shipped mission and tune layer "
+        + "ratio and no darker against their ground than C1's day trees, and under the volumetric clouds too; every day zone of every shipped mission and tune layer "
         + "lights it at about one (luminance 0.9, no channel under 0.75); every Rich card, near model and listed Original card "
         + "multiplies it in, and an Original flight writes one")]
     internal static void VegetationLight(TestContext ctx)
@@ -1186,10 +1186,12 @@ internal static class GraphicsSwitchSuites
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word;
         string launchedModels = Utils.VegetationModelsSetting.Word;
+        var wasClouds = VolumetricCloudsSetting.Lookup.Current;
         try
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
             Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
             var day = Open(ctx, true, 1, "C1", "--mission=IA1", "--freecam");
             TreeGround dayRead;
             try
@@ -1225,6 +1227,16 @@ internal static class GraphicsSwitchSuites
                 ctx.Check(rich.Count > 0 && cells.Count > 0 && rich.Concat(cells.Select(m => ((ShaderMaterial)m.MaterialOverride).Shader.Code))
                         .All(code => code.Contains(WeatherRig.VegetationLightParam, StringComparison.Ordinal)),
                     $"every Rich card ({rich.Count}) and near model cell ({cells.Count}) multiplies it in");
+
+                // The volumetric clouds light every zone as day (WeatherRig.NightOff); the vegetation keeps the night's light.
+                ApplyOption(night, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Full);
+                var held = night.Session.Weather?.VegetationLight ?? Vector3.One;
+                var cloudy = TreeAgainstGround(night, new Vector3(-7650f, 340f, -5200f), new Vector3(-7870f, 260f, -5400f), System.IO.Path.Combine(VegetationLightShots(ctx), "cm08-clouds"));
+                ctx.Check(WeatherRig.NightOff && held.X < 1f && cloudy.Pixels > 2000 && cloudy.Ratio <= cloudy.UnlitRatio * 0.85f,
+                    $"ABLE-TO-FAIL CONTROL: under the volumetric clouds (night off {WeatherRig.NightOff}) CM08's vegetation light {held} (night {light}) draws its trees ({cloudy.Pixels} px) at {cloudy.Ratio:0.000} of the ground, under 0.85 of a light of one's {cloudy.UnlitRatio:0.000}");
+                ctx.Check(cloudy.Ratio >= dayRead.Ratio * 0.88f,
+                    $"and no darker against the ground than C1's day trees, {cloudy.Ratio:0.000} against {dayRead.Ratio:0.000}");
+                ApplyOption(night, VolumetricCloudsSetting.Lookup, VolumetricCloudsSetting.Off);
             }
             finally
             {
@@ -1292,6 +1304,7 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            ApplyOption(null, VolumetricCloudsSetting.Lookup, wasClouds.Word ?? VolumetricCloudsSetting.Default);
             Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
             VegetationQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
