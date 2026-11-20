@@ -365,6 +365,10 @@ internal sealed partial class VolumetricClouds : Node3D
         uniform float point_gain = 0.35;
         // A light reaches this many times its far range inside a cloud, which scatters it wide.
         uniform float point_reach = 3.0;
+        // A burst's light, far range over `burst_far_m`, reaches this many times instead. Tripled, one
+        // burst lit too much of the cloud. Rounds, fires and placed lights stay under 50 m.
+        uniform float burst_reach = 2.0;
+        uniform float burst_far_m = 60.0;
         // The head of the ranked light list that glows, 0 with Cloud Glow off. Each light costs a veil
         // and a chord march per pixel, so all sixteen tripled the GPU time while firing in cloud.
         uniform int point_lights = 4;
@@ -376,7 +380,7 @@ internal sealed partial class VolumetricClouds : Node3D
             for (int i = 0; i < min(csky_light_count, point_lights); i++) {
                 vec4 pr = texelFetch(csky_light_data, ivec2(0, i), 0);
                 vec4 cr = texelFetch(csky_light_data, ivec2(1, i), 0);
-                float r = pr.w * point_reach;
+                float r = pr.w * (pr.w > burst_far_m ? burst_reach : point_reach);
                 vec3 oc = pr.xyz - eye;
                 float tc = dot(oc, dir);
                 float d2 = max(dot(oc, oc) - tc * tc, 0.0);
