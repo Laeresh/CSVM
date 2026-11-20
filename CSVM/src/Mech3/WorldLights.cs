@@ -20,6 +20,10 @@ public sealed class WorldLights : IDisposable
     /// at build as "world lights: … peak N"), so nearest-N never actually drops one.</summary>
     public const int MaxActive = 16;
 
+    /// <summary>The shortest head of the texture a reader takes: the volumetric clouds glow round
+    /// this many. Past it the list is ranked, so that head is the most significant.</summary>
+    public const int RankedHead = 4;
+
     /// <summary>The falloff exponent of every point omni that stands for an authored light: this
     /// pool, the wing-tip flares and the muzzle flashes. Godot's default 1.0 adds an
     /// inverse-distance term that spends a 20 m lamp within a few metres, where the original's
@@ -324,11 +328,11 @@ public sealed class WorldLights : IDisposable
         int live = _pending.Count;
         if (live > PeakCount)
             PeakCount = live;
-        if (live > MaxActive)
+        if (live > RankedHead)
         {
             // Rank by angular size (range/distance), not raw distance, plain nearest-N would
-            // drop a big flare in favor of an equally-far pinpoint. One sort decides both sets:
-            // the texture takes its head, the Enhanced omnis a longer run of the same order.
+            // drop a big flare in favor of an equally-far pinpoint. One sort decides every set:
+            // the texture takes its head, the Enhanced omnis a longer run, the cloud glow a shorter one.
             _pending.Sort((a, b) => Significance(b, viewerPositions).CompareTo(Significance(a, viewerPositions)));
         }
         int n = Math.Min(live, MaxActive);

@@ -747,6 +747,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VolumetricCloudsSetting.cs`, whether Enhanced draws the volumetric clouds and at which march resolution (off, quarter, half, full): the flag/saved/config `WordSetting` lookup over off, applied live, with an unsaved lab word.
 - `src/Utils/GlobalIlluminationSetting.cs`, whether Enhanced lights with SDFGI plus SSIL (off, on): the flag/saved/config `WordSetting` lookup over on, off on an integrated GPU or under `--det`, applied live, with an unsaved lab word.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
+- `src/Utils/CloudGlowSetting.cs`, whether Enhanced's volumetric clouds glow round the frame's most significant point lights (off, on): the flag/saved/config `WordSetting` lookup over on, read every frame.
 - `src/Utils/SpeedWispsSetting.cs`, whether Enhanced draws the authored speed cue wisps (off, on): the flag/saved/config `WordSetting` lookup over off, read every step; Original always draws them.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.

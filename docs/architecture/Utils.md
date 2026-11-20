@@ -403,6 +403,13 @@ Whether Enhanced draws the cloud shadows (`Effects/CloudShadow.cs`): `off` or `o
 every frame. The shadows ride the terrain shadow's `light()`, so under `--terrain-shadows=off` none draws and the row's
 description says so. The VIDEO page shows it as the Cloud Shadows dropdown under Ground Cover.
 
+## src/Utils/CloudGlowSetting.cs
+Whether Enhanced's volumetric clouds glow round the point lights inside them (`Session/World/VolumetricClouds.cs`): `off`
+or `on`. It resolves as `SpeedWispsSetting` does: `--cloud-glow=`, the saved `cloudGlow` word, the `graphics.cloudGlow`
+key, then `on`. It has no live-apply hook: the clouds read `Drawn` every frame and glow round the first
+`WorldLights.RankedHead` lights of the ranked texture, or none. The VIDEO page shows it as the Cloud Glow dropdown under
+Volumetric Clouds.
+
 ## src/Utils/SpeedWispsSetting.cs
 Whether Enhanced draws the authored speed cue wisps (`Flight/Hud/SpeedCue.cs`): `off` or `on`. It resolves as
 `CloudShadowSetting` does: `--speed-wisps=`, the saved `speedWisps` word, the `graphics.speedWisps` key, then `off`.

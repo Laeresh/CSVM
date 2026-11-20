@@ -70,7 +70,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's volumetric clouds dropdown, under Post-processing in the scrolled window.</summary>
     public const string VolumetricCloudsKey = "VOLUMETRICCLOUDS";
 
-    /// <summary>The page's global illumination dropdown, under Volumetric Clouds in the scrolled window.</summary>
+    /// <summary>The page's cloud glow dropdown, under Volumetric Clouds in the scrolled window.</summary>
+    public const string CloudGlowKey = "CLOUDGLOW";
+
+    /// <summary>The page's global illumination dropdown, under Cloud Glow in the scrolled window.</summary>
     public const string GlobalIlluminationKey = "GLOBALILLUMINATION";
 
     /// <summary>The page's speed wisps dropdown, under Global Illumination in the scrolled window.</summary>
@@ -173,6 +176,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Word(ShadowDistanceKey, CSVM.Utils.ShadowDistanceSetting.Lookup, "Shadow Distance"),
         Word(PostProcessingKey, CSVM.Utils.PostProcessingSetting.Lookup, "Post-processing"),
         Word(VolumetricCloudsKey, CSVM.Utils.VolumetricCloudsSetting.Lookup, "Volumetric Clouds"),
+        Word(CloudGlowKey, CSVM.Utils.CloudGlowSetting.Lookup, "Cloud Glow"),
         Word(GlobalIlluminationKey, CSVM.Utils.GlobalIlluminationSetting.Lookup, "Global Illumination"),
         Word(SpeedWispsKey, CSVM.Utils.SpeedWispsSetting.Lookup, "Speed Wisps"),
         new(VrModeKey, "VR Mode", null,
