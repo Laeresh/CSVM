@@ -117,6 +117,18 @@ public class CourseScoreKeyTests
         Assert.Equal(new[] { run.Zones[0].CompletedAt, 7f }, ScoreStore.SplitsOf(run));
     }
 
+    [Fact]
+    public void BestSegmentsKeepTheFasterOfEachAndGrowWithTheRun()
+    {
+        Assert.Equal(new[] { 0f, 4f, 2.5f }, ScoreStore.SegmentsOf(new[] { 0f, 4f, 6.5f }));
+
+        // Faster in segment 2, slower in 1, and a third segment flown for the first time.
+        Assert.Equal(new[] { 0f, 3f, 9f }, ScoreStore.FasterSegments(new[] { 0f, 4f }, new[] { 0.5f, 3f, 9f }));
+        Assert.Equal(new[] { 1f, 2f }, ScoreStore.FasterSegments(null, new[] { 1f, 2f }));
+        Assert.Null(ScoreStore.FasterSegments(new[] { 1f, 2f }, new[] { 1f, 2.5f })); // improves none
+        Assert.Null(ScoreStore.FasterSegments(new[] { 1f, 2f }, System.Array.Empty<float>()));
+    }
+
     [ExtractedDataFact]
     public void ADangerZoneRunKeepsItsKeyAndRecordsNoPenalties()
     {

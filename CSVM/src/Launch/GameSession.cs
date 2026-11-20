@@ -2356,7 +2356,7 @@ public partial class GameSession : Node3D
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
             StuntBoard = boards.BuildSoloStuntBoard,
-            BestSplits = key => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway).GetSplits(key),
+            CourseScores = () => ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway),
             ToggleGraphicsMode = _toggleGraphicsMode,
             CycleHudMode = CycleHudMode,
             EditHudLayout = OpenHudLayoutEditor,
