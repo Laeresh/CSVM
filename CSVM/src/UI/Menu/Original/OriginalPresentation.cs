@@ -220,7 +220,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// loopback wire. The first is Ready and the second not, so FLY MISSION waits.</summary>
     public const string CampaignCoopReadyAid = "campaign-coop-ready";
 
-    /// <summary>The aid value that opens the Multiplayer Connection page.</summary>
+    /// <summary>The aid value that opens the Multiplayer Games list over the session's own door.</summary>
     public const string ConnectionAid = "connection";
 
     /// <summary>The aid value that opens the games list over a LAN answering with the aids' sample
@@ -228,8 +228,19 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string ConnectionGamesAid = "connection-games";
 
     /// <summary>The <see cref="ConnectionGamesAid"/> argument for a LAN that answers nothing, so the
-    /// Searching box stands.</summary>
+    /// empty list says Searching.</summary>
     public const string ConnectionSearchingAid = "searching";
+
+    /// <summary>The <see cref="ConnectionGamesAid"/> argument for a door with no LAN socket and no
+    /// master server, so the empty list says no search can open.</summary>
+    public const string ConnectionOfflineAid = "offline";
+
+    /// <summary>The <see cref="ConnectionGamesAid"/> argument that picks the first sample game.</summary>
+    public const string ConnectionPickedAid = "picked";
+
+    /// <summary>The <see cref="ConnectionGamesAid"/> argument that puts the cursor on Build Custom
+    /// Plane.</summary>
+    public const string ConnectionBuildAid = "build";
 
     /// <summary>The <see cref="ConnectionAid"/> argument that stands GAME INFORMATION over the page,
     /// posed with the aids' sample game.</summary>
@@ -239,8 +250,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// page, posed with the aids' sample callsign and voice.</summary>
     public const string PlayerInfoAid = "playerinfo";
 
-    /// <summary>The <see cref="ConnectionAid"/> argument that poses the page over a door with a
-    /// master server, Join by code picked with the sample code in its box.</summary>
+    /// <summary>The <see cref="ConnectionAid"/> argument that stands the Join by Code box over the
+    /// page on a door with a master server, the sample code in its box.</summary>
     public const string JoinCodeAid = "code";
 
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
@@ -537,7 +548,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (destination is CoopGuestReturn guest)
         {
-            // Back onto the host's boards, or onto the Connection page saying why the link ended.
+            // Back onto the host's boards, or onto the games list saying why the link ended.
             if (!_shell.Campaign.ShowGuestDebrief(guest.Attempt))
             {
                 _shell.ReturnToConnection();
@@ -545,7 +556,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (destination is LobbyReturn landing)
         {
-            // The lobby the match was launched from, on its scores, or the Connection page saying
+            // The lobby the match was launched from, on its scores, or the games list saying
             // why the link ended.
             if (!_shell.Lobby.Land(landing.Scores, landing.Race))
             {
@@ -660,10 +671,24 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case ConnectionGamesAid:
                 case ConnectionGamesAid + ":" + ConnectionSearchingAid:
-                    _shell.StandInNetDoor(NetDoorAid.Searching(silent: aid.EndsWith(ConnectionSearchingAid, StringComparison.Ordinal)));
+                case ConnectionGamesAid + ":" + ConnectionOfflineAid:
+                case ConnectionGamesAid + ":" + ConnectionPickedAid:
+                case ConnectionGamesAid + ":" + ConnectionBuildAid:
+                    _shell.StandInNetDoor(aid.EndsWith(ConnectionOfflineAid, StringComparison.Ordinal)
+                        ? NetDoorAid.Offline()
+                        : NetDoorAid.Searching(silent: aid.EndsWith(ConnectionSearchingAid, StringComparison.Ordinal)));
                     _shell.Connection.OpenConnection();
-                    _shell.Connection.SearchLan();
                     _shell.StepNet(0.0);
+                    if (aid.EndsWith(ConnectionPickedAid, StringComparison.Ordinal))
+                    {
+                        // The first answers put the cursor on the first game, so one accept picks it.
+                        _shell.Step(new MenuCommands { Accept = true });
+                    }
+                    else if (aid.EndsWith(ConnectionBuildAid, StringComparison.Ordinal))
+                    {
+                        ((IOriginalScreenHost)_shell).FocusKey(OriginalConnectionScreen.BuildKey);
+                    }
+
                     break;
                 case string lobby when lobby == LobbyAid || lobby.StartsWith(LobbyAid + ":", StringComparison.Ordinal):
                     OpenLobbyAid(lobby[LobbyAid.Length..].TrimStart(':'), setup);

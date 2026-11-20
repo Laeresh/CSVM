@@ -221,11 +221,11 @@ internal static class MenuOriginalScoresSuites
         return host;
     }
 
-    // The Connection page's Host, both network boxes answered through their OK.
+    // The games list's Create Game, both network boxes answered through their OK.
     private static bool HostTheLobby(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         ClickRow(ctx, host, seat, shell, OriginalShell.MultiplayerKey);
-        ClickRow(ctx, host, seat, shell, OriginalConnectionScreen.HostKey);
+        ClickRow(ctx, host, seat, shell, OriginalConnectionScreen.CreateKey);
         shell.NetInfo.Draft.GameName = "Scores";
         ClickRow(ctx, host, seat, shell, OriginalNetInfoBox.OkKey);
         shell.NetInfo.Draft.Callsign = "Zachary";

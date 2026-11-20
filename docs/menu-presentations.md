@@ -499,7 +499,7 @@ transport and which end owns the match, built by `NetPlayFeature.BuildLaunch` an
 session, which from then on steps it and closes it; the door keeps only the router's port mapping,
 so it can give that back when the flight ends. The local two-seat minimum does not apply to such a
 launch, since the opponent is at another machine. Original offers it through the Multiplayer
-Connection page and the lobby's LAUNCH (`OriginalConnectionScreen`, `OriginalLobbyScreen`). A lobby
+Games list and the lobby's LAUNCH (`OriginalConnectionScreen`, `OriginalLobbyScreen`). A lobby
 Stunt Race on its host's authored course leaves with that course's file name in `LaunchExit.Course`
 on every machine, a guest's taken from its host's word (`DogfightLobby.LaunchCourse`), and returns
 where any lobby flight does rather than to Instant Action. The lobby's Course box lists the
@@ -609,10 +609,10 @@ hub's figures preview, `plane-construction:overweight` on a build past its capac
 edited build and
 `plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`, `connection` on the Multiplayer
-Connection page, `connection:gameinfo` and `connection:playerinfo` with GAME INFORMATION or PLAYER
-INFORMATION standing over it on a sample answer, `connection:code` with Join by code picked and a
-sample code in its box, and `connection-games` and `connection-games:searching` on the LAN games list
-over an in-process network holding five sample games, one of another build version, or none, and `lobby[:host|guest[:tab]]` on
+Games list, `connection:gameinfo` and `connection:playerinfo` with GAME INFORMATION or PLAYER
+INFORMATION standing over it on a sample answer, `connection:code` with the Join by Code box standing over it and a
+sample code in its box, and `connection-games` and `connection-games:searching|offline|picked|build` on the games list
+over an in-process network holding five sample games, one of another build version, or none, or no search at all, the first game picked or the cursor on Build Custom Plane, and `lobby[:host|guest[:tab]]` on
 the Multiplayer Lobby over an in-process wire with two guests, `lobby:late` a guest waiting on its host's match), and any other value opens that 
 presentation's top level. A presentation's values and output stay stable whatever presentation is added.
 

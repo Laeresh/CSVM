@@ -75,14 +75,9 @@ public enum OriginalScreen
     /// numbers on the notepad, with CONTINUE back to the Instant Action screen.</summary>
     InstantActionWrapup,
 
-    /// <summary>The Multiplayer Connection page: the LAN TCP/IP and Internet ways, the IP Address
-    /// box, Host, Connect and Exit Multiplayer, drawn from the multiplayer scripts' placements.
-    /// </summary>
+    /// <summary>The Multiplayer Games list the Multiplayer plaque opens, in the games list script's
+    /// placements. It lists the LAN's and the master server's games.</summary>
     Connection,
-
-    /// <summary>The games list a LAN Connect opens, with the Searching box over it until the
-    /// first answer.</summary>
-    ConnectionGames,
 
     /// <summary>The Multiplayer Lobby a Dogfight's host and guests share before its launch: the
     /// player list, the four tabs, Ready, the chat and Leave Game.</summary>
@@ -243,7 +238,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The Campaign row's key on the top level.</summary>
     public const string CampaignKey = "MM_B_CAMPAIGN";
 
-    /// <summary>The Multiplayer row's key on the top level, the Connection page's door.</summary>
+    /// <summary>The Multiplayer row's key on the top level, the games list's door.</summary>
     public const string MultiplayerKey = "MM_B_MULTIPLAYER";
 
     /// <summary>The Free Flight door's key on the top level.</summary>
@@ -600,8 +595,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// </summary>
     public OriginalJoinBoard JoinBoard { get; }
 
-    /// <summary>The module behind the Multiplayer Connection page and its games list. It stands on
-    /// a shell built without a network door too, with the Multiplayer plaque disabled.</summary>
+    /// <summary>The module behind the Multiplayer Games list. It stands on a shell built without a
+    /// network door too, with the Multiplayer plaque disabled.</summary>
     public OriginalConnectionScreen Connection { get; }
 
     /// <summary>The module behind the Multiplayer Lobby, standing empty until a Dogfight is hosted
@@ -653,7 +648,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             : Campaign.OpenCombo;
 
     /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's and the
-    /// Connection page's Build Custom Plane and over <paramref name="wallet"/> from the cabin's
+    /// games list's Build Custom Plane and over <paramref name="wallet"/> from the cabin's
     /// PLANE CONSTRUCTION. Nothing
     /// happens when the shell has no hangar feature or no store.</summary>
     public void OpenHangar(IHangarWallet? wallet = null) => Hangar?.OpenHangar(wallet, DoorAirframe());
@@ -705,6 +700,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         ResetCreditsSecret();
         _cheats.Reset();
         Options.ScreenOpened(screen);
+        if (screen == OriginalScreen.Connection)
+        {
+            Connection.Enter();
+        }
     }
 
     /// <summary>Applies one frame of seat 0's commands, under the rule <see cref="StepSeat"/>
@@ -722,7 +721,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public void RaiseWarning(string message) => RaiseDialog(message, DialogIcon.Warning, Ok());
 
     /// <summary>One menu frame of the network door, whatever screen shows: the door is stepped, the
-    /// cabin's co-op offer renewed and the Connection pages kept current. Returns whether the
+    /// cabin's co-op offer renewed and the games list kept current. Returns whether the
     /// picture changed. It has whenever the door's <see cref="NetPlayFeature.Revision"/> moved,
     /// as a guest's Ready, a join, a host's word or a lobby line moves it.</summary>
     public bool StepNet(double dt)
@@ -739,8 +738,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return Connection.Tick(dt) | Lobby.Tick(dt) || changed;
     }
 
-    /// <summary>The Connection page following the door's join again: a co-op guest whose link to
-    /// its host ended lands here, and the page's box says why.</summary>
+    /// <summary>The games list following the door's join again: a guest whose link to its host
+    /// ended lands here, and the list's box says why.</summary>
     public void ReturnToConnection()
     {
         Campaign.CloseCampaign();
@@ -779,8 +778,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// the suites' way to show a door they drive themselves.</summary>
     internal void StandInNetDoor(NetPlayFeature door) => _net = door ?? throw new ArgumentNullException(nameof(door));
 
-    // A joined co-op guest leaves the Connection page for its host's boards once the host names
-    // one. It goes back to the page when the link ends, and the page then says why.
+    // A joined co-op guest leaves the games list for its host's boards once the host names one.
+    // It goes back to the list when the link ends, and the list then says why.
     private bool FollowCoopGuest(NetPlayFeature net)
     {
         if (Campaign.IsGuest)
@@ -803,8 +802,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return Campaign.OpenGuestCampaign();
     }
 
-    // A joined Dogfight guest leaves the Connection pages for the lobby once its host's lobby
-    // answers. A lobby whose door has closed goes back to the Connection page, which says why.
+    // A joined Dogfight guest leaves the games list for the lobby once its host's lobby answers. A
+    // lobby whose door has closed goes back to the list, which says why.
     private bool FollowDogfight(NetPlayFeature net)
     {
         if (_screen == OriginalScreen.Lobby)
@@ -846,7 +845,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     // The airframe a default-configuration build opens on: the pilot's current plane on whichever
     // screen the hangar door stands on. Instant Action's door means its Pilot Plane pick, and the
-    // cabin's means the seated pilot's own aircraft. Any other door, the Connection page's
+    // cabin's means the seated pilot's own aircraft. Any other door, the games list's
     // included, has no current plane to inherit (docs/org/hangar.md, "What Load Default
     // Configuration loads").
     private int DoorAirframe()
@@ -856,7 +855,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return _instantAction.PlayerPlaneIndex;
         }
 
-        // A campaign left open behind the Connection page names no pilot of this door.
+        // A campaign left open behind the games list names no pilot of this door.
         if (_screen == OriginalScreen.Connection)
         {
             return HangarFeature.DefaultAirframe;

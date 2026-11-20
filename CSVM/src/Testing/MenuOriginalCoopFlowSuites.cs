@@ -247,7 +247,7 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(host.Door.CoopAllReady, $"and READY on both checks again opens the launch");
     }
 
-    // The guest opens the Connection page and joins; the host's word takes it onto the cabin.
+    // The guest opens the games list and joins; the host's word takes it onto the cabin.
     private static void Join(TestContext ctx, End host, End guest)
     {
         ClickRow(ctx, guest, OriginalShell.MultiplayerKey);

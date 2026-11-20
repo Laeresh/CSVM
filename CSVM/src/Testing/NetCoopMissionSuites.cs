@@ -1520,7 +1520,7 @@ internal static class NetCoopMissionSuites
             ctx.Check(third.Stage == NetDoorStage.Failed && third.Fault == CoopDoorText.HostLeft,
                 $"a dropped host fails the guest's door with \"{CoopDoorText.HostLeft}\" ({third.Stage}, \"{third.Fault}\")");
             ctx.Check(NetFlight.CoopGuestFlightOver(third),
-                $"and the launcher's rule ends the guest's flight, which returns it to the Connection page");
+                $"and the launcher's rule ends the guest's flight, which returns it to the games list");
             ctx.Check(hostEnd.Session.SeatRigs[1].Controller is { Inert: true }
                       && Shows(hostEnd, CoopDoorText.Left("P2")) && hostEnd.Session.Campaign?.Result == null,
                 $"while the host takes the guest's seat out, says \"{CoopDoorText.Left("P2")}\", and flies on");

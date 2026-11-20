@@ -295,7 +295,7 @@ public static class NetDoorAid
 
     /// <summary>A shut door whose LAN search hears <see cref="SampleGames"/>, answered at once
     /// from documentation addresses. With <paramref name="silent"/> nothing answers, so the
-    /// games list stands on its Searching box.</summary>
+    /// empty games list says Searching.</summary>
     public static NetPlayFeature Searching(bool silent = false) => new(
         (port, maxGuests, bind) => throw new InvalidOperationException("the aid's search door hosts nothing"),
         (address, port) => throw new InvalidOperationException("the aid's search door joins nothing"),
@@ -304,8 +304,17 @@ public static class NetDoorAid
         Version = SampleVersion,
     };
 
-    /// <summary>A shut guest door with a master server set and a code opener, so the Connection
-    /// page's Join by code way stands live. Its opener joins nothing.</summary>
+    /// <summary>A shut door with no LAN socket and no master server, so the games list can open no
+    /// search.</summary>
+    public static NetPlayFeature Offline() => new(
+        (port, maxGuests, bind) => throw new InvalidOperationException("the aid's offline door hosts nothing"),
+        (address, port) => throw new InvalidOperationException("the aid's offline door joins nothing"))
+    {
+        Version = SampleVersion,
+    };
+
+    /// <summary>A shut guest door with a master server set and a code opener, so the games list's
+    /// Join by Code stands its box. Its opener joins nothing.</summary>
     public static NetPlayFeature CodeGuest() => new(
         (port, maxGuests, bind) => throw new InvalidOperationException("the aid's code door hosts nothing"),
         (address, port) => throw new InvalidOperationException("the aid's code door joins nothing"))

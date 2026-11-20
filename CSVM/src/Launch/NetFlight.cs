@@ -141,7 +141,7 @@ internal sealed class NetFlight
             open.Dispose();
         }
 
-        // A door that failed keeps its fault, which the Connection page then names.
+        // A door that failed keeps its fault, which the games list then names.
         if (door is { Stage: not NetDoorStage.Failed } shut)
         {
             shut.Close();

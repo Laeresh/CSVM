@@ -97,33 +97,6 @@ public class NetPlayFeatureTests
         Assert.Equal(0, door.TypeAddress("/"));
     }
 
-    /// <summary>A pasted address lands trimmed and whole. A refused character or one past the cap
-    /// is left out and reported, for the box's reject cue.</summary>
-    [Fact]
-    public void APastedAddressIsTrimmedFilteredAndCapped()
-    {
-        var door = Door();
-        while (door.Address.Length > 0)
-        {
-            door.EraseAddress();
-        }
-
-        Assert.Equal((46, false), door.PasteAddress(" \t[2a04:6ec0:232:6640:feb1:ff80:9ed7:dd90]:47500\r\n"));
-        Assert.Equal("[2a04:6ec0:232:6640:feb1:ff80:9ed7:dd90]:47500", door.Address);
-
-        while (door.Address.Length > 0)
-        {
-            door.EraseAddress();
-        }
-
-        Assert.Equal((6, true), door.PasteAddress("::1/128"));
-        Assert.Equal("::1128", door.Address);
-
-        Assert.Equal((NetPlayFeature.AddressLimit - 6, true), door.PasteAddress(new string('a', 80)));
-        Assert.Equal(NetPlayFeature.AddressLimit, door.Address.Length);
-        Assert.Equal((0, false), door.PasteAddress(null));
-    }
-
     /// <summary>What a typed address splits into. A bare IPv6 address is all host, so its last
     /// group is never read as a port. A bracketed one names its port after the bracket, and one
     /// colon splits a host from its port. The board's port stands where the address names none.

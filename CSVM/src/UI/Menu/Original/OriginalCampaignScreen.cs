@@ -1390,7 +1390,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     // Host Co-op asks Game and Player Information first. It then opens a campaign listen server
     // for the seats the local players leave free and advertises the cabin's mission. Close Network
-    // hangs it up. A door the Connection page opened is left alone, its button drawn greyed.
+    // hangs it up. A door the games list opened is left alone, its button drawn greyed.
     private void ToggleCoopDoor()
     {
         if (_net() is not { } net)
@@ -1590,7 +1590,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _campaign.GuestReady = net.PickOf(Math.Clamp(field.Current, 0, net.CoopSeats - 1)).Ready;
     }
 
-    // Leaving hangs up; the shell then takes the guest back to the Connection page.
+    // Leaving hangs up; the shell then takes the guest back to the games list.
     private void AskLeaveSession()
     {
         if (_net() is not { } net)
@@ -1602,7 +1602,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     // Leaving the campaign closes the cabin's door and gives the router's port back. A door the
-    // Connection page opened is left alone.
+    // games list opened is left alone.
     private void CloseCoopDoor()
     {
         if (_net() is { IsCoopHost: true } net)
