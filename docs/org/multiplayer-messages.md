@@ -1071,7 +1071,7 @@ silent or foreign instead of naming the mismatch.
 
 Before a network game opens the original asks two things, in `MULTIPLAYERHOSTMODAL.SCRIPT` (GAME
 INFORMATION, string 10032) and `MULTIPLAYERPLAYERMODAL.SCRIPT` (PLAYER INFORMATION, 10036). The
-Connection page's Host and the games list's Create Game open Game Information, whose OK opens
+original's Connection page Host and the games list's Create Game, the remake's one way to host, open Game Information, whose OK opens
 Player Information; Join Game opens Player Information alone. Player Information's OK is the
 join or the lobby, and either box's Cancel goes back to the page under it.
 
@@ -1177,13 +1177,13 @@ The remake follows the original where it speaks and fills in what DirectPlay did
   connection. The host compares it ordinally; a match is answered with `0x60` marked admitted, and
   only then does the lobby list, seat and tell the guest anything. A wrong answer, or none within 10
   seconds (a build a patch older sends none), is sent session closed reason 5 and hung up on after
-  the full notice's grace. The guest reads Invalid Password over the Connection page. A session with
+  the full notice's grace. The guest reads Invalid Password over the games list. A session with
   no password sends no `0x60` at all.
 - **Boot.** Boot is live on the host while it has picked a guest's row; the host's own row is never
   offered. The guest is sent session closed reason 4 and hung up on, and the lobby's chat on every
   other end reads 10500, a chat line `0x55` under no name. The cabin's remake-only BOOT asks about
   each co-op guest in player order, since a campaign board has no chat. The booted guest reads "You
-  were booted from the game" over the Connection page.
+  were booted from the game" over the games list.
 - **The ban.** The remake adds one the original lacks: a boot bans the address the guest connected
   from until the session closes, and a later connection from it is refused with reason 4 before its
   password is asked. It is an address, so another player behind the same router is refused too, and

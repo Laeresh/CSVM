@@ -63,8 +63,8 @@ public class OriginalCoverageTests : IDisposable
 
     // The radios and dropdowns a screen moves the focus off sideways, taking no value from the
     // press. The lobby's StepSideways takes a dropdown's alone, so Right from the time radio reaches
-    // the MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. The local lobby takes none, so its
-    // map box and its rules move too. Every other radio is a value.
+    // the MPL_E_TIME box and Left from Ready reaches MPL_B_TEAM. The local lobby and the games list
+    // take none, so their radios and boxes move too. Every other radio is a value.
     private static readonly Dictionary<OriginalScreen, HashSet<string>> RowsThatMove = new()
     {
         [OriginalScreen.Lobby] = [OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ReadyKey],
@@ -74,16 +74,20 @@ public class OriginalCoverageTests : IDisposable
             OriginalLobbyScreen.EnvironmentKey, OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ScoreRadioKey,
             OriginalLobbyScreen.LimitedLivesKey, OriginalLobbyScreen.AutoRespawnKey,
         ],
+        [OriginalScreen.Connection] =
+        [
+            .. Enumerable.Range(0, 5).Select(OriginalConnectionScreen.SortKey), OriginalConnectionScreen.RefreshKey,
+        ],
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
     private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey };
     private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey, TypeStep + BuildName, OriginalHangarScreen.NameOkKey };
 
-    // Host answers Game Information and Player Information before the lobby opens.
+    // Create Game answers Game Information and Player Information before the lobby opens.
     private static readonly string[] HostLobby =
     {
-        OriginalShell.MultiplayerKey, OriginalConnectionScreen.HostKey, TypeStep + BuildName, OriginalNetInfoBox.OkKey,
+        OriginalShell.MultiplayerKey, OriginalConnectionScreen.CreateKey, TypeStep + BuildName, OriginalNetInfoBox.OkKey,
         TypeStep + BuildName, OriginalNetInfoBox.OkKey,
     };
 
@@ -135,9 +139,10 @@ public class OriginalCoverageTests : IDisposable
             new[] { OriginalWrapupScreen.ContinueKey, OriginalInstantActionScreen.ExitKey }),
         new("multiplayer-connection", OriginalScreen.Connection, new[] { OriginalShell.MultiplayerKey },
             new[] { OriginalConnectionScreen.ExitKey }),
-        new("multiplayer-games", OriginalScreen.ConnectionGames,
-            new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.ConnectKey },
-            new[] { OriginalConnectionScreen.CancelKey, OriginalConnectionScreen.ExitKey }),
+        new("multiplayer-code", OriginalScreen.Connection,
+            new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.CodeKey },
+            new[] { OriginalShell.DialogOkKey, OriginalConnectionScreen.ExitKey },
+            Expect: new[] { OriginalShell.DialogOkKey }),
         new("multiplayer-lobby", OriginalScreen.Lobby, HostLobby,
             new[] { OriginalLobbyScreen.LeaveKey, OriginalConnectionScreen.ExitKey }),
         new("multiplayer-lobby-plane", OriginalScreen.Lobby,
@@ -783,7 +788,7 @@ public class OriginalCoverageTests : IDisposable
         var controls = new ControlsFeature();
         controls.AddSeat(1, ControlsProfile(), new SeatCaptureDevices(MenuControlsSeats.PadOf, Array.Empty<int>), true);
         // A network door that hosts on a lone in-process wire and joins nothing. Nobody answers on
-        // its in-process LAN, so the games list stands on its Searching box.
+        // its in-process LAN, so the games list stays empty and says Searching.
         var lan = new CSVM.Net.LoopbackLan();
         var net = new NetPlayFeature(
             (_, _, _) => CSVM.Net.LoopbackTransport.Mesh(1, CSVM.Net.LoopbackConditions.Perfect, new Random(1))[0],

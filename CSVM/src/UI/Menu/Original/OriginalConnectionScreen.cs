@@ -11,44 +11,40 @@ using CSVM.UI.Screens;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The original's Multiplayer Connection screen and the LAN games list behind its Connect, a
-/// standalone module over <see cref="NetPlayFeature"/>. The multiplayer scripts place their
-/// widgets inline, so every corner here is the scripts' own, not the layout's
-/// (<c>docs/org/menu-inventory.md</c>). LAN TCP/IP searches, Internet joins the typed address, and
-/// the remake-only Join by code joins a host's code, the original's other three ways left off. Build
-/// Custom Plane opens the wallet-free hangar. Host and Create Game open the Multiplayer Lobby as a
-/// Dogfight's host once Game and Player Information are answered. Every join answers Player
-/// Information first and is followed on a messagebox over the page until it ends.
+/// The Multiplayer Games list, the Multiplayer plaque's page, a standalone module over
+/// <see cref="NetPlayFeature"/>. It lists what the LAN search and the master server hear, drawn
+/// from the original's games list script, whose corners are inline (<c>docs/org/menu-inventory.md</c>).
+/// The original's Connection page is left out, so the list opens directly on a fresh search. Join
+/// by Code raises a box holding the Join code edit box, and Build Custom Plane opens the
+/// wallet-free hangar. Create Game hosts a Dogfight's lobby once Game and Player Information are
+/// answered. Every join answers Player Information first and is followed on a messagebox.
 /// </summary>
 public sealed class OriginalConnectionScreen : IOriginalScreenModule
 {
-    /// <summary>The LAN TCP/IP radio, whose Connect searches the LAN.</summary>
-    public const string LanKey = "MP_R_LAN";
+    /// <summary>Join by Code, which raises the Join code box, or says why joining by code is
+    /// unavailable. The original has no such plaque.</summary>
+    public const string CodeKey = "MPG_B_CODE";
 
-    /// <summary>The Internet radio, whose Connect joins the typed address.</summary>
-    public const string InternetKey = "MP_R_INTERNET";
+    /// <summary>The Join code edit box in the Join by Code box.</summary>
+    public const string CodeBoxKey = "MPG_E_CODE";
 
-    /// <summary>The IP Address edit box.</summary>
-    public const string AddressKey = "MP_E_IP";
+    /// <summary>The Join by Code box's OK, which joins the typed code.</summary>
+    public const string CodeOkKey = "MPG_B_CODEOK";
 
-    /// <summary>The Join by code radio, whose Connect joins the typed code through the master
-    /// server. The original has no such way.</summary>
-    public const string CodeKey = "MP_R_CODE";
+    /// <summary>The Join by Code box's Cancel, back to the list.</summary>
+    public const string CodeCancelKey = "MPG_B_CODECANCEL";
 
-    /// <summary>The Join code edit box under the Join by code radio.</summary>
-    public const string CodeBoxKey = "MP_E_CODE";
-
-    /// <summary>The Join by code radio's label. The string table has no text for this way.</summary>
-    public const string CodeWayName = "Join by code";
+    /// <summary>The Join by Code plaque's words and the box's title. The string table has none.</summary>
+    public const string CodeName = "Join by Code";
 
     /// <summary>The Join code box's label.</summary>
     public const string CodeBoxLabel = "Join code:";
 
-    /// <summary>The Join by code way's description while it is live.</summary>
-    public const string CodeWayDescription =
+    /// <summary>The words under the Join code box.</summary>
+    public const string CodeBoxHint =
         "Join an internet game with the code its host shares, such as K7Q-X3M. No router setup needed.";
 
-    /// <summary>The box raised when Connect finds no code in the Join code box, worded as the
+    /// <summary>The box raised when OK finds no code in the Join code box, worded as the
     /// original's own unrecognized address (langui 10025).</summary>
     public const string CodeNotRecognized = "The join code is not recognized. A code has six letters and digits, such as K7Q-X3M.";
 
@@ -59,29 +55,17 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     /// builds are the lobby's Custom Planes. Greyed only on a shell with no hangar.</summary>
     public const string BuildKey = "MP_B_BUILD";
 
-    /// <summary>Host, which opens the Multiplayer Lobby as a Dogfight's host.</summary>
-    public const string HostKey = "MP_B_HOST";
-
-    /// <summary>Connect, by the way the radios name.</summary>
-    public const string ConnectKey = "MP_B_CONNECT";
-
-    /// <summary>Exit Multiplayer, back to the main menu.</summary>
-    public const string ExitKey = "MP_B_EXIT";
-
-    /// <summary>The games list's auto refresh checkbox.</summary>
+    /// <summary>The auto refresh checkbox.</summary>
     public const string RefreshKey = "MPG_C_REFRESH";
 
-    /// <summary>Create Game, the games list's Host.</summary>
+    /// <summary>Create Game, which hosts a Dogfight.</summary>
     public const string CreateKey = "MPG_B_CREATE";
 
     /// <summary>Join Game, live once a joinable row is picked.</summary>
     public const string JoinKey = "MPG_B_JOIN";
 
-    /// <summary>The games list's Exit, back to the Connection page.</summary>
-    public const string GamesExitKey = "MPG_B_EXIT";
-
-    /// <summary>The Searching box's Cancel, back to the Connection page.</summary>
-    public const string CancelKey = "MPG_B_CANCEL";
+    /// <summary>Exit, back to the main menu.</summary>
+    public const string ExitKey = "MPG_B_EXIT";
 
     /// <summary>How many games the list shows. It does not scroll.</summary>
     public const int VisibleGames = 12;
@@ -102,66 +86,48 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private const string SortKeyPrefix = "MPG_R_SORT_";
     private const string GameKeyPrefix = "MPG_L_GAME_";
 
-    private const string OptionsBackground = "MP_OPTIONSBACKGROUND.JPG";
     private const string GamesBackground = "MP_GAMESBACKGROUND.JPG";
-    private const string SearchingBackground = "MP_ERRORMESSAGEBACKGROUND.JPG";
+    private const string CodeBackground = "MP_CREATETEAMBACKGROUND.PNG";
     private const string RadioArt = "MP_B_RADIO.PNG";
     private const string SmallArt = "MP_B_SMALL.PNG";
     private const string MediumArt = "MP_B_MEDIUM.PNG";
     private const string LargeArt = "MP_B_LARGE.PNG";
     private const string CheckboxArt = "MP_B_CHECKBOXLARGE.PNG";
-    private const string ExitArt = "MP_B_EXITMULTIPLAYER.PNG";
     private const string BuildArt = "GN_B_BUILDCUSTOMPLANE.PNG";
     private const string SortHighlightArt = "MP_GAMESALPHA.PNG";
-
-    // A radio's frames are greyed, normal, rollover and selected; its label and description stand
-    // to its right and under it.
-    private const float RadioX = 50f;
     private const float RadioSize = 18f;
-    private const float RadioLabelOffset = 33f;
-    private const float RadioHitWidth = 250f;
-    private const float DescriptionX = 83f;
-    private const float FieldX = 184f;
-    private const float FieldWidth = 150f;
-    private const float FieldHeight = 18f;
-    private const float AddressDrop = 17f;
-    private const float FieldLabelOffsetX = 101f;
-    private const float FieldLabelOffsetY = 8f;
-    private const float PanelX = 59f;
-    private const float PanelY = 380f;
-    private const float PanelWidth = 329f;
 
-    // The games list: the header bars, the rows under them and the plaque line along the foot.
+    // ⚠ Do not move Join by Code into the plaque line's gap left of Create Game; the install's Auto
+    // refresh label runs across it. A second line, where the Connection page drew Exit Multiplayer,
+    // holds Join by Code and Build Custom Plane instead.
     private const float HeaderY = 141f;
-    private const float HeaderHeight = 30f;
     private const float ListX = 53f;
     private const float ListY = 175f;
     private const float ListWidth = 690f;
     private const float ListPitch = 25f;
     private const float ButtonLineY = 507f;
-    private const float SearchingX = 254f;
-    private const float SearchingY = 160f;
+    private const float SecondLineY = 559f;
+    private const float CodeX = 394f;
+    private const float BuildX = 529f;
+    private const float StatusY = ListY + (2f * ListPitch);
     private const float SortHighlightAlpha = 80f / 255f;
     private const float PickedAlpha = 0x80 / 255f;
 
-    // The original two ways stand at the script's first two radio places with its pitch and string
-    // ids, the IP Address box dropped under Internet. Join by code steps 61 px past Internet, the
-    // script's own step from Internet over its box to Modem-to-Modem, and draws in Internet's faces.
-    private static readonly string[] WayKeys = { LanKey, InternetKey, CodeKey };
-    private static readonly string?[] WayBoxes = { null, AddressKey, CodeBoxKey };
-    private static readonly string[] WayNames = { "LAN TCP/IP", "Internet", CodeWayName };
-    private static readonly int[] WayLabelIds = { 10003, 10004, 10004 };
-    private static readonly int[] WayDescriptionIds = { 10010, 10011, 10011 };
-    private static readonly float[] WayY = { 98f, 134f, 195f };
-    private static readonly float[] DescriptionY = { 117f, 177f, 238f };
+    // The Join by Code box stands in the CREATE TEAM box's art and corners (OriginalTeamBox).
+    private const float BoxX = 234f;
+    private const float BoxY = 99f;
+    private const float FieldX = 265f;
+    private const float FieldY = 200f;
+    private const float FieldWidth = 272f;
+    private const float FieldHeight = 24f;
+    private const float BoxButtonY = 382f;
+
     private static readonly float[] ColumnWidths = { 145f, 100f, 166f, 145f, 115f };
     private static readonly float[] HighlightOffsets = { 0f, 147f, 249f, 414f, 557f };
     private static readonly string[] Headers = { "Game Name", "# of Players", "Mission Type", "Mission Environment", "Status" };
 
-    // The scripts' colours beyond the plaque labels' four, starting with the panel's cream.
-    private static readonly BoardTint Cream = new(204, 200, 179);
+    // The script's colours beyond the plaque labels' four.
     private static readonly BoardTint Black = new(0, 0, 0);
-    private static readonly BoardTint Ink = new(8, 8, 8);
     private static readonly BoardTint White = new(255, 255, 255);
     private static readonly BoardTint Unjoinable = new(0x80, 0x80, 0x80);
     private static readonly BoardTint SearchingRed = new(255, 0, 0);
@@ -176,21 +142,22 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private (string Address, int Port)? _picked;
     private double _sinceAsk;
     private int _heard;
+    private string _status = string.Empty;
 
-    // Whether this visit to the games list has said this build is too old for the master server. The
-    // list asks every second while empty, so without it the box would rise again on each answer.
-    private bool _toldOutdated;
+    // Whether the cursor stands on Create Game because the list opened empty, so the first
+    // answers may move it to the first game. A cursor the player moved is left alone.
+    private bool _defaultFocus;
 
     // A join this page started, followed until it ends, and the words of the box standing for it.
     private bool _following;
     private string? _shown;
 
-    /// <summary>A Connection module over the door <paramref name="net"/> answers, which is null on
-    /// a shell with no multiplayer door. It reads its words from the string table under
-    /// <paramref name="dataRoot"/> and calls back into <paramref name="host"/>. Host and Create Game
-    /// call <paramref name="openLobby"/>. <paramref name="ask"/> stands the network boxes over the
-    /// page before a host or a join goes ahead. It takes a host's kind, or null, what to run after
-    /// OK, and whether a join may be asked a password. Without it both go ahead at once.</summary>
+    /// <summary>A games list over the door <paramref name="net"/> answers, which is null on a shell
+    /// with no multiplayer door. It reads its words from the string table under
+    /// <paramref name="dataRoot"/> and calls back into <paramref name="host"/>. Create Game calls
+    /// <paramref name="openLobby"/>. <paramref name="ask"/> stands the network boxes over the page
+    /// before a host or a join goes ahead. It takes a host's kind, or null, what to run after OK,
+    /// and whether a join may be asked a password. Without it both go ahead at once.</summary>
     public OriginalConnectionScreen(
         Func<NetPlayFeature?> net, IOriginalScreenHost host, string? dataRoot, Action? openLobby = null,
         Action<NetSessionKind?, Action, bool>? ask = null)
@@ -202,29 +169,52 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         _text = new MultiplayerBoardText(_host, dataRoot);
     }
 
-    /// <summary>The picked way, one of the radio keys.</summary>
-    public string Way { get; private set; } = LanKey;
-
     /// <summary>The column the list is sorted by, 0 to 4.</summary>
     public int Sort { get; private set; } = DefaultSort;
 
-    /// <summary>Whether auto refresh is checked.</summary>
-    public bool AutoRefresh { get; private set; }
+    /// <summary>Whether auto refresh is checked. It starts checked and keeps its state for the
+    /// session.</summary>
+    public bool AutoRefresh { get; private set; } = true;
 
     /// <summary>The games the list shows, sorted and cut to <see cref="VisibleGames"/>.</summary>
     public IReadOnlyList<LanGame> Listed => Sorted();
 
+    /// <summary>Whether the Join by Code box stands over the list.</summary>
+    public bool CodeBoxOpen { get; private set; }
+
     /// <summary>The Join code box's text as typed, in capitals.</summary>
     public string TypedCode { get; private set; } = string.Empty;
 
-    /// <summary>Why the Join by code way is shut, or "" while it is live. A shell with no network
-    /// door names no master server.</summary>
+    /// <summary>Why joining by code is shut, or "" while it is live. A shell with no network door
+    /// names no master server.</summary>
     public string CodeFault => _net()?.Internet.CodeFault ?? CoopDoorText.NoMasterServer;
 
-    /// <summary>Whether seat 0's typed characters feed an edit box. The page is showing, no box
-    /// stands over it, and the IP Address or Join code box has the focus.</summary>
+    /// <summary>The red line an empty list stands on: Searching, or why no game can be heard. It
+    /// names a shut search, a build too old for the master server, or a master server's fault.</summary>
+    public string Status
+    {
+        get
+        {
+            if (_net() is not { Searching: true } net)
+            {
+                return _text.Word(10022, "No local area network connection is detected.");
+            }
+
+            if (net.Internet.MasterOutdated)
+            {
+                return CoopDoorText.MasterOutdated;
+            }
+
+            return net.Internet.Master?.Fault is { Length: > 0 } fault
+                ? char.ToUpperInvariant(fault[0]) + fault[1..] + "."
+                : _text.Word(10577, "Searching ...");
+        }
+    }
+
+    /// <summary>Whether seat 0's typed characters feed the Join code box: it stands with the focus
+    /// and no messagebox over it.</summary>
     internal bool CapturingText =>
-        _host.Screen == OriginalScreen.Connection && !_host.DialogOpen && _host.FocusedKey is AddressKey or CodeBoxKey;
+        _host.Screen == OriginalScreen.Connection && CodeBoxOpen && !_host.DialogOpen && _host.FocusedKey == CodeBoxKey;
 
     /// <summary>A game row's key by its place in <see cref="Listed"/>.</summary>
     public static string GameKey(int index) => GameKeyPrefix + index.ToString(CultureInfo.InvariantCulture);
@@ -233,21 +223,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     public static string SortKey(int column) => SortKeyPrefix + column.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Whether a screen is this module's.</summary>
-    public bool Owns(OriginalScreen screen) => screen is OriginalScreen.Connection or OriginalScreen.ConnectionGames;
+    public bool Owns(OriginalScreen screen) => screen == OriginalScreen.Connection;
 
-    /// <summary>The Multiplayer plaque's door: the Connection page on the way it was left on.</summary>
+    /// <summary>The Multiplayer plaque's door: the games list on a fresh search.</summary>
     public void OpenConnection()
     {
         _host.CloseDialog();
         _host.Open(OriginalScreen.Connection);
-    }
-
-    /// <summary>LAN TCP/IP's Connect from the Connection page: the games list on a fresh search, or
-    /// the no-network box when the search will not open.</summary>
-    public void SearchLan()
-    {
-        Way = LanKey;
-        Connect();
     }
 
     /// <summary>A game's five cells as the list writes them. A game of another version names that
@@ -265,68 +247,52 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         };
     }
 
-    /// <summary>The showing page's rows. The Connection page is its radios, its edit boxes and its
-    /// plaques, the Join by code radio and box greyed while <see cref="CodeFault"/> names a reason.
-    /// The games list is only the Searching box's Cancel while it has heard nothing.</summary>
+    /// <summary>The page's rows: the sort radios, the plaques and then the games, so a plaque's
+    /// place holds while games come and go. The Join by Code box's rows alone while it stands.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        if (_host.Screen == OriginalScreen.Connection)
+        if (CodeBoxOpen)
         {
-            ConnectionRows(rows);
+            rows.Add(new OriginalRow(CodeBoxKey, TypedCode, OriginalRowKind.TextField, FieldX, FieldY, FieldWidth, FieldHeight, true, 0, null));
+            rows.Add(_text.Strip(CodeOkKey, SmallArt, 360f, BoxButtonY, true, 0, 74f, 37f));
+            rows.Add(_text.Strip(CodeCancelKey, MediumArt, 452f, BoxButtonY, true, 0, 96f, 37f));
+            return;
         }
-        else if (Listed.Count == 0)
-        {
-            var (x, y) = CancelCorner();
-            rows.Add(_text.Strip(CancelKey, MediumArt, x, y, true, 0, 96f, 37f));
-        }
-        else
-        {
-            GamesRows(rows);
-        }
+
+        PageRows(rows);
     }
 
-    /// <summary>Neither page scrolls.</summary>
+    /// <summary>The page does not scroll.</summary>
     public void Lists(List<OriginalList> lists)
     {
     }
 
-    /// <summary>Nothing on either page takes a sideways step, so it moves the focus.</summary>
+    /// <summary>Nothing on the page takes a sideways step, so it moves the focus.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) => false;
 
-    /// <summary>Neither page opens a list.</summary>
+    /// <summary>The page opens no list.</summary>
     public bool CloseDropdown() => false;
 
-    /// <summary>The showing page's answer to an activated row.</summary>
+    /// <summary>The page's answer to an activated row.</summary>
     public MenuExit? Activate(OriginalRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
         switch (row.Key)
         {
-            case LanKey:
-            case InternetKey:
             case CodeKey:
-                Way = row.Key;
-                break;
-            case AddressKey:
-                // Enter in the box is the box's own Connect over the Internet.
-                Way = InternetKey;
-                Connect();
+                OpenCodeBox();
                 break;
             case CodeBoxKey:
-                Way = CodeKey;
-                Connect();
+            case CodeOkKey:
+                ConnectByCode();
                 break;
-            case ConnectKey:
-                Connect();
+            case CodeCancelKey:
+                CloseCodeBox();
                 break;
             case BuildKey:
                 _host.OpenHangar(null);
                 break;
-            case ExitKey:
-                Leave();
-                break;
-            case HostKey:
             case CreateKey:
                 _ask(NetSessionKind.Dogfight, _openLobby, false);
                 break;
@@ -336,9 +302,8 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             case JoinKey:
                 JoinPicked();
                 break;
-            case GamesExitKey:
-            case CancelKey:
-                BackToConnection();
+            case ExitKey:
+                Leave();
                 break;
             case var sort when sort.StartsWith(SortKeyPrefix, StringComparison.Ordinal):
                 Sort = (OriginalWidgets.Indexed(sort, SortKeyPrefix) ?? -1);
@@ -351,13 +316,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return null;
     }
 
-    /// <summary>Back leaves the games list for the Connection page, and the Connection page for the
-    /// main menu, the way each page's own exit does.</summary>
+    /// <summary>Back is the Join by Code box's Cancel while it stands, and otherwise the page's Exit.
+    /// </summary>
     public bool Back()
     {
-        if (_host.Screen == OriginalScreen.ConnectionGames)
+        if (CodeBoxOpen)
         {
-            BackToConnection();
+            CloseCodeBox();
         }
         else
         {
@@ -367,7 +332,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return true;
     }
 
-    /// <summary>The showing page as drawn.</summary>
+    /// <summary>The page as drawn, with the Join by Code box over it while it stands.</summary>
     public void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -375,13 +340,10 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         string focused = focus >= 0 && focus < rows.Count ? rows[focus].Key : string.Empty;
         int pressedAt = _host.DialogOpen ? -1 : _host.PressedRow;
         string pressed = pressedAt >= 0 && pressedAt < rows.Count ? rows[pressedAt].Key : string.Empty;
-        if (_host.Screen == OriginalScreen.Connection)
+        ComposeGames(CodeBoxOpen ? string.Empty : focused, CodeBoxOpen ? string.Empty : pressed, layers);
+        if (CodeBoxOpen)
         {
-            ComposeConnection(rows, focused, pressed, layers);
-        }
-        else
-        {
-            ComposeGames(focused, pressed, layers);
+            ComposeCodeBox(rows, focused, pressed, layers);
         }
 
         if (_host.SeatPanel(false) is { } strip)
@@ -390,7 +352,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>One menu frame's upkeep while a page shows, after the door was stepped. The list
+    /// <summary>One menu frame's upkeep while the page shows, after the door was stepped. The list
     /// asks again on its timer, and a join started here is followed on its box. Returns whether
     /// the picture changed.</summary>
     public bool Tick(double dt)
@@ -401,7 +363,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         }
 
         bool changed = false;
-        if (_host.Screen == OriginalScreen.ConnectionGames && net.Searching)
+        if (net.Searching)
         {
             _sinceAsk += dt;
             double every = net.Games.Count == 0 ? EmptyRefreshSeconds : AutoRefresh ? AutoRefreshSeconds : double.PositiveInfinity;
@@ -410,79 +372,87 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 _sinceAsk = 0.0;
                 net.Search();
             }
+        }
 
-            int heard = Hash(net.Games);
-            if (heard != _heard)
+        int heard = Hash(net.Games);
+        if (heard != _heard)
+        {
+            bool first = _heard == 0 && net.Games.Count > 0;
+            _heard = heard;
+            changed = true;
+            if (first && _defaultFocus && !CodeBoxOpen && _host.FocusedKey == CreateKey)
             {
-                // The first answers replace the Searching box, and the cursor lands on the first game.
-                bool first = _heard == 0 && net.Games.Count > 0;
-                _heard = heard;
-                changed = true;
-                if (first)
-                {
-                    _host.FocusKey(GameKey(0));
-                }
+                _host.FocusKey(GameKey(0));
             }
 
-            // A box already up, or a join's, keeps the screen; the word waits until it is clear.
-            if (net.Internet.MasterOutdated && !_toldOutdated && !_following && !_host.DialogOpen)
-            {
-                _toldOutdated = true;
-                _host.RaiseDialog(CoopDoorText.MasterOutdated, DialogIcon.Warning, Ok(null));
-                changed = true;
-            }
+            _defaultFocus &= !first;
+        }
+
+        string status = Status;
+        if (status != _status)
+        {
+            _status = status;
+            changed = true;
         }
 
         return FollowJoin(net) || changed;
     }
 
-    /// <summary>Typed characters and Backspace into the focused edit box, which picks that box's
-    /// way as the original's box does when typed into. Each character cues the edit box's
-    /// keystroke or reject sound. A paste inserts the clipboard and cues once, the reject when any
-    /// of it was left out.</summary>
+    /// <summary>The list opening, whoever opened it: a fresh search, nothing picked, and the cursor
+    /// on Create Game until the first answers. The shell calls it on every open of the page.</summary>
+    internal void Enter()
+    {
+        if (_net() is { } net)
+        {
+            net.StopSearch();
+            net.Search();
+        }
+
+        _picked = null;
+        _sinceAsk = 0.0;
+        _heard = 0;
+        _status = Status;
+        CodeBoxOpen = false;
+        _host.FocusKey(CreateKey);
+        _defaultFocus = true;
+    }
+
+    /// <summary>Typed characters, a paste and Backspace into the Join code box. Each character cues
+    /// the edit box's keystroke, or its reject when the box refuses it. A paste inserts the
+    /// clipboard and cues once, the reject when any of it was left out.</summary>
     internal bool TypeText(MenuCommands commands, List<string> cues)
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(cues);
-        if (!CapturingText || _net() is not { } net || (commands.Typed.Length == 0 && !commands.Erase && !commands.Paste))
+        if (!CapturingText || (commands.Typed.Length == 0 && !commands.Erase && !commands.Paste))
         {
             return false;
         }
 
-        if (_host.FocusedKey == CodeBoxKey)
-        {
-            return TypeIntoCode(commands, cues);
-        }
-
-        string before = net.Address;
+        string before = TypedCode;
         foreach (char c in commands.Typed)
         {
-            cues.Add(net.TypeAddress(c.ToString()) > 0 ? OriginalCues.Text : OriginalCues.TextError);
+            cues.Add(TypeCode(c.ToString()) > 0 ? OriginalCues.Text : OriginalCues.TextError);
         }
 
         if (commands.Paste)
         {
-            var (taken, dropped) = net.PasteAddress(MenuInput.Clipboard());
-            cues.Add(dropped || taken == 0 ? OriginalCues.TextError : OriginalCues.Text);
+            string text = (MenuInput.Clipboard() ?? string.Empty).Trim();
+            int taken = TypeCode(text);
+            cues.Add(taken == 0 || taken < text.Length ? OriginalCues.TextError : OriginalCues.Text);
         }
 
-        if (commands.Erase)
+        if (commands.Erase && TypedCode.Length > 0)
         {
-            net.EraseAddress();
+            TypedCode = TypedCode[..^1];
         }
 
-        if (net.Address != before)
-        {
-            Way = InternetKey;
-            return true;
-        }
-
-        return false;
+        return TypedCode != before;
     }
 
     /// <summary>Appends <paramref name="typed"/> to the Join code box in capitals, answering how
     /// many characters it took. It takes only the code alphabet and the dash, up to
-    /// <see cref="CodeBoxLimit"/>, and leaves the reading of a code to Connect.</summary>
+    /// <see cref="CodeBoxLimit"/>, and leaves the reading of a code to OK.</summary>
     internal int TypeCode(string typed)
     {
         int taken = 0;
@@ -503,13 +473,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     /// <summary>Empties the Join code box.</summary>
     internal void ClearCode() => TypedCode = string.Empty;
 
-    /// <summary>Poses the Join by code way picked with <paramref name="typed"/> in its box and the
-    /// cursor on the box, for a screenshot aid.</summary>
+    /// <summary>Stands the Join by Code box with <paramref name="typed"/> in it and the cursor
+    /// there, for a screenshot aid.</summary>
     internal void PoseCode(string typed)
     {
         ClearCode();
         TypeCode(typed);
-        Way = CodeKey;
+        CodeBoxOpen = true;
         _host.FocusKey(CodeBoxKey);
     }
 
@@ -541,8 +511,6 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return games.Count == 0 ? 0 : hash.ToHashCode() | 1;
     }
 
-    private static (float X, float Y) CancelCorner() => (SearchingX + 150f, SearchingY + 150f);
-
     private static float SortX(int column) => column < 2 ? 145f + (133f * column) : 148f + (133f * column);
 
     private static float SortY(int column) => column < 2 ? 116f : 118f;
@@ -566,79 +534,27 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private string MissionName(int seq) =>
         _text.Strings.Text(3450 + seq, $"Mission {(seq + 1).ToString(CultureInfo.InvariantCulture)}");
 
-    private OriginalRow Radio(string key, float x, float y, bool enabled, float hitWidth) =>
-        new(key, string.Empty, OriginalRowKind.Radio, x, y, hitWidth, RadioSize, enabled, 0, new BoardArt(BoardArtLibrary.Ui, RadioArt, 4));
-
-    // The Join code box takes keystrokes and a paste as the IP Address box does, and picks its way
-    // when they change it.
-    private bool TypeIntoCode(MenuCommands commands, List<string> cues)
-    {
-        string before = TypedCode;
-        foreach (char c in commands.Typed)
-        {
-            cues.Add(TypeCode(c.ToString()) > 0 ? OriginalCues.Text : OriginalCues.TextError);
-        }
-
-        if (commands.Paste)
-        {
-            string text = (MenuInput.Clipboard() ?? string.Empty).Trim();
-            int taken = TypeCode(text);
-            cues.Add(taken == 0 || taken < text.Length ? OriginalCues.TextError : OriginalCues.Text);
-        }
-
-        if (commands.Erase && TypedCode.Length > 0)
-        {
-            TypedCode = TypedCode[..^1];
-        }
-
-        if (TypedCode != before)
-        {
-            Way = CodeKey;
-            return true;
-        }
-
-        return false;
-    }
-
-    private void ConnectionRows(List<OriginalRow> rows)
-    {
-        bool byCode = CodeFault.Length == 0;
-        for (int i = 0; i < WayKeys.Length; i++)
-        {
-            bool live = WayKeys[i] != CodeKey || byCode;
-            rows.Add(Radio(WayKeys[i], RadioX, WayY[i], live, RadioHitWidth));
-            if (WayBoxes[i] is { } box)
-            {
-                string text = box == CodeBoxKey ? TypedCode : _net()?.Address ?? string.Empty;
-                rows.Add(new OriginalRow(box, text, OriginalRowKind.TextField, FieldX, WayY[i] + AddressDrop, FieldWidth, FieldHeight, live, 0, null));
-            }
-        }
-
-        rows.Add(_text.Strip(BuildKey, BuildArt, 117f, 468f, _host.CanBuildPlane, 0, 200f, 32f));
-        rows.Add(_text.Strip(HostKey, SmallArt, 514f, 424f, _net() != null, 1, 74f, 37f));
-        rows.Add(_text.Strip(ConnectKey, MediumArt, 610f, 424f, true, 1, 96f, 37f));
-        rows.Add(_text.Strip(ExitKey, ExitArt, 514f, 559f, true, 1, 200f, 32f));
-    }
-
-    private void GamesRows(List<OriginalRow> rows)
+    private void PageRows(List<OriginalRow> rows)
     {
         for (int column = 0; column < Headers.Length; column++)
         {
-            rows.Add(Radio(SortKey(column), SortX(column), SortY(column), true, RadioSize));
+            rows.Add(new OriginalRow(SortKey(column), string.Empty, OriginalRowKind.Radio, SortX(column), SortY(column), RadioSize, RadioSize,
+                true, 0, new BoardArt(BoardArtLibrary.Ui, RadioArt, 4)));
         }
 
+        rows.Add(new OriginalRow(RefreshKey, string.Empty, OriginalRowKind.Radio, 47f, ButtonLineY, 200f, 37f, true, 0,
+            new BoardArt(BoardArtLibrary.Ui, CheckboxArt, 8)));
+        rows.Add(_text.Strip(CodeKey, LargeArt, CodeX, SecondLineY, true, 1, 131f, 37f));
+        rows.Add(_text.Strip(CreateKey, LargeArt, 394f, ButtonLineY, _net() != null, 1, 131f, 37f));
+        rows.Add(_text.Strip(JoinKey, LargeArt, 529f, ButtonLineY, PickedGame() is { } game && CoopDoorText.Joinable(game.Advert), 1, 131f, 37f));
+        rows.Add(_text.Strip(ExitKey, SmallArt, 665f, ButtonLineY, true, 1, 74f, 37f));
+        rows.Add(_text.Strip(BuildKey, BuildArt, BuildX, SecondLineY + 2f, _host.CanBuildPlane, 0, 200f, 32f));
         var listed = Listed;
         for (int i = 0; i < listed.Count; i++)
         {
             rows.Add(new OriginalRow(GameKey(i), CoopDoorText.GameName(listed[i].Advert), OriginalRowKind.ListRow,
                 ListX, ListY + (i * ListPitch), ListWidth, ListPitch, true, 0, null));
         }
-
-        rows.Add(new OriginalRow(RefreshKey, string.Empty, OriginalRowKind.Radio, 47f, ButtonLineY, 200f, 37f, true, 0,
-            new BoardArt(BoardArtLibrary.Ui, CheckboxArt, 8)));
-        rows.Add(_text.Strip(CreateKey, LargeArt, 394f, ButtonLineY, _net() != null, 1, 131f, 37f));
-        rows.Add(_text.Strip(JoinKey, LargeArt, 529f, ButtonLineY, PickedGame() is { } game && CoopDoorText.Joinable(game.Advert), 1, 131f, 37f));
-        rows.Add(_text.Strip(GamesExitKey, SmallArt, 665f, ButtonLineY, true, 1, 74f, 37f));
     }
 
     private List<LanGame> Sorted()
@@ -671,64 +587,34 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return null;
     }
 
-    // LAN TCP/IP opens the games list on a fresh search, Internet joins the typed address, and Join
-    // by code the typed code.
-    private void Connect()
+    // A shut way says why instead of standing a box that cannot join.
+    private void OpenCodeBox()
+    {
+        if (CodeFault is { Length: > 0 } why)
+        {
+            _host.RaiseDialog(CoopDoorText.CodeJoinUnavailable(why), DialogIcon.Warning, Ok(null));
+            return;
+        }
+
+        CodeBoxOpen = true;
+        _host.FocusKey(CodeBoxKey);
+    }
+
+    private void CloseCodeBox()
+    {
+        CodeBoxOpen = false;
+        _host.FocusKey(CodeKey);
+    }
+
+    // A code that does not read warns over the box, which stays for the fix. A code names no
+    // advert, so the Password box stays live in case the host asks one.
+    private void ConnectByCode()
     {
         if (_net() is not { } net)
         {
             return;
         }
 
-        if (Way == CodeKey)
-        {
-            ConnectByCode(net);
-            return;
-        }
-
-        if (Way == LanKey)
-        {
-            net.StopSearch();
-            net.Search();
-            if (!net.CanSearch || !net.Searching)
-            {
-                _host.RaiseDialog(_text.Word(10022, "No local area network connection is detected."), DialogIcon.Warning, Ok(null));
-                return;
-            }
-
-            _picked = null;
-            _sinceAsk = 0.0;
-            _heard = 0;
-            _toldOutdated = false;
-            _host.CloseDialog();
-            _host.Open(OriginalScreen.ConnectionGames);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(net.Address))
-        {
-            _host.RaiseDialog(_text.Word(10025, "The Internet IP address is not recognized."), DialogIcon.Warning, Ok(null));
-            return;
-        }
-
-        // Every join passes Player Information first, as the original's Join Game does. An address
-        // names no advert yet, so its Password box stays live in case the host asks one.
-        _ask(null, () =>
-        {
-            if (net.Stage is NetDoorStage.Failed)
-            {
-                net.Close();
-            }
-
-            net.OpenJoin();
-            _following = true;
-        }, true);
-    }
-
-    // A shut way says why rather than failing on the wire. A code names no advert, so the Password
-    // box stays live in case the host asks one.
-    private void ConnectByCode(NetPlayFeature net)
-    {
         if (net.Internet.CodeFault is { Length: > 0 } why)
         {
             _host.RaiseDialog(CoopDoorText.CodeJoinUnavailable(why), DialogIcon.Warning, Ok(null));
@@ -741,6 +627,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             return;
         }
 
+        CloseCodeBox();
         _ask(null, () =>
         {
             if (net.Stage is NetDoorStage.Failed)
@@ -797,22 +684,16 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         }, game.Advert.Password);
     }
 
-    private void BackToConnection()
-    {
-        _net()?.StopSearch();
-        _host.CloseDialog();
-        _host.Open(OriginalScreen.Connection);
-    }
-
     private void Leave()
     {
         _net()?.StopSearch();
+        CodeBoxOpen = false;
         _host.CloseDialog();
         _host.Open(OriginalScreen.TopLevel);
     }
 
-    // The box a followed join stands on: connecting, waiting on the host, or why it ended. An
-    // ended join puts the page back on Connection. Answering any of them hangs up.
+    // The box a followed join stands on: connecting, waiting on the host, or why it ended, over
+    // the list. Answering any of them hangs up.
     private bool FollowJoin(NetPlayFeature net)
     {
         if (!_following)
@@ -851,12 +732,6 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         }
 
         _host.CloseDialog();
-        if (net.Stage == NetDoorStage.Failed)
-        {
-            net.StopSearch();
-            _host.Open(OriginalScreen.Connection);
-        }
-
         _host.RaiseDialog(text, icon, answer);
         _shown = text;
         return true;
@@ -872,55 +747,19 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private OriginalDialogAnswer Ok(Action? run) =>
         new(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), run);
 
-    private void ComposeConnection(IReadOnlyList<OriginalRow> rows, string focused, string pressed, BoardLayers layers)
-    {
-        layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, OptionsBackground), 0f, 0f));
-        layers.Lines.Add(_text.Line(10014, "CONNECTION", 36f, 32f, 0f, Black));
-        layers.Lines.Add(_text.Line(10013, "MULTIPLAYER OPTIONS", 410f, 32f, 0f, Black));
-        foreach (var row in rows)
-        {
-            bool isFocused = row.Key == focused;
-            bool isPressed = row.Key == pressed;
-            int way = Array.IndexOf(WayKeys, row.Key);
-            if (way >= 0)
-            {
-                // The remake-only way's words have no string id, so they borrow the Internet way's faces.
-                bool remakeOnly = row.Key == CodeKey;
-                ComposeRadio(row, row.Key == Way, isFocused, layers);
-                layers.Lines.Add(_text.Line(WayLabelIds[way], WayNames[way], row.X + RadioLabelOffset, row.Y, 0f, Ink,
-                    text: remakeOnly ? WayNames[way] : null));
-                layers.Lines.Add(_text.Line(WayDescriptionIds[way], string.Empty, DescriptionX, DescriptionY[way], 0f, Ink,
-                    text: remakeOnly ? CodeDescription() : null));
-            }
-            else if (row.Kind == OriginalRowKind.TextField)
-            {
-                ComposeField(row, isFocused, layers);
-            }
-            else if (row.Art != null)
-            {
-                ComposePlaque(row, isFocused, isPressed, layers);
-            }
-        }
-
-        layers.Lines.Add(_text.Line(10524, "To build custom planes for your multiplayer inventory, click Build Custom Plane.",
-            PanelX, PanelY, PanelWidth, Cream, BoardJustify.Center));
-    }
-
     private void ComposeGames(string focused, string pressed, BoardLayers layers)
     {
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, GamesBackground), 0f, 0f));
-        string way = _text.Word(10003, "LAN TCP/IP");
-        string title = _text.Strings.Format(10067, way);
-        layers.Lines.Add(_text.Line(10067, string.Empty, 69f, 80f, 0f, White, text: title.Length > 0 ? title : $"{way} Games"));
+        string title = _text.Strings.Format(10067, "Multiplayer");
+        layers.Lines.Add(_text.Line(10067, string.Empty, 69f, 80f, 0f, White, text: title.Length > 0 ? title : "Multiplayer Games"));
         int sort = Math.Clamp(Sort, 0, Headers.Length - 1);
         layers.Pictures.Add(new BoardPicture(
             new BoardArt(BoardArtLibrary.Ui, SortHighlightArt), 54f + HighlightOffsets[sort], HeaderY,
             Opacity: SortHighlightAlpha, Tint: SortTint, Crop: new BoardCrop(HighlightOffsets[sort], 0f, ColumnWidths[sort], 341f)));
 
-        // The full page is drawn whatever rows stand, since the Searching box covers it rather than
-        // replacing it.
+        // The page's own rows, also while the Join by Code box stands over them.
         var rows = new List<OriginalRow>();
-        GamesRows(rows);
+        PageRows(rows);
         for (int column = 0; column < Headers.Length; column++)
         {
             var row = rows[column];
@@ -931,6 +770,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
 
         var listed = Listed;
         var picked = PickedGame();
+        string hovered = HoveredKey();
         for (int i = 0; i < listed.Count; i++)
         {
             var game = listed[i];
@@ -941,7 +781,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 layers.Fills.Add(new BoardFill(ListX, y, ListWidth, ListPitch, 0x9f, 0x28, 0x20, PickedAlpha));
             }
 
-            if (key == focused || (_host.HoveredRow >= 0 && key == HoveredKey()))
+            if (key == focused || key == hovered)
             {
                 layers.Fills.Add(new BoardFill(ListX, y, ListWidth, ListPitch, 0xdf, 0xb8, 0x60, 1f, Border: true));
             }
@@ -955,46 +795,69 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             }
         }
 
+        if (listed.Count == 0)
+        {
+            layers.Lines.Add(_text.Line(10577, string.Empty, ListX, StatusY, ListWidth, SearchingRed, BoardJustify.Center, Status));
+        }
+
         var refresh = rows.First(row => row.Key == RefreshKey);
         int box = !refresh.Enabled ? 0 : refresh.Key == pressed ? 3 : refresh.Key == focused ? 2 : 1;
         layers.Pictures.Add(new BoardPicture(refresh.Art!, refresh.X, refresh.Y, (AutoRefresh ? 4 : 0) + box));
         layers.Lines.Add(_text.Line(10076, "Auto refresh", refresh.X + 62f, refresh.Y + 8f, 0f, new BoardTint(250, 250, 250)));
-        string[] labels = { "Create Game", "Join Game", "Exit" };
-        int[] ids = { 10074, 10075, 10077 };
-        string[] keys = { CreateKey, JoinKey, GamesExitKey };
-        for (int i = 0; i < keys.Length; i++)
-        {
-            var row = rows.First(r => r.Key == keys[i]);
-            ComposePlaque(row, row.Key == focused, row.Key == pressed, layers, ids[i], labels[i],
-                row.Key == CreateKey ? CreateDisabled : MultiplayerBoardText.LabelDisabled);
-        }
 
-        if (listed.Count == 0)
+        // Join by Code has no string of its own, so it borrows Create Game's face.
+        var plaques = new (string Key, int Face, string Label)[]
         {
-            ComposeSearching(focused == CancelKey, pressed == CancelKey, layers);
+            (CodeKey, 10074, CodeName),
+            (CreateKey, 10074, _text.Word(10074, "Create Game")),
+            (JoinKey, 10075, _text.Word(10075, "Join Game")),
+            (ExitKey, 10077, _text.Word(10077, "Exit")),
+            (BuildKey, 0, string.Empty),
+        };
+        foreach (var (key, face, label) in plaques)
+        {
+            var row = rows.First(r => r.Key == key);
+            ComposePlaque(row, row.Key == focused, row.Key == pressed, layers, face, label,
+                row.Key == CreateKey ? CreateDisabled : MultiplayerBoardText.LabelDisabled);
         }
     }
 
-    // The Searching box, over the page: its picture, the red words and its Cancel.
-    private void ComposeSearching(bool focused, bool pressed, BoardLayers layers)
+    // The Join by Code box over the page, drawn in the CREATE TEAM box's art.
+    private void ComposeCodeBox(IReadOnlyList<OriginalRow> rows, string focused, string pressed, BoardLayers layers)
     {
-        var (x, y) = CancelCorner();
-        var cancel = _text.Strip(CancelKey, MediumArt, x, y, true, 0, 96f, 37f);
-        var face = _text.Regular(10578);
-        float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        layers.Overlays.Add(new BoardPanel(
-            Array.Empty<BoardFill>(),
-            new[]
+        layers.Overlays.Add(new BoardPanel(Array.Empty<BoardFill>(),
+            new[] { new BoardPicture(new BoardArt(BoardArtLibrary.Ui, CodeBackground), BoxX, BoxY) }, Array.Empty<BoardLine>()));
+        var pictures = new List<BoardPicture>();
+        var lines = new List<BoardLine>
+        {
+            _text.Line(10552, string.Empty, FieldX, 130f, FieldWidth, Black, BoardJustify.Center, CodeName.ToUpperInvariant()),
+            _text.Line(10551, string.Empty, FieldX - 3f, FieldY - 25f, 0f, Black, text: CodeBoxLabel),
+            _text.Line(10551, string.Empty, FieldX, FieldY + 40f, FieldWidth, Black, BoardJustify.Center, CodeBoxHint),
+        };
+
+        foreach (var row in rows)
+        {
+            if (row.Key == CodeBoxKey)
             {
-                new BoardPicture(new BoardArt(BoardArtLibrary.Ui, SearchingBackground), SearchingX, SearchingY),
-                new BoardPicture(cancel.Art!, cancel.X, cancel.Y, ComposedBoard.PlaqueFrame(4, focused, pressed)),
-            },
-            new[]
-            {
-                _text.Line(10577, "Searching ...", SearchingX + 80f, SearchingY + 80f, 0f, SearchingRed),
-                new BoardLine(_text.Word(10578, "Cancel"), cancel.X, cancel.Y + ((cancel.Height - size) / 2f) - 1f, cancel.Width, size,
-                    BoardInk.Row, -1, Justify: BoardJustify.Center, Face: face, Colour: MultiplayerBoardText.LabelTint(true, focused, pressed)),
-            }));
+                var caret = row.Key == focused && !_host.DialogOpen ? new BoardCaret(0, 0, 0, 1f, row.Height - 8f) : (BoardCaret?)null;
+                var face = _text.Regular(10527);
+                lines.Add(new BoardLine(row.Label, row.X + 6f, row.Y + 3f, row.Width - 12f, face?.Pixels ?? MultiplayerBoardText.TextFallback,
+                    BoardInk.Row, -1, Caret: caret, Face: face, Colour: Black)
+                {
+                    KeepEnd = true,
+                });
+                continue;
+            }
+
+            bool ok = row.Key == CodeOkKey;
+            int id = ok ? 10534 : 10535;
+            var plaque = new BoardLayers();
+            ComposePlaque(row, row.Key == focused, row.Key == pressed, plaque, id, _text.Word(id, ok ? "OK" : "Cancel"));
+            pictures.AddRange(plaque.Pictures);
+            lines.AddRange(plaque.Lines);
+        }
+
+        layers.Overlays.Add(new BoardPanel(Array.Empty<BoardFill>(), pictures, lines));
     }
 
     private void ComposeRadio(OriginalRow row, bool selected, bool focused, BoardLayers layers)
@@ -1003,63 +866,35 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         layers.Pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, frame));
     }
 
-    private string CodeDescription() => CodeFault is { Length: > 0 } why ? CoopDoorText.CodeJoinUnavailable(why) : CodeWayDescription;
-
-    private void ComposeField(OriginalRow row, bool focused, BoardLayers layers)
-    {
-        // The live box is only its black outline over the page. A shut one is outlined in the
-        // greyed label colour, and its label stays black as every way's label does.
-        var outline = row.Enabled ? Black : MultiplayerBoardText.LabelDisabled;
-        layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, outline.R, outline.G, outline.B, Border: true));
-        string? label = row.Key == CodeBoxKey ? CodeBoxLabel : null;
-        layers.Lines.Add(_text.Line(10006, "IP Address:", row.X - FieldLabelOffsetX, row.Y + FieldLabelOffsetY - 8f, 0f, Ink, text: label));
-        var face = _text.Regular(10006);
-        float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        var caret = focused && row.Enabled && !_host.DialogOpen ? new BoardCaret(0, 0, 0, 1f, row.Height - 4f) : (BoardCaret?)null;
-        // The box keeps the script's own 150 pixels, which an IPv6 address overflows. It scrolls to
-        // the end being typed, as a Windows edit box does, rather than shrink the face.
-        layers.Lines.Add(new BoardLine(row.Label, row.X + 3f, row.Y + ((row.Height - size) / 2f) - 1f, row.Width - 6f, size,
-            BoardInk.Row, -1, Caret: caret, Face: face, Colour: Ink)
-        {
-            KeepEnd = true,
-        });
-    }
-
+    // A picture rather than a plaque, since the plaque layer stands over the text. The words are
+    // drawn in the script's own colours rather than a plaque ink; a face of 0 draws none.
     private void ComposePlaque(
-        OriginalRow row, bool focused, bool pressed, BoardLayers layers, int labelId = 0, string label = "",
-        BoardTint? disabled = null)
+        OriginalRow row, bool focused, bool pressed, BoardLayers layers, int faceId, string label, BoardTint? disabled = null)
     {
-        // A picture rather than a plaque, since the plaque layer stands over the text. These words
-        // are drawn in the script's own colours rather than a plaque ink.
         int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art!.Frames, focused, pressed) : 0;
         layers.Pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, frame));
-        if (labelId == 0)
-        {
-            (labelId, label) = row.Key switch
-            {
-                HostKey => (10015, "Host"),
-                ConnectKey => (10016, "Connect"),
-                _ => (0, string.Empty),
-            };
-        }
-
-        if (labelId == 0)
+        if (faceId == 0)
         {
             return;
         }
 
-        var face = _text.Regular(labelId);
+        var face = _text.Regular(faceId);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         var tint = !row.Enabled && disabled is { } grey ? grey : MultiplayerBoardText.LabelTint(row.Enabled, focused, pressed);
-        layers.Lines.Add(new BoardLine(_text.Word(labelId, label), row.X, row.Y + ((row.Height - size) / 2f) - 1f, row.Width, size,
+        layers.Lines.Add(new BoardLine(label, row.X, row.Y + ((row.Height - size) / 2f) - 1f, row.Width, size,
             BoardInk.Row, -1, Justify: BoardJustify.Center, Face: face, Colour: tint));
     }
 
     private string HoveredKey()
     {
+        if (_host.HoveredRow < 0)
+        {
+            return string.Empty;
+        }
+
         var rows = new List<OriginalRow>();
         BuildRows(rows);
         int hovered = _host.HoveredRow;
-        return hovered >= 0 && hovered < rows.Count ? rows[hovered].Key : string.Empty;
+        return hovered < rows.Count ? rows[hovered].Key : string.Empty;
     }
 }

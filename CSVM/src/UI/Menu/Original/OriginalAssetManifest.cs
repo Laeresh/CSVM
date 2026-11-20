@@ -107,7 +107,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw or draws optionally, the
     /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 11;
+    public const int Schema = 12;
 
     /// <summary>The layout sections Original composes screens from. Every other section's art is
     /// optional, since nothing Original draws reads it.</summary>
@@ -127,8 +127,8 @@ public sealed class OriginalAssetManifest
     private static readonly string[] ScriptNamed =
     {
         "activepointerz.png", "passivepointerz.png", "arial8.tga", "PX_B_ReadyToExport.png", "PX_B_CancelExport.png",
-        "MP_OPTIONSBACKGROUND.JPG", "MP_GAMESBACKGROUND.JPG", "MP_ERRORMESSAGEBACKGROUND.JPG", "MP_GAMESALPHA.PNG",
-        "MP_B_RADIO.PNG", "MP_B_SMALL.PNG", "MP_B_MEDIUM.PNG", "MP_B_LARGE.PNG", "MP_B_EXITMULTIPLAYER.PNG",
+        "MP_GAMESBACKGROUND.JPG", "MP_GAMESALPHA.PNG",
+        "MP_B_RADIO.PNG", "MP_B_SMALL.PNG", "MP_B_MEDIUM.PNG", "MP_B_LARGE.PNG",
         "MP_B_CHECKBOXLARGE.PNG", "MP_LOBBY_BACKGROUND.JPG", "MP_LOBBY_MISSION.PNG", "MP_LOBBY_PLANE.PNG",
         "MP_LOBBY_AMMO.PNG", "MP_LOBBY_STATSCREEN.PNG", "MP_LOBBY_TABLARGE.PNG", "MP_LOBBY_TABSMALL.PNG",
         "MP_B_RADIO8STATESSM.PNG", "MP_B_CHECKBOX8STATES.PNG", "MP_B_CHECKBOX.PNG", "MP_B_LISTBOXARROW.PNG",

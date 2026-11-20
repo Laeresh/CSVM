@@ -655,7 +655,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalRaceBoard.cs`, the Original presentation's end-of-race board over the panes: wakes on the race's end, halts, retires on a new window.
 - `src/UI/Menu/Original/OriginalHangarScreen.cs`, the hangar as one standalone module: the name screen, the tabbed hub, the totals page, the inventory.
 - `src/UI/Menu/Original/OriginalCampaignScreen.cs`, the campaign as one standalone module: the ten decoded screens over the shared board component.
-- `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
+- `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Games list the Multiplayer plaque opens, a standalone module over the network door: the search, the Join by Code box, a join followed on a messagebox.
 - `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, the bot controls, chat, LAUNCH! and Leave Game.
 - `src/UI/Menu/Original/OriginalOutlawList.cs`, the lobby's outlaw list pane behind Select..., and the map from its rows to the outlaw flags.
 - `src/UI/Menu/Original/OriginalTeamBox.cs`, the lobby's CREATE TEAM box behind Create Team.

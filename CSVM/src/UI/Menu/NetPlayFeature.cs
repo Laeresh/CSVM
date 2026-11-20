@@ -752,17 +752,6 @@ public sealed class NetPlayFeature : IMenuFeature
         return taken;
     }
 
-    /// <summary>Appends pasted text to the address, trimmed of the whitespace a copied address
-    /// carries, under <see cref="TypeAddress"/>'s rule and cap. Answers how many characters it
-    /// took and whether any were left out, refused or past the cap, which a box cues as a reject.
-    /// </summary>
-    public (int Taken, bool Dropped) PasteAddress(string? clipboard)
-    {
-        string text = clipboard?.Trim() ?? string.Empty;
-        int taken = TypeAddress(text);
-        return (taken, taken < text.Length);
-    }
-
     /// <summary>Takes the last character off the address.</summary>
     public void EraseAddress()
     {
@@ -792,8 +781,8 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>Opens a listen server with the Multiplayer Lobby standing on it, the Connection
-    /// page's Host. It is <see cref="OpenHost(int)"/> with the lobby shown, whose environment the
+    /// <summary>Opens a listen server with the Multiplayer Lobby standing on it, the games list's
+    /// Create Game. It is <see cref="OpenHost(int)"/> with the lobby shown, whose environment the
     /// advert names. The host's pilot goes by <see cref="NetIdentity.PlayerName"/>.</summary>
     public void OpenDogfightHost(int maxGuests)
     {

@@ -30,7 +30,7 @@ internal static class SuitePorts
     /// <summary>net-enet-join's host.</summary>
     internal const int EnetJoin = 40;
 
-    /// <summary>menu-original-ipv6-address's host on the IPv6 loopback.</summary>
+    /// <summary>net-ipv6-join's host on the IPv6 loopback.</summary>
     internal const int Ipv6Join = 45;
 
     /// <summary>enet-dual-stack's two-socket host, and its IPv4-only control after it.</summary>
