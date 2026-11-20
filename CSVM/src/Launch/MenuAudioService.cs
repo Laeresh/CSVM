@@ -219,7 +219,7 @@ public sealed partial class MenuAudioService : Node, IMenuAudio
         }
 
         _subtitles = Flight.Hud.SubtitleLine.OnLayer(UI.Boards.HudLayers.BriefingSubtitles, "briefing_subtitles",
-            () => (_narration.Playing ? _narrationWav : null, _narration.GetPlaybackPosition()), table,
+            () => (_narration.Playing ? _narrationWav : null, _narration.GetPlaybackPosition(), null), table,
             BriefingCaptionArea);
         AddChild(_subtitles);
     }

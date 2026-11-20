@@ -434,7 +434,10 @@ object keyed by WAV name:
 ```
 
 A key matches as a pack's sound does: the file name's stem, without case or extension. `speaker`
-is optional. A clip with `segments` is captioned by the seconds it has played: a segment shows
+is optional. A combat bark (`VO_id<N>_*`) is one voice actor's take shared by every pilot of an
+accent, so its entry names nobody: the caption names the aircraft speaking it, as its marker and
+kill line do. That is a network player's callsign, else the roster pilot, the airframe's title or
+the plane. A clip with `segments` is captioned by the seconds it has played: a segment shows
 from its `start` until the next one starts, but no longer than one second past its own `end`. A
 segment without an `end` lasts until the next one starts, and one without a `speaker` takes the
 clip's. An entry with neither `text` nor `segments` is ignored.
