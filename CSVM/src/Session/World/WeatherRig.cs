@@ -54,6 +54,15 @@ public sealed class WeatherRig
     /// <see cref="ZoneLighting.SelfLitEmission"/> while SDFGI stands. Zero otherwise.</summary>
     public const string GiSelfLitParam = "csky_gi_self_lit";
 
+    /// <summary>The global the unshaded Enhanced vegetation (the Rich cards, their near models and the canopy
+    /// clumps) multiplies its albedo by: <see cref="VegetationLightOf"/> of the primary view's zone.</summary>
+    public const string VegetationLightParam = "csky_vegetation_light";
+
+    /// <summary>TUNE, Enhanced only. How much brighter than the level ground's light the unshaded vegetation draws. It
+    /// puts CM08's trees against the ground under them where C1's day trees stand against theirs, measured in a render
+    /// (docs/org/weather.md). A white day light clamps to one at it.</summary>
+    public const float VegetationLightGain = 3.6f;
+
     /// <summary>The D of a padding plane in <see cref="VolumeFogData"/>. With a zero normal, every
     /// point lies this deep inside it. So it neither cuts the ray nor thins the fog.</summary>
     public const float VolumeUnboundD = 1e9f;
@@ -411,6 +420,9 @@ public sealed class WeatherRig
     /// <summary>The <see cref="CloudTintParam"/> this rig last wrote, a mirror like <see cref="SkyTint"/>.</summary>
     public Vector3 CloudTint { get; private set; } = Vector3.One;
 
+    /// <summary>The <see cref="VegetationLightParam"/> this rig last wrote, a mirror like <see cref="SkyTint"/>.</summary>
+    public Vector3 VegetationLight { get; private set; } = Vector3.One;
+
     /// <summary>The mission's weather zones, the lighting lab's choices; empty with no weather.json.</summary>
     public IReadOnlyList<string> ZoneNames => _weather?.ZoneNames ?? (IReadOnlyList<string>)Array.Empty<string>();
 
@@ -445,11 +457,12 @@ public sealed class WeatherRig
 
     /// <summary>Puts the process-wide state a session's zone applies leave behind back to its defaults:
     /// <see cref="NightOff"/>, the terrain shadow's strength, GI's energy and sky light. It also zeroes
-    /// the cockpit interior's lift. The session's exit calls it.</summary>
+    /// the cockpit interior's lift and sets the vegetation's light to one. The session's exit calls it.</summary>
     public static void ResetProcessState()
     {
         NightOff = false;
         RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, Vector3.Zero);
+        RenderingServer.GlobalShaderParameterSet(VegetationLightParam, Vector3.One);
         Effects.TerrainShadow.Strength = 1f;
         Effects.GlobalIllumination.Reset();
     }
@@ -628,6 +641,21 @@ public sealed class WeatherRig
         RenderingServer.GlobalShaderParameterAdd(CloudTintParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
         RenderingServer.GlobalShaderParameterAdd(GiAmbientFillParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         RenderingServer.GlobalShaderParameterAdd(GiSelfLitParam, RenderingServer.GlobalShaderParameterType.Float, 0f);
+        RenderingServer.GlobalShaderParameterAdd(VegetationLightParam, RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+    }
+
+    /// <summary>What the unshaded Enhanced vegetation multiplies in under one zone. It is the linear light a level surface
+    /// takes from the scene sun and ambient at the world light's mean incidence. It is scaled by
+    /// <see cref="VegetationLightGain"/> and clamped to one per channel. A white day light clamps to one, so a dim zone
+    /// darkens it with no step at the night key. A day light authored in colour keeps that cast. Pure.</summary>
+    public static Vector3 VegetationLightOf(WeatherState.ZoneWeather fog, ZoneLighting tune)
+    {
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
+        var sun = (fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB)).SrgbToLinear();
+        var ambient = (fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB)).SrgbToLinear();
+        float level = sunEnergy * WeatherState.SunIncidence;
+        float Channel(float a, float s) => Math.Clamp(VegetationLightGain * ((a * ambientEnergy) + (s * level)), 0f, 1f);
+        return new Vector3(Channel(ambient.R, sun.R), Channel(ambient.G, sun.G), Channel(ambient.B, sun.B));
     }
 
     /// <summary>A tint as the shaders multiply it in: linear, and exactly white for an untinted
@@ -1143,6 +1171,7 @@ public sealed class WeatherRig
                + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
                + Log.Format($"shadows to {FogRangeFor(fog).X * tune.ShadowDistance * ShadowDistanceSetting.EnhancedScale():0} m")
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty)
+               + Log.Format($"; vegetation light {VegetationLightOf(fog, tune)}")
                + (tune != ZoneLighting.Default ? $"; lighting tune {tune.Describe()}" : string.Empty);
     }
 
@@ -1846,6 +1875,8 @@ public sealed class WeatherRig
         WriteGiGlobals(tune, ambientColor, ambientEnergy);
         InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy, sunColor, sunEnergy);
         RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, InteriorLiftWritten);
+        VegetationLight = VegetationLightOf(fog, tune);
+        RenderingServer.GlobalShaderParameterSet(VegetationLightParam, VegetationLight);
         ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
         foreach (var (sun, env) in _extraLighting)
             ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
@@ -1907,6 +1938,8 @@ public sealed class WeatherRig
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);
         WriteGiGlobals(ZoneLighting.Default, Colors.Black, 0f);
+        VegetationLight = Vector3.One;
+        RenderingServer.GlobalShaderParameterSet(VegetationLightParam, VegetationLight);
         _sun.LightEnergy = sunEnergy;
         WriteColorAmbient(_env, fog.SunColorAmbient, ambientEnergy);
         foreach (var (sun, env) in _extraLighting)

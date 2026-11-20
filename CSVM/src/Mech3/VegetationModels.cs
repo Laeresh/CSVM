@@ -47,7 +47,8 @@ public static class VegetationModels
     public const string BandParam = "vegetation_model_band";
 
     /// <summary>The albedo gain a material made with <c>gain</c> reads, 1 by default. A model with no card to meet, as C5's
-    /// city tree, takes its night level from it; every other material's text lacks it.</summary>
+    /// city tree, takes its night level from it, not from <c>WeatherRig.VegetationLightOf</c>.
+    /// Every other material's text lacks it.</summary>
     public const string GainParam = "model_gain";
 
     /// <summary>The canopy material's parameter for how far, in model metres, the painted surface stands over
@@ -352,7 +353,7 @@ public static class VegetationModels
                 discard;
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
-            ALBEDO = col.rgb * grade{{(gain ? " * " + GainParam : "")}}{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
+            ALBEDO = col.rgb * grade{{(gain ? " * " + GainParam : " * csky_vegetation_light")}}{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
         {{SunLitLines}}{{ClutterBuilder.RichFragmentLines}}{{(fogged ? ClutterBuilder.FogLines : "")}}
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;

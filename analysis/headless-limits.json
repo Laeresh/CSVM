@@ -33,6 +33,7 @@
     "trail-world-anchor": "reads the first drawn puff's instance transform back, which the headless renderer does not keep",
     "vegetation-added-stamps": "counts the added stamps drawn from their MultiMesh instance transforms after each edit, which the headless renderer keeps no instances for",
     "vegetation-lab": "reads the drawn clutter buffers on the map and past its edge back after each edit, which the headless renderer keeps no instances for",
+    "vegetation-light": "renders a night and a day view in a pane and reads its pixels back; headless renders none",
     "vegetation-models": "reads the near models' stamps back from their MultiMesh instance transforms after each crater, hide and switch, which the headless renderer keeps no instances for",
     "ground-cover-cards": "reads each cover card back from its MultiMesh instance transforms to check the ground under it, which the headless renderer keeps no instances for",
     "wing-flare-pose": "counts the flare's rendered pixels in a viewport; headless renders none",

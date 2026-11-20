@@ -1167,6 +1167,131 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("vegetation-light",
+        "the unshaded Enhanced vegetation takes the zone's light, measured in a render of trees against the ground behind them: "
+        + "C1's day trees draw as at a light of one; CM08's (C1B/M03, night) trees at rich draw under 0.85 of a light of one's "
+        + "ratio and no darker against their ground than C1's day trees; every day zone of every shipped mission and tune layer "
+        + "lights it at about one (luminance 0.9, no channel under 0.75); every Rich card, near model and listed Original card "
+        + "multiplies it in, and an Original flight writes one")]
+    internal static void VegetationLight(TestContext ctx)
+    {
+        RequireData(ctx, "C1B");
+        RequireData(ctx, "C1");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word;
+        string launchedModels = Utils.VegetationModelsSetting.Word;
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            Utils.VegetationModelsSetting.Resolve(Utils.VegetationModelsSetting.Near, null, null);
+            var day = Open(ctx, true, 1, "C1", "--mission=IA1", "--freecam");
+            TreeGround dayRead;
+            try
+            {
+                dayRead = TreeAgainstGround(day, new Vector3(-7620f, 140f, -3240f), new Vector3(-7868f, 40f, -3449f), System.IO.Path.Combine(VegetationLightShots(ctx), "day"));
+                ctx.Check(day.Built && day.Session.Weather?.VegetationLight == Vector3.One && dayRead.Pixels > 2000
+                        && Math.Abs(dayRead.Ratio - dayRead.UnlitRatio) < 1e-4f,
+                    $"C1's day zone lights its vegetation at one, as a light of one draws it; its trees ({dayRead.Pixels} px) read {dayRead.Ratio:0.000} of the ground behind them");
+            }
+            finally
+            {
+                day.Close();
+            }
+
+            var night = Open(ctx, true, 1, "C1B", "--mission=M03", "--freecam");
+            try
+            {
+                if (!night.Built || night.Session.Vegetation?.Clutter is not { ExportedKinds: { } kinds, ModelRoot: { } models })
+                {
+                    ctx.Check(false, $"the rich C1B/M03 session builds its clutter with a model root");
+                    return;
+                }
+                var light = night.Session.Weather?.VegetationLight ?? Vector3.One;
+                var read = TreeAgainstGround(night, new Vector3(-7650f, 340f, -5200f), new Vector3(-7870f, 260f, -5400f), System.IO.Path.Combine(VegetationLightShots(ctx), "cm08"));
+                // The pane draws the night ground darker than a flight does. The game's ratio is calibrated in a probe render
+                // (docs/org/weather.md). Here the light must darken the trees, and not past the day's ratio.
+                ctx.Check(light.X < 1f && read.Pixels > 2000 && read.Ratio <= read.UnlitRatio * 0.85f,
+                    $"ABLE-TO-FAIL CONTROL: CM08's vegetation light {light} draws its trees ({read.Pixels} px) at {read.Ratio:0.000} of the ground, under 0.85 of a light of one's {read.UnlitRatio:0.000}");
+                ctx.Check(read.Ratio >= dayRead.Ratio * 0.88f,
+                    $"and no darker against the ground than C1's day trees, {read.Ratio:0.000} against {dayRead.Ratio:0.000}");
+                var rich = kinds.Where(k => k.Rich?.Material is ShaderMaterial).Select(k => ((ShaderMaterial)k.Rich!.Material!).Shader.Code).ToList();
+                var cells = ModelCells(models);
+                ctx.Check(rich.Count > 0 && cells.Count > 0 && rich.Concat(cells.Select(m => ((ShaderMaterial)m.MaterialOverride).Shader.Code))
+                        .All(code => code.Contains(WeatherRig.VegetationLightParam, StringComparison.Ordinal)),
+                    $"every Rich card ({rich.Count}) and near model cell ({cells.Count}) multiplies it in");
+            }
+            finally
+            {
+                night.Close();
+            }
+
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Original, null, null);
+            var plain = Open(ctx, true, 1, "C1B", "--mission=M03");
+            try
+            {
+                var cards = new List<MultiMeshInstance3D>();
+                if (ClutterRoot(plain.Session) is { } root)
+                    Walk(root, node => { if (node is MultiMeshInstance3D m && m.MaterialOverride is ShaderMaterial) cards.Add(m); });
+                ctx.Check(cards.Count > 0 && cards.All(m => ((ShaderMaterial)m.MaterialOverride).Shader.Code.Contains(WeatherRig.VegetationLightParam, StringComparison.Ordinal)),
+                    $"at Vegetation Quality Original under Enhanced every listed C1B card ({cards.Count}) multiplies it in too");
+            }
+            finally
+            {
+                plain.Close();
+            }
+
+            GraphicsMode.Set(false);
+            var original = Open(ctx, false, 1, "C1B", "--mission=M03");
+            try
+            {
+                ctx.Check(original.Built && original.Session.Weather?.VegetationLight == Vector3.One,
+                    $"an Original C1B/M03 flight writes one");
+            }
+            finally
+            {
+                original.Close();
+            }
+
+            // A day sun or ambient authored in colour may hold one channel under one: the ground takes that cast too.
+            var tinted = new HashSet<string>();
+            var dim = new List<string>();
+            int zones = 0;
+            var table = LightingTable.Load();
+            foreach (string chapter in new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" })
+            {
+                foreach (string mission in new[] { "IA1", "M01", "M02", "M03", "M04", "M05", "MP1", "MP2", "MP3" })
+                {
+                    if (WeatherState.Load(ctx.MissionZrdr(chapter, mission)) is not { } weather)
+                        continue;
+                    foreach (string zone in weather.ZoneNames)
+                    {
+                        var fog = weather.Zone(zone);
+                        if (WeatherRig.IsNightZone(fog))
+                            continue;
+                        foreach (var (clouds, gi) in new[] { (false, false), (true, false), (false, true), (true, true) })
+                        {
+                            zones++;
+                            var lit = WeatherRig.VegetationLightOf(fog, table.For(chapter, mission, zone, LightingTable.ActiveLayers(clouds, gi)));
+                            float luma = (0.2126f * lit.X) + (0.7152f * lit.Y) + (0.0722f * lit.Z);
+                            if (luma < 0.9f || Math.Min(lit.X, Math.Min(lit.Y, lit.Z)) < 0.75f)
+                                dim.Add($"{chapter}/{mission}/{zone}{(clouds ? "+clouds" : "")}{(gi ? "+gi" : "")} {lit}");
+                            else if (lit != Vector3.One)
+                                tinted.Add(string.Create(CultureInfo.InvariantCulture, $"{chapter}/{mission}/{zone} {lit.X:0.00} {lit.Y:0.00} {lit.Z:0.00}"));
+                        }
+                    }
+                }
+            }
+            ctx.Check(zones > 0 && dim.Count == 0,
+                $"every day zone under every tune layer lights its vegetation at about one, luminance 0.9 and no channel under 0.75 ({zones} read; under: {string.Join("; ", dim)}; tinted: {string.Join("; ", tinted)})");
+        }
+        finally
+        {
+            Utils.VegetationModelsSetting.Resolve(launchedModels, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("city-buildings",
         "C5's buildings with fixture hulls in an Enhanced flight at rich and near, against a build with no hull: each building "
         + "with a hull draws its box in the kind's own cells and no original mesh, its further meshes are hidden, every stamp "
@@ -3422,6 +3547,65 @@ internal static class GraphicsSwitchSuites
         return image == null || image.IsEmpty() ? new Color(0f, 0f, 0f, 0f) : image.GetPixel(32, 32);
     }
 
+    // The vegetation's mean linear luminance over the ground's behind it, in the pane from `eye` toward `at`. The
+    // pane draws whole, then with the clutter and the models hidden, then whole at a light of one. A pixel is
+    // vegetation where the light-of-one draw differs from the hidden one.
+    private static TreeGround TreeAgainstGround(Rig rig, Vector3 eye, Vector3 at, string save)
+    {
+        if (!rig.Built || rig.Pane.GetCamera3D() is not { } camera)
+            return new TreeGround(0, 0f, 0f);
+        camera.GlobalPosition = eye;
+        camera.LookAt(at);
+        rig.Pane.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        var hide = new[] { ClutterRoot(rig.Session), rig.Session.Vegetation?.Clutter?.ModelRoot }.OfType<Node3D>().ToList();
+        var whole = Drawn(rig.Pane, save + "-whole.png");
+        hide.ForEach(n => n.Visible = false);
+        var ground = Drawn(rig.Pane, save + "-ground.png");
+        hide.ForEach(n => n.Visible = true);
+        var light = rig.Session.Weather?.VegetationLight ?? Vector3.One;
+        RenderingServer.GlobalShaderParameterSet(WeatherRig.VegetationLightParam, Vector3.One);
+        var unlit = Drawn(rig.Pane, save + "-light-one.png");
+        RenderingServer.GlobalShaderParameterSet(WeatherRig.VegetationLightParam, light);
+        double tree = 0, bare = 0, plain = 0;
+        int pixels = 0;
+        for (int i = 0; i + 3 < ground.Length && i + 3 < whole.Length && i + 3 < unlit.Length; i += 4)
+        {
+            if (Math.Max(Math.Abs(unlit[i] - ground[i]), Math.Max(Math.Abs(unlit[i + 1] - ground[i + 1]), Math.Abs(unlit[i + 2] - ground[i + 2]))) <= 8)
+                continue;
+            pixels++;
+            tree += Luminance(whole, i);
+            bare += Luminance(ground, i);
+            plain += Luminance(unlit, i);
+        }
+        return new TreeGround(pixels, bare > 0 ? (float)(tree / bare) : 0f, bare > 0 ? (float)(plain / bare) : 0f);
+    }
+
+    // Where the vegetation-light suite leaves its frames: the repo's .scratch, which outlives the run's own scratch.
+    private static string VegetationLightShots(TestContext ctx) =>
+        System.IO.Directory.CreateDirectory(System.IO.Path.Combine(ctx.RepoRoot, ".scratch", "vegetation-light")).FullName;
+
+    // The pane's RGBA8 pixels after enough forced draws for a fresh material's pipeline, saved to `save`. ⚠ Push every transform
+    // first: a suite never reaches the tree's flush, so a moved camera would draw from its old pose.
+    private static byte[] Drawn(SubViewport pane, string save)
+    {
+        Walk(pane, node => (node as Node3D)?.ForceUpdateTransform());
+        for (int i = 0; i < 6; i++)
+            RenderingServer.ForceDraw();
+        var image = pane.GetTexture()?.GetImage();
+        if (image == null || image.IsEmpty())
+            return Array.Empty<byte>();
+        image.Convert(Image.Format.Rgba8);
+        image.SavePng(save);
+        return image.GetData();
+    }
+
+    // Rec. 709 luminance of one sRGB pixel, linear.
+    private static double Luminance(byte[] rgba, int at)
+    {
+        static double Linear(byte v) => v / 255.0 <= 0.04045 ? v / 255.0 / 12.92 : Math.Pow(((v / 255.0) + 0.055) / 1.055, 2.4);
+        return (0.2126 * Linear(rgba[at])) + (0.7152 * Linear(rgba[at + 1])) + (0.0722 * Linear(rgba[at + 2]));
+    }
+
     // Fills Godot's worker pool with sleeps of ms each, so a pipeline compile a draw queues waits
     // behind them. The caller waits each task out once.
     private static List<long> HoldWorkerPool(int ms) => Enumerable.Range(0, 2 * OS.GetProcessorCount())
@@ -5212,6 +5396,9 @@ internal static class GraphicsSwitchSuites
     private sealed record WakeDrive(int Standing, int Moving, float Arc, Vector4[] Bounds, Vector4[] Track);
 
     // One session, its pane and the lights the launcher would own for it.
+    // How many vegetation pixels a view held, their luminance over the ground's, and the same at a light of one.
+    private sealed record TreeGround(int Pixels, float Ratio, float UnlitRatio);
+
     private sealed record Rig(SubViewport Pane, GameSession Session, DirectionalLight3D Sun,
         Godot.Environment Env, bool Built)
     {

@@ -1155,8 +1155,10 @@ public sealed class ClutterBuilder
     // authored flags, emitted as variants so a lit, fogged kind gets the base form.
     // ⚠ A blended card takes depth_prepass_alpha, never depth_draw_never: a kind is one MultiMesh,
     // one draw in buffer order, so a card writing no depth is painted over by every later card.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false)
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false, bool veg = false)
     {
+        // A listed vegetation card takes the zone's light under Enhanced at either Vegetation Quality.
+        string vegLight = rich || (veg && GraphicsMode.Enhanced) ? "    ALBEDO *= csky_vegetation_light;\n" : "";
         // Enhanced only: a blended card draws after the fog volume's body, so it greys itself.
         bool volumeFog = blend && fogged && GraphicsMode.Enhanced;
         string volumeDecls = volumeFog ? "#include \"res://shaders/csky_fog_volume.gdshaderinc\"\nvarying flat float v_fog_row;" : "";
@@ -1207,7 +1209,7 @@ public sealed class ClutterBuilder
             }
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb{{(lit ? " * csky_world_light_at(CAMERA_POSITION_WORLD)" : "")}};
-        {{(rich ? RichFragmentLines : "")}}{{(fogged ? FogLines : "")}}{{volumeFragment}}{{SceneBuilder.TintLine}}
+        {{(rich ? RichFragmentLines : "")}}{{vegLight}}{{(fogged ? FogLines : "")}}{{volumeFragment}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
         {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;
@@ -1818,17 +1820,17 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend, 32 rich. Next free bit is 64.
+    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend, 32 rich, 64 veg. Next free bit is 128.
     // ⚠ Keep the graphics mode out of the key: the cutout variant's coverage lines follow it
     // through ShaderTwins, one process-lifetime pair per key.
-    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false)
+    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false, bool veg = false)
     {
         int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0)
-            | (rich ? 32 : 0);
+            | (rich ? 32 : 0) | (veg ? 64 : 0);
         ShaderTwins.EnsureCurrent();
         if (!SpriteShaders.TryGetValue(key, out var twins))
         {
-            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend, rich),
+            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend, rich, veg),
                 "clutter-sprite", $"clutter-sprite:{key:x}");
         }
         return twins;
@@ -1855,7 +1857,8 @@ public sealed class ClutterBuilder
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
         bool spherical = kind.Billboard == SceneBuilder.BillboardKind.Spherical;
-        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv, spherical, blend));
+        bool veg = !kind.Solid && _vegetation?.Find(kind.Model) != null;
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv, spherical, blend, veg: veg));
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
         kind.MakeRichMaterial = () =>
