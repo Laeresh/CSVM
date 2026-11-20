@@ -183,10 +183,12 @@ Environment's value. Read `Session/World/VolumetricClouds.cs` next, the cloud op
 ## src/Effects/InteriorFill.cs
 The Enhanced-only work lamps inside C1's `hangar_3`, the hangar CM07's pilot takes the Bloodhawk from (#371). The data authors no lamp there, and
 under SDFGI the roofed shell `g306` admits no sky light, so the interior drew nearly black; with GI off the Environment's flat ambient already
-lights it as the original does. `Build` finds `hangar_3` and `h3_interior` in the built world and hangs a 2 × 3 grid of shadowed `OmniLight3D`s
-over the interior mesh's box, at `WorldLights.OmniAttenuation` and with a distance fade. The shadows keep the light inside the walls. A cull
-mask cannot: the floor is the chapter's shared terrain tile, one mesh inside and outside the hangar. `GameSession` builds them with the world and `Follow`s a live graphics switch; the faithful path hides them. The
-`hangar-interior-lamps` suite pins the build, placement and switch.
+lights it as the original does. `Build` finds `hangar_3` in the built world and hangs a 3 × 4 grid of shadowed `SpotLight3D`s in its frame,
+50 m up under the main hall's roof and pointing down, at `WorldLights.OmniAttenuation`. The grid is read off `g306`'s cross-section, not
+`h3_interior`'s box, which reaches out over the low glass annex to x 177. Pointing down keeps the light off the roof gaps and the glass, whose
+transparent surfaces cast no shadow; a cull mask cannot, since the floor is the chapter's shared terrain tile. Both the light and its shadow fade
+from 1,900 m, because Godot's own shadow fade defaults to 50 m. `GameSession` builds them with the world and `Follow`s a live graphics switch;
+the faithful path hides them. The `hangar-interior-lamps` suite pins the build, placement, aim and switch.
 
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's
