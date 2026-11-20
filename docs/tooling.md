@@ -195,13 +195,13 @@ exit fails the run. It refuses to start on Linux without `libfontconfig.so.1`, f
 Linux release check gives.
 
 **The complete run is the landing gate, and `-Release` is the whole catalog.** The gate passes the
-harness the `lane:gate` term, which leaves out `SuiteCatalog.ReleaseTier` (long scenarios whose
-feature keeps a shorter suite in the gate) and runs the `headlessShaders` suites headless, or
+harness the `lane:gate` term, which leaves out `SuiteCatalog.ReleaseTier` (long scenarios and the
+longer suites of seldom-used features) and runs the `headlessShaders` suites headless, or
 synthetic when the ci tier holds them, so its windowed shard holds only the suites that need a
 renderer. `-Release` runs every suite as the paragraphs below describe, with the shader-text check,
 and the release-only golden shots; the gate prints what it left out as `not checked:`. A suite
-joins the release tier when it costs the gate more than about 10 seconds and a cheaper suite
-covers its feature's wiring. A `-Suite`/`-Filter` selection runs what it names, release tier
+joins the release tier when it costs the gate more than about 8 seconds and it is not the one
+suite a core path (campaign, combat, joining a game) depends on. A `-Suite`/`-Filter` selection runs what it names, release tier
 included.
 
 **The engine stage runs its catalog in concurrent Godot processes of three kinds**, which the
@@ -275,8 +275,8 @@ one step per rendered frame, and a screen with no session reports the rendered f
 waited, read off Godot's own counter rather than off the countdown itself. Both answer the same
 question, so one manifest number covers a flight shot and a menu shot alike.
 
-**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, the Enhanced
-ones first since they run longest, each with its own watchdog, process, log and PNG. The default is
+**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, in
+registry-order batches, each with its own watchdog, process, log and PNG. The default is
 the fastest worker count that stayed bit-identical on the one machine measured, and
 **`-GoldenWorkers 1`** is the serial reference path.
 

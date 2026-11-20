@@ -257,16 +257,20 @@ public static class SuiteCatalog
 
     // The suites the landing gate leaves to `RunTests.ps1 -Release`. They are long scenarios: bots
     // flying whole courses, long matches, the Enhanced vegetation and city generators. A suite joins
-    // when it costs the gate more than about 10 seconds and a cheaper one covers its feature's
-    // wiring. One name per line, sorted.
+    // when it costs the gate more than about 8 seconds and no core path depends on it alone. The
+    // gate's total has a limit (analysis/verification-budgets.json). One name per line, sorted.
     public static readonly IReadOnlyList<string> ReleaseTier = new[]
     {
         "alpha-coverage-text",
         "campaign-coop-hangar-owner",
+        "canopy-activation",
         "canopy-clumps",
+        "canopy-mask",
         "canopy-models",
         "city-buildings",
         "city-dressing",
+        "city-ground",
+        "course-race-local",
         "graphics-coast-hide",
         "graphics-flare-switch",
         "graphics-ocean-switch",
@@ -289,10 +293,13 @@ public static class SuiteCatalog
         "net-course-long-race",
         "net-ctf-bot",
         "net-director-follow",
+        "net-player-voice",
         "net-stunt-race-bot",
+        "net-stunt-race-end",
         "net-stunt-race-photo",
         "net-stunt-race-respawn",
         "net-stunt-race-wire",
+        "net-zeppelin-vs-zeppelin",
         "net-zvz-bot",
         "net-zvz-turrets",
         "ocean-harbour-ramp",
