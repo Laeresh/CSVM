@@ -79,11 +79,11 @@ public sealed record DebriefReturn(
 
 /// <summary>A co-op guest back from its host's mission, onto the host's boards again. It carries
 /// the guest's own attempt for the host's debrief, or null when it flew nothing. A guest
-/// whose link to the host has ended lands on the Connection page instead, which says why.</summary>
+/// whose link to the host has ended lands on the games list instead, which says why.</summary>
 public sealed record CoopGuestReturn(CSVM.Session.Campaign.MissionAttempt? Attempt) : MenuReturnDestination;
 
 /// <summary>Back into the Multiplayer Lobby a Dogfight was launched from, on its Game Scores page. It
 /// carries the match's final lines, best first, because the session that counted them is freed
 /// before the page draws. A stunt race carries its table in <paramref name="Race"/>. A lobby whose
-/// link has ended lands on the Connection page instead.</summary>
+/// link has ended lands on the games list instead.</summary>
 public sealed record LobbyReturn(IReadOnlyList<DogfightScore> Scores, IReadOnlyList<RaceTableRow>? Race = null) : MenuReturnDestination;

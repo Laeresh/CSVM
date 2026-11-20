@@ -180,7 +180,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Send, which sends the chat box's line.</summary>
     public const string SendKey = "MPL_B_SEND";
 
-    /// <summary>Leave Game, back to the Connection page.</summary>
+    /// <summary>Leave Game, back to the games list.</summary>
     public const string LeaveKey = "MPL_B_LEAVE";
 
     /// <summary>The remake's COPY control on a host's first pinned Network row, which copies its
@@ -541,9 +541,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Whether a screen is this module's.</summary>
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.Lobby;
 
-    /// <summary>The Connection page's Host and the games list's Create Game: a listen server with
-    /// the lobby standing on it. The host goes by the callsign Player Information set, else by the
-    /// pilot's own name. A socket that will not open says why over the page it was asked from.</summary>
+    /// <summary>The games list's Create Game: a listen server with the lobby standing on it. The
+    /// host goes by the callsign Player Information set, else by the pilot's own name. A socket that will not open says why over the page it was asked from.</summary>
     public void OpenHost()
     {
         if (_net() is not { } net)
@@ -584,7 +583,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     /// <summary>Back from a match onto its lobby's Game Scores page, every Ready cleared, a stunt race's
     /// table in <paramref name="race"/>. False when the door no longer holds a lobby, and the caller
-    /// then shows the Connection page.</summary>
+    /// then shows the games list.</summary>
     public bool Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null)
     {
         ArgumentNullException.ThrowIfNull(scores);
