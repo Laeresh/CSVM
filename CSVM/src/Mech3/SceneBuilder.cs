@@ -623,6 +623,11 @@ void fragment() {
     // Every material KeyedBackdropTexture names, with its look under both modes (FollowGraphicsMode).
     private readonly List<KeyedSwap> _keyedSwaps = new();
 
+    // One edge-filled copy per soft-alpha world texture (EdgeFilled), and every material that draws
+    // one under Enhanced with the archive's texture it draws under Original.
+    private readonly Dictionary<string, ImageTexture> _edgeFilled = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(ShaderMaterial Material, ImageTexture Plain, ImageTexture Filled)> _edgeFilledSwaps = new();
+
     // Every placed cloud's billboard, drawn from the rendered pool under Enhanced (DrawPool).
     private readonly List<PooledSwap> _pooledSwaps = new();
     // Every textured material this builder made, paired with the texture name it resolved
@@ -1200,6 +1205,8 @@ void light() {{
             swap.Material.SetShaderParameter("albedo_tex", enhanced ? swap.KeyedTex : swap.PlainTex);
             NoteAlpha(swap.Material, enhanced || swap.PlainBlend, !enhanced && swap.PlainScissor);
         }
+        foreach (var (material, plain, filled) in _edgeFilledSwaps)
+            material.SetShaderParameter("albedo_tex", enhanced ? filled : plain);
         foreach (var swap in _pooledSwaps)
         {
             if (enhanced)
@@ -2492,10 +2499,11 @@ void light() {{
             var keyed = KeyedBackdrop(texName, tex);
             // Enhanced draws a soft-alpha world surface from an edge-filled copy. The faithful path and
             // the camera-facing sprites keep the archive's texture.
-            if (keyed == null && blend && _textures.LastAlphaIsSoft && !(_billboardTexture != null && _billboardTexture(texName)))
+            ImageTexture? filled = null;
+            if (keyed == null && blend && _textures.LastAlphaIsSoft && !(_billboardTexture != null && _billboardTexture(texName))
+                && !_edgeFilled.TryGetValue(texName, out filled))
             {
-                if (!_keyedBackdrops.TryGetValue(texName, out keyed))
-                    _keyedBackdrops[texName] = keyed = EdgeFilled(tex);
+                _edgeFilled[texName] = filled = EdgeFilled(tex);
             }
             if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
@@ -2526,8 +2534,12 @@ void light() {{
             bool oceanBase = water && !blend && !scissor && IsOceanBaseTexture(texName);
             bool oceanSurf = water && IsSurfTexture(texName);
             bool paintedCoast = IsPaintedCoastTexture(texName);
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
+            var drawn = filled != null && GraphicsMode.Enhanced ? filled : tex;
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, drawn, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water, oceanBase,
                 oceanSurf: oceanSurf, paintedCoast: paintedCoast, floor: floor ? texName : null);
+            // The texture alone follows the mode. The shader is the surface's own under either.
+            if (filled != null)
+                _edgeFilledSwaps.Add((textured, tex, filled));
             // Opaque under Original, where a priority only orders the opaque pass.
             if (paintedCoast && !water && !blend && !scissor)
                 textured.RenderPriority = CoastRampRenderPriority;
