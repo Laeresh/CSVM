@@ -174,11 +174,21 @@ each tune's key, label, range and format, which the file, `Tune.Clamped`, `Tune.
 ## src/Effects/GlobalIllumination.cs
 Godot's real-time global illumination over the Enhanced world, behind the Global Illumination option (`Utils/GlobalIlluminationSetting.cs`): SDFGI plus SSIL, on or off. `Apply` writes the option onto an Environment from
 `Launch/EnhancedLook.cs`'s `ApplyEnvironment` (the launch and a graphics switch) and from `GameSession.FollowGlobalIllumination` (a session build, an Options apply and the lighting lab's box): SDFGI with eight cascades at a 1.5 m finest cell and half vertical
-scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While SDFGI stands (`SkyLightLive`) Godot replaces the Environment's flat ambient with the cascades' light, so a roofed surface gets none.
+scale, so the cascades span a chapter, sky light read and occlusion on; SSIL at a 20 m radius. While SDFGI stands (`SkyLightLive`) Godot replaces the Environment's flat ambient with the cascades' light, so a roofed surface gets none. The launcher's Environment keeps SDFGI from one session to the next while the session's exit clears `SkyLightLive`, so `FollowGlobalIllumination` applies again whenever either disagrees with the word.
 The zone apply therefore writes two emission globals: `csky_gi_ambient_fill`, the zone's flat ambient times the tune's `ambient_floor`, which the world-lit arm, the flat sea sheet and the wave ocean add back, and `csky_gi_self_lit`, the tune's `self_lit_emission`,
 at which the self-lit (`lighting: false`) arm hands SDFGI its own colour. An unshaded EMISSION reaches only the voxels, never the screen, and a change reaches them only when SDFGI re-voxelises.
 Both globals are zero otherwise. It also writes the tune's `sdfgi_energy` into `Energy`, which a later `Apply` takes too. Off, or on the faithful path, every field takes a fresh
 Environment's value. Read `Session/World/VolumetricClouds.cs` next, the cloud option it stands beside.
+
+## src/Effects/InteriorFill.cs
+The Enhanced-only work lamps inside C1's `hangar_3`, the hangar CM07's pilot takes the Bloodhawk from (#371). The data authors no lamp there, and
+under SDFGI the roofed shell `g306` admits no sky light, so the interior drew nearly black; with GI off the Environment's flat ambient already
+lights it as the original does. `Build` finds `hangar_3` in the built world and hangs a 3 × 4 grid of shadowed `SpotLight3D`s in its frame,
+50 m up under the main hall's roof and pointing down, at `WorldLights.OmniAttenuation`. The grid is read off `g306`'s cross-section, not
+`h3_interior`'s box, which reaches out over the low glass annex to x 177. Pointing down keeps the light off the roof gaps and the glass, whose
+transparent surfaces cast no shadow; a cull mask cannot, since the floor is the chapter's shared terrain tile. Both the light and its shadow fade
+from 1,900 m, because Godot's own shadow fade defaults to 50 m. `GameSession` builds them with the world and `Follow`s a live graphics switch;
+the faithful path hides them. The `hangar-interior-lamps` suite pins the build, placement, aim and switch.
 
 ## src/Effects/CloudShadowChapters.cs
 The shipped per-chapter cloud shadow tunes, `CSVM/data/cloud_shadows.json`, read through `res://` at each session's

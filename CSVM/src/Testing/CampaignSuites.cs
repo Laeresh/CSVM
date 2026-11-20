@@ -886,6 +886,47 @@ internal static class CampaignSuites
         }
     }
 
+    /// <summary>#371: C1's world hangs shadowed work lamps inside <c>hangar_3</c>, drawn under Enhanced
+    /// and hidden under Original, and a live switch follows the mode.</summary>
+    [Suite("hangar-interior-lamps",
+        "C1's world hangs shadowed spots pointing down under hangar_3's roof, visible under Enhanced, "
+        + "hidden under Original, and InteriorFill.Follow moves them with a live graphics-mode switch (#371)")]
+    internal static void HangarInteriorLamps(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            foreach (bool enhanced in new[] { true, false })
+            {
+                GraphicsMode.Set(enhanced);
+                ctx.WithWorld("C1", collision: false, "M02", world =>
+                {
+                    var lamps = Effects.InteriorFill.Build(world.Gamez, world.Runtime);
+                    ctx.Check(lamps != null, $"{(enhanced ? "Enhanced" : "Original")}: the lamps are built");
+                    if (lamps == null)
+                        return;
+                    var spots = lamps.GetChildren().OfType<SpotLight3D>().ToList();
+                    ctx.Check(spots.Count == Effects.InteriorFill.LampCount && spots.All(l => l.ShadowEnabled && l.DistanceFadeShadow >= l.DistanceFadeBegin),
+                        $"{spots.Count} spot(s), all shadowed as far out as they light");
+                    ctx.Check(spots.All(l => (-l.GlobalBasis.Z).Dot(Vector3.Down) > 0.99f), $"every spot points straight down");
+                    var hangar = world.Runtime.FindNodeByIndex(world.Gamez.FindByName(Effects.InteriorFill.Hangar)!.Index)!;
+                    var box = Mech3.SubtreeBounds.WorldAabb(hangar);
+                    ctx.Check(spots.All(l => box.HasPoint(l.GlobalPosition) && l.GlobalPosition.Y < box.End.Y - 20f),
+                        $"every spot hangs inside the hangar's box {box}, under the roof");
+                    ctx.Check(lamps.Visible == enhanced, $"drawn only under Enhanced (visible={lamps.Visible})");
+                    GraphicsMode.Set(!enhanced);
+                    Effects.InteriorFill.Follow(lamps);
+                    ctx.Check(lamps.Visible == !enhanced, $"a live switch moves them with the mode (visible={lamps.Visible})");
+                    GraphicsMode.Set(enhanced);
+                });
+            }
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+        }
+    }
+
     /// <summary>The cutscene host over the shipped intro definition: the codes the definition
     /// raises reach it through the runtime's own dispatch, the world and the objectives update
     /// stop while it holds them, and the handoff puts every piece of session state back.</summary>

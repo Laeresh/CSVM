@@ -306,6 +306,7 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
+    private Node3D? _interiorFill;
     // The world's vegetation, null before the world build ends and on a stage with no world.
     private VegetationStage? _vegetation;
     // The wave ocean's stage, null where the session cannot stand an ocean (OceanStage.Eligible).
@@ -952,6 +953,7 @@ public partial class GameSession : Node3D
         _volumetricClouds?.Follow(enhanced);
         SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
+        Effects.InteriorFill.Follow(_interiorFill);
         SwitchProfile.Mark("lights");
         _worldEffectsFactory?.FollowGraphicsMode();
         SwitchProfile.Mark("effects");
@@ -1302,11 +1304,15 @@ public partial class GameSession : Node3D
 
     /// <summary>The Global Illumination word on the world's Environment, then the zone, whose flat ambient
     /// steps aside while SDFGI stands. A cockpit pass's copy keeps GI off (<c>CockpitOverlay</c>). A
-    /// standing word moves nothing.</summary>
+    /// standing word moves nothing once <c>SkyLightLive</c> agrees with it.</summary>
     internal void FollowGlobalIllumination()
     {
         bool enhanced = GraphicsMode.Enhanced;
-        if (_env == null || _env.SdfgiEnabled == (enhanced && GlobalIlluminationSetting.Enabled))
+        bool on = enhanced && GlobalIlluminationSetting.Enabled;
+        // ⚠ The launcher's Environment outlives a session, and the session's exit clears SkyLightLive
+        // (WeatherRig.ResetProcessState). Skipping on the Environment alone leaves the next flight with
+        // SDFGI on and no ambient fill, and ground facing away from the sun draws black.
+        if (_env == null || (_env.SdfgiEnabled == on && Effects.GlobalIllumination.SkyLightLive == on))
             return;
         Effects.GlobalIllumination.Apply(_env, enhanced);
         _sky?.Weather?.ReapplyZone();
@@ -1816,6 +1822,7 @@ public partial class GameSession : Node3D
         state.WorldScene = session.Builder.Scene;
         _worldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        _interiorFill = Effects.InteriorFill.Build(state.Gamez, session.Runtime);
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
         // as the mission does and a new launch starts on uncratered ground.
