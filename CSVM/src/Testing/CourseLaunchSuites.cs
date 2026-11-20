@@ -30,9 +30,10 @@ internal static class CourseLaunchSuites
         + "it; a --det --stunt --course= C1 session spawns on the start point, draws the gates and flies "
         + "them in sequence order only, the clock standing until the first entry and stopping on the "
         + "last, every drawn gate standing at the pose its crossing is scored against; the finished run "
-        + "records its best, penalty count and splits under the course key in the launch's --scores= file, an "
-        + "old-format Danger Zone entry there loading and surviving untouched, and takes no photograph; a "
-        + "slower rerun's gate flashes carry the signed delta to the stored splits and leave them stored")]
+        + "records its best, penalty count, splits and segments under the course key in the launch's --scores= "
+        + "file, an old-format Danger Zone entry there loading and surviving untouched, and takes no photograph; "
+        + "a slower rerun's gate flashes carry the signed deltas to the best segments and the stored splits, "
+        + "leave the splits stored and record its faster second segment")]
     internal static void CourseLaunch(TestContext ctx)
     {
         Sources(ctx);
@@ -42,7 +43,7 @@ internal static class CourseLaunchSuites
     [Suite("course-race-local",
         "a --stunt --course=C1/sample_out_and_back race of two split screen panes, and a menu-built one of a "
         + "pane and an ace race bot: every seat flies its own run of the course, the drawn course carries one cue set "
-        + "per pane, and each pane flown through every entry records its best under the course key in the launch's "
+        + "per pane, and each pane flown through every entry records its best and splits under the course key in the launch's "
         + "--scores= file; the bot's touch cuts a course pylon and the bot's rerun stands every course pylon whole; "
         + "both split screen panes, holding 1.5 s before time up, are on their approach and in a run at time up, "
         + "seat 0's crash short of the first entry ends its part at once, and seat 1's run, started at its first "
@@ -274,18 +275,23 @@ internal static class CourseLaunchSuites
             $"…and its split at each entry: [{string.Join(", ", splits ?? System.Array.Empty<float>())}]");
         ctx.Check(store.GetBest(dzKey) == 300f && store.GetPenalties(dzKey) == null && store.GetSplits(dzKey) == null,
             $"the old-format Danger Zone entry '{dzKey}' loads unchanged: {store.GetBest(dzKey)} s, penalties {store.GetPenalties(dzKey)?.ToString() ?? "none"}, no splits");
-        var keys = Godot.Json.ParseString(File.ReadAllText(scores)).AsGodotDictionary().Keys.Select(k => k.AsString()).OrderBy(k => k).ToArray();
+        var file = Godot.Json.ParseString(File.ReadAllText(scores)).AsGodotDictionary();
+        var keys = file.Keys.Select(k => k.AsString()).OrderBy(k => k).ToArray();
         ctx.Check(keys.SequenceEqual(new[] { dzKey, courseKey }.OrderBy(k => k)),
             $"…and the file holds those two keys only: {string.Join(", ", keys)}");
+        var segments = file[courseKey].AsGodotDictionary().TryGetValue("segments", out var s) ? s.AsFloat32Array() : null;
+        ctx.Check(splits != null && segments?.SequenceEqual(ScoreStore.SegmentsOf(splits)) == true,
+            $"…and its segments, which the run HUD wrote and the board's record kept: [{string.Join(", ", segments ?? System.Array.Empty<float>())}]");
     }
 
     // A rerun against the first run's stored splits. The first took a touch after entry 1, this one
     // two after entry 2: ahead at entry 2, behind from entry 3. Slower overall, it leaves the stored
-    // best and its splits as they were.
+    // best and its splits as they were, but its faster second segment becomes the best one.
     private static void AgainstTheBest(TestContext ctx, FlightController plane, StuntMission run, Course course, string scores, string courseKey)
     {
         var stored = ScoreStore.Load(scores);
         var best = stored.GetSplits(courseKey);
+        var bestSegments = stored.GetSegments(courseKey);
         float? bestTotal = stored.GetBest(courseKey);
         if (plane.PilotHud.StuntRun is not { } hud || best == null || run.TotalCount < 3)
         {
@@ -308,16 +314,24 @@ internal static class CourseLaunchSuites
 
         Step(plane, 30);
         var deltas = run.Zones.Select(z => StuntRunHud.SplitDelta(run, z, best)).ToArray();
-        ctx.Check(run.AllComplete && flashes.Select((f, i) => f == StuntRunHud.ClearedFlash(run, run.Zones[i], best)).All(x => x),
-            $"the second run's every flash carries its delta to the stored split: {string.Join(" | ", flashes)}");
+        var segmentDeltas = run.Zones.Select(z => StuntRunHud.SegmentDelta(run, z, bestSegments)).ToArray();
+        ctx.Check(run.AllComplete && flashes.Select((f, i) => f == StuntRunHud.ClearedFlash(run, run.Zones[i], best, bestSegments)).All(x => x),
+            $"the second run's every flash carries its deltas to the best segment and the stored split: {string.Join(" | ", flashes)}");
+        ctx.Check(segmentDeltas[1] is > -3.5f and < -2.5f && segmentDeltas[2] is > 5.5f and < 6.5f
+                && flashes[2]!.Contains($"  {StuntRunHud.DeltaText(segmentDeltas[2]!.Value)} / ", System.StringComparison.Ordinal),
+            $"…segment 2 about 3 s faster, and segment 3, holding both touches, about 6 s slower: {string.Join(", ", segmentDeltas)}");
         ctx.Check(deltas[0] is > -0.5f and < 0.5f && deltas[1] is > -3.5f and < -2.5f && deltas[2] is > 2.5f and < 3.5f
-                && flashes[1]!.EndsWith($"  {StuntRunHud.DeltaText(deltas[1]!.Value)}", System.StringComparison.Ordinal),
+                && flashes[1]!.EndsWith($" / {StuntRunHud.DeltaText(deltas[1]!.Value)}", System.StringComparison.Ordinal),
             $"…level at entry 1, ahead at entry 2 and behind at entry 3: {string.Join(", ", deltas)}");
         ctx.Check(!StuntRunHud.Behind(deltas[1]!.Value) && StuntRunHud.Behind(deltas[2]!.Value),
             $"…entry 2's flash draws green and entry 3's red");
         var after = ScoreStore.Load(scores);
         ctx.Check(run.Elapsed > bestTotal && after.GetBest(courseKey) == bestTotal && after.GetSplits(courseKey)?.SequenceEqual(best) == true,
             $"the slower run ({run.Elapsed} s against {bestTotal} s) leaves the stored best and its splits");
+        var segmentsAfter = after.GetSegments(courseKey);
+        var flown = ScoreStore.SegmentsOf(ScoreStore.SplitsOf(run)!);
+        ctx.Check(bestSegments != null && segmentsAfter != null && segmentsAfter[1] == flown[1] && segmentsAfter[2] == bestSegments[2],
+            $"…and its faster segment 2 is the best now, the first run's segment 3 kept: [{string.Join(", ", segmentsAfter ?? System.Array.Empty<float>())}]");
     }
 
     private static string Scores(TestContext ctx, string cell)
@@ -368,6 +382,9 @@ internal static class CourseLaunchSuites
                 ctx.Check(opened && crossed == course.Sequence.Count && key.StartsWith($"course/{Chapter}/{Sample}/{course.Hash}/", StringComparison.Ordinal)
                         && best is > 0f && best == board,
                     $"[{cell}] seat {i} crosses {crossed} of {course.Sequence.Count} entries and records its best under '{key}' ({CourseFlight.Seconds(best)}, board {CourseFlight.Seconds(board)})");
+                var splits = ScoreStore.Load(scores).GetSplits(key);
+                ctx.Check(splits?.Length == course.Sequence.Count && splits.SequenceEqual(race.Of(i)!.Splits.Select(t => t ?? -1f)),
+                    $"[{cell}] …with that run's splits, so a solo run after it shows the run delta: [{string.Join(", ", splits ?? Array.Empty<float>())}]");
             }
 
             if (seats[1] is { IsBotSeat: true })

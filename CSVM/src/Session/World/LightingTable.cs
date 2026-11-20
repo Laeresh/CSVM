@@ -150,24 +150,7 @@ public sealed class LightingTable
         IReadOnlyDictionary<string, float> missionFields, bool? night = null, ZoneLighting? under = null)
     {
         var (chapter, mission, zone, layer) = at;
-        JsonObject root;
-        if (string.IsNullOrWhiteSpace(existing))
-        {
-            root = new JsonObject();
-        }
-        else
-        {
-            try
-            {
-                root = Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
-                    ?? throw new InvalidDataException("the lighting file is not a JSON object, so Save leaves it as it is");
-            }
-            catch (Exception ex) when (ex is JsonException or ArgumentException)
-            {
-                throw new InvalidDataException($"the lighting file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
-            }
-        }
-
+        var root = RootOf(existing);
         string zoneKey = zone.ToUpperInvariant();
         var chapterNode = Child(root, chapter);
         PutFields(chapterNode, zoneKey, layer, chapterLighting.Differences(under ?? ZoneLighting.Default));
@@ -183,6 +166,28 @@ public sealed class LightingTable
             if (missionNode.Count == 0)
                 Remove(chapterNode, mission);
         }
+        if (chapterNode.Count == 0)
+            Remove(root, chapter);
+        return root.ToJsonString(Written) + Environment.NewLine;
+    }
+
+    /// <summary>The file's text with <paramref name="layer"/>'s own fields (<see cref="ZoneLighting.Field.Layer"/>)
+    /// of <paramref name="lighting"/> set in the chapter zone's layer block, whose other fields stand. A value at
+    /// its default is dropped. The lab saves a clouds field so while it edits the gi layer, which cannot hold one.
+    /// Throws as <see cref="WithZone"/> does.</summary>
+    public static string WithLayerOwn(string? existing, string chapter, string zone, string layer, ZoneLighting lighting)
+    {
+        var root = RootOf(existing);
+        var held = new Dictionary<string, float>(Parse(existing ?? "{}").ChapterFields(chapter, zone, layer), StringComparer.OrdinalIgnoreCase);
+        foreach (var f in ZoneLighting.Fields.Where(f => f.Layer == layer))
+        {
+            if (ZoneLighting.Field.Rounded(f.Get(lighting)) == ZoneLighting.Field.Rounded(f.Default))
+                held.Remove(f.Key);
+            else
+                held[f.Key] = f.Get(lighting);
+        }
+        var chapterNode = Child(root, chapter);
+        PutFields(chapterNode, zone.ToUpperInvariant(), layer, held);
         if (chapterNode.Count == 0)
             Remove(root, chapter);
         return root.ToJsonString(Written) + Environment.NewLine;
@@ -307,6 +312,22 @@ public sealed class LightingTable
     }
 
     // The object under the key matched in any case, created at the end when absent.
+    // The file's text as its root object, empty for no text. Throws InvalidDataException for anything else.
+    private static JsonObject RootOf(string? existing)
+    {
+        if (string.IsNullOrWhiteSpace(existing))
+            return new JsonObject();
+        try
+        {
+            return Mech3.VegetationSidecar.ParseWhole(existing) as JsonObject
+                ?? throw new InvalidDataException("the lighting file is not a JSON object, so Save leaves it as it is");
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            throw new InvalidDataException($"the lighting file is not readable JSON ({ex.Message}), so Save leaves it as it is", ex);
+        }
+    }
+
     private static JsonObject Child(JsonObject parent, string key)
     {
         foreach (var (k, node) in parent)

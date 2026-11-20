@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
@@ -70,6 +71,39 @@ public class CourseHudTests
 
         Assert.Equal(new[] { "GATE 1  0:00.0  +0.0", "GATE 2  0:05.5  -0.8" }, flashes);
         Assert.Equal(5.5f - 6.3f, StuntRunHud.SplitDelta(run, run.Zones[1], best));
+    }
+
+    [Fact]
+    public void EachGateFlashLeadsWithTheDeltaToTheBestSegment()
+    {
+        var run = Run(Fwd(A), Fwd(B));
+        var bestSplits = new[] { 0f, 6.3f };
+        var bestSegments = new[] { 0f, 4f };
+        var flashes = new List<(string Text, bool Behind)[]>();
+        run.ZoneCompleted += z => flashes.Add(StuntRunHud.FlashPieces(run, z, bestSplits, bestSegments));
+
+        Pass(run, A);
+        run.Tick(2.5f);
+        Brush(run); // +3 s inside the second segment
+        Pass(run, B);
+
+        Assert.Equal("GATE 1  0:00.0  +0.0 / +0.0", string.Concat(flashes[0].Select(p => p.Text)));
+        Assert.Equal("GATE 2  0:05.5  +1.5 / -0.8", string.Concat(flashes[1].Select(p => p.Text)));
+        Assert.Equal(new[] { ("+1.5", true), ("-0.8", false) }, flashes[1].Where(p => p.Text is ['+' or '-', ..]));
+        Assert.Equal(5.5f - 4f, StuntRunHud.SegmentDelta(run, run.Zones[1], bestSegments));
+    }
+
+    [Fact]
+    public void AGateWithOneStoredBestShowsThatDeltaAlone()
+    {
+        var run = Run(Fwd(A), Fwd(B));
+        Pass(run, A);
+        run.Tick(5.5f);
+        Pass(run, B);
+
+        Assert.Equal("GATE 2  0:05.5  -0.8", StuntRunHud.ClearedFlash(run, run.Zones[1], new[] { 0f, 6.3f }, new[] { 0f }));
+        Assert.Equal("GATE 2  0:05.5  +1.5", StuntRunHud.ClearedFlash(run, run.Zones[1], null, new[] { 0f, 4f }));
+        Assert.Null(StuntRunHud.SegmentDelta(run, run.Zones[1], new[] { 0f }));
     }
 
     [Fact]
