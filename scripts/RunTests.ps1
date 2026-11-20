@@ -106,8 +106,9 @@
     that would drift out of it. A stage over its budget prints "over budget" and is listed after
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
-    is compared against nothing. Build carries no budget, and there is no total budget. The
-    engine budget is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
+    is compared against nothing. Build carries no budget. The landing gate's total is held to the
+    lane's totalLimit, a stated limit: past it, work moves to the release tier. The engine budget
+    is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -131,9 +132,9 @@
 
 .PARAMETER Shards
     How many Godot processes the engine stage divides the catalog over. 0 (the default) means the
-    measured default (6) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
+    default (7) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
     is faster started once than started N times. A full run adds one process per suite the weights
-    file runs alone, so 6 is six shared shards and the alone shard, and 1 is one shared shard and the
+    file runs alone, so 7 is seven shared shards and the alone shard, and 1 is one shared shard and the
     alone shard; a selection keeps its count.
     Membership comes from analysis/engine-suite-weights.json through the harness's own
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
@@ -2822,9 +2823,13 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
-# A skipped stage is compared against nothing. There is no total budget: one set by the same rule
-# is never below the stage budgets' sum, so it could only ever trip after a stage already had.
+# A skipped stage is compared against nothing. The landing gate's total is held to the lane's
+# totalLimit, a stated limit and not a measurement: past it, work moves to the release tier.
 $OverBudget = @()
+if ($CompleteRun -and -not $Release -and -not $Gaming.Used -and $LaneBudget -and $LaneBudget.PSObject.Properties["totalLimit"] -and
+    $totalSeconds -gt [double]$LaneBudget.totalLimit) {
+    $OverBudget += "the run took $(Format-Seconds $totalSeconds)s against the landing gate's $(Format-Seconds ([double]$LaneBudget.totalLimit))s limit: move suites, unit tests or golden shots to the release tier"
+}
 $stageBudgetText = @{}
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name

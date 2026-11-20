@@ -105,8 +105,10 @@ reds.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
 back-to-back warm runs plus 50 %. A skipped stage is compared against nothing. Build carries no
-budget, since only cutting features shortens it. There is no total budget: one set by the same
-rule is never below the stage budgets' sum, so it could only trip after a stage had. The engine
+budget, since only cutting features shortens it. **The landing gate's total is held to the lane's
+`totalLimit`, 300 seconds**, a stated limit and not a measurement: a complete run past it prints
+`over budget` (never a failure), and the answer is to move suites, unit tests or golden shots to
+the release tier, which `-Release` runs with no limit. The engine
 budget is capped at 80 % of a shard's 1200 s ceiling, so no budget written into the file sits at
 the kill line, where a stage would go red without printing `over budget` first.
 
@@ -216,14 +218,14 @@ kinds run `--render-thread safe`: under the project's separate render thread the
 RID owners race (godot#121949), which prints a spread of engine errors at no fixed count. **`-RealData`**
 also runs the ci tier on the real extraction, inside the headless shards, with the synthetic
 process kept as an extra pass: pass it before a push, at a plan's close and on a merge to main.
-`-Shards <n>` sets how many headless shards divide their share; the default is 6 for a full run and
+`-Shards <n>` sets how many headless shards divide their share; the default is 7 for a full run and
 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection. Membership comes from the harness's
 `shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
 the same tree always divides the same way; an unweighted suite is charged the default and printed
 as `not checked:`. **A suite the file lists under `alone` gets a windowed process of its own**,
 which keeps `graphics-retext-compiles`'s first TAA frame out of a shard holding worlds: a full
-run's default is one windowed shard, the alone shard, six headless shards and the synthetic
-process, nine processes. A selection keeps one process per kind, since it never holds a full
+run's default is one windowed shard, the alone shard, seven headless shards and the synthetic
+process, ten processes, which is every net port block a run holds. A selection keeps one process per kind, since it never holds a full
 shard's worlds. Regenerate the weights from the shard reports of one warm full run, as its
 `readme` says.
 
