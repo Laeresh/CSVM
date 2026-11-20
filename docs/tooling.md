@@ -192,7 +192,17 @@ line, an allowance over its cap, an unscreened log, a FAIL, a missing or stale r
 exit fails the run. It refuses to start on Linux without `libfontconfig.so.1`, for the reason the
 Linux release check gives.
 
-**The engine stage runs the full catalog in concurrent Godot processes of three kinds**, which the
+**The complete run is the landing gate, and `-Release` is the whole catalog.** The gate passes the
+harness the `lane:gate` term, which leaves out `SuiteCatalog.ReleaseTier` (long scenarios whose
+feature keeps a shorter suite in the gate) and runs the `headlessShaders` suites headless, or
+synthetic when the ci tier holds them, so its windowed shard holds only the suites that need a
+renderer. `-Release` runs every suite as the paragraphs below describe, with the shader-text check,
+and the release-only golden shots; the gate prints what it left out as `not checked:`. A suite
+joins the release tier when it costs the gate more than about 10 seconds and a cheaper suite
+covers its feature's wiring. A `-Suite`/`-Filter` selection runs what it names, release tier
+included.
+
+**The engine stage runs its catalog in concurrent Godot processes of three kinds**, which the
 harness's `render:<kind>` term selects (`SuiteRender`). **Windowed** runs every suite the
 `headlessOnly`, `headlessDiffers` and `headlessShaders` maps of `analysis/headless-limits.json` name:
 the suites that need a renderer, every suite that switches graphics modes (a switch makes texts for
@@ -217,7 +227,7 @@ process, nine processes. A selection keeps one process per kind, since it never 
 shard's worlds. Regenerate the weights from the shard reports of one warm full run, as its
 `readme` says.
 
-**A full run fails when a headless process made a shader text no windowed process compiled**, and
+**A `-Release` run fails when a headless process made a shader text no windowed process compiled**, and
 names the suite: each report lists every suite's shader texts as hashes (`ShaderCensus`), and the
 merge holds the headless shards' texts against the windowed ones'. The fix is to add that suite to
 `headlessShaders`. The synthetic process is not held to it, since invented data makes texts the
@@ -1170,14 +1180,17 @@ enough free.
 - **Learned estimates.** Every launch admitted by a script records its peak private bytes (read
   from a handle the ledger holds on the process, after it exits or is killed) under its kind in
   `history.json`; the estimate is the highest of the kind's last 20 peaks plus 10 percent, and
-  never below the kind's seed. An `engine-shard` or `engine-headless` peak is recorded only from
-  the windowed shard or a headless shard of a complete-catalog `RunTests.ps1` run under the default
+  never below the kind's seed. An `engine-*` kind's peak is recorded only from
+  the windowed shard or a headless shard of a complete `RunTests.ps1` run under the default
   shard plan (the default `-Shards`, gaming mode off, no `-RealData`): a filtered shard stays small,
   any other plan hands a shard a different share of the catalog, and the alone shard and the
   synthetic process hold little. A launch the engine refused records nothing. The seed table is
-  `$MemSeedGB` in `MemoryLedgerCore.ps1`; the kinds are `engine-shard`, `engine-headless` (the
-  `RunTests.ps1` engine stage names it per launch; any other `--run-tests` launch is
-  `engine-shard`), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`) and
+  `$MemSeedGB` in `MemoryLedgerCore.ps1`; the kinds are `engine-shard` (`-Release`'s windowed
+  shard), `engine-windowed` (the landing gate's), `engine-headless` (the `RunTests.ps1` engine
+  stage names these per launch), `engine-suites` (any other `--run-tests` launch: a selection, an
+  alone suite, a probe; never learned, so a full shard's peak cannot reserve its size for one
+  suite), `golden-shot`, `perf`, `hitch`, `probe`, `capture-enhanced` (`--graphics=enhanced`, an
+  Enhanced golden shot included) and
   `capture-xr` (`--xr*`). `estimates.json` beside it, written from the seeds when the ledger is
   first used, is what the engine reads.
 - **DEFERRED.** A launch still waiting after `$MemMaxWaitSec` (1800 s) ends its run

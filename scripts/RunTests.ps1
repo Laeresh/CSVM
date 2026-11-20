@@ -170,7 +170,8 @@
 
 .PARAMETER Release
     Also run what every other complete run leaves out: the golden shots marked "release": true in
-    the manifest, the in-engine suites of SuiteCatalog.ReleaseTier, and the suites of
+    the manifest, the unit tests marked [Trait("Tier", "Release")], the in-engine suites of
+    SuiteCatalog.ReleaseTier, and the suites of
     headless-limits.json's headlessShaders in the windowed shard, with the check that a windowed
     process compiled every shader text. The battery before a release passes it.
 
@@ -378,12 +379,12 @@ $EngineCeilingTimeoutSec = $EngineCeilingSec
 # without ever printing "over budget" first.
 $EngineBudgetCapSec = [math]::Floor(0.8 * $EngineCeilingSec)
 # Shared shards for the FULL catalog when -Shards is not given; each alone suite adds a process on
-# top (Get-EngineShardPlan). Measured on the development machine (8
-# cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
-# every shard within 8 s of the others, and 8 was slower per shard from contention. The shard
-# watchdogs above judge each launch's progress, so they are not a budget the shard count may be
-# tuned against.
-$DefaultEngineShards = 6
+# top (Get-EngineShardPlan). Seven is what the run's ten net port blocks leave beside the windowed
+# shard, the alone suite and the synthetic process ($NetPortSlotShards); the headless shards are
+# the stage's long pole on the development machine (8 cores, 16 threads). The shard watchdogs
+# above judge each launch's progress, so they are not a budget the shard count may be tuned
+# against.
+$DefaultEngineShards = 7
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
@@ -907,9 +908,9 @@ if ($SelfTest) {
         # shards teach the estimates.
         $gamingTwo = [pscustomobject]@{ shards = 2 }
         $plans = [ordered]@{
-            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
-            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
-            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 6, 9, "1,0,0,0,0,0,0,0,0")
+            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 7, 10, "1,0,1,1,1,1,1,1,1,0")
+            "-Shards 7"    = @((Get-EngineShardPlan -Requested 7 -AloneCount 1), 7, 10, "1,0,1,1,1,1,1,1,1,0")
+            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 7, 10, "1,0,0,0,0,0,0,0,0,0")
             "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 4, "0,0,0,0")
             "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 5, "0,0,0,0,0")
             "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
@@ -1376,6 +1377,10 @@ if ($SkipUnits) {
     $testArgs = @("test", $Sln, "--no-build", "--nologo")
     if ($UnitFilter) {
         $testArgs += @("--filter", $UnitFilter)
+    } elseif (-not $Release) {
+        # The landing gate leaves the tests marked [Trait("Tier", "Release")] to -Release.
+        $testArgs += @("--filter", "Tier!=Release")
+        Add-Unchecked "the release-tier unit tests did not run (-Release runs them)"
     }
     $testArgs += @("--results-directory", $trxDir, "--logger", "trx;LogFileName=units.trx")
     if ($Gaming.Settings) {

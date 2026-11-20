@@ -151,8 +151,10 @@ public class AnimZbdTests
         Assert.Null(AnimZbd.Load(null, "ZBD/C1/cam_anim.zbd", "C1/cam_anim"));
     }
 
+    // 61 archives in series, about 100 s; the gate keeps the C1 archive through the test below.
     [GameFilesTheory(AlsoExtracted = true)]
     [MemberData(nameof(AnimArchives))]
+    [Trait("Tier", "Release")]
     public void TheReaderBuildsTheModelTheExtractionBuilds(string path)
     {
         var bytes = GameFilesData.Source!.ReadAllBytes("ZBD/" + path);
