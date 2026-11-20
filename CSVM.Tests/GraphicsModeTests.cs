@@ -106,8 +106,13 @@ public class GraphicsModeTests
             Assert.Equal(authored * 2f, WeatherRig.FogRangeFor(authored, day));
             Assert.Equal(authored, WeatherRig.FogRangeFor(authored, night));
             Assert.Equal(authored * 2f, WeatherRig.FogRangeFor(authored, null));
+            // The zone tune's fog far lifts a day zone's pushed far alone, and never pulls one in.
+            Assert.Equal(new Godot.Vector2(3000f, 8000f), WeatherRig.FogRangeFor(authored, day, 8000f));
+            Assert.Equal(authored * 2f, WeatherRig.FogRangeFor(authored, day, 4000f));
+            Assert.Equal(authored, WeatherRig.FogRangeFor(authored, night, 8000f));
             GraphicsMode.Resolve("original");
             Assert.Equal(authored, WeatherRig.FogRangeFor(authored, day));
+            Assert.Equal(authored, WeatherRig.FogRangeFor(authored, day, 8000f));
         }
         finally
         {

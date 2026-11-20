@@ -289,6 +289,9 @@ internal sealed partial class VolumetricClouds : Node3D
         Follow(GraphicsMode.Enhanced);
     }
 
+    // Ready turns processing on for a node with a _Process, after _EnterTree's Follow turned it off.
+    public override void _Ready() => SetProcess(GraphicsMode.Enhanced);
+
     public override void _ExitTree() => Follow(false);
 
     public override void _Process(double delta)

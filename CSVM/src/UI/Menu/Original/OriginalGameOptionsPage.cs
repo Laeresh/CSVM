@@ -61,6 +61,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The page's Keep Camera Zoom checkbox, a remake-only row.</summary>
     public const string KeepCameraZoomKey = "KEEPCAMERAZOOM";
 
+    /// <summary>The page's Flag Markers checkbox, a remake-only row.</summary>
+    public const string FlagMarksKey = "FLAGMARKS";
+
     /// <summary>The page's Subtitles dropdown, a remake-only row shown only while a subtitle table is
     /// loaded.</summary>
     public const string SubtitlesKey = "SUBTITLES";
@@ -214,6 +217,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, _ => SwitchWords,
             c => c.KeepCameraZoomOn ? 1 : 0,
             (c, i) => c.KeepCameraZoom = i == 1),
+        new(FlagMarksKey, "Flag Markers",
+            _ => CSVM.Utils.FlagMarksSetting.Lookup.Detail(false),
+            OriginalRowKind.Radio, _ => SwitchWords,
+            c => c.At(CSVM.Utils.FlagMarksSetting.Lookup),
+            (c, i) => c.Pick(CSVM.Utils.FlagMarksSetting.Lookup, c.Offered(CSVM.Utils.FlagMarksSetting.Lookup)[i])),
         new(SubtitlesKey, "Subtitles",
             _ => "Show the words of the radio and the briefings. High puts them at the top of the screen in flight.",
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SubtitlesSetting.Labels(),

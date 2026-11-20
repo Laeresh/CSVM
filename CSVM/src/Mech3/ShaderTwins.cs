@@ -411,6 +411,8 @@ internal static class ShaderTwins
             return null;
         // A blended source's veil multiplies the ALPHA written last, so it follows this line too.
         string veil = code.Contains("uniform bool over_slab", StringComparison.Ordinal) ? SceneBuilder.SlabVeilLine + "\n" : string.Empty;
+        if (code.Contains(SceneBuilder.SlabFogLine, StringComparison.Ordinal))
+            veil += SceneBuilder.SlabFogLine + "\n";
         return code[..close] + $"    ALPHA = col.a{SceneBuilder.OpacityTerm};\n" + veil + code[close..];
     }
 

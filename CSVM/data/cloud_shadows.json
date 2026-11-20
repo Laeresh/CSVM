@@ -28,6 +28,11 @@
       "ambient": 0.43,
       "softness": 0.08,
       "deck_sun": 0.65
+    },
+    "look": {
+      "cloud_fog": 0.35,
+      "haze_near_m": 4000,
+      "far_m": 12000
     }
   },
   "C1B": {

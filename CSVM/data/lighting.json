@@ -15,9 +15,11 @@
       "grade_saturation": 0.88,
       "shadow_softness": 0.85,
       "gi": {
-        "ambient_energy": 0.6,
+        "ambient_energy": 1.19,
         "sky_g": 0.49,
-        "cloud_g": 0.48,
+        "cloud_r": 0.54,
+        "cloud_g": 0.52,
+        "cloud_b": 0.54,
         "white": 6.1,
         "shadow_softness": 0.9,
         "normal_bias": 1.3,
@@ -28,7 +30,8 @@
       },
       "clouds": {
         "shadow_strength": 0.8,
-        "god_rays": 0.54
+        "god_rays": 0.54,
+        "fog_far": 8000
       }
     },
     "ZONE2": {
