@@ -1158,7 +1158,7 @@ public sealed class ClutterBuilder
     private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend, bool rich = false, bool veg = false)
     {
         // A listed vegetation card takes the zone's light under Enhanced at either Vegetation Quality.
-        string vegLight = rich || (veg && GraphicsMode.Enhanced) ? "    ALBEDO *= csky_vegetation_light;\n" : "";
+        string vegLight = (rich || veg) && GraphicsMode.Enhanced ? "    ALBEDO *= csky_vegetation_light;\n" : "";
         // Enhanced only: a blended card draws after the fog volume's body, so it greys itself.
         bool volumeFog = blend && fogged && GraphicsMode.Enhanced;
         string volumeDecls = volumeFog ? "#include \"res://shaders/csky_fog_volume.gdshaderinc\"\nvarying flat float v_fog_row;" : "";
