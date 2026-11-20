@@ -45,6 +45,11 @@ public sealed class WeatherRig
     /// linear, times the tune's <see cref="ZoneLighting.AmbientFloor"/>. Zero otherwise.</summary>
     public const string GiAmbientFillParam = "csky_gi_ambient_fill";
 
+    /// <summary>The Enhanced zone light, as <see cref="ZoneLight"/> measures it, the cockpit interior is
+    /// at least lit by. Linear light. Just under the dimmest flown day zone, C4's in-cloud ZONE2 at
+    /// 0.379, so no day cockpit moves.</summary>
+    public const float InteriorLightFloor = 0.375f;
+
     /// <summary>The global gain the self-lit world hands SDFGI its colour at, the tune's
     /// <see cref="ZoneLighting.SelfLitEmission"/> while SDFGI stands. Zero otherwise.</summary>
     public const string GiSelfLitParam = "csky_gi_self_lit";
@@ -386,6 +391,10 @@ public sealed class WeatherRig
     /// (<see cref="IsNightZone"/>), false until one has.</summary>
     public bool NightApplied => _appliedZone is { } fog && IsNightZone(fog);
 
+    /// <summary>The cockpit interior's lift (<see cref="InteriorLift"/>) the last Enhanced zone apply
+    /// wrote, zero until one has.</summary>
+    public Vector3 InteriorLiftWritten { get; private set; }
+
     /// <summary>The sun orientation the last zone apply wrote, the sun's own until one has.</summary>
     public Vector3 SunOrientation => _appliedZone is { } fog ? LightOrientation(fog) : _sun.Rotation;
 
@@ -435,10 +444,12 @@ public sealed class WeatherRig
     public bool Moonlit { get; private set; }
 
     /// <summary>Puts the process-wide state a session's zone applies leave behind back to its defaults:
-    /// <see cref="NightOff"/>, the terrain shadow's strength and GI's energy and sky light. The session's exit calls it.</summary>
+    /// <see cref="NightOff"/>, the terrain shadow's strength, GI's energy and sky light. It also zeroes
+    /// the cockpit interior's lift. The session's exit calls it.</summary>
     public static void ResetProcessState()
     {
         NightOff = false;
+        RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, Vector3.Zero);
         Effects.TerrainShadow.Strength = 1f;
         Effects.GlobalIllumination.Reset();
     }
@@ -480,6 +491,24 @@ public sealed class WeatherRig
         float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
         float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
         return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
+    }
+
+    /// <summary>One zone's light for the interior floor: the Rec. 709 luminance of the colour ambient
+    /// plus the sun, in linear light. Each colour arrives in sRGB, as Godot is handed it, and is
+    /// linearised before its energy scales it. Pure.</summary>
+    public static float ZoneLight(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    {
+        var light = (ambient.SrgbToLinear() * ambientEnergy) + (sun.SrgbToLinear() * sunEnergy);
+        return (0.2126f * light.R) + (0.7152f * light.G) + (0.0722f * light.B);
+    }
+
+    /// <summary>The linear grey ambient the interior adds on its albedo (<c>SceneBuilder.InteriorLiftParam</c>)
+    /// so its zone's light reaches <see cref="InteriorLightFloor"/>: max(floor - light, 0). Zero where
+    /// the zone already does, so a bright mission's cockpit stays as lit. Pure.</summary>
+    public static Vector3 InteriorLift(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    {
+        float lift = MathF.Max(InteriorLightFloor - ZoneLight(ambient, ambientEnergy, sun, sunEnergy), 0f);
+        return new Vector3(lift, lift, lift);
     }
 
     /// <summary>The enhanced sun's <c>LightSpecular</c> for one zone: the strength of its direct
@@ -1815,6 +1844,8 @@ public sealed class WeatherRig
         RenderingServer.GlobalShaderParameterSet(SkyTintParam, SkyTint);
         RenderingServer.GlobalShaderParameterSet(CloudTintParam, CloudTint);
         WriteGiGlobals(tune, ambientColor, ambientEnergy);
+        InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy, sunColor, sunEnergy);
+        RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, InteriorLiftWritten);
         ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);
         foreach (var (sun, env) in _extraLighting)
             ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, sunColor, ambientEnergy, ambientColor, skyColor);

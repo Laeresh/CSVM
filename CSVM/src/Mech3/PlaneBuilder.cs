@@ -137,6 +137,7 @@ public sealed class PlaneBuilder
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
                 NoAlphaCoverage = true,
+                InteriorAmbientFloor = true,
                 // The stereo path's interior, which XrCockpit lifts to the XR origin's frame.
                 XrPreciseInterior = xrInterior,
             };
