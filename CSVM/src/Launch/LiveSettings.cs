@@ -167,6 +167,7 @@ internal sealed class LiveSettings
         options.HudMode = applied.HudMode;
         options.HudLayout = applied.HudLayout;
         options.SpyglassScale = applied.SpyglassScale;
+        options.Subtitles = applied.Subtitles;
         CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
@@ -206,6 +207,8 @@ internal sealed class LiveSettings
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
         // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
         SpyglassScaleSetting.ApplySaved(spec.Det, options);
+        // The caption reads the word each frame, so a pick over the pause sheet moves it at once.
+        SubtitlesSetting.ApplySaved(spec.Det, options);
         // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.
         // Under --det the apply leaves it alone, so a pick there never overwrites the panes' F2 steps.
         HudModeSetting.ApplyAfterOptions(spec.Det, options);

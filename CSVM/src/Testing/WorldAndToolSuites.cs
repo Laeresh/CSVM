@@ -2838,9 +2838,9 @@ internal static class WorldAndToolSuites
     }
 
     // Able to fail: a floor that reaches the airframe, misses the gauges, moves the Original text or
-    // lifts a day zone. Also one that lifts the darkest night zone too little to see.
+    // counts the sun into the measure. Also one that lifts the darkest night or dimmest day zone too little to see.
     [Suite("cockpit-ambient-floor",
-        "the Enhanced cockpit interior, gauges and needles included, takes the ambient floor and the airframe and Original text do not; every flown day zone lifts nothing and the darkest night zone does")]
+        "the Enhanced cockpit interior, gauges and needles included, takes the ambient floor and the airframe and Original text do not; every flown zone lifts its ambient alone to the floor, the darkest night zone and the dimmest day zone visibly")]
     internal static void CockpitAmbientFloor(TestContext ctx)
     {
         if (ctx.SyntheticData)
@@ -2888,7 +2888,7 @@ internal static class WorldAndToolSuites
 
             // The lift every zone's Enhanced apply writes, through the shipped lighting tune, over every flown world.
             GraphicsMode.Set(true);
-            float dimmestDay = float.MaxValue, darkestLift = 0f;
+            float dimmestDay = float.MaxValue, darkestLift = 0f, dimmestDayLift = 0f;
             string dimmestAt = "", darkestAt = "";
             foreach (var (chapter, _, missions) in ZbdManifest.Chapters)
             {
@@ -2903,14 +2903,15 @@ internal static class WorldAndToolSuites
                     {
                         rig.ForceZone(zone);
                         float lift = rig.InteriorLiftWritten.X;
-                        float light = WeatherRig.ZoneLight(env.AmbientLightColor, env.AmbientLightEnergy, sun.LightColor, sun.LightEnergy);
+                        float light = WeatherRig.ZoneLight(env.AmbientLightColor, env.AmbientLightEnergy);
                         string at = $"{chapter}/{mission} {zone}";
-                        ctx.Note($"{at}: {(rig.NightApplied ? "night" : "day")}, light {light:0.###}, lift {lift:0.###}, ambient {env.AmbientLightEnergy:0.###}, sun {sun.LightEnergy:0.###}");
-                        if (!rig.NightApplied)
+                        ctx.Note($"{at}: {(rig.NightApplied ? "night" : "day")}, ambient light {light:0.###}, lift {lift:0.###}, ambient {env.AmbientLightEnergy:0.###}, sun {sun.LightEnergy:0.###}");
+                        // Read back off the applied Environment, so a sun counted into the measure fails it.
+                        ctx.Check(Mathf.IsEqualApprox(lift, Mathf.Max(WeatherRig.InteriorLightFloor - light, 0f), 1e-4f),
+                            $"{at} lifts its ambient to the floor lift={lift:0.###} ambient light={light:0.###}");
+                        if (!rig.NightApplied && light < dimmestDay)
                         {
-                            ctx.Check(lift == 0f, $"the day zone {at} lifts nothing lift={lift:0.###}");
-                            if (light < dimmestDay)
-                                (dimmestDay, dimmestAt) = (light, at);
+                            (dimmestDay, dimmestAt, dimmestDayLift) = (light, at, lift);
                         }
                         else if (lift > darkestLift)
                         {
@@ -2921,6 +2922,7 @@ internal static class WorldAndToolSuites
             }
             ctx.Note($"dimmest day zone {dimmestAt} at {dimmestDay:0.###}, darkest night zone {darkestAt} lifted {darkestLift:0.###}");
             ctx.Check(darkestLift > 0.05f, $"the darkest night zone is lifted by a visible share of the floor {darkestAt} lift={darkestLift:0.###}");
+            ctx.Check(dimmestDayLift > 0.05f, $"the dimmest day zone's panel, lit by the ambient alone, is lifted too {dimmestAt} lift={dimmestDayLift:0.###}");
         }
         finally
         {

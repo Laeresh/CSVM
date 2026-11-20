@@ -45,10 +45,10 @@ public sealed class WeatherRig
     /// linear, times the tune's <see cref="ZoneLighting.AmbientFloor"/>. Zero otherwise.</summary>
     public const string GiAmbientFillParam = "csky_gi_ambient_fill";
 
-    /// <summary>The Enhanced zone light, as <see cref="ZoneLight"/> measures it, the cockpit interior is
-    /// at least lit by. Linear light. Just under the dimmest flown day zone, C4's in-cloud ZONE2 at
-    /// 0.379, so no day cockpit moves.</summary>
-    public const float InteriorLightFloor = 0.375f;
+    /// <summary>The Enhanced ambient, as <see cref="ZoneLight"/> measures it, the cockpit interior is at
+    /// least lit by. Linear light. Every night zone and the dimmer day zones (C1's, C1C's and C2's ZONE1,
+    /// C4's in-cloud ZONE2) fall below it. The bright day zones' ambient already reaches it.</summary>
+    public const float InteriorLightFloor = 0.35f;
 
     /// <summary>The global gain the self-lit world hands SDFGI its colour at, the tune's
     /// <see cref="ZoneLighting.SelfLitEmission"/> while SDFGI stands. Zero otherwise.</summary>
@@ -499,28 +499,24 @@ public sealed class WeatherRig
     /// <summary>The enhanced energies under a zone tune: its multipliers in place of the default
     /// conversion factors, over the night-capped authored pair. Pure.</summary>
     public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog, ZoneLighting tune)
-    {
-        bool night = IsNightZone(fog);
-        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
-        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
-        return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
-    }
+        => EnhancedEnergies(fog, tune, IsNightZone(fog));
 
     /// <summary>One zone's light for the interior floor: the Rec. 709 luminance of the colour ambient
-    /// plus the sun, in linear light. Each colour arrives in sRGB, as Godot is handed it, and is
-    /// linearised before its energy scales it. Pure.</summary>
-    public static float ZoneLight(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    /// alone, in linear light. The panel sits under the airframe facing aft, so the sun barely reaches
+    /// it. The colour arrives in sRGB, as Godot is handed it, and is linearised before its energy
+    /// scales it. Pure.</summary>
+    public static float ZoneLight(Color ambient, float ambientEnergy)
     {
-        var light = (ambient.SrgbToLinear() * ambientEnergy) + (sun.SrgbToLinear() * sunEnergy);
+        var light = ambient.SrgbToLinear() * ambientEnergy;
         return (0.2126f * light.R) + (0.7152f * light.G) + (0.0722f * light.B);
     }
 
     /// <summary>The linear grey ambient the interior adds on its albedo (<c>SceneBuilder.InteriorLiftParam</c>)
-    /// so its zone's light reaches <see cref="InteriorLightFloor"/>: max(floor - light, 0). Zero where
-    /// the zone already does, so a bright mission's cockpit stays as lit. Pure.</summary>
-    public static Vector3 InteriorLift(Color ambient, float ambientEnergy, Color sun, float sunEnergy)
+    /// so its zone's ambient reaches <see cref="InteriorLightFloor"/>: max(floor - <see cref="ZoneLight"/>, 0).
+    /// Zero where the ambient already does. Pure.</summary>
+    public static Vector3 InteriorLift(Color ambient, float ambientEnergy)
     {
-        float lift = MathF.Max(InteriorLightFloor - ZoneLight(ambient, ambientEnergy, sun, sunEnergy), 0f);
+        float lift = MathF.Max(InteriorLightFloor - ZoneLight(ambient, ambientEnergy), 0f);
         return new Vector3(lift, lift, lift);
     }
 
@@ -571,11 +567,7 @@ public sealed class WeatherRig
     /// Enhanced its world is a moonlit mission (<see cref="LightingTable.Night"/>). It is what caps
     /// the enhanced energies and aims the light at the moon. Public so the rule can be pinned and a
     /// log line can say which side of it a zone fell on.</summary>
-    public static bool IsNightZone(WeatherState.ZoneWeather fog)
-        => !NightOff
-           && ((fog.Moonlit && GraphicsMode.Enhanced)
-               || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
-                   < NightFogLuminance));
+    public static bool IsNightZone(WeatherState.ZoneWeather fog) => !NightOff && IsNightSky(fog);
 
     /// <summary>The light's Euler rotation whose +Z is <paramref name="dir"/>, the inverse of the
     /// authored euler-to-direction mapping (docs/org/weather.md).</summary>
@@ -652,10 +644,11 @@ public sealed class WeatherRig
     /// <summary>What the unshaded Enhanced vegetation multiplies in under one zone. It is the linear light a level surface
     /// takes from the scene sun and ambient at the world light's mean incidence. It is scaled by
     /// <see cref="VegetationLightGain"/> and clamped to one per channel. A white day light clamps to one, so a dim zone
-    /// darkens it with no step at the night key. A day light authored in colour keeps that cast. Pure.</summary>
+    /// darkens it with no step at the night key. A day light authored in colour keeps that cast. A night zone keeps its
+    /// capped light under <see cref="NightOff"/>, whose day energies would clamp it to one over cloud-shadowed ground.</summary>
     public static Vector3 VegetationLightOf(WeatherState.ZoneWeather fog, ZoneLighting tune)
     {
-        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune);
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog, tune, IsNightSky(fog));
         var sun = (fog.SunColorDiffuse * new Color(tune.SunR, tune.SunG, tune.SunB)).SrgbToLinear();
         var ambient = (fog.SunColorAmbient * new Color(tune.AmbientR, tune.AmbientG, tune.AmbientB)).SrgbToLinear();
         float level = sunEnergy * WeatherState.SunIncidence;
@@ -1240,6 +1233,18 @@ public sealed class WeatherRig
         float fill = live ? ambientEnergy * tune.AmbientFloor : 0f;
         RenderingServer.GlobalShaderParameterSet(GiAmbientFillParam, new Vector3(linear.R, linear.G, linear.B) * fill);
         RenderingServer.GlobalShaderParameterSet(GiSelfLitParam, live ? tune.SelfLitEmission : 0f);
+    }
+
+    // The night test without NightOff: what the zone authors, whatever the volumetric clouds hold.
+    private static bool IsNightSky(WeatherState.ZoneWeather fog)
+        => (fog.Moonlit && GraphicsMode.Enhanced)
+           || ((0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B) < NightFogLuminance);
+
+    private static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog, ZoneLighting tune, bool night)
+    {
+        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
+        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
+        return (diffuse * tune.SunEnergy, ambient * tune.AmbientEnergy);
     }
 
     // One authored SUNLIGHT scalar against its own colour, the triple the original's light class
@@ -1879,7 +1884,7 @@ public sealed class WeatherRig
         RenderingServer.GlobalShaderParameterSet(SkyTintParam, SkyTint);
         RenderingServer.GlobalShaderParameterSet(CloudTintParam, CloudTint);
         WriteGiGlobals(tune, ambientColor, ambientEnergy);
-        InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy, sunColor, sunEnergy);
+        InteriorLiftWritten = InteriorLift(ambientColor, ambientEnergy);
         RenderingServer.GlobalShaderParameterSet(SceneBuilder.InteriorLiftParam, InteriorLiftWritten);
         VegetationLight = VegetationLightOf(fog, tune);
         RenderingServer.GlobalShaderParameterSet(VegetationLightParam, VegetationLight);

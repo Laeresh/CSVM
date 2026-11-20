@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Utils;
 
@@ -9,8 +11,9 @@ namespace CSVM.Extraction;
 /// <summary>
 /// The subtitle table: the words a voice clip speaks, looked up by the clip's WAV name and the
 /// seconds played. The original ships no transcript, so the table is read from a folder a player
-/// drops files into under the data root. Loose files only: a zip in the folder is not read. Each <c>*.json</c> file maps a WAV name to a speaker and text,
-/// or to timed segments for a long clip. Files load in name order and a later one wins.
+/// drops files into under the data root. Each <c>*.json</c> file maps a WAV name to a speaker and
+/// text, or to timed segments for a long clip. A <c>*.zip</c> there adds the <c>*.json</c> files it
+/// holds. Files and zips load in name order and a later one wins.
 /// Format: docs/formats/sounds.md "Subtitles".
 /// </summary>
 public sealed class Subtitles
@@ -46,20 +49,34 @@ public sealed class Subtitles
             return new(clips);
         }
 
-        var files = Directory.GetFiles(dir, "*.json");
-        Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-        foreach (var file in files)
+        var sources = new List<string>(Directory.GetFiles(dir, "*.json"));
+        sources.AddRange(Directory.GetFiles(dir, "*.zip"));
+        sources.Sort(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
         {
+            if (!source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                ReadFile(source, () => File.ReadAllText(source), clips);
+                continue;
+            }
+
             try
             {
-                if (Parse(File.ReadAllText(file), clips) == 0)
+                using var zip = ZipFile.OpenRead(source);
+                var entries = zip.Entries.Where(e => e.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in entries)
                 {
-                    Log.Warn("sound", $"subtitles: {file} holds no entry with \"text\" or \"segments\"");
+                    ReadFile($"{source}:{entry.FullName}", () =>
+                    {
+                        using var reader = new StreamReader(entry.Open());
+                        return reader.ReadToEnd();
+                    }, clips);
                 }
             }
-            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                Log.Warn("sound", $"subtitles: skipped {file}: {e.Message}");
+                Log.Warn("sound", $"subtitles: skipped {source}: {e.Message}");
             }
         }
 
@@ -89,6 +106,22 @@ public sealed class Subtitles
         }
 
         return null;
+    }
+
+    // Adds one file's clips, warning when it is unreadable or holds none.
+    private static void ReadFile(string name, Func<string> read, Dictionary<string, Segment[]> into)
+    {
+        try
+        {
+            if (Parse(read(), into) == 0)
+            {
+                Log.Warn("sound", $"subtitles: {name} holds no entry with \"text\" or \"segments\"");
+            }
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException)
+        {
+            Log.Warn("sound", $"subtitles: skipped {name}: {e.Message}");
+        }
     }
 
     // Adds one file's clips over any already read and returns how many it read. A clip's segments

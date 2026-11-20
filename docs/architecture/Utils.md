@@ -446,7 +446,7 @@ Whether Enhanced lights the world with SDFGI plus SSIL (`Effects/GlobalIlluminat
 `graphics.globalIllumination` key, then `FallbackFor(det, integrated)`: `on` on a discrete GPU, `off` on an integrated one
 (`default_integrated_gpu`, the GPU test `ShadowQualitySetting` holds) until the Steam Deck measures SDFGI, and `off` under `--det`
 (`default_det`), so a golden lights without GI unless its command line asks. Its live-apply hook follows the session, which writes GI on the world's
-Environment and each cockpit pass's copy, then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
+Environment alone (a cockpit pass's copy keeps it off), then relights the zone (`GameSession.FollowGlobalIllumination`). `TakeUnsaved` is the
 lighting lab's toggle, unsaved as the cloud lab's is. The VIDEO page shows it as the Global Illumination dropdown under
 Volumetric Clouds.
 
@@ -554,6 +554,13 @@ The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the fact
 `Resolve` takes the saved `spyglassScale` over 100, the decoded size, and `SavedWord` holds the
 `--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
 reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
+
+## src/Utils/SubtitlesSetting.cs
+Where the voice subtitles show as a word, `off`, `low` or `high`, saved as `subtitles` (null reads
+low). `SavedWord` holds the `--det` guard. The launcher reads it at startup, before any briefing,
+and every options apply stores it again. `Flight/Hud/SubtitleLine.cs` reads `Word` each frame: off
+draws nothing, high moves the flight caption to the top of the pane, and a briefing's caption keeps
+its own area at low and high. The Game Options row shows only while a subtitle table is loaded.
 
 ## src/Utils/HudModeSetting.cs
 The HUD mode of the outside views (`HudMode`: Full, Minimal, None) as a word, `full`, `minimal`

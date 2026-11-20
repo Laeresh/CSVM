@@ -10,7 +10,7 @@ namespace CSVM.UI.Menu.Original;
 /// The Game Options page behind the Options hub, one page module over the decoded
 /// <c>[@GameOptions@]</c> section. It is a table of options, each a key, a title, a control and
 /// the store field it reads and writes. The plate grows a whole band of its own art per row past
-/// the three it is painted with, its plaques moving down with it. It stages its thirteen settings in
+/// the three it is painted with, its plaques moving down with it. It stages its settings in
 /// the form's shared <see cref="OptionsChoices"/> and leaves through the form's apply exit (<see cref="IOriginalOptionsForm"/>).
 /// The rows and their readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
@@ -60,6 +60,10 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The page's Keep Camera Zoom checkbox, a remake-only row.</summary>
     public const string KeepCameraZoomKey = "KEEPCAMERAZOOM";
+
+    /// <summary>The page's Subtitles dropdown, a remake-only row shown only while a subtitle table is
+    /// loaded.</summary>
+    public const string SubtitlesKey = "SUBTITLES";
 
     /// <summary>The page's Modding Folder dropdown, a remake-only row: Off, or a folder of unzbd
     /// output read from the next start (<c>Spec.ModdingFolder</c>).</summary>
@@ -149,7 +153,7 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     // carries every choice, and LiveSettings.Persist writes the options file for it.
     // The difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored.
     // The setting scales enemy armour and health at spawn and nothing about how the enemy flies.
-    private static readonly GameOption[] Options =
+    private static readonly GameOption[] AllOptions =
     {
         new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
             OriginalRowKind.Dropdown, _ => DifficultyWords,
@@ -210,14 +214,19 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, _ => SwitchWords,
             c => c.KeepCameraZoomOn ? 1 : 0,
             (c, i) => c.KeepCameraZoom = i == 1),
+        new(SubtitlesKey, "Subtitles",
+            _ => "Show the words of the radio and the briefings. High puts them at the top of the screen in flight.",
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.SubtitlesSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.SubtitlesSetting.Words, c.Subtitles, CSVM.Utils.SubtitlesSetting.Default),
+            (c, i) => c.Subtitles = CSVM.Utils.SubtitlesSetting.Words[Math.Clamp(i, 0, CSVM.Utils.SubtitlesSetting.Words.Count - 1)]),
         new(ModFolderKey, "Modding Folder", ModFolderDescription,
             OriginalRowKind.Dropdown, ModFolderWords,
             c => c.ModFolder is { } folder ? 1 + IndexOfFolder(c.ModFolders, folder) : 0,
             (c, i) => c.ModFolder = i <= 0 ? null : c.ModFolders[Math.Min(i, c.ModFolders.Count) - 1]),
     };
 
-    // The furthest the window scrolls, which puts the last option on its bottom row.
-    private static readonly int LastTop = Math.Max(0, Options.Length - WindowRows);
+    // The page without the Subtitles row, which a launch with no subtitle table has nothing to set.
+    private static readonly GameOption[] NoSubtitles = AllOptions.Where(o => o.Key != SubtitlesKey).ToArray();
 
     private readonly OriginalOptionsChrome _chrome;
     private readonly IOriginalScreenHost _host;
@@ -288,6 +297,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The Keep Camera Zoom switch the page would apply, null while never set.</summary>
     public bool? KeepCameraZoomChoice => _choices.KeepCameraZoom;
 
+    /// <summary>The subtitle word the page would apply, null while never set.</summary>
+    public string? SubtitlesChoice => _choices.Subtitles;
+
     /// <summary>The modding folder the page would apply, null for none.</summary>
     public string? ModFolderChoice => _choices.ModFolder;
 
@@ -296,6 +308,12 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     string IOriginalOptionsPage.AcceptKey => AcceptKey;
 
     string IOriginalOptionsPage.CancelKey => CancelKey;
+
+    // The options the page offers this launch.
+    private static GameOption[] Options => CSVM.Extraction.Subtitles.Current.Count > 0 ? AllOptions : NoSubtitles;
+
+    // The furthest the window scrolls, which puts the last option on its bottom row.
+    private static int LastTop => Math.Max(0, Options.Length - WindowRows);
 
     // The options the window shows now, top to bottom.
     private IReadOnlyList<GameOption> Shown => Options.Skip(_top).Take(WindowRows).ToArray();

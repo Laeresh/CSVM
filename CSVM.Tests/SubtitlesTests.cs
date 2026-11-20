@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 using CSVM.Extraction;
 using CSVM.Flight.Hud;
 using Xunit;
@@ -34,6 +35,35 @@ public class SubtitlesTests
         Assert.Null(table.At("VO_empty.wav", 0));
         Assert.Null(table.At(null, 0));
         Assert.Equal(0, Subtitles.Open(root, "Missing").Count);
+    }
+
+    [Fact]
+    public void AZipAddsItsJsonFilesInNameOrderWithTheLooseOnes()
+    {
+        var root = TestData.TempDir();
+        var dir = Directory.CreateDirectory(Path.Combine(root, "Subtitles")).FullName;
+        File.WriteAllText(Path.Combine(dir, "a.json"), """{ "one.wav": { "text": "loose" }, "two.wav": { "text": "loose" } }""");
+        using (var zip = ZipFile.Open(Path.Combine(dir, "b.zip"), ZipArchiveMode.Create))
+        {
+            Add(zip, "pack/z.json", """{ "two.wav": { "text": "zip z" } }""");
+            Add(zip, "pack/y.json", """{ "two.wav": { "text": "zip y" }, "three.wav": { "text": "zip" } }""");
+            Add(zip, "pack/README.md", "not read");
+        }
+
+        File.WriteAllText(Path.Combine(dir, "c.zip"), "not a zip");
+
+        var table = Subtitles.Open(root, "Subtitles");
+
+        Assert.Equal(3, table.Count);
+        Assert.Equal("loose", table.At("one.wav", 0)?.Text);
+        Assert.Equal("zip z", table.At("two.wav", 0)?.Text);
+        Assert.Equal("zip", table.At("three.wav", 0)?.Text);
+
+        static void Add(ZipArchive zip, string name, string text)
+        {
+            using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+            writer.Write(text);
+        }
     }
 
     [Fact]
