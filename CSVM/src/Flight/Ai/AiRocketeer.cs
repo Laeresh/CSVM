@@ -30,6 +30,10 @@ public readonly struct RocketPylonView
     /// per-mount solver takes on this same field (docs/org/aiPilot/aiWeapons.md).</summary>
     public float RoundAccel { get; init; }
 
+    /// <summary>The weapon's <c>RANGE</c>, metres of path the round flies before it expires; 0 when
+    /// unauthored. Only a bot seat's reach hold reads it (<see cref="AiRocketeer.IsBotSeat"/>).</summary>
+    public float RoundRangeM { get; init; }
+
     /// <summary>This slot's own authored engagement window and refire interval, metres and seconds.
     /// The original keeps all three per weapon slot; 0 means the fit authored none and the walk
     /// falls back to the vehicle-wide defaults on <see cref="AiRocketeer"/>.</summary>
@@ -56,6 +60,11 @@ public sealed class AiRocketeer
     /// <c>acos(0.9962)</c>, 5°, of the lead. The original's own literal, and tighter than the gun's
     /// <see cref="AiGunner.AimQualityCos"/> by design.</summary>
     public const float AimQualityCos = 0.9962f;
+
+    /// <summary>The share of a round's <c>RANGE</c> a bot seat's predicted intercept path may use.
+    /// The quarter left covers a hull that turns off the straight-line prediction, since a gun's
+    /// hits spend the round's health and never its range.</summary>
+    public const float ReachFraction = 0.75f;
 
     /// <summary>The shot-acceptance cone off the target's nose/tail axis, degrees. The original
     /// applies this at the TOP of the fire decision, before the weapon walk, so it gates the
@@ -97,6 +106,12 @@ public sealed class AiRocketeer
     /// as before. Off for every single-player AI, where the roll is the gate.</summary>
     public bool FiresOnFailedRoll;
 
+    /// <summary>A bot seat (<c>FlightController.IsBotSeat</c>), a remake-only rule since the original
+    /// seats no bots. Its <c>DAMAGES_ZEPPELIN</c> launch waits until the predicted intercept path lies
+    /// within <see cref="ReachFraction"/> of the round's <c>RANGE</c>. ⚠ Do not set it for campaign
+    /// or Instant Action AI; they keep the decoded launch gates (docs/org/aiPilot/aiWeapons.md).</summary>
+    public bool IsBotSeat;
+
     private readonly Func<float> _roll;
     private readonly Dictionary<int, float> _slotLockouts = new();
     private readonly List<int> _slotKeys = new(); // Tick's reused copy of the keys it writes through
@@ -130,6 +145,7 @@ public sealed class AiRocketeer
         NoPylon,
         Band,
         Intercept,
+        Reach,
         Aim,
         Taken,
     }
@@ -163,6 +179,8 @@ public sealed class AiRocketeer
         Verdict.Band => FormattableString.Invariant(
             $"pylon{_verdictPylon} out of its {_verdictA:0}-{_verdictB:0} m band at {Mathf.Sqrt(_verdictC):0} m"),
         Verdict.Intercept => $"pylon{_verdictPylon} has no intercept",
+        Verdict.Reach => FormattableString.Invariant(
+            $"pylon{_verdictPylon} intercept {_verdictA:0} m of path past its {_verdictB:0} m reach"),
         Verdict.Aim => FormattableString.Invariant(
             $"pylon{_verdictPylon} lead {_verdictA:0}° yaw {_verdictB:0}° pitch off the mount"),
         Verdict.Taken => FormattableString.Invariant(
@@ -187,6 +205,7 @@ public sealed class AiRocketeer
                 Verdict.NoPylon => "no pylon offered",
                 Verdict.Band => $"band:{_verdictPylon}",
                 Verdict.Intercept => $"intercept:{_verdictPylon}",
+                Verdict.Reach => $"reach:{_verdictPylon}",
                 Verdict.Aim => $"aim:{_verdictPylon}",
                 Verdict.Taken => $"taken:{_verdictPylon}:{_verdictRolled}",
                 _ => string.Empty,
@@ -298,14 +317,22 @@ public sealed class AiRocketeer
             // in the launcher's, on the ramp it climbs, and one without a motor at VELOCITY against
             // the target's world velocity, since it carries nothing of its launcher's.
             Vector3 aim;
+            float flight = 0f;
             bool solved = p.RoundAccel != 0f
                 ? TryMotorIntercept(p.MountPos, p.RoundSpeed, p.RoundAccel, targetPos,
                     targetVelocity - ownVelocity, out aim)
                 : AimAssist.TryIntercept(p.MountPos, p.RoundSpeed, targetPos, targetVelocity,
-                    out aim, out _);
+                    out aim, out flight);
             if (!solved)
             {
                 SetVerdict(Verdict.Intercept, p.Index); // a target outrunning the round is simply not shot at
+                continue;
+            }
+            // ponytail: a motor round reports no flight time, so the hold reads only motorless rounds, as every shipped torpedo is.
+            float path = p.RoundSpeed * flight, reach = ReachFraction * p.RoundRangeM;
+            if (IsBotSeat && p.DamagesZeppelin && reach > 0f && path > reach)
+            {
+                SetVerdict(Verdict.Reach, p.Index, path, reach);
                 continue;
             }
             var local = (toLocal * aim).Normalized();
