@@ -66,6 +66,7 @@ public class PartThrottleEquilibriumTests
     /// sides. Approaching from above and below matters because the solve only says where thrust
     /// equals drag, and a stable equilibrium has to attract from either direction.</summary>
     [ExtractedDataFact]
+    [Trait("Tier", "Release")]
     public void EveryAirframeFliesToTheDecodedEquilibriumAtEveryLever()
     {
         int checkedPoints = 0;

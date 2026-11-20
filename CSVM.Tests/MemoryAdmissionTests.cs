@@ -27,7 +27,7 @@ public sealed class MemoryAdmissionTests
     [Fact]
     public void KindsMatchTheLedgerScript()
     {
-        Assert.Equal("engine-shard", MemoryAdmission.Kind(["--run-tests", "--net-port-base=40000"]));
+        Assert.Equal("engine-suites", MemoryAdmission.Kind(["--run-tests", "--net-port-base=40000"]));
         Assert.Equal("capture-xr", MemoryAdmission.Kind(["--det", "--xr-sim=eye=2112x2304", "--graphics=enhanced"]));
         Assert.Equal("capture-enhanced", MemoryAdmission.Kind(["--det", "--graphics=enhanced", "--frames=9"]));
         Assert.Equal("perf", MemoryAdmission.Kind(["--det", "--perf", "--frames=9"]));

@@ -42,7 +42,7 @@ public static class MemoryAdmission
 
     /// <summary>The ledger kind a launch's memory is learned and estimated under.</summary>
     public static string Kind(IReadOnlyList<string> args) =>
-        args.Any(a => a.StartsWith("--run-tests", StringComparison.Ordinal)) ? "engine-shard"
+        args.Any(a => a.StartsWith("--run-tests", StringComparison.Ordinal)) ? "engine-suites"
         : args.Any(a => a.StartsWith("--xr", StringComparison.Ordinal)) ? "capture-xr"
         : args.Contains("--graphics=enhanced") ? "capture-enhanced"
         : args.Contains("--perf") ? "perf"

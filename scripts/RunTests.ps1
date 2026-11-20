@@ -22,8 +22,10 @@
                shader; headless shards (-Shards) for the rest, at about a third of the memory;
                and one headless process for the ci tier on synthetic data (-RealData also runs
                that tier on the real data). Each has its own log, report and scratch
-               subdirectory; the stage's verdict is the merge of their reports, which also fails
-               a full run on a shader text a headless shard made and no windowed one compiled.
+               subdirectory; the stage's verdict is the merge of their reports. The complete run
+               is the landing gate: it leaves out SuiteCatalog.ReleaseTier and runs headless the
+               suites that are windowed for their shader texts alone. -Release runs every suite,
+               and fails on a shader text a headless shard made and no windowed one compiled.
       goldens  The golden-image tripwire: one Godot per shot in analysis/goldens/manifest.json,
                each a pinned --det capture, compared as md5 of the RAW pixel buffer (the engine
                prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
@@ -104,8 +106,9 @@
     that would drift out of it. A stage over its budget prints "over budget" and is listed after
     the summary. These are AWARENESS thresholds and NEVER change the exit code: this is a
     workstation, and load the script cannot see must not turn a correct tree red. A skipped stage
-    is compared against nothing. Build carries no budget, and there is no total budget. The
-    engine budget is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
+    is compared against nothing. Build carries no budget. The landing gate's total is held to the
+    lane's totalLimit, a stated limit: past it, work moves to the release tier. The engine budget
+    is capped at 80 percent of a shard's ceiling, so no budget sits at the kill line.
 
     Extracted game data is found through CSVM_DATA_ROOT by the engine and the unit tests
     alike, so this runs from a git worktree -- which has no extracted/, no tools/ and no
@@ -129,9 +132,9 @@
 
 .PARAMETER Shards
     How many Godot processes the engine stage divides the catalog over. 0 (the default) means the
-    measured default (6) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
+    default (7) for a full run and 1 for an explicit -Suite/-Filter/-Quick selection, which
     is faster started once than started N times. A full run adds one process per suite the weights
-    file runs alone, so 6 is six shared shards and the alone shard, and 1 is one shared shard and the
+    file runs alone, so 7 is seven shared shards and the alone shard, and 1 is one shared shard and the
     alone shard; a selection keeps its count.
     Membership comes from analysis/engine-suite-weights.json through the harness's own
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
@@ -167,8 +170,11 @@
     release-only shots keep the pins they have.
 
 .PARAMETER Release
-    Also run the golden shots marked "release": true in the manifest, which every other run skips.
-    The battery before a release passes it.
+    Also run what every other complete run leaves out: the golden shots marked "release": true in
+    the manifest, the unit tests marked [Trait("Tier", "Release")], the in-engine suites of
+    SuiteCatalog.ReleaseTier, and the suites of
+    headless-limits.json's headlessShaders in the windowed shard, with the check that a windowed
+    process compiled every shader text. The battery before a release passes it.
 
 .PARAMETER GoldenWorkers
     How many golden shots launch at once. Default 4: an A/B of 1/2/3/4 workers, three repeats each,
@@ -374,12 +380,12 @@ $EngineCeilingTimeoutSec = $EngineCeilingSec
 # without ever printing "over budget" first.
 $EngineBudgetCapSec = [math]::Floor(0.8 * $EngineCeilingSec)
 # Shared shards for the FULL catalog when -Shards is not given; each alone suite adds a process on
-# top (Get-EngineShardPlan). Measured on the development machine (8
-# cores, 16 threads) over the 305-suite catalog: 4 shards ran the stage in 115 s, 6 in 83 s with
-# every shard within 8 s of the others, and 8 was slower per shard from contention. The shard
-# watchdogs above judge each launch's progress, so they are not a budget the shard count may be
-# tuned against.
-$DefaultEngineShards = 6
+# top (Get-EngineShardPlan). Seven is what the run's ten net port blocks leave beside the windowed
+# shard, the alone suite and the synthetic process ($NetPortSlotShards); the headless shards are
+# the stage's long pole on the development machine (8 cores, 16 threads). The shard watchdogs
+# above judge each launch's progress, so they are not a budget the shard count may be tuned
+# against.
+$DefaultEngineShards = 7
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
@@ -679,7 +685,10 @@ function Invoke-GodotPool {
 # its peak teaches the ledger: only a windowed or headless shard of the complete catalog under the
 # default count does, because any other plan hands a shard a different share of the catalog.
 function Get-EngineShardPlan {
-    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount, [switch]$RealData)
+    param([int]$Requested, [string]$Selector, $GamingSettings, [int]$AloneCount, [switch]$RealData, [switch]$Release)
+    # Three ledger kinds for a windowed process, since they differ fivefold in memory: the gate's
+    # shard, -Release's (every shader-text suite on top), and a selection's or an alone suite's.
+    $windowedKind = if ($Selector) { "engine-suites" } elseif ($Release) { "engine-shard" } else { "engine-windowed" }
     $shared = $Requested
     if ($shared -le 0) {
         $shared = if ($Selector) { 1 } elseif ($GamingSettings) { $GamingSettings.shards } else { $DefaultEngineShards }
@@ -689,7 +698,7 @@ function Get-EngineShardPlan {
     $default = -not $Selector -and -not $GamingSettings -and $shared -eq $DefaultEngineShards
     $groups = @(
         [pscustomobject]@{ Render = "windowed"; Count = $windowed; Headless = $false; Synthetic = $false
-            Extra = $false; Kind = "engine-shard"; Learns = @(for ($k = 1; $k -le $windowed; $k++) { $default -and $k -eq 1 }) }
+            Extra = $false; Kind = $windowedKind; Learns = @(for ($k = 1; $k -le $windowed; $k++) { $default -and $k -eq 1 }) }
         [pscustomobject]@{ Render = $(if ($RealData) { "headless+synthetic" } else { "headless" }); Count = $shared
             Headless = $true; Synthetic = $false; Extra = $false; Kind = "engine-headless"
             Learns = @(for ($k = 1; $k -le $shared; $k++) { $default -and -not $RealData }) }
@@ -900,9 +909,9 @@ if ($SelfTest) {
         # shards teach the estimates.
         $gamingTwo = [pscustomobject]@{ shards = 2 }
         $plans = [ordered]@{
-            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
-            "-Shards 6"    = @((Get-EngineShardPlan -Requested 6 -AloneCount 1), 6, 9, "1,0,1,1,1,1,1,1,0")
-            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 6, 9, "1,0,0,0,0,0,0,0,0")
+            "default"      = @((Get-EngineShardPlan -Requested 0 -AloneCount 1), 7, 10, "1,0,1,1,1,1,1,1,1,0")
+            "-Shards 7"    = @((Get-EngineShardPlan -Requested 7 -AloneCount 1), 7, 10, "1,0,1,1,1,1,1,1,1,0")
+            "-RealData"    = @((Get-EngineShardPlan -Requested 0 -AloneCount 1 -RealData), 7, 10, "1,0,0,0,0,0,0,0,0,0")
             "-Shards 1"    = @((Get-EngineShardPlan -Requested 1 -AloneCount 1), 1, 4, "0,0,0,0")
             "-Shards 2"    = @((Get-EngineShardPlan -Requested 2 -AloneCount 1), 2, 5, "0,0,0,0,0")
             "gaming mode"  = @((Get-EngineShardPlan -Requested 0 -GamingSettings $gamingTwo -AloneCount 1), 2, 5, "0,0,0,0,0")
@@ -1369,6 +1378,10 @@ if ($SkipUnits) {
     $testArgs = @("test", $Sln, "--no-build", "--nologo")
     if ($UnitFilter) {
         $testArgs += @("--filter", $UnitFilter)
+    } elseif (-not $Release) {
+        # The landing gate leaves the tests marked [Trait("Tier", "Release")] to -Release.
+        $testArgs += @("--filter", "Tier!=Release")
+        Add-Unchecked "the release-tier unit tests did not run (-Release runs them)"
     }
     $testArgs += @("--results-directory", $trxDir, "--logger", "trx;LogFileName=units.trx")
     if ($Gaming.Settings) {
@@ -1471,7 +1484,10 @@ if ($SkipEngine) {
         $weightsJson = [System.IO.File]::ReadAllText((Join-Path $RepoRoot "analysis\engine-suite-weights.json")) | ConvertFrom-Json
         $aloneCount = @($weightsJson.alone | Where-Object { $_ }).Count
     } catch { }
-    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount -RealData:$RealData
+    $shardPlan = Get-EngineShardPlan -Requested $Shards -Selector $EngineSelector -GamingSettings $Gaming.Settings -AloneCount $aloneCount -RealData:$RealData -Release:$Release
+    # The landing gate: the whole catalog less SuiteCatalog.ReleaseTier, with the suites that are
+    # windowed for their shader texts alone run headless. -Release and a selection run as named.
+    $gateLane = if (-not $EngineSelector -and -not $Release) { "lane:gate" } else { $null }
     $shardCount = $shardPlan.Total
     if ($shardCount -gt $NetPortSlotShards) {
         throw "-Shards $($shardPlan.Shared) plus $($shardCount - $shardPlan.Shared) windowed and synthetic makes $shardCount processes: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards"
@@ -1503,7 +1519,7 @@ if ($SkipEngine) {
             # The harness writes its report and its per-suite artifacts beside this log, in a
             # directory named for the render term and shard -- so the launch directory decides both.
             $shardTerm = if ($group.Count -gt 1) { "shard:$i/$($group.Count)" } else { $null }
-            $terms  = (@($EngineSelector, "render:$($group.Render)", $shardTerm) | Where-Object { $_ }) -join ","
+            $terms  = (@($EngineSelector, $gateLane, "render:$($group.Render)", $shardTerm) | Where-Object { $_ }) -join ","
             $name   = "$($group.Render)-shard${i}of$($group.Count)"
             $report = Join-Path $engineRunDir "$name\test-report.json"
             $log    = Join-Path $engineRunDir "$name.log"
@@ -1522,12 +1538,17 @@ if ($SkipEngine) {
             if ($group.Synthetic) { $godotArgs += "--synthetic-data" }
             $shardRuns += [pscustomobject]@{
                 Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
-                NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]; Kind = $group.Kind
+                NetPortBase = $netPortBase; LearnPeak = $shardPlan.Learns[$k - 1]
+                Kind = $(if (-not $group.Headless -and $i -gt 1) { "engine-suites" } else { $group.Kind })
                 Render = $group.Render; Synthetic = $group.Synthetic; Extra = $group.Extra
                 Args = $godotArgs; Launch = $null; ExitCode = -1
             }
         }
     }
+    # The pool admits in order and waits on its head, so an alone suite's process goes last: its
+    # estimate must never hold the headless shards back while the windowed shard runs.
+    $shardRuns = @($shardRuns | Where-Object { $_.Kind -ne "engine-suites" -or $EngineSelector }) +
+                 @($shardRuns | Where-Object { $_.Kind -eq "engine-suites" -and -not $EngineSelector })
     Write-Host "  $($shardPlan.Windowed) windowed (alone suites included), $($shardPlan.Shared) headless, 1 synthetic$(if ($RealData) { ' (an extra pass: -RealData runs the ci tier in the headless shards)' }), weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
     Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
@@ -1572,8 +1593,11 @@ if ($SkipEngine) {
         Add-Stage -Name "engine" -Status "DEFERRED" -Seconds $watch.Elapsed.TotalSeconds -Detail "no shard ran"
     } else {
         $judged = if ($script:Deferred) { $ranShards } else { $shardRuns }
-        # Only a complete run holds every windowed suite, so only it can show a text went uncompiled.
-        $merged = Merge-EngineShards -Shards $judged -CheckShaders:(-not $EngineSelector -and -not $script:Deferred)
+        # Only -Release holds every windowed suite, so only it can show a text went uncompiled.
+        $merged = Merge-EngineShards -Shards $judged -CheckShaders:($Release -and -not $EngineSelector -and -not $script:Deferred)
+        if ($gateLane) {
+            Add-Unchecked "the release tier's in-engine suites did not run, and no windowed process compiled the headless shards' shader texts (-Release does both)"
+        }
         $status = $merged.Status
         $problems = @($merged.Problems)
         $detail = $merged.Detail
@@ -1842,12 +1866,13 @@ if ($SkipGoldensNow) {
             Shot = $shot; Png = (Join-Path $GoldenDir "$($shot.name).png"); Log = (Join-Path $GoldenDir "$($shot.name).log")
             Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
             Label = $shot.name; Args = $null; ExitCode = -1
+            # An Enhanced shot holds about twice a Faithful one, so one kind would admit fewer of both.
+            Kind = $(if (@($shot.args) -contains "--graphics=enhanced") { "capture-enhanced" } else { "golden-shot" })
             Hash = ""; Size = ""; Gpu = ""; Frame = -1; Clock = ""; FirstHash = ""; FirstAttempt = 0
         }
         Remove-GoldenShotFiles -State $state
         $states += $state
     }
-
     # First pass: every shot's attempt 1 in registry order, at most $goldenWorkerCount in flight,
     # each admitted by memory on its own. At 1 this is the serial loop, one launch, one wait, repeat.
     # Each shot keeps its own per-launch watchdog, so one hung shot fails only itself.
@@ -2797,9 +2822,13 @@ foreach ($stage in $Stages) {
     $totalSeconds += $stage.Seconds
 }
 
-# A skipped stage is compared against nothing. There is no total budget: one set by the same rule
-# is never below the stage budgets' sum, so it could only ever trip after a stage already had.
+# A skipped stage is compared against nothing. The landing gate's total is held to the lane's
+# totalLimit, a stated limit and not a measurement: past it, work moves to the release tier.
 $OverBudget = @()
+if ($CompleteRun -and -not $Release -and -not $Gaming.Used -and $LaneBudget -and $LaneBudget.PSObject.Properties["totalLimit"] -and
+    $totalSeconds -gt [double]$LaneBudget.totalLimit) {
+    $OverBudget += "the run took $(Format-Seconds $totalSeconds)s against the landing gate's $(Format-Seconds ([double]$LaneBudget.totalLimit))s limit: move suites, unit tests or golden shots to the release tier"
+}
 $stageBudgetText = @{}
 foreach ($stage in $Stages) {
     $budget = Get-StageBudget $stage.Name

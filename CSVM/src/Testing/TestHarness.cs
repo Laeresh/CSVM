@@ -99,7 +99,8 @@ public static class TestHarness
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
         var shard = SuiteShards.Parse(filter, out string unsharded, out string? shardError);
-        var render = SuiteRender.Parse(unsharded, out string terms, out string? renderError);
+        var render = SuiteRender.Parse(unsharded, out string laned, out string? renderError);
+        bool gateLane = SuiteRender.TakeGate(laned, out string terms);
         if ((shardError ?? renderError) is { } termError)
         {
             Log.Error("test", $"run-tests {termError}");
@@ -112,6 +113,10 @@ public static class TestHarness
             return 1;
         }
         var selected = Select(All, terms, out var unmatched);
+        if (gateLane)
+        {
+            selected = selected.Where(s => !SuiteCatalog.ReleaseTier.Contains(s.Name)).ToList();
+        }
         var skipFails = SkipFailures(terms);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
@@ -135,7 +140,7 @@ public static class TestHarness
         int selectedTotal = selected.Count;
         if (render != null)
         {
-            selected = selected.Where(s => render.Contains(SuiteRender.KindOf(s.Name, limits!))).ToList();
+            selected = selected.Where(s => render.Contains(SuiteRender.KindOf(s.Name, limits!, gateLane))).ToList();
         }
         var plan = PlanShard(ctx, shard, render, selectedTotal, ref selected);
         var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
