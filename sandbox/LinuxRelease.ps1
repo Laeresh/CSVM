@@ -358,9 +358,9 @@ if (Test-Path $noticePath) {
             $problems += "LICENSE-thirdparty.txt does not state '$stamp': it was not assembled for the Linux payload"
         }
     }
-    foreach ($marker in @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe")) {
+    foreach ($marker in @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe", "osx-arm64", "CSVM.app")) {
         if ($notice.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-            $problems += "LICENSE-thirdparty.txt names '$marker', which is the Windows payload's"
+            $problems += "LICENSE-thirdparty.txt names '$marker', which is another platform's payload's"
         }
     }
 }

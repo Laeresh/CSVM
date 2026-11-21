@@ -26,6 +26,9 @@ public sealed class Sdl2Sticks : IStickNative
     /// build ships one.</summary>
     public const string MacLibrary = "libSDL2-2.0.0.dylib";
 
+    // Apple Silicon Homebrew's library folder, which dyld's default search leaves out.
+    private const string AppleSiliconHomebrew = "/opt/homebrew/lib/";
+
     private const uint InitJoystick = 0x200;
     private const uint JoyDeviceAdded = 0x605;
     private const uint JoyDeviceRemoved = 0x606;
@@ -56,7 +59,7 @@ public sealed class Sdl2Sticks : IStickNative
     /// otherwise <see cref="LinuxCandidates"/>.</summary>
     public static IReadOnlyList<string> ForPlatform(bool windows, string exeDir, string? repoRoot, string? dataRoot, bool macOS = false) =>
         windows ? Candidates(exeDir, repoRoot, dataRoot)
-        : macOS ? new[] { "/opt/homebrew/lib/" + MacLibrary, MacLibrary }
+        : macOS ? new[] { AppleSiliconHomebrew + MacLibrary, MacLibrary }
         : LinuxCandidates(exeDir);
 
     /// <summary>Linux: a copy beside the executable, then the bare <see cref="LinuxLibrary"/>, which
