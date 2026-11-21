@@ -116,6 +116,9 @@
       "grade_contrast": 1.09,
       "gi": {
         "ambient_g": 0.99,
+        "sky_r": 0.33,
+        "sky_g": 0.33,
+        "sky_b": 0.33,
         "cloud_r": 0.45,
         "cloud_g": 0.44,
         "grade_contrast": 1.08,
@@ -125,7 +128,8 @@
         "sdfgi_energy": 1
       },
       "clouds": {
-        "god_rays": 1.12
+        "god_rays": 1.12,
+        "fog_far": 8000
       }
     }
   },
