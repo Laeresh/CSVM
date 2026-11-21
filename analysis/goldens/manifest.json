@@ -171,7 +171,7 @@
     {
       "name": "c5-city-towers-enhanced",
       "frame": 120,
-      "hash": "0153f780e18c7ee48209a52f23ab4203",
+      "hash": "2be6378cfe96bb15a51c1d8b37e29fa9",
       "exercises": "Enhanced night city from 165 m over the dense towers: script-built hulls, near variants and far boxes, facade colours, seeded windows on the shader clock, the block floors, their dressing and the street traffic, outside the whiteout.",
       "args": ["--freecam", "--chapter=C5", "--pos=-7124,165,-11732", "--lookat=-7424,5,-12032", "--det", "--mute", "--graphics=enhanced"]
     },

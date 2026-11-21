@@ -550,11 +550,11 @@ public sealed class CityDressing
             groundJson = FileAccess.GetFileAsString(layoutPath);
         var cover = Flagged(_gamez);
         double overlay = clock.Elapsed.TotalMilliseconds;
-        VegetationGround.WalkWorld(_gamez, "world1", (_, mesh, xf) =>
+        VegetationGround.WalkWorld(_gamez, "world1", (node, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
-                if (_ground.FloorOf(poly) is not { } floor || poly.UvCoords is not { Count: >= 3 } uvs)
+                if (_ground.FloorOf(node, poly) is not { } floor || poly.UvCoords is not { Count: >= 3 } uvs)
                     continue;
                 var variants = floor.Files.Select(file => SlotsFor(file, floor.Set, floor.Spec, groundJson, slotsOf)).ToList();
                 var corners = new List<Vector3>();
@@ -566,7 +566,8 @@ public sealed class CityDressing
                     corners.Add(xf * mesh.Vertices[poly.VertexIndices[c]]);
                 }
                 var p0 = xf * mesh.Vertices[poly.VertexIndices[0]];
-                var offset = new Vector2(uvs[0].X - (p0.X / TileM), uvs[0].Y - (p0.Z / TileM));
+                // A turned polygon draws its floor at world XZ, so its layout's UV is that.
+                var offset = floor.Turned ? Vector2.Zero : new Vector2(uvs[0].X - (p0.X / TileM), uvs[0].Y - (p0.Z / TileM));
                 // The flagged layer draws over a clear one, so a clear polygon stands nothing where one lies over it.
                 Stand(corners, offset, floor.Spec, variants, poly.NoClutter || !cover.Meets(corners) ? null : cover.Covers, placed);
             }

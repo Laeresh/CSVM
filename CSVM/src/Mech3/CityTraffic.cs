@@ -177,11 +177,11 @@ internal static class CityTraffic
         var lines = new Dictionary<(int Nx, int Nz, long P), (Vector2 N, float P, SortedDictionary<int, float> Ys)>();
         // A line's half width in metres, the narrowest paint along it, so its lanes stay inside every kerb.
         var halves = new Dictionary<(int Nx, int Nz, long P), float>();
-        VegetationGround.WalkWorld(gamez, "world1", (_, mesh, xf) =>
+        VegetationGround.WalkWorld(gamez, "world1", (node, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
-                if (ground.FloorOf(poly) is not { } floor || poly.UvCoords is not { Count: >= 3 } uvs)
+                if (ground.FloorOf(node, poly) is not { } floor || poly.UvCoords is not { Count: >= 3 } uvs)
                     continue;
                 var tris = new List<Vector3>();
                 for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
@@ -193,7 +193,8 @@ internal static class CityTraffic
                 }
                 var p0 = xf * mesh.Vertices[poly.VertexIndices[0]];
                 // A floored polygon is in frame, so its offset is whole within FrameSlack: rounded, every polygon agrees on a line.
-                var offset = new Vector2(MathF.Round(uvs[0].X - (p0.X / TileM)), MathF.Round(uvs[0].Y - (p0.Z / TileM)));
+                // A turned one's cross turns into itself, so it takes the world's frame.
+                var offset = floor.Turned ? Vector2.Zero : new Vector2(MathF.Round(uvs[0].X - (p0.X / TileM)), MathF.Round(uvs[0].Y - (p0.Z / TileM)));
                 foreach (var s in floor.Spec.Streets)
                 {
                     float alen = s.Axis.Length();
