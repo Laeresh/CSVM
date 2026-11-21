@@ -57,6 +57,12 @@
     The tarball carries no SDL2, so neither notice has an SDL section; the zip's
     LICENSE-SDL2.txt is SDL's own file beside it.
 
+    -MacOS writes packaging/LICENSE-thirdparty-macos.txt, which the macOS zip ships as
+    LICENSE-thirdparty.txt. The universal app bundles both the osx-arm64 and the osx-x64
+    runtime pack; the notice stamps osx-arm64 and the run refuses to write it unless the two
+    packs' LICENSE.TXT and THIRD-PARTY-NOTICES.TXT are byte-identical. No template check: a
+    Windows host cannot run the macOS template to ask its build.
+
 .EXAMPLE
     .\packaging\BuildThirdPartyNotices.ps1
     Rewrite packaging/LICENSE-thirdparty.txt from the current tools/ and NuGet cache.
@@ -78,7 +84,10 @@ param(
     [string] $ToolsRoot = "",
 
     # Also write the Linux tarball's notice. Needs WSL (Debian) for the template check.
-    [switch] $Linux
+    [switch] $Linux,
+
+    # Also write the macOS zip's notice.
+    [switch] $MacOS
 )
 
 $ErrorActionPreference = "Stop"
@@ -118,6 +127,13 @@ if ($Linux) {
         Name = "Linux"; OutFile = Join-Path $PSScriptRoot "LICENSE-thirdparty-linux.txt"
         Pack = "linux-x64"; Archive = "tarball"; Sep = "/"
         Exe = "CSVM.x86_64"; DataDir = "data_CSVM_linuxbsd_x86_64"
+    }
+}
+if ($MacOS) {
+    $Platforms += [pscustomobject]@{
+        Name = "macOS"; OutFile = Join-Path $PSScriptRoot "LICENSE-thirdparty-macos.txt"
+        Pack = "osx-arm64"; Archive = "zip"; Sep = "/"
+        Exe = "CSVM.app"; DataDir = "CSVM.app/Contents/Resources/data_CSVM_macos_*"
     }
 }
 
@@ -245,6 +261,17 @@ foreach ($platform in $Platforms) {
     $platform | Add-Member DotnetLicense (Read-Utf8 (Join-Path $packDir "LICENSE.TXT"))
     $platform | Add-Member DotnetNotices (Read-Utf8 (Join-Path $packDir "THIRD-PARTY-NOTICES.TXT"))
 }
+if ($MacOS) {
+    $x64Dir = Join-Path $PackCache "microsoft.netcore.app.runtime.osx-x64\$RuntimeVersion"
+    $armDir = Join-Path $PackCache "microsoft.netcore.app.runtime.osx-arm64\$RuntimeVersion"
+    foreach ($file in "LICENSE.TXT", "THIRD-PARTY-NOTICES.TXT") {
+        if (-not (Test-Path (Join-Path $x64Dir $file)) -or
+            (Get-FileHash (Join-Path $x64Dir $file)).Hash -ne (Get-FileHash (Join-Path $armDir $file)).Hash) {
+            throw "The osx-x64 pack's $file ($x64Dir) is missing or differs from osx-arm64's, so " +
+                "one notice stamped osx-arm64 cannot speak for the universal app."
+        }
+    }
+}
 
 # ---------------------------------------------------------------- pl_mpeg
 
@@ -324,7 +351,7 @@ function Section([string] $Number, [string] $Title, [string] $Body) {
 
 function Build-Notice($P) {
     $dataDir = $P.DataDir + $P.Sep
-    $flag = if ($P.Name -eq "Linux") { " -Linux" } else { "" }
+    $flag = switch ($P.Name) { "Linux" { " -Linux" } "macOS" { " -MacOS" } default { "" } }
     $header = @"
 CSVM third-party notices
 ========================
@@ -379,8 +406,9 @@ Sections
 # The markers ExportRelease.ps1 and sandbox\LinuxRelease.ps1 refuse in the other platform's
 # archive. Checked here too, so a notice that would fail there is never written.
 $ForeignMarkers = @{
-    Windows = @("linux-x64", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64")
-    Linux   = @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe")
+    Windows = @("linux-x64", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64", "osx-arm64", "CSVM.app")
+    Linux   = @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe", "osx-arm64", "CSVM.app")
+    macOS   = @("win-x64", "linux-x64", "data_CSVM_windows_x86_64", "data_CSVM_linuxbsd_x86_64", "CSVM.exe", "CSVM.x86_64")
 }
 
 foreach ($platform in $Platforms) {

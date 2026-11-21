@@ -15,6 +15,7 @@
       LICENSE.*                          the seven licences the release carries
       lib\*.windows.template_*.x86_64.dll  Windows x64, debug and release
       lib\*.linux.template_*.x86_64.so     Linux x64, debug and release
+      lib\*.macos.template_*.universal.framework\  macOS universal, debug and release
 
     and adds res://addons/webrtc_native/webrtc_native.gdextension to
     <Root>\CSVM\.godot\extension_list.cfg, which is where a run that never opened the editor looks
@@ -69,6 +70,10 @@ $Pinned = @(
     @{ Name = "lib\libwebrtc_native.windows.template_release.x86_64.dll"; Sha = "3A8053D325A874493F596630B0F165F3A83E265C61D9FD87D82DA6CB4C2A81FD" },
     @{ Name = "lib\libwebrtc_native.linux.template_debug.x86_64.so";      Sha = "D99224F5411C5083F1D0932F2ED30B0B68F5F697BE025671FF0083015F06A033" },
     @{ Name = "lib\libwebrtc_native.linux.template_release.x86_64.so";    Sha = "88C927C551592F526FDB13FAB28536629FAE026F8D738D7D83CE2CF2493DB9E3" },
+    @{ Name = "lib\libwebrtc_native.macos.template_debug.universal.framework\libwebrtc_native.macos.template_debug.universal.dylib";     Sha = "F01B7F8271B01FB9CA3A626BA20495FBC140EADA35CA3A2550D252A21C0079C7" },
+    @{ Name = "lib\libwebrtc_native.macos.template_debug.universal.framework\Resources\Info.plist";                                      Sha = "1DBCE09399C51434EAF1F495D7D85DCDBE6B05EC59B28F13C817B04E52477105" },
+    @{ Name = "lib\libwebrtc_native.macos.template_release.universal.framework\libwebrtc_native.macos.template_release.universal.dylib"; Sha = "6B0B7F281834E661881C4A8CB6DFF0FD204D021252E0A1009A7EB7BF55900C27" },
+    @{ Name = "lib\libwebrtc_native.macos.template_release.universal.framework\Resources\Info.plist";                                    Sha = "FBC994401EB633918D73108CD457685AA09B87C314DC8FA025EDF2B9B56F2880" },
     @{ Name = "LICENSE.libdatachannel"; Sha = "FAB3DD6BDAB226F1C08630B1DD917E11FCB4EC5E1E020E2C16F83A0A13863E85" },
     @{ Name = "LICENSE.libjuice";       Sha = "FAB3DD6BDAB226F1C08630B1DD917E11FCB4EC5E1E020E2C16F83A0A13863E85" },
     @{ Name = "LICENSE.libsrtp";        Sha = "8E19D42A1EEC9561F3F347253DDF2E385C55F392F025BB0FD41B88DBF38DB5AE" },

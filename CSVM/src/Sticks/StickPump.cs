@@ -131,7 +131,7 @@ public sealed partial class StickPump : Node
     {
         string exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? string.Empty;
         bool windows = OperatingSystem.IsWindows();
-        var candidates = Sdl2Sticks.ForPlatform(windows, exeDir, repoRoot, dataRoot);
+        var candidates = Sdl2Sticks.ForPlatform(windows, exeDir, repoRoot, dataRoot, OperatingSystem.IsMacOS());
         var native = Sdl2Sticks.Load(candidates, out string outcome);
         if (native is null)
         {

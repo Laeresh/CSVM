@@ -22,6 +22,13 @@ public sealed class Sdl2Sticks : IStickNative
     /// SteamOS, sdl2-compat over SDL3). No Linux build ships one.</summary>
     public const string LinuxLibrary = "libSDL2-2.0.so.0";
 
+    /// <summary>The macOS runtime's install name, the file Homebrew's <c>sdl2</c> installs. No macOS
+    /// build ships one.</summary>
+    public const string MacLibrary = "libSDL2-2.0.0.dylib";
+
+    // Apple Silicon Homebrew's library folder, which dyld's default search leaves out.
+    private const string AppleSiliconHomebrew = "/opt/homebrew/lib/";
+
     private const uint InitJoystick = 0x200;
     private const uint JoyDeviceAdded = 0x605;
     private const uint JoyDeviceRemoved = 0x606;
@@ -47,10 +54,13 @@ public sealed class Sdl2Sticks : IStickNative
 
     public string LastError => Text(_api.GetError());
 
-    /// <summary>This platform's candidates: <see cref="Candidates"/> on Windows, otherwise
-    /// <see cref="LinuxCandidates"/>.</summary>
-    public static IReadOnlyList<string> ForPlatform(bool windows, string exeDir, string? repoRoot, string? dataRoot) =>
-        windows ? Candidates(exeDir, repoRoot, dataRoot) : LinuxCandidates(exeDir);
+    /// <summary>This platform's candidates: <see cref="Candidates"/> on Windows, on macOS Apple Silicon
+    /// Homebrew's <see cref="MacLibrary"/> (a folder dyld does not search) then the bare name,
+    /// otherwise <see cref="LinuxCandidates"/>.</summary>
+    public static IReadOnlyList<string> ForPlatform(bool windows, string exeDir, string? repoRoot, string? dataRoot, bool macOS = false) =>
+        windows ? Candidates(exeDir, repoRoot, dataRoot)
+        : macOS ? new[] { AppleSiliconHomebrew + MacLibrary, MacLibrary }
+        : LinuxCandidates(exeDir);
 
     /// <summary>Linux: a copy beside the executable, then the bare <see cref="LinuxLibrary"/>, which
     /// the system loader resolves. A bare name is the one candidate <see cref="Load"/> hands to the
@@ -167,7 +177,7 @@ public sealed class Sdl2Sticks : IStickNative
 
         // ⚠ Do not drop any of these. SDL3 reads the pads: HIDAPI would handshake with them (on Linux,
         // over hidraw), RAWINPUT take SDL3's registration, XInput and WGI list a pad twice.
-        // Windows sticks enumerate through DirectInput alone; Linux ignores the last three.
+        // Windows sticks enumerate through DirectInput alone; Linux and macOS ignore the last three.
         api.SetHint("SDL_NO_SIGNAL_HANDLERS", "1");
         api.SetHint("SDL_JOYSTICK_HIDAPI", "0");
         api.SetHint("SDL_JOYSTICK_RAWINPUT", "0");
