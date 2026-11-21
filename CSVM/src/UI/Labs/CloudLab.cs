@@ -41,6 +41,8 @@ internal sealed partial class CloudLab : Node
         ("pw_density", "Density", 0.005f, 0.2f, 0.005f),
         ("edge_cut", "Edge cut", 0f, 0.9f, 0.01f),
         ("edge_k", "Edge hardness", 1f, 10f, 0.1f),
+        ("deck_cover", "Deck: cover", 0f, 1f, 0.01f),
+        ("deck_gaps", "Deck: share torn open", 0f, 1f, 0.01f),
         ("deck_scale", "Deck: tile scale", 0.2f, 3f, 0.05f),
         ("deck_k", "Deck: density", 0f, 2f, 0.05f),
         ("deck_erode", "Deck: erosion", 0f, 1f, 0.01f),
@@ -225,6 +227,23 @@ internal sealed partial class CloudLab : Node
         return _savePath;
     }
 
+    /// <summary>What either Save button does: the tunes (<see cref="Save"/>), then the look
+    /// (<see cref="SaveLook"/>) while a slab stands to read it from. An edit in one column is then never
+    /// lost to the other column's button. Returns the path written, or null where the tunes were not.</summary>
+    public string? SaveBoth()
+    {
+        string? path = Save();
+        if (path == null || VolumetricClouds.LookValue("od_step") == null)
+            return path;
+        string tunes = _note;
+        if (SaveLook() != null)
+        {
+            _note = $"{tunes}; {_note}";
+            UpdateStatus();
+        }
+        return path;
+    }
+
     /// <summary>Writes the standing look options that differ from the preset into
     /// the chapter's look block. Returns the path written, or null where nothing was saved.</summary>
     public string? SaveLook()
@@ -388,7 +407,7 @@ internal sealed partial class CloudLab : Node
 
         var buttons = new HBoxContainer();
         var save = new Button { Text = $"Save for {_chapter}", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
-        save.Pressed += () => Save();
+        save.Pressed += () => SaveBoth();
         buttons.AddChild(save);
         var revert = new Button { Text = "Revert to saved", FocusMode = Control.FocusModeEnum.None };
         revert.Pressed += RevertToSaved;
@@ -396,7 +415,7 @@ internal sealed partial class CloudLab : Node
         box.AddChild(buttons);
         _status = Small("");
         box.AddChild(_status);
-        box.AddChild(Small("Save writes the tunes and the drift's speed and heading into the edited layer for this chapter; the tint stays live only. RMB looks, the sliders take the left button · Shift+F4 hides this panel", Dim));
+        box.AddChild(Small("Save writes the tunes and the drift's speed and heading into the edited layer for this chapter, and the cloud look beside it; the tint stays live only. RMB looks, the sliders take the left button · Shift+F4 hides this panel", Dim));
 
         margin.AddChild(box);
         panel.AddChild(margin);
@@ -418,11 +437,11 @@ internal sealed partial class CloudLab : Node
         var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         box.AddThemeConstantOverride("separation", 4);
         box.AddChild(new Label { Text = "CLOUD LOOK  volumetric clouds", Modulate = Amber });
-        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, Reset returns to the saved look. Copy puts the edits on the clipboard as name=value pairs.", Dim));
+        box.AddChild(Small($"Each edit applies at once. Save writes what differs from the preset into {_chapter}'s look block, and the cloud shadow tunes beside it. Reset returns to the saved look. Copy puts the edits on the clipboard as name=value pairs.", Dim));
 
         var buttons = new HBoxContainer();
         var save = new Button { Text = "Save", FocusMode = Control.FocusModeEnum.None, Disabled = _savePath == null };
-        save.Pressed += () => SaveLook();
+        save.Pressed += () => SaveBoth();
         buttons.AddChild(save);
         var reset = new Button { Text = "Reset", FocusMode = Control.FocusModeEnum.None };
         reset.Pressed += () =>
