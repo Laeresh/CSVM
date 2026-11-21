@@ -238,7 +238,7 @@ public sealed class CityGround
         var ground = new CityGround(floors, uv2, resolved, keys, missing);
         Follow();
         Log.Info("world",
-            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; placed polygons floored={ground.Floored} turned={census.Turned.Count} other_frame={census.OtherFrame} two_frames={census.TwoFrames} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames}; placements built apart={keys.Values.Count(k => k > 1)}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
+            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; placed polygons floored={ground.Floored} turned={census.Turned.Count} other_frame={census.OtherFrame} two_frames={census.TwoFrames} hand_built={census.HandBuilt.Count} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames - census.HandBuilt.Count}; placements built apart={keys.Values.Count(k => k > 1)}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
         return ground;
     }
 
@@ -274,8 +274,8 @@ public sealed class CityGround
     /// <summary>Each placement of a polygon of a paint in <paramref name="layout"/> reached from <paramref name="worldName"/>,
     /// with the set standing on it. A clear one stands its own, a flagged one the clear layer beneath that takes stamps,
     /// else <c>none</c>. The set is null off the frame <see cref="InFrame"/> tests, or where one node reached twice
-    /// disagrees. A flagged polygon on a street cross may lie turned, the cross turned into itself and
-    /// its set in the world's frame. Pure, so a hand-built world pins it.</summary>
+    /// disagrees, and on a hand-built tile over a stamping layer. A flagged polygon on a street cross may lie turned,
+    /// the cross turned into itself and its set in the world's frame. Pure, so a hand-built world pins it.</summary>
     internal static Dictionary<(GameZNode Node, GameZPolygon Poly), (string Paint, string? Set)> Resolve(GameZ gamez, Layout layout,
         out Census census, string worldName = "world1")
     {
@@ -315,9 +315,16 @@ public sealed class CityGround
                 string? set = !square && !turned ? null
                     : !poly.NoClutter ? paint
                     : BaseUnder(Centre(mesh, poly, xf), bases) ?? "none";
-                if (set == null)
-                    counted.OtherFrame++;
                 var at = (node, poly);
+                // A hand-built tile over a stamping layer keeps its paint. Its floor would be laid out for the stamps the
+                // city hides there (HandBuilt), not for the tile's own buildings.
+                if (poly.NoClutter && set != null && set != "none" && node.Children.Any(c => CarriesMesh(gamez, c)))
+                {
+                    counted.HandBuilt.Add(at);
+                    set = null;
+                }
+                else if (set == null)
+                    counted.OtherFrame++;
                 if (found.TryGetValue(at, out var had) && (had.Set != set || counted.Turned.Contains(at) != turned))
                 {
                     counted.TwoFrames++;
@@ -551,10 +558,11 @@ public sealed class CityGround
     internal readonly record struct Family(Vector2 Axis, float Centre, float Half, float Origin);
 
     /// <summary>The placed polygons <see cref="Resolve"/> kept on the paint: laid in another frame, or reached twice and
-    /// disagreeing. Then those it floors turned, which read the floor at world XZ.</summary>
+    /// disagreeing, or a hand-built tile over a stamping layer. Then those it floors turned, which read the floor at world XZ.</summary>
     internal sealed class Census
     {
         public readonly HashSet<(GameZNode, GameZPolygon)> Turned = new();
+        public readonly HashSet<(GameZNode, GameZPolygon)> HandBuilt = new();
         public int OtherFrame;
         public int TwoFrames;
     }
