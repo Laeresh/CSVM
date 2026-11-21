@@ -32,7 +32,9 @@
     "look": {
       "cloud_fog": 0.35,
       "haze_near_m": 4000,
-      "far_m": 12000
+      "far_m": 12000,
+      "deck_cover": 0.8,
+      "deck_gaps": 0.41
     }
   },
   "C1B": {
