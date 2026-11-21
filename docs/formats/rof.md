@@ -156,7 +156,7 @@ are unexplained and listed under Open.
 |---|---|
 | `[0, 3n)` | 24bpp RGB shading map |
 | `[3n, 6n)` | three 8-bit paint-region weight masks, slot 1, 2, 3 |
-| `[6n, 10n)` | 32bpp pattern/decal overlay with alpha |
+| `[6n, 10n)` | RGBA8 pattern/decal overlay; A is the blend amount |
 
 ### The shading map
 
@@ -168,8 +168,8 @@ a neutral luminance map at the same dimensions.
 
 ### Paint region masks
 
-**The three 8-bit planes at `[3n, 6n)` are per-pixel blend weights, one per paint colour slot,
-and they sum to 255.** This is the region table [paint.md](paint.md) records as absent from the
+**The three 8-bit planes at `[3n, 6n)` are per-pixel blend amounts, one per paint colour slot,
+applied in file order.** This is the region table [paint.md](paint.md) records as absent from the
 data, it was in the UI archive all along.
 
 They are weights, not indices, which matters: the values cluster at 0 and 255 with a scatter of
@@ -184,32 +184,57 @@ directly, `HUGHES` resolves into clean rectangular blocks, `FORTUNE` into a curv
 that matches the white swoosh on the red Fortune Hunters Bloodhawk in
 `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png`.
 
-So the original's colouring is, per texel:
+The identified loader does not collapse the three amounts into one weighted colour. It starts each
+output channel `v` at the corresponding shading-map byte and applies the masks in slot order.
+For mask `m` and the matching tint channel `c`, both in 0..255:
 
-```
-shaded_paint = shading_map * (w1*colour1 + w2*colour2 + w3*colour3) / 255
+```text
+round255(x) = (257*x + 32768) >> 16
+tinted = round255(m*v*c)
+v = round255(tinted + (255-m)*v)
 ```
 
-with the overlay composited over the result. Regions with **no hue at all** are expressible
-this way, which is what the hue-window approach structurally could not do, see "Known
-divergences" in [paint.md](paint.md).
+`round255` is rounded division by 255 over the products used here. A zero mask leaves `v`
+unchanged; a full mask multiplies it by the tint channel. Intermediate masks blend that tinted
+value into the current value, so slot order is significant even where the three amounts total
+255. The mask loop is at RVAs `0x1B9E` to `0x1C41` in the hash-identified image under
+"Evidence & limits". Regions with **no hue at all** are expressible this way, which is what the hue-window
+approach structurally could not do, see "Known divergences" in [paint.md](paint.md).
 
 ### The overlay layer
 
-`[6n, 10n)` is 32bpp with a meaningful 4th channel, holding the pattern's decorative artwork
+`[6n, 10n)` is RGBA8, holding the pattern's decorative artwork
 (stripes, flashes, squadron marks) as a layer to composite over the painted skin. It is
 **all-zero for parts a pattern does not decorate**, `BLCKSWAN/FUR_WING.BM` has an empty
 overlay, so a pattern can leave a part plain.
 
-Channel order within the overlay is unconfirmed: the content inspected so far is greyscale, so
-RGBA and BGRA are indistinguishable on it.
+For each channel, overlay value `o` and fourth byte `a` replace the current value with:
+
+```text
+v = round255(a*o + (255-a)*v)
+```
+
+The executable's surface conversion at RVA `0x1D201A` packs working bytes 2, 1 and 0 into the high,
+middle and low colour fields, confirming the file's RGB channel order and the fourth byte's blend
+role. It does not make that fourth byte the returned texture's alpha channel.
+
+### Loader output dimensions
+
+The identified loader turns the composed `width` by `height` image into a square whose side is
+`max(width, height)`. It repeats pixels along each shorter source axis using the integer expansion
+factor calculated at RVAs `0x1969` and `0x1986`, nearest-neighbour rather than interpolation. The
+evidenced files exercise 1:1 and 2:1 ratios. Behaviour for a non-integral ratio is not established.
+
+Row zero of that square still comes from source row `height - 1`, so the expansion does not change
+the bottom-up rule above.
 
 ## Known limits
 
-- **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
-  undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
-  everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed *, file order **is** `paint_color1..3`. Rendering the
+- **CSVM painter fidelity.** `PlanePainter` currently combines all three masks as one
+  floating-point weighted colour and keeps the source rectangle. The retail loader instead uses
+  the identified loader's ordered integer operations and square expansion above. This is an
+  implementation difference, not a remaining format ambiguity.
+- **Slot order.** File order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between
@@ -241,4 +266,15 @@ pixel for pixel but not byte for byte, since that one used another compressor.
 
 ## Evidence & limits
 
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+The composition and square-output rules are patch-scoped executable evidence. The identified
+CSFix-patched `crimson.exe` has SHA-256
+`0B301525037550FFD9D9696D7CCC1AEE8CC0C774EEDAB263D242F6E73C70A73F`. Its loader at RVA
+`0x1910` reads the dimensions and calculates the expansion factors, applies the three masks at
+`0x1B9E` to `0x1C41`, and applies the overlay at `0x1D5F` to `0x1DE7`. The surface conversion at
+RVA `0x1D201A` establishes the channel order. An instruction-emulation check covers 99 invented
+records, and the decoder's output is also checked over the six `FORTUNE/FIR_*.BM` files with
+invented tints. This evidence does not establish that an unpatched executable has byte-identical
+code or that every `.BM` is selected at runtime.
+
+The archive layout, dimensions, row order and plane census come from CSVM's retail install and its
+readers. No game asset bytes are reproduced here.
