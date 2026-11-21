@@ -94,13 +94,16 @@ public sealed class CityGround
         """;
 
     /// <summary>The fragment lines after <c>base_col</c>, the paint. UV2 holds the combination's first layer and its
-    /// count, 0 to keep the paint. The street band stays the paint exactly. Past the kerb the verge colour fades to the
-    /// floor over <see cref="KerbBlendM"/>. A lamp pool stays where it outshines the floor.
+    /// count, 0 to keep the paint, negative to read the floor at world XZ (turned, <see cref="Resolve"/>). The street band
+    /// stays the paint exactly. Past the kerb the verge colour fades to the floor over <see cref="KerbBlendM"/>. A lamp
+    /// pool stays where it outshines the floor.
     /// ⚠ Keep every sample outside a branch: the kerb reads screen derivatives.</summary>
     internal static readonly string FragmentLines = $$"""
             uint city_floor_pick = csky_city_floor_pick(v_city_floor_pos.xz / 256.0);
-            float city_floor_layer = UV2.x + float(city_floor_pick % uint(max(UV2.y, 1.0) + 0.5));
-            vec4 city_floor_col = texture(city_floor_tex, vec3(UV, city_floor_layer), csky_mip_bias);
+            float city_floor_count = abs(UV2.y);
+            float city_floor_layer = UV2.x + float(city_floor_pick % uint(max(city_floor_count, 1.0) + 0.5));
+            vec2 city_floor_uv = UV2.y < 0.0 ? v_city_floor_pos.xz / 256.0 : UV;
+            vec4 city_floor_col = texture(city_floor_tex, vec3(city_floor_uv, city_floor_layer), csky_mip_bias);
             vec4 city_kerb0 = csky_city_floor_kerb(city_floor_street0, UV);
             vec4 city_kerb1 = csky_city_floor_kerb(city_floor_street1, UV);
             vec4 city_kerb = city_kerb0.x < city_kerb1.x ? city_kerb0 : city_kerb1;
@@ -112,19 +115,28 @@ public sealed class CityGround
             float city_light = smoothstep({{F(Linear(LightKneeLo))}}, {{F(Linear(LightKneeHi))}}, dot(base_col.rgb, vec3(0.2126, 0.7152, 0.0722)))
                 * (1.0 - smoothstep({{F(LightReachM - LightFadeM)}}, {{F(LightReachM)}}, city_kerb.x));
             city_floored = mix(city_floored, max(city_floored, base_col), city_light);
-            base_col = mix(base_col, city_floored, float(city_kerb.x > 0.0) * step(0.5, csky_city_ground) * step(0.5, UV2.y));
+            base_col = mix(base_col, city_floored, float(city_kerb.x > 0.0) * step(0.5, csky_city_ground) * step(0.5, city_floor_count));
         """;
 
-    private readonly Dictionary<string, Floor> _floors;
-    private readonly Dictionary<GameZPolygon, Vector2> _uv2;
-    private readonly Dictionary<GameZPolygon, (string Paint, string? Set)> _sets;
+    // The eight axis-aligned frames of one 256 m repeat, U+X V+Z first: uv = (dot(U, xz), dot(V, xz)) / 256 + whole.
+    private static readonly (Vector2 U, Vector2 V)[] Frames =
+    {
+        (new(1f, 0f), new(0f, 1f)), (new(0f, 1f), new(-1f, 0f)), (new(-1f, 0f), new(0f, -1f)), (new(0f, -1f), new(1f, 0f)),
+        (new(1f, 0f), new(0f, -1f)), (new(-1f, 0f), new(0f, 1f)), (new(0f, 1f), new(1f, 0f)), (new(0f, -1f), new(-1f, 0f)),
+    };
 
-    private CityGround(Dictionary<string, Floor> floors, Dictionary<GameZPolygon, Vector2> uv2,
-        Dictionary<GameZPolygon, (string Paint, string? Set)> sets, List<string> missing)
+    private readonly Dictionary<string, Floor> _floors;
+    private readonly Dictionary<(GameZNode, GameZPolygon), Vector2> _uv2;
+    private readonly Dictionary<(GameZNode, GameZPolygon), (string Paint, string? Set)> _sets;
+    private readonly Dictionary<GameZNode, int> _keys;
+
+    private CityGround(Dictionary<string, Floor> floors, Dictionary<(GameZNode, GameZPolygon), Vector2> uv2,
+        Dictionary<(GameZNode, GameZPolygon), (string Paint, string? Set)> sets, Dictionary<GameZNode, int> keys, List<string> missing)
     {
         _floors = floors;
         _uv2 = uv2;
         _sets = sets;
+        _keys = keys;
         Missing = missing;
     }
 
@@ -139,7 +151,7 @@ public sealed class CityGround
     public IReadOnlyList<string> Missing { get; }
 
     /// <summary>How many polygons draw a floor.</summary>
-    public int Floored => _uv2.Values.Count(v => v.Y > 0f);
+    public int Floored => _uv2.Values.Count(v => v.Y != 0f);
 
     /// <summary>Declares the global off. Must run before the first floor shader is built.</summary>
     public static void RegisterGlobal() =>
@@ -216,25 +228,29 @@ public sealed class CityGround
             return null;
         }
         var resolved = Resolve(gamez, layout, out var census);
-        var uv2 = new Dictionary<GameZPolygon, Vector2>(ReferenceEqualityComparer.Instance);
-        foreach (var (poly, (paint, set)) in resolved)
+        var uv2 = new Dictionary<(GameZNode, GameZPolygon), Vector2>();
+        foreach (var (at, (paint, set)) in resolved)
         {
-            uv2[poly] = set != null && floors.TryGetValue(paint, out var floor) && floor.Sets.TryGetValue(set, out var at)
-                ? at : Vector2.Zero;
+            uv2[at] = set != null && floors.TryGetValue(paint, out var floor) && floor.Sets.TryGetValue(set, out var layers)
+                ? census.Turned.Contains(at) ? new Vector2(layers.X, -layers.Y) : layers : Vector2.Zero;
         }
-        var ground = new CityGround(floors, uv2, resolved, missing);
+        var keys = Keys(gamez, uv2);
+        var ground = new CityGround(floors, uv2, resolved, keys, missing);
         Follow();
         Log.Info("world",
-            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; polygons floored={ground.Floored} other_frame={census.OtherFrame} two_frames={census.TwoFrames} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
+            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; placed polygons floored={ground.Floored} turned={census.Turned.Count} other_frame={census.OtherFrame} two_frames={census.TwoFrames} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames}; placements built apart={keys.Values.Count(k => k > 1)}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
         return ground;
     }
 
     /// <summary>Whether polygons wearing <paramref name="texture"/> take the floor arm: a paint with a floor image.</summary>
     public bool Paints(string? texture) => texture != null && _floors.ContainsKey(Stem(texture));
 
-    /// <summary>The UV2 a polygon of a paint carries: its combination's first layer and variant count, zero to keep
-    /// the paint.</summary>
-    public Vector2 Uv2Of(GameZPolygon poly) => _uv2.TryGetValue(poly, out var at) ? at : Vector2.Zero;
+    /// <summary>The UV2 a polygon of a paint carries where <paramref name="node"/> places it: its combination's first
+    /// layer and variant count, negative turned, zero to keep the paint.</summary>
+    public Vector2 Uv2Of(GameZNode? node, GameZPolygon poly) => node != null && _uv2.TryGetValue((node, poly), out var at) ? at : Vector2.Zero;
+
+    /// <summary>The key that tells apart the floors of one mesh's placements (<see cref="Uv2Of"/>), 0 for none.</summary>
+    public int FloorKey(GameZNode? node) => node != null && _keys.TryGetValue(node, out int key) ? key : 0;
 
     /// <summary>Sets the paint's floor uniforms on <paramref name="mat"/>.</summary>
     public void Bind(ShaderMaterial mat, string texture)
@@ -255,14 +271,15 @@ public sealed class CityGround
         mat.SetShaderParameter("city_floor_origin", new Vector2(cells[0].Origin, cells.Count > 1 ? cells[1].Origin : 0f));
     }
 
-    /// <summary>Each polygon of a paint in <paramref name="layout"/> reached from <paramref name="worldName"/>, with the
-    /// set standing on it. A clear one stands its own, a flagged one the clear layer beneath that takes stamps, else
-    /// <c>none</c>. The set is null off the frame <see cref="InFrame"/> tests, or where two placements of its mesh
-    /// disagree. Pure, so a hand-built world pins it.</summary>
-    internal static Dictionary<GameZPolygon, (string Paint, string? Set)> Resolve(GameZ gamez, Layout layout, out Census census,
-        string worldName = "world1")
+    /// <summary>Each placement of a polygon of a paint in <paramref name="layout"/> reached from <paramref name="worldName"/>,
+    /// with the set standing on it. A clear one stands its own, a flagged one the clear layer beneath that takes stamps,
+    /// else <c>none</c>. The set is null off the frame <see cref="InFrame"/> tests, or where one node reached twice
+    /// disagrees. A flagged polygon on a street cross may lie turned, the cross turned into itself and
+    /// its set in the world's frame. Pure, so a hand-built world pins it.</summary>
+    internal static Dictionary<(GameZNode Node, GameZPolygon Poly), (string Paint, string? Set)> Resolve(GameZ gamez, Layout layout,
+        out Census census, string worldName = "world1")
     {
-        var found = new Dictionary<GameZPolygon, (string Paint, string? Set)>(ReferenceEqualityComparer.Instance);
+        var found = new Dictionary<(GameZNode Node, GameZPolygon Poly), (string Paint, string? Set)>();
         var counted = new Census();
         string? TextureOf(GameZPolygon poly) =>
             poly.MaterialIndex >= 0 && poly.MaterialIndex < gamez.Materials.Count && gamez.Materials[poly.MaterialIndex].TextureName is { } t
@@ -286,23 +303,31 @@ public sealed class CityGround
             }
         });
 
-        VegetationGround.WalkWorld(gamez, worldName, (_, mesh, xf) =>
+        VegetationGround.WalkWorld(gamez, worldName, (node, mesh, xf) =>
         {
             foreach (var poly in mesh.Polygons)
             {
-                if (TextureOf(poly) is not { } paint || !layout.Paints.ContainsKey(paint))
+                if (TextureOf(poly) is not { } paint || !layout.Paints.TryGetValue(paint, out var spec))
                     continue;
-                string? set = !InFrame(mesh, poly, xf) ? null
+                bool square = InFrame(mesh, poly, xf);
+                bool turned = !square && poly.NoClutter && spec.Streets.Count == 2
+                    && Enumerable.Range(1, Frames.Length - 1).Any(f => InFrame(mesh, poly, xf, f));
+                string? set = !square && !turned ? null
                     : !poly.NoClutter ? paint
                     : BaseUnder(Centre(mesh, poly, xf), bases) ?? "none";
                 if (set == null)
                     counted.OtherFrame++;
-                if (found.TryGetValue(poly, out var had) && had.Set != set)
+                var at = (node, poly);
+                if (found.TryGetValue(at, out var had) && (had.Set != set || counted.Turned.Contains(at) != turned))
                 {
                     counted.TwoFrames++;
                     set = null;
                 }
-                found[poly] = (paint, set);
+                if (turned && set != null)
+                    counted.Turned.Add(at);
+                else
+                    counted.Turned.Remove(at);
+                found[at] = (paint, set);
             }
         });
         census = counted;
@@ -310,19 +335,26 @@ public sealed class CityGround
     }
 
     /// <summary>Whether every corner of <paramref name="poly"/> placed by <paramref name="xf"/> lies on the U+X V+Z frame
-    /// of one 256 m repeat. Its whole UVs then fall on world multiples of 256 m: u = x / 256 + i, v = z / 256 + j.</summary>
-    internal static bool InFrame(GameZMesh mesh, GameZPolygon poly, Transform3D xf)
+    /// of one 256 m repeat, or the <paramref name="frame"/>-th of <see cref="Frames"/>. Its whole UVs then fall on world
+    /// multiples of 256 m. In U+X V+Z, u = x / 256 + i and v = z / 256 + j.</summary>
+    internal static bool InFrame(GameZMesh mesh, GameZPolygon poly, Transform3D xf, int frame = 0)
     {
         var uvs = poly.UvCoords;
         int n = poly.VertexIndices.Count;
         if (uvs == null || uvs.Count < n || n < 3)
             return false;
-        var p0 = xf * mesh.Vertices[poly.VertexIndices[0]];
-        float iu = MathF.Round(uvs[0].X - (p0.X / 256f)), iv = MathF.Round(uvs[0].Y - (p0.Z / 256f));
-        for (int k = 0; k < n; k++)
+        var (fu, fv) = Frames[frame];
+        Vector2 Tile(int k)
         {
             var p = xf * mesh.Vertices[poly.VertexIndices[k]];
-            if (MathF.Abs(uvs[k].X - (p.X / 256f) - iu) > FrameSlack || MathF.Abs(uvs[k].Y - (p.Z / 256f) - iv) > FrameSlack)
+            var xz = new Vector2(p.X, p.Z) / 256f;
+            return new Vector2(uvs[k].X - fu.Dot(xz), uvs[k].Y - fv.Dot(xz));
+        }
+        var whole = Tile(0).Round();
+        for (int k = 0; k < n; k++)
+        {
+            var off = Tile(k) - whole;
+            if (MathF.Abs(off.X) > FrameSlack || MathF.Abs(off.Y) > FrameSlack)
                 return false;
         }
         return true;
@@ -349,6 +381,30 @@ public sealed class CityGround
         return files;
     }
 
+    /// <summary>Each placement's floor key: 0 where it floors nothing, else one more than the distinct floors its mesh
+    /// took before it. Placements of one mesh with one key share a built mesh.</summary>
+    internal static Dictionary<GameZNode, int> Keys(GameZ gamez, Dictionary<(GameZNode, GameZPolygon), Vector2> uv2)
+    {
+        var keys = new Dictionary<GameZNode, int>();
+        var seen = new Dictionary<int, List<Vector2[]>>();
+        foreach (var node in uv2.Keys.Select(k => k.Item1).Distinct())
+        {
+            var floor = gamez.Meshes[node.MeshIndex].Polygons.Select(p => uv2.TryGetValue((node, p), out var at) ? at : Vector2.Zero).ToArray();
+            if (floor.All(v => v == Vector2.Zero))
+                continue;
+            if (!seen.TryGetValue(node.MeshIndex, out var floors))
+                seen[node.MeshIndex] = floors = new List<Vector2[]>();
+            int k = floors.FindIndex(f => f.SequenceEqual(floor));
+            if (k < 0)
+            {
+                k = floors.Count;
+                floors.Add(floor);
+            }
+            keys[node] = k + 1;
+        }
+        return keys;
+    }
+
     /// <summary>The variant cell of world point (<paramref name="x"/>, <paramref name="z"/>) on a paint, as
     /// <see cref="PickCode"/> takes it. Each family gives floor(dot(axis, xz / 256) - origin), a missing one 0.</summary>
     internal static (int I, int J) CellOf(PaintLayout spec, float x, float z)
@@ -363,12 +419,13 @@ public sealed class CityGround
     /// its first plus the pick modulo its count.</summary>
     internal static uint Pick(int i, int j) => Hash(unchecked((uint)i) ^ Hash(unchecked((uint)j + 0x9e3779b9u)));
 
-    /// <summary>The floor a polygon draws, null where it keeps the paint. It names the paint's layout, the set and the
-    /// layers' floor files in order; <c>&lt;file&gt;.json</c> beside an image is its dressing layout.</summary>
-    internal (PaintLayout Spec, string Set, IReadOnlyList<string> Files)? FloorOf(GameZPolygon poly) =>
-        _uv2.TryGetValue(poly, out var at) && at.Y > 0f && _sets.TryGetValue(poly, out var combo) && combo.Set is { } set
+    /// <summary>The floor a polygon draws where <paramref name="node"/> places it, null where it keeps the paint. It names
+    /// the paint's layout, the set and the layers' floor files in order; <c>&lt;file&gt;.json</c> beside an image is its
+    /// dressing layout. A turned one reads its floor at world XZ over 256.</summary>
+    internal (PaintLayout Spec, string Set, IReadOnlyList<string> Files, bool Turned)? FloorOf(GameZNode node, GameZPolygon poly) =>
+        _uv2.TryGetValue((node, poly), out var at) && at.Y != 0f && _sets.TryGetValue((node, poly), out var combo) && combo.Set is { } set
             && _floors.TryGetValue(combo.Paint, out var floor) && floor.Files.TryGetValue(set, out var files)
-            ? (floor.Spec, set, files) : null;
+            ? (floor.Spec, set, files, at.Y < 0f) : null;
 
     // The centre of the polygon's largest triangle in the world. A paint overlies its base wholly or not at all, so one
     // point inside it answers for the polygon.
@@ -439,10 +496,11 @@ public sealed class CityGround
     /// cell's origin.</summary>
     internal readonly record struct Family(Vector2 Axis, float Centre, float Half, float Origin);
 
-    /// <summary>The polygons <see cref="Resolve"/> kept on the paint: laid in another frame, or placed twice and
-    /// disagreeing.</summary>
+    /// <summary>The placed polygons <see cref="Resolve"/> kept on the paint: laid in another frame, or reached twice and
+    /// disagreeing. Then those it floors turned, which read the floor at world XZ.</summary>
     internal sealed class Census
     {
+        public readonly HashSet<(GameZNode, GameZPolygon)> Turned = new();
         public int OtherFrame;
         public int TwoFrames;
     }

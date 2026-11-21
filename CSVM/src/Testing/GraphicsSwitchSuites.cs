@@ -1545,7 +1545,7 @@ internal static class GraphicsSwitchSuites
 
     [Suite("city-ground",
         "C5's block floor from placeholder images in an Enhanced flight at rich and near: the paint's surfaces carry their "
-        + "combination in UV2 (two variants for its own set, one for none, zero to keep the paint), its materials sample the "
+        + "combination in UV2 (two variants for its own set, one for none, zero to keep the paint, negative turned), its materials sample the "
         + "floor array with the layout's street and cell, a combination with no image keeps the paint and is named once; the "
         + "floor global follows the city on a live move to Off and back, Faithful's text carries no floor and Enhanced's again "
         + "after the switch back; no other texture takes the floor, and a folder with no index or a chapter with no layout "
@@ -1606,7 +1606,7 @@ internal static class GraphicsSwitchSuites
                     for (int s = 0; s < mesh.GetSurfaceCount(); s++)
                     {
                         if (mesh.SurfaceGetMaterial(s) is { } m && paintSet.Contains(m))
-                            uv2.UnionWith(mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.TexUV2].AsVector2Array().Select(v => v.Y));
+                            uv2.UnionWith(mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.TexUV2].AsVector2Array().Select(v => MathF.Abs(v.Y)));
                     }
                 });
                 ctx.Check(uv2.SetEquals(new[] { 0f, 1f, 2f }), $"the paint's surfaces carry UV2 counts of two, one and zero ({string.Join(", ", uv2.Order())})");
@@ -1688,8 +1688,7 @@ internal static class GraphicsSwitchSuites
                 // The two tiles run 512 m along Z.
                 int across = placed.Count(p => p.Transform.Origin.X >= acrossCblock4.X && p.Transform.Origin.X < acrossCblock4.X + 256f
                     && p.Transform.Origin.Z >= acrossCblock4.Y && p.Transform.Origin.Z < acrossCblock4.Y + 512f);
-                ctx.Check(across > 0, $"the cblock2 tiles over cblock4's set, which stands across their street, are floored and dressed ({across} instances)");
-                List<MultiMeshInstance3D> CellsOf(Node root)
+                ctx.Check(across > 0, $"the cblock2 tiles over cblock4's set, which stands across their street, are floored and dressed ({across} instances)"); List<MultiMeshInstance3D> CellsOf(Node root)
                 {
                     var found = new List<MultiMeshInstance3D>();
                     Walk(root, n =>
