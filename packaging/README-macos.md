@@ -23,7 +23,7 @@ To check the file you downloaded, open Terminal in the folder holding it and run
 the name replaced by the archive you actually have:
 
 ```
-shasum -a 256 CSVM-v0.7.1-macos.zip
+shasum -a 256 CSVM-v0.8.0-macos.zip
 ```
 
 The printed hash must match the one on the release page. If it does not, delete the file and
