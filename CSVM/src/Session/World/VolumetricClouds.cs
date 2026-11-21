@@ -23,8 +23,10 @@ internal sealed partial class VolumetricClouds : Node3D
     // over the same floor, so the heads have room to tower.
     private const float LayerDepthGain = 3f;
     private const float LayerMinDepthM = 900f;
-    private const float DeckCover = 0.92f;
-    // The share of a deck torn open and the tears' size.
+    // A deck mission's preset over its look: the deck's cover and the share of it torn open. A deck
+    // reads as a near-solid overcast with a few tall heads over it, and the sun falls through its rifts.
+    private const string DeckLook = ";deck_cover=0.92;deck_gaps=0.35";
+    // The share torn open as the ground's global holds it with no deck, and the tears' size.
     private const float DeckGaps = 0.35f;
     private const float GapM = 3200f;
     // The deck's depth over the layer floor, the shader's deck_depth_m.
@@ -1212,15 +1214,10 @@ internal sealed partial class VolumetricClouds : Node3D
         var material = new ShaderMaterial { Shader = new Shader { Code = code } };
         material.SetShaderParameter("layer_bottom", bottom);
         material.SetShaderParameter("layer_top", top);
-        // A deck chapter reads as a near-solid overcast with a few tall heads over it, formed only
-        // where the pattern is strong. One without a deck draws fuller heads alone.
-        material.SetShaderParameter("deck_cover", _hasDeck ? DeckCover : 0f);
         material.SetShaderParameter("cover_bias", CoverBias);
         material.SetShaderParameter("taper", Tune.HeadTaper);
         material.SetShaderParameter("heads_gain", BaseHeadsGain);
-        // A deck tears open in rifts and the sun falls through them in shafts. The shafts are strong
-        // where the mission authors rain and faint in a dry haze.
-        material.SetShaderParameter("deck_gaps", _hasDeck ? DeckGaps : 0f);
+        // The shafts are strong where the mission authors rain and faint in a dry haze.
         material.SetShaderParameter("gap_m", GapM);
         material.SetShaderParameter("shaft_gain", ShaftGain);
         ApplyLook(material);
@@ -1234,7 +1231,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _lookValues.Clear();
         material.SetShaderParameter("shape_tex", CloudNoise.Shape);
         material.SetShaderParameter("detail_tex", CloudNoise.Detail);
-        string preset = Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset;
+        string preset = (Storm ? StormPreset : _hasDeck ? DeckPreset : ClearPreset) + (_hasDeck ? DeckLook : string.Empty);
         ApplySet(preset, material);
         _presetValues.Clear();
         foreach (var kv in _lookValues)
@@ -1250,6 +1247,9 @@ internal sealed partial class VolumetricClouds : Node3D
             _savedValues[kv.Key] = kv.Value;
         _savedTop = _top;
         ApplySet(LabSetText, material);
+        // A chapter's saved deck is its deck missions'. One with no deck authored draws none.
+        if (!_hasDeck)
+            ApplySet("deck_cover=0;deck_gaps=0", material);
     }
 
     // Writes "name=v;name=a,b,c" onto `materials`, floats kept for LookOr. The int uniforms take ints.
@@ -1324,7 +1324,7 @@ internal sealed partial class VolumetricClouds : Node3D
         _built = root;
         AddChild(root);
         string layer = _bottom is { } b && _top is { } t ? $"layer {b:0}-{t:0} m" : "no cloud band";
-        Log.Info("world", $"volumetric clouds: {layer}, deck cover {(_hasDeck ? DeckCover : 0f):0.00} gaps {(_hasDeck ? DeckGaps : 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}, bubbles={_hulls.Count}");
+        Log.Info("world", $"volumetric clouds: {layer}, deck cover {LookOr("deck_cover", 0f):0.00} gaps {LookOr("deck_gaps", 0f):0.00}, shafts {ShaftGain:0.0}, {detail}, hidden: deck={(_weather.HideDeck ? "yes" : "no")} field={(_field is { } f && !f.Visible ? "yes" : "no")} sprites={_hidden.Count}, bubbles={_hulls.Count}");
     }
 
     private string BuildSlab(Node3D root)
@@ -1723,7 +1723,7 @@ internal sealed partial class VolumetricClouds : Node3D
             return;
         }
         // The layer the effects drawn after the slab march their transmittance through (csky_pc_veil_at).
-        RenderingServer.GlobalShaderParameterSet(CloudShadow.VeilParam, new Vector4(bottom, top, _hasDeck ? DeckCover : 0f, DeckDepthM));
+        RenderingServer.GlobalShaderParameterSet(CloudShadow.VeilParam, new Vector4(bottom, top, _hasDeck ? LookOr("deck_cover", 0f) : 0f, DeckDepthM));
         // The fog splits at the layer: the held lower zone below it, the upper zone's range above it.
         if (_weather.Mission is { } mission && !_fitted)
         {
@@ -1737,7 +1737,7 @@ internal sealed partial class VolumetricClouds : Node3D
         var sun = _weather.SunDirection;
         var tune = Tune;
         float deckY = bottom + DeckDepthM * 0.4f;
-        PublishedGround = new Vector4(deckY, _hasDeck ? tune.DeckSunTaken : 0f, DeckGaps, GapM);
+        PublishedGround = new Vector4(deckY, _hasDeck ? tune.DeckSunTaken : 0f, _hasDeck ? LookOr("deck_gaps", DeckGaps) : DeckGaps, GapM);
         RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundParam, PublishedGround);
         RenderingServer.GlobalShaderParameterSet(CloudShadow.GroundSunParam,
             new Vector4(sun.X, sun.Y, sun.Z, bottom + (top - bottom) * 0.3f));
