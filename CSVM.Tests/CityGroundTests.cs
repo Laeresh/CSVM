@@ -115,6 +115,63 @@ public sealed class CityGroundTests
         Assert.False(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity.Rotated(Vector3.Up, Mathf.Pi / 2f), Vector3.Zero), 1));
     }
 
+    /// <summary>A hand-built tile is a flagged cblock polygon on a node with a mesh below it on the nearest LOD. A bare
+    /// flagged tile, one whose only building is a far LOD, a clear tile with a building and a flagged road are none.
+    /// One over a stamping layer keeps its paint.</summary>
+    [Fact]
+    public void AHandBuiltTileIsFlaggedCityGroundCarryingItsOwnBuildings()
+    {
+        var gamez = new GameZ();
+        var world = new GameZNode { Kind = "World", Name = "world1" };
+        gamez.Nodes.Add(world);
+        gamez.Materials.Add(new GameZMaterial { TextureName = "cblock1.tif" });
+        gamez.Materials.Add(new GameZMaterial { TextureName = "road.tif" });
+        var building = new GameZMesh();
+        building.Vertices.Add(Vector3.Zero);
+        gamez.Meshes.Add(building);
+
+        // A tile at x0 on a node of its own, with a building under a LOD whose near edge is lodMin, or none.
+        (GameZNode, GameZPolygon) Tile(float x0, int material, bool noClutter, float? lodMin)
+        {
+            var mesh = new GameZMesh();
+            var poly = Quad(mesh, material, x0, 5f, 256f, noClutter, Vector2.Zero);
+            gamez.Meshes.Add(mesh);
+            var node = new GameZNode { Kind = "Object3d", Name = $"tile{x0}", MeshIndex = gamez.Meshes.Count - 1, Index = gamez.Nodes.Count };
+            world.Children.Add(gamez.Nodes.Count);
+            gamez.Nodes.Add(node);
+            if (lodMin is not { } min)
+                return (node, poly);
+            node.Children.Add(gamez.Nodes.Count);
+            var lod = new GameZNode { Kind = "Lod", Name = "l3", LodRangeMin = min, Index = gamez.Nodes.Count };
+            gamez.Nodes.Add(lod);
+            lod.Children.Add(gamez.Nodes.Count);
+            gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "g55", MeshIndex = 0, Index = gamez.Nodes.Count });
+            return (node, poly);
+        }
+
+        Tile(0f, 0, noClutter: false, lodMin: null);                 // the clear ground the stamps stand on
+        var overStamps = Tile(0f, 0, noClutter: true, lodMin: 0f);   // the hand-built tile over it
+        var bare = Tile(512f, 0, noClutter: true, lodMin: null);
+        Tile(1024f, 0, noClutter: true, lodMin: 500f);
+        Tile(1536f, 0, noClutter: false, lodMin: 0f);
+        Tile(2048f, 1, noClutter: true, lodMin: 0f);
+        var alone = Tile(2560f, 0, noClutter: true, lodMin: 0f);     // hand-built with nothing beneath
+
+        var tiles = CityGround.HandBuilt(gamez);
+        Assert.Equal(12, tiles.Count);
+        Assert.True(CityGround.OnHandBuilt(tiles, new Vector3(100f, 5f, 200f)));
+        foreach (float x in new[] { 300f, 600f, 1100f, 1600f, 2100f })
+            Assert.False(CityGround.OnHandBuilt(tiles, new Vector3(x, 5f, 100f)));
+
+        // Over a stamping layer the tile keeps its paint; with nothing beneath it floors bare, as any flagged tile.
+        var found = CityGround.Resolve(gamez, CityGround.Layout.Parse(LayoutJson), out var census);
+        Assert.Null(found[overStamps].Set);
+        Assert.Equal(("cblock1", "none"), found[bare]);
+        Assert.Equal(("cblock1", "none"), found[alone]);
+        Assert.Equal(new[] { overStamps }, census.HandBuilt);
+        Assert.Equal(0, census.OtherFrame);
+    }
+
     /// <summary>The shipped layout parses: cblock7's two streets and its square cell, and no floor for a base paint.</summary>
     [Fact]
     public void TheShippedLayoutParses()

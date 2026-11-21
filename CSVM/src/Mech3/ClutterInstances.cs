@@ -285,7 +285,7 @@ public sealed class ClutterInstances
             if (cells != null && !ReferenceEquals(cells, _drawn))
                 cells.Release();
             cells = box
-                ? Layout.Cut(CityProto, new Stamps(proto.Placements, null, _city!.BoxMaterial), cellM, nodes ? fadeScaleSq : null)
+                ? Layout.Cut(CityProto, new Stamps(proto.Placements, null, _city!.BoxMaterial), cellM, nodes ? fadeScaleSq : null, hidden: _city.Hidden)
                 : Layout.Cut(proto, _rich ? _richVariant! : proto.Original, cellM, nodes ? fadeScaleSq : null);
             Own(cells);
         }
@@ -337,7 +337,7 @@ public sealed class ClutterInstances
             Layers = VegetationModels.Layer,
         };
         _nearCells ??= Layout.Cut(_nearProto, (city ? _proto.Original : _richVariant!) with { Material = _near.Material },
-            city ? CityModels.CellM : VegetationModels.CellM, near: _near);
+            city ? CityModels.CellM : VegetationModels.CellM, near: _near, hidden: _city?.Hidden);
         _nearCells.RangeTo(VegetationModels.Band.Y);
         _nearCells.CatchUp(_moved, AuthoredList);
         if (_nearCells.Node == null)
@@ -385,6 +385,9 @@ public sealed class ClutterInstances
         // Each mesh's placements by slot; null for the whole layout, whose slot is the placement.
         public int[][]? Members { get; }
 
+        // The city's stamps it never draws (City.Hidden), whatever transform they are given; null for none.
+        public IReadOnlyList<bool>? Hidden { get; init; }
+
         // The cell edge the layout was cut at, 0 for the whole one.
         public float CellM { get; }
 
@@ -411,7 +414,8 @@ public sealed class ClutterInstances
         // ⚠ Keep a load's cut making each node beside its buffer, before the whole node is freed.
         // Making the buffers first moves c1-rocket-hit-enhanced, though every float is the same.
         // A near model with variants is keyed by cell and variant, each cell drawing its own variant's mesh.
-        public static Layout Cut(Prototype proto, Stamps variant, float cellM, float? nodesAt = null, Near? near = null)
+        public static Layout Cut(Prototype proto, Stamps variant, float cellM, float? nodesAt = null, Near? near = null,
+            IReadOnlyList<bool>? hidden = null)
         {
             var placements = variant.Placements;
             var fades = proto.Fades;
@@ -454,7 +458,7 @@ public sealed class ClutterInstances
                 {
                     int i = list[s];
                     var placed = placements[i];
-                    local.Add(new Transform3D(placed.Basis, placed.Origin - offset));
+                    local.Add(new Transform3D(DrawnBasis(placed.Basis, hidden, i), placed.Origin - offset));
                     cellOf[i] = c;
                     slotOf[i] = s;
                 }
@@ -474,6 +478,7 @@ public sealed class ClutterInstances
             var layout = new Layout(meshes, variant.Material, offsets, cellOf, slotOf, members, cellM, far2, radius, neverFades)
             {
                 Node = group,
+                Hidden = hidden,
             };
             if (nodesAt is { } scale)
                 layout.Range(scale);
@@ -566,9 +571,13 @@ public sealed class ClutterInstances
         public void Write(int i, Transform3D placed)
         {
             int c = CellOf?[i] ?? 0;
-            Meshes[c].SetInstanceTransform(SlotOf?[i] ?? i, new Transform3D(placed.Basis, placed.Origin - Offsets[c]));
+            Meshes[c].SetInstanceTransform(SlotOf?[i] ?? i, new Transform3D(DrawnBasis(placed.Basis, Hidden, i), placed.Origin - Offsets[c]));
             Shown[i] = placed;
         }
+
+        // A stamp the layout never draws collapses as a hidden one does; its transform is still kept as given.
+        private static Basis DrawnBasis(Basis basis, IReadOnlyList<bool>? hidden, int i) =>
+            hidden != null && hidden[i] ? basis.Scaled(Vector3.Zero) : basis;
 
         // One cell's MultiMesh. A recut fills it with one buffer upload. A load fills it one instance
         // at a time, whose first frame carries a different motion history under TAA.
@@ -674,7 +683,12 @@ public sealed class ClutterInstances
     /// <summary>A building kind's look-alike under the city (<see cref="CityModels"/>). The far box draws over the
     /// kind's own cells in place of its mesh, the near model over the same stamps. A further mesh of the building
     /// takes one with neither, and hides while the city is drawn.</summary>
-    public sealed record City(Mesh? Box, Material? BoxMaterial, Near? Near);
+    public sealed record City(Mesh? Box, Material? BoxMaterial, Near? Near)
+    {
+        /// <summary>Gets, index-aligned with the stamps, those the city never draws: they stand on a hand-built tile
+        /// (<see cref="CityGround.HandBuilt"/>). Their colliders stay. Null for none.</summary>
+        public IReadOnlyList<bool>? Hidden { get; init; }
+    }
 
     // Everything the builder's whole node carried, and the authored stamps it held.
     private sealed record Prototype(Node3D? Root, StringName Name, Mesh Mesh, Material? Material,

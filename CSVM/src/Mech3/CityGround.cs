@@ -238,7 +238,7 @@ public sealed class CityGround
         var ground = new CityGround(floors, uv2, resolved, keys, missing);
         Follow();
         Log.Info("world",
-            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; placed polygons floored={ground.Floored} turned={census.Turned.Count} other_frame={census.OtherFrame} two_frames={census.TwoFrames} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames}; placements built apart={keys.Values.Count(k => k > 1)}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
+            $"city ground: {variants} floor variant(s) for {string.Join(", ", floors.Keys)} from {dir}; placed polygons floored={ground.Floored} turned={census.Turned.Count} other_frame={census.OtherFrame} two_frames={census.TwoFrames} hand_built={census.HandBuilt.Count} kept={resolved.Count - ground.Floored - census.OtherFrame - census.TwoFrames - census.HandBuilt.Count}; placements built apart={keys.Values.Count(k => k > 1)}; paint kept for {(missing.Count == 0 ? "none" : string.Join(", ", missing))}; {clock.Elapsed.TotalMilliseconds:0} ms");
         return ground;
     }
 
@@ -274,8 +274,8 @@ public sealed class CityGround
     /// <summary>Each placement of a polygon of a paint in <paramref name="layout"/> reached from <paramref name="worldName"/>,
     /// with the set standing on it. A clear one stands its own, a flagged one the clear layer beneath that takes stamps,
     /// else <c>none</c>. The set is null off the frame <see cref="InFrame"/> tests, or where one node reached twice
-    /// disagrees. A flagged polygon on a street cross may lie turned, the cross turned into itself and
-    /// its set in the world's frame. Pure, so a hand-built world pins it.</summary>
+    /// disagrees, and on a hand-built tile over a stamping layer. A flagged polygon on a street cross may lie turned,
+    /// the cross turned into itself and its set in the world's frame. Pure, so a hand-built world pins it.</summary>
     internal static Dictionary<(GameZNode Node, GameZPolygon Poly), (string Paint, string? Set)> Resolve(GameZ gamez, Layout layout,
         out Census census, string worldName = "world1")
     {
@@ -315,9 +315,16 @@ public sealed class CityGround
                 string? set = !square && !turned ? null
                     : !poly.NoClutter ? paint
                     : BaseUnder(Centre(mesh, poly, xf), bases) ?? "none";
-                if (set == null)
-                    counted.OtherFrame++;
                 var at = (node, poly);
+                // A hand-built tile over a stamping layer keeps its paint. Its floor would be laid out for the stamps the
+                // city hides there (HandBuilt), not for the tile's own buildings.
+                if (poly.NoClutter && set != null && set != "none" && node.Children.Any(c => CarriesMesh(gamez, c)))
+                {
+                    counted.HandBuilt.Add(at);
+                    set = null;
+                }
+                else if (set == null)
+                    counted.OtherFrame++;
                 if (found.TryGetValue(at, out var had) && (had.Set != set || counted.Turned.Contains(at) != turned))
                 {
                     counted.TwoFrames++;
@@ -332,6 +339,49 @@ public sealed class CityGround
         });
         census = counted;
         return found;
+    }
+
+    /// <summary>The hand-built city tiles reached from <paramref name="worldName"/>, as world triangles of three corners.
+    /// A tile is a flagged <c>cblock</c> polygon on a node with a mesh below it, its modelled buildings. A clear layer beneath still takes stamps (docs/org/clutter.md), which then stand inside those
+    /// buildings (#363). Pure, so a hand-built world pins it.</summary>
+    internal static List<Vector3> HandBuilt(GameZ gamez, string worldName = "world1")
+    {
+        var found = new List<Vector3>();
+        VegetationGround.WalkWorld(gamez, worldName, (node, mesh, xf) =>
+        {
+            if (!node.Children.Any(c => CarriesMesh(gamez, c)))
+                return;
+            foreach (var poly in mesh.Polygons)
+            {
+                if (!poly.NoClutter || poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                    || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex
+                    || !Stem(tex).StartsWith("cblock", StringComparison.Ordinal))
+                    continue;
+                for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+                {
+                    var (a, b, c) = VegetationGround.Positions(poly, i);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[a]]);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[b]]);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[c]]);
+                }
+            }
+        });
+        return found;
+    }
+
+    /// <summary>Whether a point's XZ falls on any of <paramref name="tiles"/> (<see cref="HandBuilt"/>).</summary>
+    internal static bool OnHandBuilt(IReadOnlyList<Vector3> tiles, Vector3 at)
+    {
+        for (int i = 0; i + 2 < tiles.Count; i += 3)
+        {
+            Vector3 a = tiles[i], b = tiles[i + 1], c = tiles[i + 2];
+            if (at.X < MathF.Min(a.X, MathF.Min(b.X, c.X)) || at.X > MathF.Max(a.X, MathF.Max(b.X, c.X))
+                || at.Z < MathF.Min(a.Z, MathF.Min(b.Z, c.Z)) || at.Z > MathF.Max(a.Z, MathF.Max(b.Z, c.Z)))
+                continue;
+            if (VegetationGround.HeightIn(a, b, c, at) != null)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Whether every corner of <paramref name="poly"/> placed by <paramref name="xf"/> lies on the U+X V+Z frame
@@ -447,6 +497,17 @@ public sealed class CityGround
         return best;
     }
 
+    // Whether the node, or a node under it, draws a mesh on the clutter's walk (the nearest LOD only).
+    private static bool CarriesMesh(GameZ gamez, int index)
+    {
+        if (index < 0 || index >= gamez.Nodes.Count)
+            return false;
+        var node = gamez.Nodes[index];
+        if (WorldBuilder.SkipWorldNode(node) || (node.Kind == "Lod" && node.LodRangeMin != 0f))
+            return false;
+        return (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count) || node.Children.Any(c => CarriesMesh(gamez, c));
+    }
+
     private static string? BaseUnder(Vector3 at, List<(Vector3 A, Vector3 B, Vector3 C, string Texture)> bases)
     {
         foreach (var (a, b, c, tex) in bases)
@@ -497,10 +558,11 @@ public sealed class CityGround
     internal readonly record struct Family(Vector2 Axis, float Centre, float Half, float Origin);
 
     /// <summary>The placed polygons <see cref="Resolve"/> kept on the paint: laid in another frame, or reached twice and
-    /// disagreeing. Then those it floors turned, which read the floor at world XZ.</summary>
+    /// disagreeing, or a hand-built tile over a stamping layer. Then those it floors turned, which read the floor at world XZ.</summary>
     internal sealed class Census
     {
         public readonly HashSet<(GameZNode, GameZPolygon)> Turned = new();
+        public readonly HashSet<(GameZNode, GameZPolygon)> HandBuilt = new();
         public int OtherFrame;
         public int TwoFrames;
     }
