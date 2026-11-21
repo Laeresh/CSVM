@@ -1337,7 +1337,8 @@ internal static class GraphicsSwitchSuites
         + "and Faithful draw the original city and back to Near draws the same; the map edge copies draw the box and hide the "
         + "further meshes, and the original after a move to Off; a hull folder with no facade files draws the flat grade, and "
         + "the shipped hulls carry the facade atlas, the window ids and the facade's poster counts; with the shipped hulls "
-        + "every solid building and dressing kind draws its hull and no original mesh, and under Faithful or Off none does")]
+        + "every solid building and dressing kind draws its hull and no original mesh, and under Faithful or Off none does; the "
+        + "stamps standing on a hand-built tile draw collapsed in the box cells and whole under Faithful (#363)")]
     internal static void CityBuildings(TestContext ctx)
     {
         RequireData(ctx, "C5");
@@ -1522,8 +1523,15 @@ internal static class GraphicsSwitchSuites
                 bool Whole(Mech3.ClutterBuilder.KindExport k) => Visible(cityRoot, k.Mesh) > 0 && (k.City?.Box is not { } box || Visible(cityRoot, box) == 0);
                 string Undressed() => string.Join(", ", solid.Where(k => !Dressed(k)).Select(k => HdModels.NodeKey(k.Model)).Distinct());
                 ctx.Check(solid.Count > 0 && solid.All(Dressed), $"every solid kind of the shipped city draws its hull, none its original ({solid.Count} kinds; undressed: {Undressed()})");
+                var onTile = solid.Where(k => k.City?.Hidden != null)
+                    .SelectMany(k => Enumerable.Range(0, k.Placements.Count).Where(i => k.City!.Hidden![i]).Select(i => Key(k.Placements[i])))
+                    .ToHashSet();
+                var boxCollapsed = DrawnStamps(cityRoot, solid.Select(k => k.City?.Box).OfType<Mesh>(), collapsed: true); ctx.Check(onTile.Count > 0 && onTile.IsSubsetOf(boxCollapsed),
+                    $"the stamps on a hand-built tile draw collapsed in the box cells ({onTile.Count} origins, {onTile.Count(boxCollapsed.Contains)} collapsed)");
                 Switch(full, enhanced: false);
                 ctx.Check(solid.All(Whole), $"under Faithful every solid kind draws its original mesh and no hull");
+                ctx.Check(onTile.IsSubsetOf(DrawnStamps(cityRoot, solid.Select(k => k.Mesh), collapsed: false)),
+                    $"and the stamps on a hand-built tile draw whole on it");
                 Switch(full, enhanced: true);
                 Models(full, Utils.VegetationModelsSetting.Off);
                 ctx.Check(solid.All(Whole), $"with the 3D models off every solid kind draws its original mesh and no hull");
@@ -4356,6 +4364,22 @@ internal static class GraphicsSwitchSuites
     }
 
     private static int Visible(Node root, Mesh mesh) => CityCells(root, mesh).Count(m => m.IsVisibleInTree());
+
+    // The stamps the cells drawing any of the meshes hold collapsed (a zero basis), or whole, by Key in world space.
+    private static HashSet<string> DrawnStamps(Node root, IEnumerable<Mesh> meshes, bool collapsed)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var cell in meshes.Distinct().SelectMany(m => CityCells(root, m)))
+        {
+            for (int i = 0; i < cell.Multimesh.InstanceCount; i++)
+            {
+                var xf = cell.Multimesh.GetInstanceTransform(i);
+                if ((xf.Basis.Determinant() == 0f) == collapsed)
+                    found.Add(Key(new Transform3D(xf.Basis, cell.Position + xf.Origin)));
+            }
+        }
+        return found;
+    }
 
     // Every stamp one cell draws, by Key in world space.
     private static IEnumerable<string> CellStamps(MultiMeshInstance3D cell) => Enumerable.Range(0, cell.Multimesh.InstanceCount)

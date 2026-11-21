@@ -309,6 +309,49 @@ public sealed class CityGround
         return found;
     }
 
+    /// <summary>The hand-built city tiles reached from <paramref name="worldName"/>, as world triangles of three corners.
+    /// A tile is a flagged <c>cblock</c> polygon on a node with a mesh below it, its modelled buildings. A clear layer beneath still takes stamps (docs/org/clutter.md), which then stand inside those
+    /// buildings (#363). Pure, so a hand-built world pins it.</summary>
+    internal static List<Vector3> HandBuilt(GameZ gamez, string worldName = "world1")
+    {
+        var found = new List<Vector3>();
+        VegetationGround.WalkWorld(gamez, worldName, (node, mesh, xf) =>
+        {
+            if (!node.Children.Any(c => CarriesMesh(gamez, c)))
+                return;
+            foreach (var poly in mesh.Polygons)
+            {
+                if (!poly.NoClutter || poly.MaterialIndex < 0 || poly.MaterialIndex >= gamez.Materials.Count
+                    || gamez.Materials[poly.MaterialIndex].TextureName is not { } tex
+                    || !Stem(tex).StartsWith("cblock", StringComparison.Ordinal))
+                    continue;
+                for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+                {
+                    var (a, b, c) = VegetationGround.Positions(poly, i);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[a]]);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[b]]);
+                    found.Add(xf * mesh.Vertices[poly.VertexIndices[c]]);
+                }
+            }
+        });
+        return found;
+    }
+
+    /// <summary>Whether a point's XZ falls on any of <paramref name="tiles"/> (<see cref="HandBuilt"/>).</summary>
+    internal static bool OnHandBuilt(IReadOnlyList<Vector3> tiles, Vector3 at)
+    {
+        for (int i = 0; i + 2 < tiles.Count; i += 3)
+        {
+            Vector3 a = tiles[i], b = tiles[i + 1], c = tiles[i + 2];
+            if (at.X < MathF.Min(a.X, MathF.Min(b.X, c.X)) || at.X > MathF.Max(a.X, MathF.Max(b.X, c.X))
+                || at.Z < MathF.Min(a.Z, MathF.Min(b.Z, c.Z)) || at.Z > MathF.Max(a.Z, MathF.Max(b.Z, c.Z)))
+                continue;
+            if (VegetationGround.HeightIn(a, b, c, at) != null)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>Whether every corner of <paramref name="poly"/> placed by <paramref name="xf"/> lies on the U+X V+Z frame
     /// of one 256 m repeat. Its whole UVs then fall on world multiples of 256 m: u = x / 256 + i, v = z / 256 + j.</summary>
     internal static bool InFrame(GameZMesh mesh, GameZPolygon poly, Transform3D xf)
@@ -388,6 +431,17 @@ public sealed class CityGround
             }
         }
         return best;
+    }
+
+    // Whether the node, or a node under it, draws a mesh on the clutter's walk (the nearest LOD only).
+    private static bool CarriesMesh(GameZ gamez, int index)
+    {
+        if (index < 0 || index >= gamez.Nodes.Count)
+            return false;
+        var node = gamez.Nodes[index];
+        if (WorldBuilder.SkipWorldNode(node) || (node.Kind == "Lod" && node.LodRangeMin != 0f))
+            return false;
+        return (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count) || node.Children.Any(c => CarriesMesh(gamez, c));
     }
 
     private static string? BaseUnder(Vector3 at, List<(Vector3 A, Vector3 B, Vector3 C, string Texture)> bases)
