@@ -143,6 +143,9 @@ $ModZip = $modRoots | ForEach-Object { Join-Path $_ "extracted\C1\gamez.zip" } |
 # name with a * is a pattern that must match at least one file.
 $manifestText = [IO.File]::ReadAllText((Join-Path $RepoRoot "packaging\MANIFEST.md"), $Utf8)
 $linuxPart = $manifestText.Substring($manifestText.IndexOf("## Linux tarball"))
+# The Linux table ends at the next section (the macOS zip's), whose names the tarball never holds.
+$nextSection = $linuxPart.IndexOf("`n## ")
+if ($nextSection -gt 0) { $linuxPart = $linuxPart.Substring(0, $nextSection) }
 $Expected = @()
 foreach ($row in ($linuxPart -split "`n" | Where-Object { $_ -match '^\|' })) {
     $first = ($row -split '\|')[1]

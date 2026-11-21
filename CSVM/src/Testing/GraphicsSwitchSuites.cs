@@ -4704,8 +4704,8 @@ internal static class GraphicsSwitchSuites
     // Able to fail: the tunes' Save alone leaves a look edit out of the file.
     private static void CloudLabSavesBoth(TestContext ctx)
     {
-        string shipped = ProjectSettings.GlobalizePath("res://data/cloud_shadows.json");
-        string text = System.IO.File.ReadAllText(shipped);
+        // Read through res:// as the game does: an export keeps the file in the pck, not on disk.
+        string text = FileAccess.GetFileAsString(CloudShadowChapters.DefaultPath);
         string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"csvm-cloud-lab-{System.Environment.ProcessId}");
         string copy = System.IO.Path.Combine(dir, "cloud_shadows.json");
         System.IO.Directory.CreateDirectory(dir);
@@ -4718,7 +4718,7 @@ internal static class GraphicsSwitchSuites
             var back = CloudShadowChapters.Parse(System.IO.File.ReadAllText(copy));
             bool look = back.Look(CloudsChapter).TryGetValue("deck_cover", out float cover) && Mathf.IsEqualApprox(cover, 0.5f);
             bool kept = back.Look(CloudsChapter).Count == CloudShadowChapters.Parse(text).Look(CloudsChapter).Count + 1;
-            ctx.Check(written == copy && look && kept && System.IO.File.ReadAllText(shipped) == text,
+            ctx.Check(written == copy && look && kept && FileAccess.GetFileAsString(CloudShadowChapters.DefaultPath) == text,
                 $"the cloud lab's Save writes a look edit beside the tunes into the temp copy and leaves the shipped file alone (written {written ?? "nothing"}, deck_cover saved {look}, the look's other options kept {kept})");
         }
         finally
