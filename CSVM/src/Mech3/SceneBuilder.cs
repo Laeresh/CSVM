@@ -586,13 +586,11 @@ void fragment() {
     // Dropping one hands a cached material back at the wrong setting.
     // Non-scrolling surfaces all key on (0,0), so the common path's cache behaviour is unchanged.
     private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade, SurfaceTint Tint, bool Floor), Material> _materialCache = new();
-    // Keyed by (model index, force-double-sided, force-lit, clutter-fade): every override is baked
-    // into the built surfaces (sidedness into the geometry groups, `lit` and the fade into which
-    // material/shader a surface gets), so a forced build must not be handed back for the same
-    // model referenced normally. No model in this install is referenced both ways (the deck's 144
-    // tiles have exclusive model indices), so this is defence. `ForceLit` is the deck-underside
-    // exception (`WorldBuilder.Add`); `ClutterFade` is ClutterBuilder's 3D-decoration build.
-    private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade, SurfaceTint Tint), ArrayMesh?> _meshCache = new();
+    // Every key part is baked into the built surfaces, so a forced build is never handed back for
+    // the model referenced normally. The lit force is the deck underside (`WorldBuilder.Add`), the
+    // fade ClutterBuilder's 3D decoration. The floor is the placement's (CityGround.FloorKey), so
+    // placements of one mesh may floor apart.
+    private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade, SurfaceTint Tint, int Floor), ArrayMesh?> _meshCache = new();
     // A model pack replacement as this builder draws it: the shared import's surfaces under this
     // builder's materials. The model index is in the key because its render flags reach the materials.
     private readonly Dictionary<(ArrayMesh Import, int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh> _replacementCache = new();
@@ -1572,7 +1570,7 @@ void light() {{
             // Only the drawn mesh changes. The node, its metas, bias, layer, shadow and colliders
             // stay the original's, and the colliders keep reading the gamez model.
             var replacement = Replacement(node, node.MeshIndex, forceDoubleSided, forceLit);
-            var mesh = replacement ?? GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
+            var mesh = replacement ?? GetMesh(node.MeshIndex, forceDoubleSided, forceLit, node: node);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -1624,7 +1622,7 @@ void light() {{
                 if (replacement != null)
                 {
                     ReplacedMeshCount++;
-                    if (GetMesh(node.MeshIndex, forceDoubleSided, forceLit) is { } gamezMesh)
+                    if (GetMesh(node.MeshIndex, forceDoubleSided, forceLit, node: node) is { } gamezMesh)
                         mi.SetMeta(GamezMeshMeta, gamezMesh);
                 }
                 if (collidable)
@@ -2057,17 +2055,19 @@ void light() {{
     }
 
     private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false,
-        bool clutterFade = false)
+        bool clutterFade = false, GameZNode? node = null)
     {
-        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit, clutterFade, Tint), out var cached))
+        int floor = Ground?.FloorKey(node) ?? 0;
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit, clutterFade, Tint, floor), out var cached))
             return cached;
-        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit, clutterFade);
-        _meshCache[(meshIndex, forceDoubleSided, forceLit, clutterFade, Tint)] = mesh;
+        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit, clutterFade, floor == 0 ? null : node);
+        _meshCache[(meshIndex, forceDoubleSided, forceLit, clutterFade, Tint, floor)] = mesh;
         return mesh;
     }
 
+    // `node` is the placement whose city floor the paint's UV2 carries, null for none.
     private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided, bool forceLit,
-        bool clutterFade = false)
+        bool clutterFade = false, GameZNode? node = null)
     {
         if (mesh.Polygons.Count == 0)
             return null;
@@ -2202,7 +2202,7 @@ void light() {{
                 && materialIndex >= 0 && materialIndex < _gamez.Materials.Count && Ground.Paints(_gamez.Materials[materialIndex].TextureName);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
-                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag, floor ? Ground!.Uv2Of(poly) : null);
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag, floor ? Ground!.Uv2Of(node, poly) : null);
             // Wrapping is what produces the hairline seams on a surface mapped once (see ClampFor).
             var (clampUv, edgeClamp) = ClampFor(UvAxesWithinUnitSquare(polys, pass), scroll);
 

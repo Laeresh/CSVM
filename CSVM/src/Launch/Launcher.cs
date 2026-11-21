@@ -235,10 +235,10 @@ public partial class Launcher : Node3D
         }
         else
         {
-            // Exported build: res:// lives inside the pck, so the root is the exe's own folder. A
-            // CrimsonSkiesGame copy sits beside the exe, and logs/ and .scratch/ output land there too.
+            // Exported build: res:// lives inside the pck, so the root is the exe's own folder (on
+            // macOS the app's). A CrimsonSkiesGame copy, logs/ and .scratch/ output land there.
             _exported = true;
-            repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
+            repoRoot = Config.ExportRoot(OS.GetExecutablePath());
         }
 
         // Everything the command line settles is parsed and resolved in one place; see

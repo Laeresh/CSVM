@@ -19,7 +19,7 @@ public sealed class CityGroundTests
             "cblock7": { "streets": [ { "family": "u", "centre": 0.5, "half": 0.07 }, { "family": "v", "centre": 0.494, "half": 0.068 } ],
                          "cell": { "family": ["u", "v"], "origin": [0.5, 0.5] },
                          "sets": [ { "set": "cblock7", "on_street": 0.003 }, { "set": "cblock4", "on_street": 0.001 }, { "set": "none", "on_street": 0.0 } ] },
-            "cblock1": { "streets": [ { "family": "u", "centre": 0.5, "half": 0.064 } ],
+            "cblock1": { "streets": [ { "family": "u", "centre": 0.502, "half": 0.064 }, { "family": "v", "centre": 0.498, "half": 0.064 } ],
                          "cell": { "family": ["u", "v"], "origin": [0.5, 0.5] },
                          "sets": [ { "set": "cblock1", "on_street": 0.0 }, { "set": "cblock2", "on_street": 0.378 } ] },
             "cblock3": { "streets": [ { "family": "u-v", "centre": 0.5, "half": 0.064 } ], "cell": { "family": ["u-v"], "origin": [0.5] },
@@ -34,27 +34,70 @@ public sealed class CityGroundTests
     {
         var gamez = World(out var polys);
         var found = CityGround.Resolve(gamez, CityGround.Layout.Parse(LayoutJson), out var census);
-        Assert.Equal(("cblock7", "cblock7"), found[polys["clear"]]);
-        Assert.Equal(("cblock7", "cblock4"), found[polys["over base"]]);
-        Assert.Equal(("cblock7", "none"), found[polys["bare"]]);
-        Assert.Equal(("cblock7", "none"), found[polys["over flagged"]]);
-        Assert.Equal(("cblock1", "cblock2"), found[polys["over clear cblock2"]]);
-        Assert.Equal(("cblock7", (string?)null), found[polys["45 m"]]);
-        Assert.False(found.ContainsKey(polys["base"]));
-        Assert.Equal(1, census.OtherFrame);
+        var ground = gamez.Nodes[1];
+        Assert.Equal(("cblock7", "cblock7"), found[(ground, polys["clear"])]);
+        Assert.Equal(("cblock7", "cblock4"), found[(ground, polys["over base"])]);
+        Assert.Equal(("cblock7", "none"), found[(ground, polys["bare"])]);
+        Assert.Equal(("cblock7", "none"), found[(ground, polys["over flagged"])]);
+        Assert.Equal(("cblock1", "cblock2"), found[(ground, polys["over clear cblock2"])]);
+        Assert.Equal(("cblock7", (string?)null), found[(ground, polys["45 m"])]);
+        Assert.False(found.ContainsKey((ground, polys["base"])));
+        Assert.Equal(3, census.OtherFrame);
         Assert.Equal(0, census.TwoFrames);
     }
 
-    /// <summary>A mesh placed twice, once off the whole-tile grid, keeps the paint at both.</summary>
+    /// <summary>A flagged polygon turned a quarter on a street cross takes the set beneath, or none over bare ground. It
+    /// reads its floor at world XZ. Turned clear ground, or a turned diagonal paint, keeps the paint.</summary>
     [Fact]
-    public void TwoPlacementsThatDisagreeKeepThePaint()
+    public void ATurnedOverlayOnACrossTakesTheSetBeneath()
+    {
+        var gamez = World(out var polys);
+        var found = CityGround.Resolve(gamez, CityGround.Layout.Parse(LayoutJson), out var census);
+        var ground = gamez.Nodes[1];
+        Assert.Equal(("cblock1", "none"), found[(ground, polys["turned bare"])]);
+        Assert.Equal(("cblock1", "cblock2"), found[(ground, polys["turned over clear cblock2"])]);
+        Assert.Equal(new[] { (ground, polys["turned over clear cblock2"]), (ground, polys["turned bare"]) }.ToHashSet(), census.Turned);
+        Assert.Null(found[(ground, polys["turned clear"])].Set);
+        Assert.Null(found[(ground, polys["turned diagonal"])].Set);
+    }
+
+    /// <summary>Each placement of a mesh takes its own set (#366). A copy off the whole-tile grid keeps the paint. A copy
+    /// turned a quarter, its base turned with it, stands the base's set turned. The first placement keeps its sets.</summary>
+    [Fact]
+    public void EachPlacementOfAMeshTakesItsOwnSet()
     {
         var gamez = World(out var polys);
         gamez.Nodes[0].Children.Add(gamez.Nodes.Count);
-        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "copy", MeshIndex = 0, Index = 2, Local = new Transform3D(Basis.Identity, new Vector3(100f, 0f, 0f)) });
+        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "off grid", MeshIndex = 0, Index = 2, Local = new Transform3D(Basis.Identity, new Vector3(100f, 0f, 0f)) });
+        gamez.Nodes[0].Children.Add(gamez.Nodes.Count);
+        gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "turned", MeshIndex = 0, Index = 3, Local = new Transform3D(Basis.Identity.Rotated(Vector3.Up, Mathf.Pi / 2f), new Vector3(0f, 0f, 8192f)) });
         var found = CityGround.Resolve(gamez, CityGround.Layout.Parse(LayoutJson), out var census);
-        Assert.Null(found[polys["clear"]].Set);
-        Assert.True(census.TwoFrames > 0);
+        var (ground, offGrid, turned) = (gamez.Nodes[1], gamez.Nodes[2], gamez.Nodes[3]);
+        Assert.Equal(("cblock7", "cblock7"), found[(ground, polys["clear"])]);
+        Assert.Null(found[(offGrid, polys["clear"])].Set);
+        Assert.Equal(("cblock7", "cblock4"), found[(ground, polys["over base"])]);
+        Assert.Equal(("cblock7", "cblock4"), found[(turned, polys["over base"])]);
+        Assert.Contains((turned, polys["over base"]), census.Turned);
+        Assert.DoesNotContain((ground, polys["over base"]), census.Turned);
+        Assert.Equal(0, census.TwoFrames);
+    }
+
+    /// <summary>Placements of one mesh with one floor share a key, one with another floor takes the next, and one that
+    /// floors nothing takes none.</summary>
+    [Fact]
+    public void PlacementsShareAKeyOnlyWhereTheirFloorsAgree()
+    {
+        var gamez = World(out var polys);
+        GameZNode Node(int i) => new() { Kind = "Object3d", Name = $"n{i}", MeshIndex = 0, Index = i };
+        var (a, b, c, d) = (Node(10), Node(11), Node(12), Node(13));
+        var uv2 = new Dictionary<(GameZNode, GameZPolygon), Vector2>
+        {
+            [(a, polys["clear"])] = new(0f, 4f), [(b, polys["clear"])] = new(0f, 4f),
+            [(c, polys["clear"])] = new(4f, -3f), [(d, polys["clear"])] = Vector2.Zero,
+        };
+        var keys = CityGround.Keys(gamez, uv2);
+        Assert.Equal((1, 1, 2), (keys[a], keys[b], keys[c]));
+        Assert.False(keys.ContainsKey(d));
     }
 
     /// <summary>The frame test holds for whole UVs on any whole tile and fails a quarter tile off.</summary>
@@ -67,6 +110,9 @@ public sealed class CityGroundTests
         Assert.True(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity, new Vector3(-2048f, 5f, 768f))));
         Assert.False(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity, new Vector3(64f, 0f, 0f))));
         Assert.False(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity.Rotated(Vector3.Up, Mathf.Pi / 2f), Vector3.Zero)));
+        // A quarter turn puts u along -Z and v along +X: the fourth frame.
+        Assert.True(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity.Rotated(Vector3.Up, Mathf.Pi / 2f), Vector3.Zero), 3));
+        Assert.False(CityGround.InFrame(mesh, poly, new Transform3D(Basis.Identity.Rotated(Vector3.Up, Mathf.Pi / 2f), Vector3.Zero), 1));
     }
 
     /// <summary>A hand-built tile is a flagged cblock polygon on a node with a mesh below it on the nearest LOD. A bare
@@ -147,7 +193,7 @@ public sealed class CityGroundTests
         world.Children.Add(1);
         gamez.Nodes.Add(world);
         gamez.Nodes.Add(new GameZNode { Kind = "Object3d", Name = "ground", MeshIndex = 0, Index = 1 });
-        foreach (string t in new[] { "cblock7.tif", "cblock4.tif", "cblock1.tif", "cblock2.tif" })
+        foreach (string t in new[] { "cblock7.tif", "cblock4.tif", "cblock1.tif", "cblock2.tif", "cblock3.tif" })
             gamez.Materials.Add(new GameZMaterial { TextureName = t });
         var mesh = new GameZMesh();
         polys = new Dictionary<string, GameZPolygon>
@@ -161,13 +207,18 @@ public sealed class CityGroundTests
             ["clear cblock2"] = Quad(mesh, 3, 2048f, 0f, 256f, noClutter: false, uvOffset: Vector2.Zero),
             ["over clear cblock2"] = Quad(mesh, 2, 2048f, 0.02f, 256f, noClutter: true, uvOffset: Vector2.Zero),
             ["45 m"] = Quad(mesh, 0, 4096f, 0f, 45f, noClutter: false, uvOffset: Vector2.Zero),
+            ["clear cblock2 b"] = Quad(mesh, 3, 2560f, 0f, 256f, noClutter: false, uvOffset: Vector2.Zero),
+            ["turned over clear cblock2"] = Quad(mesh, 2, 2560f, 0.02f, 256f, noClutter: true, uvOffset: new Vector2(4f, 1f), turned: true),
+            ["turned clear"] = Quad(mesh, 0, 3072f, 0f, 256f, noClutter: false, uvOffset: Vector2.Zero, turned: true),
+            ["turned diagonal"] = Quad(mesh, 4, 3584f, 0f, 256f, noClutter: true, uvOffset: Vector2.Zero, turned: true),
+            ["turned bare"] = Quad(mesh, 2, 5120f, 0f, 256f, noClutter: true, uvOffset: Vector2.Zero, turned: true),
         };
         gamez.Meshes.Add(mesh);
         return gamez;
     }
 
-    // A 256 m square at x0, its UVs one unit per `metresPerUv` from world zero, shifted by uvOffset.
-    private static GameZPolygon Quad(GameZMesh mesh, int material, float x0, float y, float metresPerUv, bool noClutter, Vector2 uvOffset)
+    // A 256 m square at x0, its UVs one unit per `metresPerUv` from world zero, shifted by uvOffset. Turned lays U+Z V-X.
+    private static GameZPolygon Quad(GameZMesh mesh, int material, float x0, float y, float metresPerUv, bool noClutter, Vector2 uvOffset, bool turned = false)
     {
         int first = mesh.Vertices.Count;
         var corners = new[] { new Vector3(x0, y, 0f), new Vector3(x0 + 256f, y, 0f), new Vector3(x0 + 256f, y, 256f), new Vector3(x0, y, 256f) };
@@ -175,7 +226,7 @@ public sealed class CityGroundTests
         foreach (var c in corners)
         {
             mesh.Vertices.Add(c);
-            poly.UvCoords.Add(new Vector2(c.X / metresPerUv, c.Z / metresPerUv) + uvOffset);
+            poly.UvCoords.Add(((turned ? new Vector2(c.Z, -c.X) : new Vector2(c.X, c.Z)) / metresPerUv) + uvOffset);
             poly.VertexIndices.Add(first + poly.VertexIndices.Count);
         }
         mesh.Polygons.Add(poly);
