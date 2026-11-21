@@ -614,6 +614,9 @@ internal static class GraphicsSwitchSuites
                     {
                         ctx.Check(false, $"{CloudsChapter} carries a cloud band to cross");
                     }
+                    // Last while the clouds stand: the move to off that follows puts the shadows' saved tune back.
+                    if (word == VolumetricCloudsSetting.Half)
+                        CloudLabSavesBoth(ctx);
                 }
 
                 pufferOwner.QueueFree();
@@ -4672,6 +4675,36 @@ internal static class GraphicsSwitchSuites
         ctx.Check(killed == 0 && richHidden && originalHidden,
             $"a crater on a dropped {kinds[k].Model} stamp counts nothing ({killed}), flattens it under rich ({richHidden}) and keeps it flattened after a live move to original ({originalHidden})");
         report.AppendLine(CultureInfo.InvariantCulture, $"crater: {kinds[k].Model} stamp {i}, {killed} counted");
+    }
+
+    // Either Save button of the cloud lab writes the tunes and the look, into a temp copy here.
+    // Able to fail: the tunes' Save alone leaves a look edit out of the file.
+    private static void CloudLabSavesBoth(TestContext ctx)
+    {
+        string shipped = ProjectSettings.GlobalizePath("res://data/cloud_shadows.json");
+        string text = System.IO.File.ReadAllText(shipped);
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"csvm-cloud-lab-{System.Environment.ProcessId}");
+        string copy = System.IO.Path.Combine(dir, "cloud_shadows.json");
+        System.IO.Directory.CreateDirectory(dir);
+        System.IO.File.WriteAllText(copy, text);
+        var lab = new UI.Labs.CloudLab(() => CloudShadow.Live, CloudsChapter, copy);
+        try
+        {
+            VolumetricClouds.LabSet("deck_cover", 0.5f);
+            string? written = lab.SaveBoth();
+            var back = CloudShadowChapters.Parse(System.IO.File.ReadAllText(copy));
+            bool look = back.Look(CloudsChapter).TryGetValue("deck_cover", out float cover) && Mathf.IsEqualApprox(cover, 0.5f);
+            bool kept = back.Look(CloudsChapter).Count == CloudShadowChapters.Parse(text).Look(CloudsChapter).Count + 1;
+            ctx.Check(written == copy && look && kept && System.IO.File.ReadAllText(shipped) == text,
+                $"the cloud lab's Save writes a look edit beside the tunes into the temp copy and leaves the shipped file alone (written {written ?? "nothing"}, deck_cover saved {look}, the look's other options kept {kept})");
+        }
+        finally
+        {
+            CloudShadow.Live?.Reload(CloudShadowChapters.Parse(text));
+            VolumetricClouds.LabClear();
+            lab.Free();
+            System.IO.Directory.Delete(dir, recursive: true);
+        }
     }
 
     // Save from a lab of its own over a temp copy of the sidecar, so the shipped file and mask are never written.
