@@ -427,6 +427,24 @@ find a valid ICU package installed on the system". `sandbox\LinuxRelease.ps1` ch
 this writes (see "The Linux release check in WSL" below), and `PublishRelease.ps1` publishes
 it beside the zip ("Publishing a release").
 
+**`-MacOS`** is opt-in the same way and experimental: no Mac has run the build. It exports the
+`macOS` preset headless into `.scratch\export-macos\CSVM.zip`, a universal `CSVM.app` (arm64 and
+x86_64, with one self-contained .NET runtime per architecture in
+`Contents/Resources/data_CSVM_macos_*/`) that Godot's built-in signer ad-hoc signs, which is the
+least Apple Silicon runs. It is not notarized, so the README tells the player to clear the
+quarantine flag with `xattr`. The script appends the payload (`packaging/MANIFEST.md`'s macOS
+table) to Godot's zip, because Godot's zip writer is the one here that records Unix modes; .NET's
+append marks every entry as made on Windows, so the script sets each central directory record's
+host byte back to Unix, without which a Mac unpacks the executable without its execute bit. ⚠ Godot
+builds the bundle in `<temp>\CSVM` and zips that whole folder, where test suites leave files, so the
+export runs with `TEMP` pointed at a fresh folder and the script refuses a zip holding anything
+outside `CSVM.app/`. The preset has no Shader Baker, since baking Metal pipelines needs a Metal
+device, and Godot refuses an arm64 export unless `project.godot` imports ETC2/ASTC (the project
+imports no texture, so the setting costs nothing). On macOS the exported build's root is the folder
+holding `CSVM.app`, not the executable's `Contents/MacOS` (`Config.ExportRoot`), so logs,
+screenshots and the game-file copy sit beside the app. The result is
+`.scratch\CSVM-v<version>-macos.zip`; `PublishRelease.ps1` does not publish it.
+
 **The version has one home: `application/config/version` in `CSVM/project.godot`.** Bump it there
 and nowhere else. The engine reads it at startup for the log's first line and the menu's corner
 stamp; the Windows export preset stamps it into the exe's file and product version, which is what
@@ -1008,6 +1026,10 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   read from `dlopen`'s errors in the load exception's message; an error naming any file but the
   soname is a missing dependency, not absence. A loaded one logs the file the loader chose, read from
   `/proc/self/maps`: `sticks: SDL 2.32.4 from libSDL2-2.0.so.0 (system: /usr/lib/...)`.
+  macOS ships no SDL2 either. Its list is Apple Silicon Homebrew's
+  `/opt/homebrew/lib/libSDL2-2.0.0.dylib` by path, since `dyld` does not search that folder, then
+  the bare `libSDL2-2.0.0.dylib`, which `dyld` finds in Intel Homebrew's `/usr/local/lib`. The
+  player installs it with `brew install sdl2`.
 - **The hints in `Sdl2Sticks.Load`** are set on both platforms. `SDL_JOYSTICK_HIDAPI=0` matters on
   Linux too: it keeps SDL2 off the hidraw nodes, where it would handshake with the Deck's built-in
   controls and with pads Steam or Godot's SDL3 are driving. RawInput, WGI and XInput are Windows
