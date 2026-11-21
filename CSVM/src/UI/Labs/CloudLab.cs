@@ -41,6 +41,8 @@ internal sealed partial class CloudLab : Node
         ("pw_density", "Density", 0.005f, 0.2f, 0.005f),
         ("edge_cut", "Edge cut", 0f, 0.9f, 0.01f),
         ("edge_k", "Edge hardness", 1f, 10f, 0.1f),
+        ("deck_cover", "Deck: cover", 0f, 1f, 0.01f),
+        ("deck_gaps", "Deck: share torn open", 0f, 1f, 0.01f),
         ("deck_scale", "Deck: tile scale", 0.2f, 3f, 0.05f),
         ("deck_k", "Deck: density", 0f, 2f, 0.05f),
         ("deck_erode", "Deck: erosion", 0f, 1f, 0.01f),
