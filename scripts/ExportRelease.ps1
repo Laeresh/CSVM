@@ -40,9 +40,17 @@
     on Linux carries the executable bit that CSVM.x86_64 needs. A zip made here cannot,
     which is why the Linux download is a tarball.
 
+    -MacOS is opt-in the same way: it exports the "macOS" preset, which Godot writes as a zip
+    holding an ad-hoc signed universal CSVM.app, adds the macOS payload to that zip's root and
+    moves it to CSVM-v<version>-macos.zip. Godot's zip is the archive because it is the one
+    writer here that records the executable bits a Mac needs.
+
 .PARAMETER Linux
     Also export the Linux build and package the .tar.gz. Needs the Linux export templates
     and a WSL Debian distro with tar (docs/tooling.md, "-Linux").
+
+.PARAMETER MacOS
+    Also export the macOS build and package its zip. Needs the macos.zip export template.
 
 .EXAMPLE
     .\scripts\ExportRelease.ps1
@@ -65,7 +73,8 @@
 #>
 param(
     [string] $ToolsRoot = "",
-    [switch] $Linux
+    [switch] $Linux,
+    [switch] $MacOS
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +135,17 @@ $LinuxReleaseFiles = @(
     @{ Source = $LinuxReadme;                                   Dest = "README.md"; Lf = $true },
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE";        Dest = "LICENSE"; Lf = $true },
     @{ Source = $LinuxThirdPartyNotices;                        Dest = "LICENSE-thirdparty.txt"; Lf = $true }
+) + $WebRtcLicences
+
+# The macOS zip's payload beside CSVM.app: the tarball's list with the macOS README and notices,
+# staged LF for the same reason.
+$MacExportDir = Join-Path $RepoRoot ".scratch\export-macos"
+$MacExportZip = Join-Path $MacExportDir "CSVM.zip"
+$MacThirdPartyNotices = Join-Path $RepoRoot "packaging\LICENSE-thirdparty-macos.txt"
+$MacReleaseFiles = @(
+    @{ Source = Join-Path $RepoRoot "packaging\README-macos.md"; Dest = "README.md"; Lf = $true },
+    @{ Source = Join-Path $RepoRoot "packaging\LICENSE";         Dest = "LICENSE"; Lf = $true },
+    @{ Source = $MacThirdPartyNotices;                           Dest = "LICENSE-thirdparty.txt"; Lf = $true }
 ) + $WebRtcLicences
 
 if (-not (Test-Path $Sln)) {
@@ -208,6 +228,17 @@ if ($Linux) {
         }
     }
 }
+if ($MacOS) {
+    if (-not (Test-Path (Join-Path $TemplateDir "macos.zip"))) {
+        throw "macOS export template not found at $TemplateDir\macos.zip -- the one-time template " +
+            "install above must include the macos.zip file of the .tpz."
+    }
+    foreach ($file in $MacReleaseFiles) {
+        if (-not (Test-Path $file.Source)) {
+            throw "macOS payload file not found at $($file.Source) -- see packaging\MANIFEST.md."
+        }
+    }
+}
 
 # Each notice speaks for payloads whose versions it names in its own header
 # (packaging\BuildThirdPartyNotices.ps1 assembles both). A notice assembled for a different
@@ -249,14 +280,20 @@ function Read-Notice([string] $Path, [string] $Pack, [string[]] $Foreign, [strin
     return $notice
 }
 $notices = @(Read-Notice $ThirdPartyNotices "win-x64" `
-    @("linux-x64", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64") `
+    @("linux-x64", "data_CSVM_linuxbsd_x86_64", "CSVM.x86_64", "osx-arm64", "CSVM.app") `
     "packaging\BuildThirdPartyNotices.ps1")
 $winNotice = $notices[0]
 if ($Linux) {
     $linuxNotice = Read-Notice $LinuxThirdPartyNotices "linux-x64" `
-        @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe") `
+        @("win-x64", "data_CSVM_windows_x86_64", "CSVM.exe", "osx-arm64", "CSVM.app") `
         "packaging\BuildThirdPartyNotices.ps1 -Linux"
     $notices += $linuxNotice
+}
+if ($MacOS) {
+    $macNotice = Read-Notice $MacThirdPartyNotices "osx-arm64" `
+        @("win-x64", "linux-x64", "data_CSVM_windows_x86_64", "data_CSVM_linuxbsd_x86_64", "CSVM.exe", "CSVM.x86_64") `
+        "packaging\BuildThirdPartyNotices.ps1 -MacOS"
+    $notices += $macNotice
 }
 
 $godotBuild = (& $GodotExe --version | Select-Object -Last 1).Trim()
@@ -286,6 +323,7 @@ if ($versionMatch.Count -ne 1) {
 $Version = $versionMatch[0].Matches[0].Groups[1].Value
 $ZipPath = Join-Path $RepoRoot ".scratch\CSVM-v$Version-win64.zip"
 $TarPath = Join-Path $RepoRoot ".scratch\CSVM-v$Version-linux-x64.tar.gz"
+$MacZipPath = Join-Path $RepoRoot ".scratch\CSVM-v$Version-macos.zip"
 Write-Host "Version $Version (CSVM\project.godot)" -ForegroundColor Cyan
 
 # The staging folder is rebuilt from nothing each run, because everything in it is copied into
@@ -320,6 +358,9 @@ Clear-StagingDir $ExportDir
 if ($Linux) {
     Clear-StagingDir $LinuxExportDir
 }
+if ($MacOS) {
+    Clear-StagingDir $MacExportDir
+}
 
 Write-Host "Building CSVM..." -ForegroundColor Cyan
 dotnet build $Sln
@@ -344,7 +385,7 @@ if ($LASTEXITCODE -ne 0) {
 # restore it byte-for-byte around the run. Copy-Item both ways rather than a text round-trip,
 # which is what keeps PowerShell 5.1's ANSI default away from the file (see CLAUDE.md). This is
 # the file's only writer: the version above is READ from it, never stamped into it.
-function Invoke-PresetExport([string] $Preset, [string] $OutFile) {
+function Invoke-PresetExport([string] $Preset, [string] $OutFile, [switch] $NoBake) {
     $stagingDir = Split-Path $OutFile -Parent
     Write-Host "Exporting release build to $OutFile..." -ForegroundColor Cyan
     $backup = Join-Path $env:TEMP "csvm-project-godot-$PID.bak"
@@ -352,8 +393,9 @@ function Invoke-PresetExport([string] $Preset, [string] $OutFile) {
 
     $log = Join-Path $stagingDir "export.log"
     try {
-        & $script:GodotExe --path $script:ProjectDir --rendering-driver vulkan `
-            --rendering-method forward_plus --export-release $Preset $OutFile |
+        # A preset that bakes nothing needs no rendering device, so it exports without a window.
+        [string[]] $device = if ($NoBake) { @("--headless") } else { @("--rendering-driver", "vulkan", "--rendering-method", "forward_plus") }
+        & $script:GodotExe --path $script:ProjectDir @device --export-release $Preset $OutFile |
             Tee-Object -FilePath $log
         $exportExit = $LASTEXITCODE
     } finally {
@@ -369,7 +411,7 @@ function Invoke-PresetExport([string] $Preset, [string] $OutFile) {
     # no warning and no missing file, only a slower first draw on someone else's machine. Assert
     # the stage ran rather than trusting the flag, since the preset key and the renderer have to
     # agree for it to do anything.
-    if (-not (Select-String -Path $log -Pattern "baking_shaders" -Quiet)) {
+    if (-not $NoBake -and -not (Select-String -Path $log -Pattern "baking_shaders" -Quiet)) {
         throw "Export of '$Preset' finished but baked no shaders -- check shader_baker/enabled " +
             "in CSVM\export_presets.cfg and that this export ran with a real rendering device."
     }
@@ -529,6 +571,100 @@ try {
 
 Write-Host "Exported to $ExportExe" -ForegroundColor Green
 Write-Host "Packaged  $ZipPath ($($entries.Count) files)" -ForegroundColor Green
+
+# .NET's Update mode rewrites every entry's "version made by" host as Windows, and a Mac's unzip then
+# ignores the Unix modes, so CSVM.app's executable would unpack without its execute bit. Each central
+# directory record's host byte is set back to 3 (Unix); every entry carries a Unix mode. No ZIP64:
+# the signature check throws on an archive this walk cannot read.
+function Set-ZipMadeByUnix([string] $Path) {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $end = $bytes.Length - 22
+    while ($end -ge 0 -and [BitConverter]::ToUInt32($bytes, $end) -ne 0x06054b50) { $end-- }
+    if ($end -lt 0) {
+        throw "$Path has no end of central directory record."
+    }
+    $at = [BitConverter]::ToUInt32($bytes, $end + 16)
+    for ($i = 0; $i -lt [BitConverter]::ToUInt16($bytes, $end + 10); $i++) {
+        if ([BitConverter]::ToUInt32($bytes, $at) -ne 0x02014b50) {
+            throw "$Path's central directory record $i is not where its end record says."
+        }
+        $bytes[$at + 5] = 3
+        $at += 46 + [BitConverter]::ToUInt16($bytes, $at + 28) + [BitConverter]::ToUInt16($bytes, $at + 30) +
+            [BitConverter]::ToUInt16($bytes, $at + 32)
+    }
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+# The macOS half. Godot's zip is kept and the payload appended in Update mode, which copies the
+# existing entries' compressed bytes and Unix modes, so CSVM.app keeps its signature; the host byte
+# is restored after. The checks read the two files they need out of the zip.
+if ($MacOS) {
+    # Godot builds the bundle in <temp>\CSVM and zips that whole folder, so anything else there (test
+    # suites write into %TEMP%\CSVM) would ship. The export gets a temp folder of its own.
+    $macTemp = Join-Path $RepoRoot ".scratch\export-macos-temp"
+    Clear-StagingDir $macTemp
+    $savedTemp = $env:TEMP, $env:TMP
+    $env:TEMP = $macTemp
+    $env:TMP = $macTemp
+    try {
+        Invoke-PresetExport "macOS" $MacExportZip -NoBake
+    } finally {
+        $env:TEMP, $env:TMP = $savedTemp
+        Remove-Item $macTemp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $checkDir = Join-Path $MacExportDir "check"
+    New-Item -ItemType Directory -Force $checkDir | Out-Null
+    $macLibrary = "libwebrtc_native.macos.template_release.universal.dylib"
+    $macZip = [System.IO.Compression.ZipFile]::OpenRead($MacExportZip)
+    try {
+        $macApp = @($macZip.Entries | Where-Object { $_.FullName -match '^CSVM\.app/Contents/Resources/(data_CSVM_[^/]+)/CSVM\.runtimeconfig\.json$' })
+        if ($macApp.Count -lt 1) {
+            throw "$MacExportZip holds no CSVM.app/Contents/Resources/data_CSVM_*/CSVM.runtimeconfig.json -- the preset's .NET publish did not run."
+        }
+        $stray = @($macZip.Entries | Where-Object { -not $_.FullName.StartsWith("CSVM.app/") })
+        if ($stray.Count -gt 0) {
+            throw "$MacExportZip holds $($stray.Count) entries outside CSVM.app, first $($stray[0].FullName)."
+        }
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($macApp[0], (Join-Path $checkDir "CSVM.runtimeconfig.json"), $true)
+        $lib = @($macZip.Entries | Where-Object { $_.Name -eq $macLibrary })
+        if ($lib.Count -eq 1) {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($lib[0], (Join-Path $checkDir $macLibrary), $true)
+        }
+        $macExe = @($macZip.Entries | Where-Object { $_.FullName -eq "CSVM.app/Contents/MacOS/CSVM" })
+        # The high word of the external attributes is the Unix mode; 0x40 is the owner's execute bit.
+        if ($macExe.Count -ne 1 -or -not (($macExe[0].ExternalAttributes -shr 16) -band 0x40)) {
+            throw "$MacExportZip does not mark CSVM.app/Contents/MacOS/CSVM executable."
+        }
+    } finally {
+        $macZip.Dispose()
+    }
+    Assert-ExportRuntime $checkDir $macNotice
+    $macWebRtc = Get-WebRtcInfo $checkDir $macLibrary "/"
+    Remove-Item $checkDir -Recurse -Force
+
+    Copy-ReleaseFiles $MacReleaseFiles $MacExportDir
+    Write-BuildInfo (Join-Path $MacExportDir "BUILD-INFO.txt") `
+        "CSVM.app, with the .NET runtimes in Contents/Resources/data_CSVM_macos_*/" "`n" `
+        $macWebRtc.Info $macWebRtc.Licence
+
+    $macPrefix = (Get-Item $MacExportDir).FullName.TrimEnd("\") + "\"
+    $macPayload = @(Get-ChildItem $MacExportDir -Recurse -File | Where-Object { $_.FullName -ne $MacExportZip })
+    $macZip = [System.IO.Compression.ZipFile]::Open($MacExportZip, "Update")
+    try {
+        foreach ($file in $macPayload) {
+            $relative = $file.FullName.Substring($macPrefix.Length).Replace("\", "/")
+            $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($macZip, $file.FullName, $relative, "Optimal")
+            $entry.ExternalAttributes = 0x81A4 -shl 16  # Unix mode 0100644, a plain readable file
+        }
+    } finally {
+        $macZip.Dispose()
+    }
+    Set-ZipMadeByUnix $MacExportZip
+    Move-Item $MacExportZip $MacZipPath -Force
+
+    Write-Host "Packaged  $MacZipPath (CSVM.app and $($macPayload.Count) files)" -ForegroundColor Green
+    Write-Host "SHA-256   $((Get-FileHash $MacZipPath -Algorithm SHA256).Hash.ToLower())" -ForegroundColor Green
+}
 
 if (-not $Linux) {
     return

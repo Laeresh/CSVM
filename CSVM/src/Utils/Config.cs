@@ -116,8 +116,21 @@ public static class Config
     /// folder instead. Pure, so a unit pins it without an export.</summary>
     public static string ExportedPath(string resPath, string executablePath) =>
         Path.Combine(
-            Path.GetDirectoryName(Path.GetFullPath(executablePath)) ?? "",
+            ExportRoot(executablePath),
             resPath.StartsWith("res://", StringComparison.Ordinal) ? resPath["res://".Length..] : resPath);
+
+    /// <summary>The folder an exported build treats as its own: the executable's, or on macOS the one
+    /// holding the <c>.app</c>. Inside the signed bundle, logs and copies would be hidden from the
+    /// player. Pure, so a unit pins it without an export.</summary>
+    public static string ExportRoot(string executablePath)
+    {
+        string dir = Path.GetDirectoryName(Path.GetFullPath(executablePath)) ?? "";
+        string contents = Path.GetDirectoryName(dir) ?? "";
+        string app = Path.GetDirectoryName(contents) ?? "";
+        bool bundled = Path.GetFileName(dir) == "MacOS" && Path.GetFileName(contents) == "Contents"
+            && app.EndsWith(".app", StringComparison.OrdinalIgnoreCase);
+        return bundled ? Path.GetDirectoryName(app) ?? dir : dir;
+    }
 
     /// <summary>Override for <paramref name="key"/> if present and a number, else
     /// <paramref name="fallback"/> (returned verbatim, so an absent file is byte-identical).</summary>

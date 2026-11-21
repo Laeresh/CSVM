@@ -49,4 +49,18 @@ public class ReleaseCheckTests
             Path.Combine(Path.GetTempPath(), "CSVM-export", "config.json"),
             Config.ExportedPath(Config.DefaultResPath, exe));
     }
+
+    /// <summary>A Mac's executable sits inside the signed bundle, so the build's folder is the one
+    /// holding CSVM.app. A MacOS folder outside a bundle is an ordinary folder.</summary>
+    [Fact]
+    public void AMacExportReadsConfigBesideItsAppBundle()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "CSVM-export");
+        string exe = Path.Combine(folder, "CSVM.app", "Contents", "MacOS", "CSVM");
+        Assert.Equal(folder, Config.ExportRoot(exe));
+        Assert.Equal(Path.Combine(folder, "config.json"), Config.ExportedPath(Config.DefaultResPath, exe));
+
+        string plain = Path.Combine(folder, "Contents", "MacOS");
+        Assert.Equal(plain, Config.ExportRoot(Path.Combine(plain, "CSVM")));
+    }
 }

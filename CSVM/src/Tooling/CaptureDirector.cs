@@ -60,7 +60,7 @@ public sealed class CaptureDirector
     /// place to attach a picture to a report from. Exported is the launcher's own editor test.</summary>
     public static string ShotDir() =>
         ShotDirFor(ProjectSettings.GlobalizePath("res://"),
-            Path.GetDirectoryName(OS.GetExecutablePath()) ?? string.Empty, !OS.HasFeature("editor"));
+            Config.ExportRoot(OS.GetExecutablePath()), !OS.HasFeature("editor"));
 
     /// <summary>The repo's git-ignored Screenshots/ beside <c>CSVM/</c> (rendered frames are
     /// game-derived) for an editor-hosted run, and Screenshots/ inside the executable's own folder

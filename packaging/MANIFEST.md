@@ -54,6 +54,23 @@ the archive before it reports success.
 | `LICENSE-thirdparty.txt` | `packaging/LICENSE-thirdparty-linux.txt` | The zip's notice assembled from the Linux payload instead, by `BuildThirdPartyNotices.ps1 -Linux`: the same Godot sections (the engine compiles them from one `COPYRIGHT.txt` on every platform, and the script checks that the Linux template reports the editor's build) and the `linux-x64` runtime pack's own `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT`. Its header stamps the `linux-x64` pack; the export refuses it unless that and the two version stamps match, and refuses it if it names any Windows payload file or pack. No SDL section: the tarball ships no SDL2 |
 | `BUILD-INFO.txt` | GENERATED, as in the zip | The same commit, with the Linux file names and LF line endings. `PublishRelease.ps1` reads it out of the tarball and refuses the same qualifier as the zip's |
 
+## macOS zip (experimental)
+
+`ExportRelease.ps1 -MacOS` exports the `macOS` preset into `.scratch\export-macos\`, appends the
+rows below to the zip Godot wrote, and moves it to `.scratch\CSVM-v<version>-macos.zip`. It is
+the tarball's payload with the macOS README and notices, text files staged LF. Every entry is
+marked Unix-made: `0755` for the executables Godot marked, `0644` for the appended rows. No SDL2:
+the build reads flight sticks through Homebrew's `libSDL2-2.0.0.dylib` when the player installed
+it (`docs/tooling.md`, "SDL2 for flight sticks").
+
+| Zip path | Source | Notes |
+|---|---|---|
+| `CSVM.app/` | the Godot `macOS` release export output | Universal (arm64 and x86_64), ad-hoc signed, not notarized. Holds the pck, one self-contained .NET runtime per architecture in `Contents/Resources/data_CSVM_macos_*/`, and the webrtc-native framework in `Contents/Frameworks/` |
+| `README.md` | `packaging/README-macos.md` | The macOS README: the experimental label, the `xattr` step that clears Gatekeeper's quarantine, the game files, logs beside `CSVM.app`, the settings folder, and the licences |
+| `LICENSE`, `LICENSE-webrtc/LICENSE.*` | as in the zip | |
+| `LICENSE-thirdparty.txt` | `packaging/LICENSE-thirdparty-macos.txt` | Assembled by `BuildThirdPartyNotices.ps1 -MacOS` from the `osx-arm64` runtime pack, which the script checks is byte-identical in its two notice files to the `osx-x64` pack the app also carries. Its header stamps `osx-arm64`; the export refuses it unless that and the two version stamps match |
+| `BUILD-INFO.txt` | GENERATED, as in the zip | The same commit, with the macOS file names and LF line endings. The webrtc hash is the signed copy inside the app, which differs from the pinned file |
+
 The archives hold no game data: CSVM reads the player's own game files in place, and its
 optional copy of them lands in the data folder on the player's machine. The zip contains zero
 game assets by construction.

@@ -370,6 +370,18 @@ public class StickRosterTests
         Assert.Equal(new[] { Sdl2Sticks.LinuxLibrary }, Sdl2Sticks.LinuxCandidates(string.Empty));
     }
 
+    /// <summary>macOS ships no SDL2. Apple Silicon Homebrew's copy goes by path, since dyld does not
+    /// search /opt/homebrew. The bare name finds Intel Homebrew's in /usr/local/lib.</summary>
+    [Fact]
+    public void MacOsTriesAppleSiliconHomebrewThenAsksTheSystem()
+    {
+        string exe = Path.Combine(Path.GetTempPath(), "CSVM.app", "Contents", "MacOS");
+
+        var paths = Sdl2Sticks.ForPlatform(windows: false, exe, null, null, macOS: true);
+
+        Assert.Equal(new[] { "/opt/homebrew/lib/libSDL2-2.0.0.dylib", "libSDL2-2.0.0.dylib" }, paths);
+    }
+
     // The soname is one no host installs, so a machine with a system SDL2 still exercises absence.
     [Fact]
     public void ABareNameTheSystemCannotFindRunsWithoutSticksAndNamesIt()
