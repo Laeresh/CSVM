@@ -577,10 +577,10 @@ public class OriginalHangarTests : IDisposable
 
         Click(host, OriginalHangarScreen.SellPlanesKey);
         Assert.Equal(OriginalScreen.HangarInventory, host.Screen);
-        // Wallet-free the Export row is not built at all: Instant Action has nowhere to export to,
-        // and the removal is a delete rather than a sale.
+        // Wallet-free the Export row is not built: Instant Action has nowhere to export to, and the
+        // removal is a delete rather than a sale. The Export strip carries the import instead.
         Assert.Equal(
-            new[] { OriginalHangarScreen.InventoryPlanesKey, OriginalHangarScreen.InventorySellKey, OriginalHangarScreen.InventoryDoneKey },
+            new[] { OriginalHangarScreen.InventoryPlanesKey, OriginalHangarScreen.InventorySellKey, OriginalHangarScreen.InventoryImportKey, OriginalHangarScreen.InventoryDoneKey },
             host.Rows.Select(r => r.Key));
         Assert.Equal("Delete", Row(host, OriginalHangarScreen.InventorySellKey).Label);
         Assert.Equal("Old", host.Rows[0].Label);
@@ -614,6 +614,46 @@ public class OriginalHangarTests : IDisposable
 
         Click(host, OriginalHangarScreen.InventoryDoneKey);
         Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
+    }
+
+    /// <summary>The wallet-free inventory's Import copies the original install's saved planes into
+    /// the store. It keeps the player's own plane of the same name, and says what it did.</summary>
+    [Fact]
+    public void TheInventorysImportCopiesTheOriginalsSavedPlanesBesideTheStoredOnes()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Blue Streak", Airframe = 2, Engine = 1 });
+        string install = TestData.TempDir();
+        string planes = Path.Combine(install, "Planes");
+        Directory.CreateDirectory(planes);
+        File.WriteAllBytes(Path.Combine(planes, "Blue Streak"), CustomPlaneRecordTests.Record("Blue Streak"));
+        File.WriteAllBytes(Path.Combine(planes, "Broken"), new byte[3]);
+        var host = Host(out var hangar, install: install);
+        OpenHub(host, "Ace");
+        Click(host, OriginalHangarScreen.SellPlanesKey);
+        Assert.Equal("Import", Row(host, OriginalHangarScreen.InventoryImportKey).Label);
+
+        Click(host, OriginalHangarScreen.InventoryImportKey);
+
+        Assert.Equal(
+            "Imported 1 plane from Crimson Skies, skipped 1.  Renamed to keep your own: Blue Streak (2).  Unreadable or not saved: Broken.",
+            host.Dialog?.Message);
+        Assert.Equal(new[] { "Blue Streak", "Blue Streak (2)" }, hangar.Saved.Select(p => p.Name));
+        Assert.Equal(2, _store.Load("Blue Streak")!.Airframe);
+        Assert.Equal(1, host.RosterRefreshes);
+        Assert.True(File.Exists(Path.Combine(planes, "Blue Streak")));
+    }
+
+    [Fact]
+    public void TheInventorysImportWithNoSavesSaysSoAndWritesNothing()
+    {
+        var host = Host(out _);
+        OpenHub(host, "Ace");
+        Click(host, OriginalHangarScreen.SellPlanesKey);
+
+        Click(host, OriginalHangarScreen.InventoryImportKey);
+
+        Assert.Equal("No saved Crimson Skies planes were found on this computer.", host.Dialog?.Message);
+        Assert.Empty(_store.List());
     }
 
     /// <summary>The inventory's plane line stands on the row <c>HANGAR.SCRIPT</c> binds,
@@ -937,9 +977,12 @@ public class OriginalHangarTests : IDisposable
 
     // The module over a fresh feature, the suite's scratch store and the layout fixture, standing
     // on the Instant Action screen, which is the wallet-free door's own.
-    private HangarHost Host(out HangarFeature hangar, UiStrings? strings = null)
+    private HangarHost Host(out HangarFeature hangar, UiStrings? strings = null, string? install = null)
     {
-        hangar = new HangarFeature(strings ?? UiStrings.Empty, StockAirframes.Node);
+        hangar = new HangarFeature(strings ?? UiStrings.Empty, StockAirframes.Node)
+        {
+            OriginalSaves = () => install == null ? Array.Empty<IReadOnlyList<string>>() : new[] { CustomPlaneRecord.SaveFolders(install, null) },
+        };
         var host = new HangarHost();
         host.Module = new OriginalHangarScreen(hangar, _store, MenuLayoutReaderTests.OriginalLayout(), Measure, host);
         return host;

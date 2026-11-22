@@ -55,7 +55,8 @@ internal static class MenuHangarSuites
         + "through the shared feature with the running total following, READY TO PURCHASE and the commit "
         + "(reading Export on this door, centred on its paper plaque) save the scratch plane into the "
         + "suite's scratch plane store and the shared roster and return to the "
-        + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory, which "
+        + "Instant Action screen with it in the Pilot Plane list, the Import left of Build Custom Plane "
+        + "answers a press with no save folders in the messagebox and writes nothing, SELL PLANES opens the inventory, which "
         + "wallet-free builds no Export row and deletes instead of selling, standing the picked plane's "
         + "line centred in its dashed box and leaving its "
         + "Value row unwritten and asking the unpriced delete "
@@ -686,6 +687,22 @@ internal static class MenuHangarSuites
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch, MenuLayout layout)
     {
         var door = BuildDoor(host, seat, shell, fit)!;
+        int stored = store.List().Count;
+        var import = Row(shell, OriginalInstantActionScreen.ImportKey);
+        ctx.Check(import is { Enabled: true } && import.X + import.Width < door.X,
+            $"Instant Action stands a live Import left of Build Custom Plane ({import?.X}, {import?.Width} before {door.X})");
+        if (import != null)
+        {
+            // The suite's feature is handed no save folders, so the press finds none and writes nothing.
+            Click(host, seat, Pointer(fit, import.X + 5f, import.Y + 5f, pressed: true, clicked: true));
+            ctx.Check(shell.Dialog?.Message == "No saved Crimson Skies planes were found on this computer." && store.List().Count == stored,
+                $"whose press answers in the messagebox and writes nothing ({shell.Dialog?.Message}, {store.List().Count} of {stored})");
+            if (Row(shell, OriginalShell.DialogOkKey) is { } dismiss)
+            {
+                Click(host, seat, Pointer(fit, dismiss.X + 5f, dismiss.Y + 5f, pressed: true, clicked: true));
+            }
+        }
+
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = "Other" });
         var ok = Row(shell, OriginalHangarScreen.NameOkKey)!;

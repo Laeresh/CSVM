@@ -1,10 +1,30 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 
 namespace CSVM.Flight.Hangar;
+
+/// <summary>What one <see cref="CustomPlaneRecord.ImportInto"/> did: the names stored, those of
+/// them suffixed past a stored plane, the planes already stored identically, and the file names
+/// skipped.</summary>
+public sealed record CustomPlaneImport
+{
+    /// <summary>Gets every plane written, under the name it was stored as.</summary>
+    public List<string> Imported { get; } = new();
+
+    /// <summary>Gets the imported names that took a suffix to keep a stored plane.</summary>
+    public List<string> Renamed { get; } = new();
+
+    /// <summary>Gets the planes the store already held identically, which were not written.</summary>
+    public List<string> AlreadyThere { get; } = new();
+
+    /// <summary>Gets the file names that did not read or could not be written.</summary>
+    public List<string> Skipped { get; } = new();
+}
 
 /// <summary>
 /// Import-only reader for the original's saved custom plane files: the 204-byte records under an
@@ -156,28 +176,165 @@ public static class CustomPlaneRecord
         }
     }
 
-    /// <summary>Every readable saved plane in an install's <c>Planes</c> directory (absolute
-    /// path), sorted by name. The directory is only ever read. The original's saves carry no
-    /// extension, so every file is tried (its own scan is <c>Planes\*.*</c>); a missing directory
-    /// or an unreadable file contributes nothing.</summary>
-    public static IReadOnlyList<CustomPlaneDef> ImportDirectory(string directory)
+    /// <summary>Every save folder of the original on this machine, one group per install (see the
+    /// overload). <paramref name="known"/> are the installs CSVM was told of.</summary>
+    public static IReadOnlyList<IReadOnlyList<string>> FindSaves(IEnumerable<string?> known) =>
+        FindSaves(known, InstallSearchRoots.ForThisMachine(),
+            OperatingSystem.IsWindows() ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) : null);
+
+    /// <summary>The existing save folders of <paramref name="known"/>, then of every install
+    /// <see cref="InstallLocator.Candidates"/> finds under <paramref name="roots"/>, then of the
+    /// installer's default folder under each Program Files. An absent install still counts: an
+    /// uninstall leaves its VirtualStore saves behind. Each group is <see cref="SaveFolders"/>' order.</summary>
+    public static IReadOnlyList<IReadOnlyList<string>> FindSaves(
+        IEnumerable<string?> known, InstallSearchRoots roots, string? localAppData)
     {
-        RequireAbsolute(directory);
-        var planes = new List<CustomPlaneDef>();
-        if (Directory.Exists(directory))
+        var installs = new List<string>();
+        foreach (var place in known)
         {
-            foreach (var file in Directory.GetFiles(directory))
+            if (!string.IsNullOrWhiteSpace(place) && Path.IsPathRooted(place))
             {
-                var def = ReadFile(file);
-                if (def != null)
+                installs.Add(place);
+            }
+        }
+
+        installs.AddRange(InstallLocator.Candidates(roots, null));
+        if (roots.Windows)
+        {
+            foreach (var programFiles in roots.ProgramFiles)
+            {
+                installs.Add(Path.Combine(programFiles, "Microsoft Games", "Crimson Skies"));
+            }
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var found = new List<IReadOnlyList<string>>();
+        foreach (var install in installs)
+        {
+            var folders = new List<string>();
+            foreach (var folder in SaveFolders(install, localAppData))
+            {
+                if (Directory.Exists(folder) && seen.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder))))
                 {
-                    planes.Add(def);
+                    folders.Add(folder);
+                }
+            }
+
+            if (folders.Count > 0)
+            {
+                found.Add(folders);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Where the original install at <paramref name="install"/> (absolute) keeps its saved
+    /// planes, in the order the game sees them. The VirtualStore copy under
+    /// <paramref name="localAppData"/> (null where none exists) comes first, then <c>Planes</c>.
+    /// Windows redirects the game's <c>Planes\%s</c> write under Program Files there.</summary>
+    public static IReadOnlyList<string> SaveFolders(string install, string? localAppData)
+    {
+        RequireAbsolute(install);
+        var folders = new List<string>();
+        if (!string.IsNullOrEmpty(localAppData) && Path.GetPathRoot(install) is { Length: > 0 } root)
+        {
+            folders.Add(Path.Combine(localAppData, "VirtualStore", install[root.Length..], "Planes"));
+        }
+
+        folders.Add(InstallLocator.ResolveDirectory(install, "Planes") ?? Path.Combine(install, "Planes"));
+        return folders;
+    }
+
+    /// <summary>Copies every file of each install's folders (read only, the original's own
+    /// <c>Planes\*.*</c>) into <paramref name="store"/>. Within one install a name an earlier
+    /// folder held is passed over. A file that does not read or write is skipped and named.
+    /// ⚠ Never overwrite a stored name: it is the player's own plane, so the import becomes
+    /// "name (2)" and on. A stored identical twin counts as already there.</summary>
+    public static CustomPlaneImport ImportInto(CustomPlaneStore store, IEnumerable<IReadOnlyList<string>> installs)
+    {
+        var result = new CustomPlaneImport();
+        foreach (var folders in installs)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var folder in folders)
+            {
+                foreach (var file in FilesIn(folder))
+                {
+                    string fileName = Path.GetFileName(file);
+                    if (!seen.Add(fileName))
+                    {
+                        continue;
+                    }
+
+                    if (ReadFile(file) is not { } def || !TrySaveBeside(store, def, result))
+                    {
+                        result.Skipped.Add(fileName);
+                    }
                 }
             }
         }
 
-        planes.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-        return planes;
+        return result;
+    }
+
+    // Walks the name and its suffixes to the first free file or an identical twin. A suffix trims
+    // the name so the whole fits the name cap. False when the store cannot be written.
+    private static bool TrySaveBeside(CustomPlaneStore store, CustomPlaneDef def, CustomPlaneImport result)
+    {
+        string name = def.Name;
+        try
+        {
+            for (int n = 1; ; n++)
+            {
+                string suffix = string.Create(CultureInfo.InvariantCulture, $" ({n})");
+                def.Name = n == 1 ? name
+                    : name[..Math.Min(name.Length, Math.Max(0, CustomPlaneDef.MaxNameLength - suffix.Length))].TrimEnd() + suffix;
+                if (!File.Exists(store.PathFor(def.Name)))
+                {
+                    store.Save(def);
+                    result.Imported.Add(def.Name);
+                    if (n > 1)
+                    {
+                        result.Renamed.Add(def.Name);
+                    }
+
+                    return true;
+                }
+
+                if (store.Load(def.Name) is { } stored && CustomPlaneStore.Serialize(stored) == CustomPlaneStore.Serialize(def))
+                {
+                    result.AlreadyThere.Add(def.Name);
+                    return true;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string[] FilesIn(string folder)
+    {
+        try
+        {
+            var files = Directory.Exists(folder) ? Directory.GetFiles(folder) : Array.Empty<string>();
+            Array.Sort(files, StringComparer.Ordinal);
+            return files;
+        }
+        catch (IOException)
+        {
+            return Array.Empty<string>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     // The name is NUL-terminated within its field; the original writes it with sprintf, so bytes

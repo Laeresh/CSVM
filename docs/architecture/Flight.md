@@ -1695,12 +1695,14 @@ check, or whose id is a stock node, an earlier mod's or past the roster's 31 byt
 Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`, `CSVM.Tests/ModPlaneHangarTests.cs`, `CSVM.Tests/ModPlaneCampaignTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneRecord.cs
-Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
-`Planes` directory, into `CustomPlaneDef`s. Every paint field is read as the index it is, the
-cached RGBA the engine writes alongside is left out and exposed only for a cross-check, and the
-derived fields are ignored. A file it cannot make sense of reads as null rather than throwing, so
-an import never breaks on one corrupt save. The read is one way: CSVM's own planes persist through
-`CustomPlaneStore` and never in this format. Format: [../formats/paint.md](../formats/paint.md).
+Import-only reader for the original's 204-byte saved-plane files: one record into a
+`CustomPlaneDef`, or every install's saves into a `CustomPlaneStore`. Paint fields are read as
+indices, derived fields are ignored, and an unreadable file is null rather than a throw. `SaveFolders`
+names one install's save folders (its VirtualStore copy, then `Planes`); `FindSaves` gathers them for
+the known installs, `Extraction/InstallLocator.cs`' candidates and the installer's default folder, an
+absent install's VirtualStore copy included. `ImportInto` stores each save, skipping and naming a
+failure, never overwriting a stored name (a numbered suffix inside the name cap) and counting an
+identical stored twin as already there. Format: [../formats/paint.md](../formats/paint.md). Coverage: `CSVM.Tests/CustomPlaneRecordTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneStore.cs
 JSON persistence for `CustomPlaneDef`, one file per plane under `user://Planes/`. The store works

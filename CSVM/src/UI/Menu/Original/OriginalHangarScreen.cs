@@ -87,6 +87,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     /// never deactivates it, and the still shows it drawn like Sell beside it.</summary>
     public const string InventoryExportKey = "HA_B_EXPORTP";
 
+    /// <summary>The wallet-free inventory's Import button, on the Export button's strip and place:
+    /// the original game's saved planes copied into the store.</summary>
+    public const string InventoryImportKey = "HA_B_IMPORTP";
+
     /// <summary>The inventory's Done button, back to the hub.</summary>
     public const string InventoryDoneKey = "HA_B_DONE";
 
@@ -203,6 +207,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private const string DeleteLabel = "Delete";
     private const string DeletePrompt = "Delete a Plane";
     private const string DeleteQuestion = "Are you sure you want to delete it?";
+
+    // A remake-only word too. The paper strip is 117 pixels wide, too narrow for "Import from
+    // Crimson Skies", so the result line names the game instead.
+    private const string ImportLabel = "Import";
 
     private static readonly Regex FontTag = new(@"\[[A-Za-z0-9]+\]", RegexOptions.Compiled);
 
@@ -341,6 +349,23 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.PlaneName);
     }
 
+    /// <summary>Imports the original game's saved planes into the wallet-free store and shows the
+    /// result line, from the inventory or Instant Action's own Import. The one-button notice keeps
+    /// the exclamation icon every notice of the original's mask 0x1 wears (Export's own included).
+    /// Nothing happens without a feature or a store.</summary>
+    public void ImportOriginalPlanes()
+    {
+        if (_hangar == null || _planes == null)
+        {
+            return;
+        }
+
+        string line = _hangar.ImportOriginalPlanes(_planes);
+        _host.RefreshRosterFromStore();
+        _host.RefreshInstantActionRoster();
+        _host.RaiseDialog(line, DialogIcon.Warning, Ok());
+    }
+
     /// <summary>Opens a hangar tab directly on a default-configuration build named
     /// <paramref name="name"/>, the screenshot aids' door. It is the name screen's OK with the box
     /// checked, then the tab. It runs over <paramref name="wallet"/> when the shot wants the
@@ -465,7 +490,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
-        key is PurchaseNowKey or InventorySellKey or InventoryExportKey;
+        key is PurchaseNowKey or InventorySellKey or InventoryExportKey or InventoryImportKey;
 
     // A list whose rows move the bill. The pricing is kept on the list, so the hub can show what a
     // row under the cursor would cost and weigh without taking it.
@@ -1155,9 +1180,14 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         if (_hangar.Wallet == null)
         {
             // Wallet-free the removal is a delete, and there is nowhere to export to. The export
-            // door's own store is the one the shared pickers already read. So the Export row is
-            // not built at all rather than built dead, and Sell takes the delete word.
+            // door's own store is the one the shared pickers already read. So no Export row is
+            // built, Sell takes the delete word, and the Export strip carries the import instead.
             Relabel(rows, InventorySellKey, DeleteLabel);
+            AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, true, 0);
+            if (rows.Count > 0 && rows[^1].Key == InventoryExportKey)
+            {
+                rows[^1] = rows[^1] with { Key = InventoryImportKey, Label = ImportLabel };
+            }
         }
         else
         {
@@ -1586,6 +1616,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
                 return null;
             case InventoryExportKey:
                 ExportPicked();
+                return null;
+            case InventoryImportKey:
+                ImportOriginalPlanes();
                 return null;
             case InventoryDoneKey:
                 ShowHangarScreen(_hangarTab);

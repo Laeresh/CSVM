@@ -65,9 +65,8 @@ public sealed class HangarFeature : IMenuFeature
     /// which is the plane the original's construction screens open over.</summary>
     public const int DefaultAirframe = 5;
 
-    /// <summary>The longest name a plane may carry: the original's saved-plane index is 33-byte
-    /// records (docs/formats/paint.md), so 32 characters plus the terminator.</summary>
-    public const int MaxNameLength = 32;
+    /// <summary>The longest name a plane may carry, the model's own cap.</summary>
+    public const int MaxNameLength = CustomPlaneDef.MaxNameLength;
 
     /// <summary>The GUNS dropdown's row count: five calibres single, five twinned, No Gun.</summary>
     public const int GunCycleRows = 11;
@@ -124,6 +123,11 @@ public sealed class HangarFeature : IMenuFeature
     /// <summary>The plane mods the airframe list offers after the eleven stock rows; null reads
     /// <see cref="ModPlanes.Current"/> at each use, which is what the game wants.</summary>
     public ModPlanes? Mods { get; init; }
+
+    /// <summary>The original game's save folders <see cref="ImportOriginalPlanes"/> reads, asked at
+    /// each import: one group per install, as <c>CustomPlaneRecord.FindSaves</c> answers.
+    /// Null reads none.</summary>
+    public Func<IReadOnlyList<IReadOnlyList<string>>>? OriginalSaves { get; init; }
 
     /// <summary>The airframe list's rows. Row 0-10 is the stock airframe id; row 11 + i is
     /// <see cref="Mods"/>' plane i, built on its parent. Every int airframe this feature takes is a row.</summary>
@@ -747,6 +751,42 @@ public sealed class HangarFeature : IMenuFeature
         Message = string.Empty;
         ReadRoster();
         return gone;
+    }
+
+    /// <summary>The import: copies the original game's saved planes into the wallet-free
+    /// <paramref name="store"/> (<see cref="CustomPlaneRecord.ImportInto"/>), re-reads
+    /// <see cref="Saved"/> over an open build and answers the line to show. A campaign aircraft is
+    /// bought, so no wallet door offers it.</summary>
+    public string ImportOriginalPlanes(CustomPlaneStore store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        var installs = OriginalSaves?.Invoke() ?? Array.Empty<IReadOnlyList<string>>();
+        var result = CustomPlaneRecord.ImportInto(store, installs);
+        ReadRoster();
+        if (result.Imported.Count + result.AlreadyThere.Count + result.Skipped.Count == 0)
+        {
+            return "No saved Crimson Skies planes were found on this computer.";
+        }
+
+        var line = new System.Text.StringBuilder();
+        line.Append(CultureInfo.InvariantCulture,
+            $"Imported {result.Imported.Count} {(result.Imported.Count == 1 ? "plane" : "planes")} from Crimson Skies, skipped {result.Skipped.Count}.");
+        if (result.Renamed.Count > 0)
+        {
+            line.Append($"  Renamed to keep your own: {string.Join(", ", result.Renamed)}.");
+        }
+
+        if (result.Skipped.Count > 0)
+        {
+            line.Append($"  Unreadable or not saved: {string.Join(", ", result.Skipped)}.");
+        }
+
+        if (result.AlreadyThere.Count > 0)
+        {
+            line.Append(CultureInfo.InvariantCulture, $"  Already in your hangar: {result.AlreadyThere.Count}.");
+        }
+
+        return line.ToString();
     }
 
     /// <summary>Clears the refusal line, which any navigation does.</summary>

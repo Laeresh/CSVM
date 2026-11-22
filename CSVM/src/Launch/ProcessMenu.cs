@@ -138,7 +138,14 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
 
         host.Features.Add(notice);
         var strings = UiStrings.TryLoad(at.DataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.Data.Zrdr));
+        // The import reads the install the player picked, the game files' folder, the one the
+        // original's setup recorded, then every install the locator finds. A deterministic run
+        // reads no saved options and no player's saves.
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), at.Data.Zrdr)
+        {
+            OriginalSaves = () => spec.Det ? System.Array.Empty<System.Collections.Generic.IReadOnlyList<string>>()
+                : CustomPlaneRecord.FindSaves(new[] { Extraction.RememberedInstall.Get(), paths().Game?.Location, Extraction.InstallLocator.Registered() }),
+        });
         // The campaign feature carries both cinemas because the presentation reads it and cannot
         // reach this module to play a film through.
         _chapterCinema = new ChapterCinema(audio.PlayCinema, audio.StopCinema);

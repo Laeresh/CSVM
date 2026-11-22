@@ -56,6 +56,8 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
 
     public int RosterRefreshes { get; private set; }
 
+    public int Imports { get; private set; }
+
     public bool CanBuildPlane { get; set; }
 
     public bool DialogOpen => Dialog != null;
@@ -190,6 +192,8 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
         HangarWallet = wallet;
         HangarOpens++;
     }
+
+    public virtual void ImportOriginalPlanes() => Imports++;
 
     public virtual MenuExit? BeginSeatWalk() => null;
 

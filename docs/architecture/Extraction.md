@@ -18,7 +18,7 @@ walk a path one segment at a time and answer the disk's spelling, never renaming
 the silent rule: `ZBD` plus `GOSDATA/ASSETS`. `Check` judges a pick, naming the install when the
 pick sits inside or holds it. A `ZBD` with root archives alone is refused (`NoChapters`). The disc,
 its `GAME` folder or an `.iso` is a `Disc` (chapter `.cab`s), read through `CabinetSource`.
-`Candidates` lists the remembered path, then `BesidePlaces` (CSVM's folder or its `GAME`, and each
+`Registered` reads the install folder the original's setup recorded in the Windows registry. `Candidates` lists the remembered path, then `BesidePlaces` (CSVM's folder or its `GAME`, and each
 `.iso`, where a disc counts), then Program Files and fixed drives on Windows, or Wine and every
 Proton prefix on Linux, folded through links. Read `RememberedInstall.cs` next.
 
