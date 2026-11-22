@@ -20,8 +20,9 @@ public sealed class PlayerActions
     private readonly ActionSnapshot _snapshot = new();
     private readonly MutedKeyboard _muted = new();
 
-    // The actions down as the load gate opened, read released until each is let go. A throttle or
-    // trigger held through the load then does nothing on the first flying frame.
+    // The actions down as the load gate opened, read released until each reads under half travel
+    // (ActiveDevice.PressTravel). A throttle or trigger held through the load then does nothing on
+    // the first flying frame.
     private readonly HandoverLatch _heldThrough = new();
 
     // Built or polled while the gate was closed: the first poll after it opens arms the latch.
@@ -53,7 +54,7 @@ public sealed class PlayerActions
     /// <summary>Resolves every bound action out of this tick's hardware. The one place the map
     /// touches device state, so a consumer's reads cost nothing and cannot drift apart. Nothing
     /// reads while <see cref="LoadGate"/> is closed, and a control held through it reads released
-    /// until it is let go.</summary>
+    /// until it reads under half travel (<see cref="ActiveDevice.PressTravel"/>).</summary>
     public void Poll(IDeviceState state)
     {
         if (LoadGate.Closed)

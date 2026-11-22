@@ -193,7 +193,7 @@ the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in
 reads none of them. Several of these over one `ActionMap` is the supported shape, for an action whose
 keyboard and pad halves take different processing and are then summed rather than ORed. Nothing
 resolves while `Utils/LoadGate.cs` is closed, and an action held through its opening reads released
-until let go (`HandoverLatch.cs`). Read `BindingProfile.cs` for the whole seat above this.
+until it reads under half travel (`ActiveDevice.PressTravel`, `HandoverLatch.cs`). Read `BindingProfile.cs` for the whole seat above this.
 
 ## src/Bindings/HandoverLatch.cs
 A control held through a handover reads released until it is let go: `Arm` marks an action, and

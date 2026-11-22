@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Launch;
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Godot;
 
@@ -21,8 +23,10 @@ internal static class LoadGateSuites
         + "pad Start opens no pause board and a full right trigger reads no throttle; once it is "
         + "down the bus and the root's input are as they were, the Start and the trigger held "
         + "through its drop still act on nothing, a drifting trigger reads live at once, and the "
-        + "next press pauses and the next pull reads full throttle; a second load screen the "
-        + "launcher stands replaces the first, so taking it down opens the gate")]
+        + "next press pauses and the next pull reads full throttle; the leave question's keys read "
+        + "off the keyboard answer it, and the Enter and Backspace held through a Yes raise nothing "
+        + "on the menu, the Space held through a No fires no gun, until each is pressed again; a "
+        + "second load screen the launcher stands replaces the first, so taking it down opens the gate")]
     internal static void LoadGate(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -96,7 +100,108 @@ internal static class LoadGateSuites
             pilot.Free();
         }
 
+        HeldThroughLeaveQuestion(ctx);
         StackedLoadScreens(ctx);
+    }
+
+    // The keys the leave question reads off the keyboard, pressed through Godot's Input as a key
+    // would be. Each answer is given with a key still held through the board's drop. A Yes lands on a
+    // menu, whose seat reads Enter mapped and Backspace and Delete directly. A No goes on to fly.
+    private static void HeldThroughLeaveQuestion(TestContext ctx)
+    {
+        var menu = new MenuInput(() => null, () => null) { Keyboard = true };
+        menu.Prime();
+        var flight = new PlayerActions(BindingProfile.Defaults(default, true).Map(InputContext.Flight), true);
+        var keyboard = new GodotDeviceState(new DeviceRegistry());
+        LoadBoard? board = null;
+        try
+        {
+            board = LeaveBoard(ctx);
+            menu.Poll(0f);
+            Key(Godot.Key.Escape, true, board);
+            ctx.Check(board.Asking != null, $"Esc pressed on a held board raises its leave question");
+            Key(Godot.Key.Escape, false, board);
+            Key(Godot.Key.Backspace, true, board);
+            Key(Godot.Key.Enter, true, board);
+            menu.Poll(0f);
+            ctx.Check(board.LeaveConfirmed && board.Asking == null, $"…and Enter on its Yes answers it, the box down");
+            Drop(ctx, ref board);
+
+            menu.Poll(0f);
+            ctx.Check(!menu.Accept && !menu.Erase && !menu.Unbind && Input.IsKeyPressed(Godot.Key.Backspace),
+                $"the Enter and Backspace held through the drop raise no Accept, Erase or Unbind on the menu's first frame after it (accept {menu.Accept}, erase {menu.Erase}, unbind {menu.Unbind})");
+            Key(Godot.Key.Enter, false);
+            Key(Godot.Key.Backspace, false);
+            menu.Poll(0f);
+            Key(Godot.Key.Backspace, true);
+            menu.Poll(0f);
+            ctx.Check(menu.Erase && menu.Unbind, $"…and the next press of Backspace erases and unbinds");
+            Key(Godot.Key.Backspace, false);
+            Key(Godot.Key.Enter, true);
+            menu.Poll(0f);
+            ctx.Check(menu.Accept, $"…and the next press of Enter accepts");
+            Key(Godot.Key.Enter, false);
+
+            board = LeaveBoard(ctx);
+            flight.Poll(keyboard);
+            Key(Godot.Key.Escape, true, board);
+            Key(Godot.Key.Escape, false, board);
+            Key(Godot.Key.Right, true, board);
+            Key(Godot.Key.Right, false, board);
+            Key(Godot.Key.Space, true, board);
+            flight.Poll(keyboard);
+            ctx.Check(board.Asking == null && !board.LeaveConfirmed, $"Space on the question's No takes it down, the hold going on");
+            Drop(ctx, ref board);
+
+            flight.Poll(keyboard);
+            ctx.Check(!flight.Held(InputAction.FireGuns) && Input.IsKeyPressed(Godot.Key.Space),
+                $"the Space held through the drop fires no gun on the first flying frame after it");
+            Key(Godot.Key.Space, false);
+            flight.Poll(keyboard);
+            Key(Godot.Key.Space, true);
+            flight.Poll(keyboard);
+            ctx.Check(flight.Held(InputAction.FireGuns), $"…and the next press of Space fires");
+        }
+        finally
+        {
+            Drop(ctx, ref board);
+            foreach (var key in new[] { Godot.Key.Escape, Godot.Key.Enter, Godot.Key.Backspace, Godot.Key.Right, Godot.Key.Space })
+            {
+                Key(key, false);
+            }
+        }
+    }
+
+    // A board held for the other machines on the suite host, its leave question named. Its keys are
+    // read once, so the next press is an edge.
+    private static LoadBoard LeaveBoard(TestContext ctx)
+    {
+        var board = LoadBoard.Build(
+            ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, false, "FREE FLIGHT", null);
+        board.LeaveQuestion = "LEAVE?";
+        ctx.Host.AddChild(board);
+        board._Process(0d);
+        return board;
+    }
+
+    private static void Drop(TestContext ctx, ref LoadBoard? board)
+    {
+        if (board == null)
+        {
+            return;
+        }
+
+        ctx.Host.RemoveChild(board);
+        board.QueueFree();
+        board = null;
+    }
+
+    // One key event through Godot's Input, then one frame of the board's own key read.
+    private static void Key(Godot.Key key, bool pressed, LoadBoard? board = null)
+    {
+        Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = pressed });
+        Input.FlushBufferedEvents();
+        board?._Process(0d);
     }
 
     // The launcher's own board, stood twice as a menu aid over a launch would. The second replaces
@@ -114,13 +219,23 @@ internal static class LoadGateSuites
             launcher.ShowLoadScreenForTest();
             launcher.ShowLoadScreenForTest();
             ctx.Check(Utils.LoadGate.Closed, $"the launcher's load screen, stood twice, closes the gate");
+            launcher.HideLoadScreenForTest();
+            ctx.Check(!Utils.LoadGate.Closed, $"…and one drop opens it, so the second board replaced the first");
         }
         finally
         {
+            // A board the replace rule left standing would hold the gate closed and the root's input
+            // off for every later suite in this shard.
             launcher.HideLoadScreenForTest();
+            foreach (var layer in launcher.GetChildren())
+            {
+                if (layer is CanvasLayer && layer.GetChildren().Any(child => child is LoadBoard))
+                {
+                    launcher.RemoveChild(layer);
+                    layer.QueueFree();
+                }
+            }
         }
-
-        ctx.Check(!Utils.LoadGate.Closed, $"…and one drop opens it, so the second board replaced the first");
     }
 
     // A flight reader over the shipped keymap's pad half, the shape a seat's pad reader takes.
