@@ -2,8 +2,9 @@
 
 How CSVM reads a plane mod: a new airframe a modder adds beside the eleven stock ones, as a model
 and a small definition that inherits a stock plane's stats. This is a CSVM format, not a decode of
-the original; it is the reference a mod author works from. A [model pack](model-packs.md) changes
-how an existing airframe looks; a mod adds an airframe the game did not have.
+the original; it is the reference a mod author works from, and [plane-mods.md](../plane-mods.md) is the
+walk-through for preparing a model. A [model pack](model-packs.md) changes how an existing airframe
+looks; a mod adds an airframe the game did not have.
 
 ## Contents
 
