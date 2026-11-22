@@ -1260,7 +1260,7 @@ public partial class GameSession : Node3D
 
     /// <summary>Every board's and the pause sheet's way out. A network race says so first. A guest's
     /// word marks its seats left on the host; a host leaving an ended race takes every guest to the
-    /// lobby.</summary>
+    /// lobby. A lobby host leaving any game before its end does too (<c>NetFlight.Landing</c>).</summary>
     internal void LeaveFlight()
     {
         _raceDirector?.Leave(toLobby: _menuDriven);

@@ -37,7 +37,8 @@ internal static class MenuOriginalCoopFlowSuites
         + "back in the cabin clears the Ready, the host's launch names the flight InMission and the "
         + "guest launches into nothing it did not see open, the guest's plane and ammunition outlive "
         + "the host's Restart and the host builds the guest's seat on them, the host's debrief is the "
-        + "guest's with the host's cash, RETURN TO CABIN takes both back, after a lost mission REPLAY "
+        + "guest's with the host's cash, RETURN TO CABIN takes both back, a host that quits a mission "
+        + "both fly keeps its door and takes the guest back to its cabin, after a lost mission REPLAY "
         + "MISSION goes back through the briefing, the check and Ready with the guest still on its "
         + "pick, a change onto the stock Devastator flies it at rest, and the guest's own saves are "
         + "untouched")]
@@ -108,6 +109,7 @@ internal static class MenuOriginalCoopFlowSuites
             Launch(ctx, host, guest, exits);
             var remembered = PickOutlivesARestart(ctx, host, guest);
             ShareTheDebrief(ctx, host, guest);
+            HostQuitTakesTheGuestHome(ctx, host, guest, exits, remembered);
             RetryGoesBackThroughSelection(ctx, host, guest, exits, remembered);
         }
         finally
@@ -480,6 +482,45 @@ internal static class MenuOriginalCoopFlowSuites
             $"the host's RETURN TO CABIN takes both back ({host.Shell.Screen}, {guest.Shell.Screen})");
     }
 
+    // The host quits a mission both ends fly, in the launcher's order. Its door keeps the wire, the
+    // host lands where its launch left from, and the guest follows it there with its link up.
+    private static void HostQuitTakesTheGuestHome(
+        TestContext ctx, End host, End guest, List<MenuExit> exits, (byte Airframe, CoopFit Fit) remembered)
+    {
+        ClickRow(ctx, host, nameof(BoardButton.NextMission));
+        Pump(host, guest, frames: 3);
+        ClickRow(ctx, host, nameof(BoardButton.GoToFlightCheck));
+        Pump(host, guest, frames: 3);
+        ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
+        Pump(host, guest, frames: 4);
+        int launched = exits.Count;
+        ClickRow(ctx, host, nameof(BoardButton.FlyMission));
+        var guestWire = guest.Door.BuildLaunch();
+        if (exits.LastOrDefault() is not CampaignMissionExit { Net: { } hostWire } exit || exits.Count != launched + 1 || guestWire == null)
+        {
+            ctx.Check(false, $"both ends fly the mission the host quits ({exits.Count - launched} launch(es), guest {guestWire != null})");
+            return;
+        }
+
+        StepInFlight(host, guest, hostWire, guestWire);
+        CSVM.Launch.NetFlight.EndNetWire(host.Door, hostWire.Transport, keepLobby: false);
+        var landing = MenuReturnDestination.ForLaunch(exit);
+        host.Host.Show(landing);
+        for (int i = 0; i < 20 && !CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door); i++)
+        {
+            host.Host.Tick(Dt);
+            guestWire.Transport.Step(Dt);
+            guest.Door.Step(Dt);
+        }
+
+        ctx.Check(landing is CabinReturn && host.Door.IsCoopHost && !host.Door.Released
+                  && CSVM.Launch.NetFlight.CoopGuestFlightOver(guest.Door) && guest.Door.Stage == NetDoorStage.Joined,
+            $"the host's quit keeps its door and lands on its cabin, which ends the guest's flight with its link up ({landing}, {guest.Door.Stage}, \"{guest.Door.Fault}\")");
+        GuestReturns(ctx, host, guest, hostWire, remembered, "after the host's quit");
+        ctx.Check(host.Shell.Screen == OriginalScreen.CampaignCabin && guest.Shell.Screen == OriginalScreen.CampaignCabin,
+            $"and both stand on the host's cabin ({host.Shell.Screen}, {guest.Shell.Screen})");
+    }
+
     // Retry is the book's REPLAY MISSION after a lost mission both ends flew: both go to the
     // briefing under a new round. The host flies again only once the guest has answered Ready on its
     // check once more, and the guest answers on the pick it flew.
@@ -492,9 +533,10 @@ internal static class MenuOriginalCoopFlowSuites
         Pump(host, guest, frames: 3);
         ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
         Pump(host, guest, frames: 4);
+        int launched = exits.Count;
         ClickRow(ctx, host, nameof(BoardButton.FlyMission));
         var guestWire = guest.Door.BuildLaunch();
-        if (exits.LastOrDefault() is not CampaignMissionExit { Net: { } hostWire } || exits.Count != 2 || guestWire == null)
+        if (exits.LastOrDefault() is not CampaignMissionExit { Net: { } hostWire } || exits.Count != launched + 1 || guestWire == null)
         {
             ctx.Check(false, $"both ends fly the mission the retry follows ({exits.Count} launch(es), guest {guestWire != null})");
             return;

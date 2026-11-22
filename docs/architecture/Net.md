@@ -470,8 +470,8 @@ when the last one arrives, drops, or after `TimeoutSeconds` (TUNE, under the ENe
 ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own; one under
 another round is answered with `Hold`. A guest opens on `Start` under its round or on its host's
 link dropping. While held the host sends `Count` for the guests' load boards and puts it in each
-`Hold`; `Cancel` calls the held start off, heard by a build whose `Loaded` is `AnswersCancel`.
-Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
+`Hold`; `Cancel` calls the held start or a lobby game in flight off, heard by a build whose `Loaded`
+is `AnswersCancel`. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session

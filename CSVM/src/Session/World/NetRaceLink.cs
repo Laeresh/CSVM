@@ -141,7 +141,8 @@ internal sealed class NetRaceLink
 
     /// <summary>This machine leaves the race. A guest tells the host, which marks its seats left. The
     /// host tells its guests only when it takes an ended race to the lobby (<paramref name="toLobby"/>).
-    /// A host leaving otherwise closes its door, which ends every guest's flight.</summary>
+    /// A host leaving a running race calls it off through the start gate instead (<c>NetFlight</c>).
+    /// </summary>
     internal void Leave(bool toLobby)
     {
         if (!_net.IsHost)

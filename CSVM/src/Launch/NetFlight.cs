@@ -39,7 +39,7 @@ internal sealed class NetFlight
     // Whether the flight under way came out of the Dogfight lobby, whose seats carry picked fits.
     private bool _lobbyFlight;
 
-    // Set by a finished lobby match on its way out, so the door keeps the wire for the lobby.
+    // Set by a lobby flight landing on its lobby, so the door keeps the wire for it.
     private bool _keepLobby;
 
     // Set by a guest leaving its held start, so the door gives the wire up even in co-op.
@@ -58,6 +58,10 @@ internal sealed class NetFlight
         _returnToMenu = returnToMenu;
         _exitSession = exitSession;
     }
+
+    /// <summary>The landing of a start or a game the host called off: the lobby itself, with its
+    /// players, teams and planes. Its last scores stay standing.</summary>
+    public static LobbyReturn CalledOff => new(System.Array.Empty<DogfightScore>(), Cancelled: true);
 
     /// <summary>Whether the flight under way came out of the Dogfight lobby with a pilot on a team,
     /// which picks the load screen's team dialog.</summary>
@@ -103,6 +107,16 @@ internal sealed class NetFlight
         return RaceLanding(race) is { } table ? new LobbyReturn(System.Array.Empty<DogfightScore>(), table) : null;
     }
 
+    /// <summary>A lobby game left before its end: whether it goes back to the lobby, landing on
+    /// <see cref="CalledOff"/>. A host whose lobby a screen stands on calls the game off here. That
+    /// sends the call-off to every guest and drops each one deaf to it
+    /// (<see cref="SessionNet.CancelStart"/>). A guest answers whether it heard that; one leaving
+    /// alone gives its wire up.</summary>
+    public static bool CallGameOff(bool lobbyFlight, DogfightLobby? lobby, SessionNet wire) =>
+        lobbyFlight && (wire.Link is { IsHost: true }
+            ? lobby is { Shown: true } && wire.CancelStart()
+            : wire.GameCalledOff);
+
     /// <summary>Whether a lobby flight's match ends on Game Scores rather than on a results board.
     /// The host's presentation decides for every machine. A host lands when a lobby screen stands on
     /// its lobby, and a guest when its host's options say so.</summary>
@@ -119,8 +133,8 @@ internal sealed class NetFlight
     public static bool VersusGuestFlightOver(NetPlayFeature door) =>
         door.Stage == NetDoorStage.Failed;
 
-    /// <summary>The door's half of a network flight's end. A co-op door, or a lobby whose match
-    /// ran to its end, takes <paramref name="wire"/> back, unless a guest is
+    /// <summary>The door's half of a network flight's end. A co-op door, or a lobby flight that
+    /// lands on its lobby, takes <paramref name="wire"/> back, unless a guest is
     /// <paramref name="leaving"/> its held start. A host otherwise closes through its door, which
     /// tells every guest first. Anything else disposes the wire and shuts the door.</summary>
     public static void EndNetWire(NetPlayFeature? door, Net.INetTransport wire, bool keepLobby, bool leaving = false)
@@ -388,7 +402,7 @@ internal sealed class NetFlight
 
         if (CoopGuestFlightOver(door))
         {
-            Log.Info("core", $"net: co-op flight over, {(door.IsCoopGuest ? "the host left the mission" : $"the link ended ({door.Fault})")}");
+            Log.Info("core", $"net: co-op flight over, {(door.IsCoopGuest ? "the host named another board" : $"the link ended ({door.Fault})")}");
             // The host's ending reaches the guest's director inside the host's own hold. A result
             // is therefore banked here whenever the host went on to its debrief.
             _returnToMenu(new CoopGuestReturn(session.Campaign?.Result?.Attempt));
@@ -398,7 +412,8 @@ internal sealed class NetFlight
     /// <summary>A lobby Dogfight's or stunt race's upkeep in flight; the session steps the wire,
     /// never the door. A host's door still advertises, so a player who joins mid-match waits in the
     /// lobby. A guest's door watches its host, and a host that leaves ends the flight here. A host
-    /// that takes an ended race to the lobby takes this guest there, the race's table with it.
+    /// that takes an ended race to the lobby takes this guest there, the race's table with it. One
+    /// that calls its game off takes it to the lobby itself.
     /// </summary>
     public void TickVersus(double delta, GameSession? session)
     {
@@ -413,19 +428,21 @@ internal sealed class NetFlight
             Log.Info("core", $"net: versus flight over, the host left ({door.Fault})");
             _returnToMenu(new LobbyReturn(System.Array.Empty<DogfightScore>()));
         }
-        else if (!_isHost && session.Wire.Race is { LobbyCalled: true })
+        else if (!_isHost && (session.Wire.Race is { LobbyCalled: true } || session.Wire.GameCalledOff))
         {
-            Log.Info("core", $"net: the host took the race back to the lobby");
+            Log.Info("core", $"net: the host took the {(session.Wire.GameCalledOff ? "game" : "race")} back to the lobby");
             _exitSession();
         }
     }
 
     /// <summary>Where the live <paramref name="session"/> lands when it leaves: its lobby's Game
-    /// Scores (<see cref="LobbyLanding"/>), or null for the launch's own destination. A landing
-    /// keeps the wire for the lobby when the flight closes.</summary>
+    /// Scores (<see cref="LobbyLanding"/>), or the lobby itself for a game called off. On a host
+    /// that call-off is made here and sent (<see cref="CallGameOff"/>). Null lands on the launch's
+    /// own destination. A landing keeps the wire for the lobby when the flight closes.</summary>
     public LobbyReturn? Landing(GameSession session)
     {
-        var landing = LobbyLanding(_lobbyFlight, Door?.Dogfight, session.Dogfight?.Match, session.NetSeats, session.RaceDirector?.Race);
+        var landing = LobbyLanding(_lobbyFlight, Door?.Dogfight, session.Dogfight?.Match, session.NetSeats, session.RaceDirector?.Race)
+            ?? (CallGameOff(_lobbyFlight, Door?.Dogfight, session.Wire) ? CalledOff : null);
         _keepLobby = landing != null;
         return landing;
     }
@@ -441,7 +458,7 @@ internal sealed class NetFlight
         }
 
         _keepLobby = true;
-        return new LobbyReturn(System.Array.Empty<DogfightScore>(), Cancelled: true);
+        return CalledOff;
     }
 
     /// <summary>A guest leaves its held start for the games list. The flight's close then gives the
@@ -461,7 +478,7 @@ internal sealed class NetFlight
     /// <summary>The end of a network flight: the wire is dropped, and the door gives the router's
     /// forwarded port back. The door never closes a transport it handed over, so the flight closes
     /// it here. A co-op door takes its wire back instead, since its session outlives a flight, and
-    /// so does a lobby whose match ran to its end.</summary>
+    /// so does a lobby flight that lands on its lobby.</summary>
     public void Close()
     {
         if (_wire == null)

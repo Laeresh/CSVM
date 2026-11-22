@@ -64,6 +64,9 @@ internal sealed class SessionNet
     private readonly HashSet<int> _builtAhead = new();
     // A host's guests whose loaded word carried no cancel mark, an older build's.
     private readonly HashSet<int> _deafToCancel = new();
+    // A host's guests whose latest loaded word named no round of this flight. One whose gate opened
+    // on its timeout so takes no round, and no call-off in flight.
+    private readonly HashSet<int> _roundless = new();
     // The menu door's lobby under the wire, null on a command-line launch, which has none.
     private readonly Net.NetLobby? _lobby;
 
@@ -177,6 +180,9 @@ internal sealed class SessionNet
 
     /// <summary>Whether the host called this guest's held start off.</summary>
     public bool StartCancelled { get; private set; }
+
+    /// <summary>Whether the host called this guest's game off in flight, taking it to the lobby.</summary>
+    public bool GameCalledOff { get; private set; }
 
     /// <summary>AI aircraft and world pools over the wire, null outside a network match.</summary>
     public NetWorldLink? World { get; private set; }
@@ -393,26 +399,29 @@ internal sealed class SessionNet
         return true;
     }
 
-    /// <summary>The host calls its held start off. Every guest is told under the round. An older
-    /// build drops that word unread, so a guest whose loaded word came unmarked loses its link now.
-    /// One still loading loses it to the lobby when its word arrives (<c>CallOffStart</c>). Either
-    /// goes down its lost-link path.</summary>
-    public void CancelStart()
+    /// <summary>The host calls its held start, or its game in flight, off. Every guest is told under
+    /// the round. A guest deaf to it loses its link now: an older build (an unmarked loaded word),
+    /// or one in flight that never named the round. An older one still loading loses it to the lobby
+    /// when its word arrives (<c>CallOffStart</c>). Each goes down its lost-link path. False with no
+    /// gate.</summary>
+    public bool CancelStart()
     {
         if (Link is not { IsHost: true } net || StartGate is not { } gate)
         {
-            return;
+            return false;
         }
 
         net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Cancel, gate.Round), Net.NetChannels.Events);
-        foreach (int peer in _deafToCancel.ToArray())
+        var deaf = gate.Open ? _deafToCancel.Union(_roundless).ToArray() : _deafToCancel.ToArray();
+        foreach (int peer in deaf)
         {
             net.Disconnect(peer);
         }
 
         _lobby?.CallOffStart();
 
-        Log.Info("core", $"net start: called off by the host, round {gate.Round}, {_deafToCancel.Count} older build(s) dropped");
+        Log.Info("core", $"net start: called off by the host, round {gate.Round}, {deaf.Length} guest(s) that cannot hear it dropped");
+        return true;
     }
 
     /// <summary>Combat over the wire, wired once the seats, the pool and the catalogue stand. It
@@ -1167,14 +1176,18 @@ internal sealed class SessionNet
 
             if (!gate.Current(word.Round))
             {
+                _roundless.Add(peer);
                 if (word.Round == 0)
                 {
                     _builtAhead.Add(peer);
                 }
 
                 SendHold(peer);
+                return;
             }
-            else if (!gate.Open)
+
+            _roundless.Remove(peer);
+            if (!gate.Open)
             {
                 gate.TakeLoaded(peer, word.Round);
             }
@@ -1196,10 +1209,11 @@ internal sealed class SessionNet
                 SendLoaded();
             }
         }
-        else if (!net.IsHost && word.Word == Net.NetStartWord.Cancel && gate.Current(word.Round) && !gate.Open)
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Cancel && gate.Current(word.Round))
         {
-            StartCancelled = true;
-            Log.Info("core", $"net start: the host called the start off, round {word.Round}");
+            StartCancelled = !gate.Open;
+            GameCalledOff = gate.Open;
+            Log.Info("core", $"net start: the host called the {(gate.Open ? "game" : "start")} off, round {word.Round}");
         }
         else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
         {
