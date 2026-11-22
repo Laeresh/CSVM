@@ -295,6 +295,22 @@ internal static class WorldAndToolSuites
         // The four-bit alpha clears some faint coloured texels too, so not every clear texel is black.
         ctx.Check(blackBefore > 0, $"the archive's texture keeps black clear texels ({blackBefore} of {clear} clear)");
         ctx.Check(blackAfter == 0 && alphaMoved == 0, $"the Enhanced copy fills every clear texel and moves no alpha (black {blackAfter}, alpha moved {alphaMoved})");
+
+        // Every builder shares one copy per source and mode, so a plane rebuilt does not fill again.
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            var first = SceneBuilder.SharedEdgeFilled(tex);
+            var again = SceneBuilder.SharedEdgeFilled(tex);
+            GraphicsMode.Set(!wasEnhanced);
+            var switched = SceneBuilder.SharedEdgeFilled(tex);
+            ctx.Check(ReferenceEquals(first, again) && !ReferenceEquals(first, switched),
+                $"builders share one edge-filled copy per source, made again after a mode switch");
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+        }
     }
 
     // Faithful graphics keeps four bits of an alpha-plane texture's alpha, as the original's ARGB4444
