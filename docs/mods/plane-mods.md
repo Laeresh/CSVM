@@ -281,7 +281,8 @@ A minimal definition:
 
 From there add what the plane needs: `overrides` for speed, armour and handling numbers, `"turrets": []`
 to turn a parent's turret into forward guns, `loadout` for its default guns and pylons,
-`hangar_capacity`, `cockpit`, `sound`, `unlock`, `portrait` and `tint`. Each key is in the reference.
+`hangar_capacity`, `description` (the plane builder's flavour text), `cockpit`, `sound`, `unlock`,
+`portrait` and `tint`. Each key is in the reference.
 A key starting with `_` is a comment.
 
 ## 9. Test it

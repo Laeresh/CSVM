@@ -48,6 +48,7 @@ machine in a network match needs the same mods, which the content hash compares.
   "cockpit": "player_warhawk",
   "sound": "player_fury",
   "portrait": "portrait.png",
+  "description": "A carrier fighter with eight guns and armour piled on the nose.",
   "overrides": { "fd_speed": 120.0, "turrets": [] },
   "tint": { "mask": "avenger_mask.png", "detail": "avenger_detail.png", "materials": ["avenger"] },
   "hangar_capacity": 12500,
@@ -68,6 +69,7 @@ machine in a network match needs the same mods, which the content hash compares.
 | `sound` | A stock node whose engine sounds the plane uses: the engine loop, the cockpit-view loop, the damaged loop with its pitch range and the dive whine its def names, in the original and the Enhanced sound mode alike. Absent, the parent's. |
 | `portrait` | The path of an image inside the mod (`.png`, `.jpg`, `.webp`, `.tga` or `.bmp`) that menus show as the plane's portrait ([Menu art](#menu-art)). Absent, a render of the model. |
 | `tint` | How a livery colours the plane's own surfaces: `mask` and `detail`, each the path of a `.png` inside the mod, and `materials`, a non-empty list of `plane.glb` material names. All three are required; a `_` key inside is prose. Absent, the plane's own surfaces keep their paint under every livery. The rules are in [Paint](#paint). |
+| `description` | The prose the plane builder's AIRFRAME tab shows under the figures and the DESCRIPTION heading, in place of the parent's ([The hangar](#the-hangar)). Line breaks join into one paragraph, as the shipped prose does. Absent, the parent's. |
 | `hangar_capacity` | The hangar's weight capacity in lb, a whole number from 1 to 100000, replacing the parent's stat-table capacity in the overweight check ([The hangar](#the-hangar)). Absent, the parent's. |
 | `loadout` | The plane's default fit, replacing the parent's stock fit: see [Default loadout](#default-loadout). Absent, the parent's. |
 
@@ -215,7 +217,8 @@ availability, slot titles, engine rows), with `hangar_capacity` in place of the 
 mod with `"turrets": []`, no turret slots, so the converted slot costs and weighs as a wing gun
 ([hangar.md](../org/hangar.md)). Its default configuration is the [default loadout](#default-loadout),
 engine tier 2, and the armour of the parent's zones after the mod's `<zone>_armor` overrides. The
-description prose and the engine names are the parent's; the picture is the mod's ([Menu art](#menu-art)).
+AIRFRAME tab's prose is the mod's `description`, else the parent's; the engine names and their prose
+are the parent's; the picture is the mod's ([Menu art](#menu-art)).
 
 A saved build keeps the mod's id as `modAirframe` beside its parent's stock id in `airframe` in
 CSVM's custom plane file; a stock build's file carries no `modAirframe`. The plane pickers fly such a

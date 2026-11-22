@@ -1903,7 +1903,8 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
                 var bare = HangarEconomy.Price(new CustomPlaneDef { Airframe = stockId, ModAirframe = mod?.Id }, mod);
                 name = hangar.AirframeName(airframe);
                 info = HangarDescriptions.Airframe(
-                    hangar.Strings, stockId, Rating(bare.AgilityStars), Rating(bare.ArmourStars), HangarEconomy.StatsFor(stockId, mod));
+                    hangar.Strings, stockId, Rating(bare.AgilityStars), Rating(bare.ArmourStars), HangarEconomy.StatsFor(stockId, mod),
+                    mod?.Description);
                 break;
             case OriginalScreen.HangarEngine:
                 int engine = FocusedItem(rows, focus, EngineDropKey) ?? scratch.Engine;

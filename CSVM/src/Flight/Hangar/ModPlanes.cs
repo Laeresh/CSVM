@@ -116,6 +116,10 @@ public sealed class ModPlane
     /// stat-table row; null keeps the parent's.</summary>
     public int? HangarCapacity { get; internal init; }
 
+    /// <summary><c>description</c>: the plane builder's prose under the airframe's figures, in place of
+    /// the parent's; null keeps the parent's.</summary>
+    public string? Description { get; internal init; }
+
     /// <summary>The plane's stats: the parent's, as <see cref="PlaneStats.Load"/> or, for a bot,
     /// <see cref="PlaneStats.LoadForAi"/> with the parent's AI def loads them, then the overrides and
     /// <see cref="ClearsTurrets"/>. Engine sounds come from <see cref="Sound"/> when set.
@@ -435,10 +439,14 @@ public sealed class ModPlanes
         GunChoice[]? guns = null;
         int? hardpoints = null;
         int? capacity = null;
+        string? description = null;
         foreach (var field in doc.RootElement.EnumerateObject())
         {
             switch (field.Name)
             {
+                case "description":
+                    description = Text(field);
+                    break;
                 case "loadout":
                     (guns, hardpoints) = DefaultLoadout(field.Value);
                     break;
@@ -493,7 +501,13 @@ public sealed class ModPlanes
 
         return new ModPlane(id, name ?? id, kindOf, overrides, clearsTurrets, unlock, cockpit, sound, portrait,
             source, zip, files, Hash(source, zip, files))
-        { Tint = tint, DefaultGuns = guns, DefaultHardpointsPerWing = hardpoints, HangarCapacity = capacity };
+        {
+            Tint = tint,
+            DefaultGuns = guns,
+            DefaultHardpointsPerWing = hardpoints,
+            HangarCapacity = capacity,
+            Description = description,
+        };
     }
 
     // The tint block: a mask and a detail PNG inside the mod, and the non-empty list of materials they tint.
