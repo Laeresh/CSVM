@@ -578,7 +578,7 @@ The full-screen colour wash, two channels over one hidden `ColorRect` per render
 channel is the `FBFX_COLOR_FROM_TO` wash a close HE, AP or flak burst authors, lerped in RGBA on sim
 time and then ended rather than held, replacing whatever that pane was running, and painted on every
 pane whose own camera stands inside the burst def's authored player-range gate. The blend channel is
-`BlendWash`, addressed by the struck aircraft's player index and painting nothing for an AI. The two
+`BlendWash`, addressed by the struck aircraft's player index and painting nothing for an AI; a sonic or flash hit's `PlayBlinding` also keeps its envelope alone (`BlindingFor`) for the target marker. The two
 composite at paint time alone, the blend over the ramp, so a pane with no blend wash paints exactly
 the ramp's own colour. One state per pane, never one global: in splitscreen each pane is its own
 picture. The wash keys: [../formats/anim-definitions.md](../formats/anim-definitions.md).

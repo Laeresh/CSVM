@@ -685,6 +685,8 @@ internal sealed class HumanFlightAdapter
             var fogRange = _world.FogRange;
             int paneIndex = rig.Index;
             targetHud.FogRange = fogRange == null ? null : () => fogRange(paneIndex);
+            var washWeight = _world.WashWeight;
+            targetHud.WashWeight = washWeight == null ? null : () => washWeight(paneIndex);
             if (verbose)
                 Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 

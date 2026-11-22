@@ -34,6 +34,11 @@ public sealed partial class TargetHud : Control
     /// without, and the picture stepped with the target in a turn.</summary>
     public const int AfterFlightRigs = 1;
 
+    /// <summary>The least sonic or flash wash weight that hides the marker: the first the original's
+    /// 32-level software blend paints any wash colour at. Remake-only rule: docs/org/targeting.md
+    /// "Under a blinding wash".</summary>
+    public const float BlindingFloor = 1f / 32f;
+
     /// <summary>Which pane this draws in (0-based), the identity <see cref="OwnTeam"/> falls
     /// back to with no aircraft bound.</summary>
     public int PlayerIndex;
@@ -73,6 +78,10 @@ public sealed partial class TargetHud : Control
     /// <summary>The live per-zone fog band (near, far) the spyglass's range gate is derived from,
     /// or null on a pane with no weather bound, where the gate is its 2000 m cap alone.</summary>
     public System.Func<Vector2>? FogRange;
+
+    /// <summary>The weight of this pane's sonic or flash wash this frame (<c>ScreenFlash.BlindingFor</c>,
+    /// smoke excluded). Null on a pane with none bound, which is never blinded.</summary>
+    public System.Func<float>? WashWeight;
 
     /// <summary>The hostile and destructive-objective colour, the decoded (200,0,0) in the HUD
     /// palette's desaturation.</summary>
@@ -198,6 +207,11 @@ public sealed partial class TargetHud : Control
     /// gate still run.</summary>
     public bool Textless { get; set; }
 
+    /// <summary>Whether a sonic or flash wash blinds the pilot (<see cref="Blinds"/>). Set, the
+    /// selection's box, label, lead marker and spyglass are not drawn, flat or in the headset. The
+    /// selection, its gates and every other marker run on.</summary>
+    public bool Blinded => WashWeight is { } weight && Blinds(weight());
+
     /// <summary>Whether a stereo session draws this pane's markers in the world
     /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
     /// The stereo host then answers the spyglass's gates and shows its picture on the head ring.</summary>
@@ -269,6 +283,10 @@ public sealed partial class TargetHud : Control
         hud.AddChild(hud._spyglass);
         return hud;
     }
+
+    /// <summary>Whether a sonic or flash wash at <paramref name="washWeight"/> hides the marker: at or
+    /// above <see cref="BlindingFloor"/>, so for as long as the wash shows.</summary>
+    public static bool Blinds(float washWeight) => washWeight >= BlindingFloor;
 
     /// <summary>The nearest live hostile AI aircraft in <paramref name="scan"/>, or null. Pure
     /// over the candidate snapshot: live (a crashed plane is listed but not live), an
@@ -578,7 +596,7 @@ public sealed partial class TargetHud : Control
     /// still against the drawn target. Read by the suite.</summary>
     public (Vector3 Lead, Vector3 Target)? LeadMark()
     {
-        if (Own is not { LeadMarker: true } own)
+        if (Blinded || Own is not { LeadMarker: true } own)
         {
             return null;
         }
@@ -770,8 +788,13 @@ public sealed partial class TargetHud : Control
             // gun's physics pose, a fly-by shake through a camera on the render pose. The gate in
             // UpdateBrackets stays on the physics pose.
             var pos = TargetPool.TryRenderPosition(target.Source, out var render) ? render : target.Position;
-            into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
-                _bracketed, 0));
+            if (!Blinded)
+            {
+                into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
+                    _bracketed, 0));
+            }
+
+            // Set while blinded too, so the hostile fallback never stands in for the hidden marker.
             selected = true;
         }
 
@@ -1005,7 +1028,7 @@ public sealed partial class TargetHud : Control
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
     // _Draw. Both latch, and a latch that advanced per repaint would depend on how often the pane
     // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing, and
-    // neither does a textless one.
+    // neither does a textless or a blinded one.
     private void StepSpyglass()
     {
         // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
@@ -1015,7 +1038,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        if (!Visible || Textless || Selected is not { Source: not null } sel
+        if (!Visible || Textless || Blinded || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
             ReleaseSpyglass();

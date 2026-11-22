@@ -209,6 +209,11 @@ internal sealed class FlightWorldBindings
     /// these bindings are.</summary>
     public Func<int, Vector2>? FogRange { get; init; }
 
+    /// <summary>The weight of one pane's sonic or flash wash this frame, by its <c>PlayerRig.Index</c>
+    /// (<c>ScreenFlash.BlindingFor</c>, smoke excluded). The target marker hides while it shows. A
+    /// closure for the same reason as <see cref="FogRange"/>.</summary>
+    public Func<int, float>? WashWeight { get; init; }
+
     /// <summary>The session's race flag: true wherever the session runs a race, whatever carries
     /// it. Both assemblers stamp it on every aircraft (<c>FlightController.Racing</c>), and the human
     /// one also builds the pilot unarmed, ghosted and labelled. False leaves every build as it was.

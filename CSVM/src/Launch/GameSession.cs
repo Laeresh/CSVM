@@ -2342,6 +2342,7 @@ public partial class GameSession : Node3D
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
             FogRange = rigIndex => _sky?.Weather?.FogOf(rigIndex).Range ?? Vector2.Zero,
+            WashWeight = rigIndex => _screenFlash?.BlindingFor(rigIndex)?.Weight ?? 0f,
             // The session's race flag, keyed off the race itself and not off the pane count. A
             // network race that builds a StuntRace takes the same presence rules.
             Racing = race != null,

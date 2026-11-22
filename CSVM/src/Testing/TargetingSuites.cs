@@ -1583,6 +1583,140 @@ internal static class TargetingSuites
         }
     }
 
+    // A sonic or flash hit's wash against a real TargetHud with a real selection and spyglass, no game
+    // data. The washes go through a real two-pane ScreenFlash, read the way the session binds it. The
+    // flash and the hud's frame are stepped by hand, and the headset half mirrors XrMarkers.Refresh.
+    [Suite("blinded-marker-hud",
+        "the target marker under a sonic or flash wash (TargetHud.Blinded): a smoke wash painted on the "
+        + "pane hides nothing; a flash's start delay hides nothing; from the moment its wash shows until "
+        + "its cut the hud lists no selection mark and drops the off-screen spyglass, flat and in the "
+        + "headset, while the selection and its bracket gate are kept; after the cut both are back, flat "
+        + "and in the headset; a weak hit near the radius hides it for its whole wash too; a pane with no "
+        + "wash bound is never blinded")]
+    internal static void BlindedMarkerHud(TestContext ctx)
+    {
+        TargetHud? hud = null;
+        FlightController? own = null;
+        UI.Boards.ScreenFlash? flash = null;
+        Node[] panes = System.Array.Empty<Node>();
+        try
+        {
+            var eye = ctx.Camera.GlobalTransform;
+            var targeting = new TargetSelection();
+            own = new FlightController { Targeting = targeting };
+            // Behind the camera and inside the spyglass's 2000 m cap, so the picture comes up.
+            var bogey = TargetRef.ForAircraft(
+                new AimCandidate
+                {
+                    Team = AimAssist.TeamOfPilot(100),
+                    Live = true,
+                    Source = new object(),
+                    Position = eye.Origin + (eye.Basis.Z * 300f),
+                },
+                TargetClass.Enemy, "blind_bogey", "Bogey");
+            targeting.Pool.Add(bogey);
+            targeting.Nearest(TargetClass.Enemy);
+            targeting.Resolve(eye.Origin, eye.Basis);
+
+            hud = TargetHud.Build(0, ctx.Camera, null!);
+            ctx.Host.AddChild(hud);
+            hud.Own = own;
+            hud.PlanePos = eye.Origin;
+            var marks = new List<WorldMark>();
+            bool Marked()
+            {
+                marks.Clear();
+                hud.WorldMarks(marks);
+                return marks.Exists(m => m.Style == WorldMarkStyle.Selected);
+            }
+
+            // The flat pane: the hud's own frame answers the spyglass.
+            bool FlatShows()
+            {
+                hud.MarksInWorld = false;
+                hud._Process(0d);
+                return Marked() && hud.DiscShown;
+            }
+
+            // The headset: XrMarkers.Refresh's own two calls, the cards' list then the ring's picture.
+            bool HeadsetShows()
+            {
+                hud.MarksInWorld = true;
+                bool card = Marked();
+                bool picture = XrMarkers.AnswerSpyglass(hud, true, marks, eye) != null && hud.DiscShown;
+                return card && picture;
+            }
+
+            ctx.Check(hud.Selected?.Name == "blind_bogey" && !hud.Blinded && FlatShows() && HeadsetShows(),
+                $"CONTROL: with no wash bound the selection is marked and its off-screen spyglass is up, flat and in the headset");
+
+            (flash, panes) = AnimationAndEffectsSuites.PaneFlash(ctx, null);
+            var screen = flash;
+            hud.WashWeight = () => screen.BlindingFor(0)?.Weight ?? 0f;
+            const float Dt = 1f / 60f;
+            void Step(float seconds)
+            {
+                for (float t = 0f; t < seconds; t += Dt)
+                {
+                    screen.Advance(Dt);
+                }
+            }
+
+            // The smoke screen's first-hit wash, the session's PlayBlend route.
+            screen.PlayBlend(0, new Color(0.2f, 0.29f, 0.145f), 0.97f, 2f);
+            Step(1f);
+            ctx.Check(screen.CurrentFor(0).A > 0.5f && !hud.Blinded && FlatShows() && HeadsetShows(),
+                $"a smoke wash painting the pane at alpha {screen.CurrentFor(0).A:0.00} hides nothing, flat or in the headset");
+            Step(1.5f);
+
+            // A dead-centre flash, the caller's own arguments: weight 1 for 5 s after a 1 s delay.
+            screen.PlayBlinding(0, new Color(1f, 1f, 1f), 1f, 5f, 1f);
+            var blind = screen.BlindingFor(0)!;
+            Step(0.5f);
+            ctx.Check(blind.Running && blind.Weight == 0f && !hud.Blinded && FlatShows() && HeadsetShows(),
+                $"inside the flash's start delay its wash paints nothing yet and the marker stays");
+
+            Step(0.6f);
+            ctx.Check(blind.Weight > 0f && blind.Weight < 0.5f && hud.Blinded && !FlatShows() && !HeadsetShows(),
+                $"early in the attack (weight {blind.Weight:0.00}) the selection mark and the spyglass are gone, flat and in the headset");
+            ctx.Check(hud.Selected?.Name == "blind_bogey" && hud.Bracketed,
+                $"…while the lock is kept: still selected ({hud.Selected?.Name}) and still bracketed by the gun gate ({hud.Bracketed})");
+
+            while (blind.Running && blind.Elapsed < blind.Duration - (2f * Dt))
+            {
+                screen.Advance(Dt);
+            }
+
+            ctx.Check(blind.Running && hud.Blinded && !FlatShows(),
+                $"two frames before the cut the release still shows at {blind.Weight:0.00} and the marker is still hidden");
+            Step(0.1f);
+            ctx.Check(!blind.Running && !hud.Blinded && FlatShows() && HeadsetShows(),
+                $"after the cut the marker and the spyglass are back, flat and in the headset");
+
+            // A weak hit near the radius: d squared at 0.82 of the radius squared leaves 0.45 for 2.25 s.
+            DisablingIntensity.TryResolve(0.82f, 1f, false, 0f, out float weak, out float weakSeconds);
+            screen.PlayBlinding(0, new Color(1f, 0f, 0f), weak, weakSeconds, 1f);
+            Step(1.5f);
+            ctx.Check(blind.Running && hud.Blinded && !FlatShows(),
+                $"a weak sonic hit ({weak:0.00} for {weakSeconds:0.00} s) hides the marker too");
+            Step(weakSeconds);
+            ctx.Check(!blind.Running && FlatShows(), $"and returns it at its cut");
+
+            hud.WashWeight = null;
+            ctx.Check(!hud.Blinded, $"a pane with no wash bound is never blinded");
+        }
+        finally
+        {
+            hud?.Free();
+            own?.Free();
+            flash?.Free();
+            foreach (var pane in panes)
+            {
+                pane.Free();
+            }
+        }
+    }
+
     // The target-routing switch, driven directly against hand-built sources, no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW

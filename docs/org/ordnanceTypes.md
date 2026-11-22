@@ -988,7 +988,7 @@ order is what decides which types can ever deal damage:
    `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed. CSVM:
    `ProjectilePool.ApplyDisabling`, run from `Apply` on every burst of a `SONIC`/`FLASH` weapon over
    the same aircraft gather the splash uses, with the shooter kept as a candidate where the damage
-   pass drops them; a human's pane through `ProjectilePool.WashSink` (`ScreenFlash.PlayBlend`), an
+   pass drops them; a human's pane through `ProjectilePool.WashSink` (`ScreenFlash.PlayBlinding`), an
    AI through `FlightController.TryStunPilot`.
 3. **`BEEPER`** (`0x4000`). Tests the shooter against the victim (`FUN_004b8ce0`), then tags the
    victim by handing `FUN_004b88a0` the shared `TIME` at `+0x18`. Zeroes both damage figures and
@@ -1089,7 +1089,9 @@ the new one by the incoming weight (`(old·p + new·w) / (p' + w)`, normalised b
 the weights combine as `p' = w + p − w·p`, so two flashes are worse than one but never saturate; a
 re-hit resets the elapsed clock but not the displayed weight. The first argument is a **start
 delay** during which nothing paints, read on the first hit only: the sonic/flash caller passes 1.0 s,
-the smoke caller 0. An optional sound handle starts with it.
+the smoke caller 0. An optional sound handle starts with it. The wash is painted over the finished
+frame, so it covers the HUD and the target marker too ([`targeting.md`](targeting.md), "Under a
+blinding wash").
 
 ⚠ **Nothing on the player's path touches the controls.** The player branch calls only the screen
 wash and returns; there is no input lockout, no state change, no stun. That asymmetry is the design:

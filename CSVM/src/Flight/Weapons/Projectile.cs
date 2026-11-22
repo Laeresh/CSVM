@@ -89,7 +89,7 @@ public sealed partial class ProjectilePool : Node3D
     /// def, so a static instance of its template must not stand in for it. Null carries nothing.</summary>
     public System.Func<string, bool>? EffectHandles;
 
-    /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlend</c>'s
+    /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlinding</c>'s
     /// shape (player index, colour, weight, duration, start delay). Assigned by the session; null (a
     /// lab, a headless view) washes nobody while the AI stun beside it still runs.</summary>
     public System.Action<int, Color, float, float, float>? WashSink;
