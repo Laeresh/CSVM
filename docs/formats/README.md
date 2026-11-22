@@ -9,7 +9,7 @@ tables and tiny excerpt values, never bulk extracted content.
 
 Most of this was decoded by inspecting extracted data and matching behavior against the original
 game (screenshots, videos, in-game measurements). Most pages additionally cite `crimson.exe`, at
-each point where the retail binary settles a question the data cannot: 40 of the 48 pages here name
+each point where the retail binary settles a question the data cannot: 40 of the 49 pages here name
 a function, address or global from it. That is sometimes a literal the file's meaning depends on,
 such as the editor format comment naming every `aiv` roster field ([ai-rosters.md](ai-rosters.md))
 or the absent `ThrustFactor` token ([vehicle.md](vehicle.md)), and more often the routine that
@@ -105,6 +105,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 
 - [model-packs.md](model-packs.md), the glTF model pack and per-airframe `rig.json` a pack author
   writes: folder and keys, materials, the UV-compatible livery rule, and what is never replaced.
+- [mod-planes.md](mod-planes.md), the plane mod a modder writes to add an airframe: the
+  `Mods/Planes` folder or zip, `plane.json`, the checks that skip a mod, and the content hash.
 
 ## Shared conventions (zrdr readers)
 

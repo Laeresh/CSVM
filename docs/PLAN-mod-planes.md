@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, mod loading and airframe identity
 
-11. ☐ Mod discovery and the `plane.json` format
+11. ☑ Mod discovery and the `plane.json` format
 12. ☐ One airframe registry in place of the fixed eleven-plane lists
 13. ☐ Mod stats: synthetic def from `kind_of` plus literal overrides
 14. ☐ Build a mod plane from its GLB
@@ -361,22 +361,43 @@ pack lives in the data root, never in the repo.
 
 # Wave B, mod loading and airframe identity
 
-## B11 ☐ Mod discovery and the `plane.json` format
+## B11 ☑ Mod discovery and the `plane.json` format
+
+**Landed.** **Verified.** <pending orchestrator run>
 
 **Goal.** Folders and zips in `<dataRoot>/Mods/Planes/` load as mod records (id, display name,
 `kind_of`, literal overrides, `unlock`, optional cockpit and sound names, optional portrait) with a
 content hash; an invalid mod is skipped with a log line and a menu notice.
 
-**Evidence (confidence: lead-only).** HD packs already discover subfolders and top-level zips
-(`CSVM/src/Extraction/HdModels.cs`, per the exploration agent); reuse that discovery style.
+**Evidence (confidence: traced-to-code).** HD packs discover subfolders and top-level zips through
+`Extraction/PackIndex.cs`, but merge every pack into one key map; a mod is a unit of its own, so the
+loader enumerates the same way (subfolders and `.zip`s in name order) without `PackIndex`, as
+`Extraction/Subtitles.cs` does.
 
-**Approach.** <TODO: loader location, schema, hash scope>. Document the format in a new
-`docs/formats/` page.
+**Approach.** `CSVM/src/Flight/Hangar/ModPlanes.cs`, beside `StockAirframes.cs`, which it validates
+against (an `Extraction` module would have had to name `Flight`). `ModPlanes.Open(dataRoot)` reads
+`Mods/Planes`: each subfolder and top-level `.zip` is a `ModPlane` with id = folder or zip base name.
+A zip's top is where `plane.json` sits, at its root or under one top folder; two top folders holding
+one each skip it. `plane.json` keys: `kind_of` (required, a stock node), `name` (default the id),
+`overrides` (def field name to finite number, plus `"turrets": []` as `ClearsTurrets`), `unlock`
+(`start`, `with_parent` default, or any other non-empty string as a mission or chapter id),
+`cockpit` and `sound` (stock nodes), `portrait` (a path that must exist in the mod); `_`-prefixed
+keys are prose, any other key fails. `plane.glb` at the top is required. The id may not be a stock
+node or an earlier mod's id (matched without case). The hash is SHA-256 over every file sorted by
+lower-case path (path, zero byte, 64-bit length, bytes), dot files excluded, so a folder and a zip of
+the same files hash alike. A failing mod is logged (`flight` category) and listed in
+`ModPlanes.Skipped`. `ModPlanes.Current` exists but nothing sets or reads it yet; the launch call
+belongs to B12 with a `--det` rule so engine suites never read a user's mods. Format page:
+`docs/formats/mod-planes.md`.
 
-**Model recommendation.** <TODO: tier not settled>
+**Verify.** `CSVM.Tests/ModPlanesTests.cs`, 17 cases over mods built in a temp data root: every
+field, the defaults, folder vs flat zip vs nested zip with one hash, the hash's content rules, eleven
+invalid `plane.json` forms, the colliding, duplicate and incomplete mods. No suite reads the user's
+modding folders.
 
-**Verify.** <TODO>. Test mods are built in `ctx.ScratchDir`; no suite reads the user's modding
-folders.
+**Original approach (kept for reference).** <TODO: loader location, schema, hash scope>. Document
+the format in a new `docs/formats/` page. Model recommendation: <TODO: tier not settled>. Verify:
+<TODO>. Test mods are built in `ctx.ScratchDir`; no suite reads the user's modding folders.
 
 **⚠ Traps.** The id must not collide with a stock node name (`player_avenger` is the Hellhound's,
 `StockAirframes.cs:19`).

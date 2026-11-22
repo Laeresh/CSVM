@@ -1674,6 +1674,16 @@ fields, `IdOf` answers null for a node none of the eleven fly as, and `Nodes` is
 roster indexes. One table for the plane pickers, the campaign director's own and wingman planes,
 and the wire. Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`.
 
+## src/Flight/Hangar/ModPlanes.cs
+The plane mods in `<dataRoot>/Mods/Planes`: each subfolder and top-level `.zip` is one `ModPlane`,
+its id the folder or zip name, read in name order. `Open` checks `plane.json` (a stock `kind_of`,
+literal overrides, `unlock`, stock `cockpit` and `sound`, a portrait inside the mod) and the
+`plane.glb` beside it, and hashes every file by path for multiplayer matching. A mod that fails a
+check, or whose id is a stock node or an earlier mod's, is left out with a warning and listed in
+`Skipped`; `ModPlane.Read` reads a mod's file on demand. Engine-free, reading only
+`StockAirframes`. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage:
+`CSVM.Tests/ModPlanesTests.cs`.
+
 ## src/Flight/Hangar/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
 `Planes` directory, into `CustomPlaneDef`s. Every paint field is read as the index it is, the
