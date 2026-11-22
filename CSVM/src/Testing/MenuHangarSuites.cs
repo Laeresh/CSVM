@@ -71,10 +71,11 @@ internal static class MenuHangarSuites
         + "an open list's focused row is what the two figures price without taking it, a previewed "
         + "airframe row instead leaving that weight line on the shipped Pending word in the page's ink "
         + "where a hardpoint row over the same capacity keeps the figure and the red, a tab page's "
-        + "description box follows the shipped figures with the heading that string ends with and the "
-        + "component's own prose flowed inside the authored box, a body longer than that box standing "
-        + "as a window the wheel takes to the stretch the unscrolled box cut and a changed body putting "
-        + "it back at its head, a decal list opens as the page's "
+        + "description box is one note of the shipped figures, the heading that string ends with and the "
+        + "component's own prose flowed inside the authored box, a body longer than that box making the "
+        + "whole box a window with its stretched thumb inside the right edge and the words wrapped short "
+        + "of it, which the wheel takes to the stretch the unscrolled box cut and a changed body puts "
+        + "back at its head, a decal list opens as the page's "
         + "five-across two-down grid of the sheet's own tiles with its scrollbar counting rows of "
         + "five, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
@@ -544,21 +545,20 @@ internal static class MenuHangarSuites
         var info = hangar.Strings.Text(1154).Split('\n');
         string heading = info.Length >= 2 ? info[^2] : string.Empty;
         string prose = hangar.Strings.Text(3240 + (hangar.Scratch.Airframe * 6) + engine);
-        ctx.Check(board.Lines.Any(l => l.Text == "COST: $" + line.Cost.ToString(CultureInfo.InvariantCulture))
-            && board.Lines.Any(l => l.Text.StartsWith("TOP SPEED: ", StringComparison.Ordinal))
-            && board.Lines.Any(l => l.Text.StartsWith("NITRO-BOOST: ", StringComparison.Ordinal)),
-            $"the engine box carries the shipped info string's own figure lines");
-        ctx.Check(heading.Length > 0 && board.Lines.Any(l => l.Text == heading),
-            $"with the heading that string ends with over the prose ({heading})");
         var note = board.Notes.Count == 1 ? board.Notes[0] : null;
-        ctx.Check(note != null && prose.Length > 0 && note.Entries.Count == 1 && note.Entries[0] == prose,
-            $"and the engine's own prose row flowed under it ({note?.Entries.Count}, {prose.Length} chars)");
+        string body = note != null && note.Entries.Count == 1 ? note.Entries[0] : string.Empty;
+        ctx.Check(body.StartsWith("COST: $" + line.Cost.ToString(CultureInfo.InvariantCulture) + "\n", StringComparison.Ordinal)
+            && body.Contains("\nTOP SPEED: ", StringComparison.Ordinal)
+            && body.Contains("\nNITRO-BOOST: ", StringComparison.Ordinal),
+            $"the engine box is one note opening on the shipped info string's own figure lines ({note?.Entries.Count})");
+        ctx.Check(heading.Length > 0 && prose.Length > 0 && body.EndsWith("\n\n" + heading + "\n" + prose, StringComparison.Ordinal),
+            $"with the heading that string ends with and the engine's own prose row under it ({heading}, {prose.Length} chars)");
         var enginePage = layout.Screen("Engine");
         float boxFoot = Field(enginePage, "EN_S_ENGINEDESC", "Y") + Field(enginePage, "EN_S_ENGINEDESC", "Height");
         ctx.CheckShipped(boxFoot == 334f + 165f, $"on the install the engine box ends at 334 + 165 ({boxFoot})");
         ctx.Check(note != null && note.Y + note.Height <= boxFoot && note.Cut,
             $"inside the authored box, cut where it runs out of room rather than growing it ({note?.Y}, {note?.Height})");
-        OriginalDescriptionScroll(ctx, host, seat, shell, fit);
+        OriginalDescriptionScroll(ctx, host, seat, shell, fit, layout);
 
         // The decal picker: fifty tiles as a five-across, two-down grid on the page, wider than
         // the 87-pixel box it hangs from, its arrows and thumb inside its own right edge.
@@ -610,9 +610,11 @@ internal static class MenuHangarSuites
     }
 
     // The armour tab's body runs past its box, which is what the authored S widget's slider and
-    // arrows are for: the box becomes a window the wheel moves, and the stretch the unscrolled box
-    // cut is drawn once it stands at the foot. Leaves the hub on the armour tab.
-    private static void OriginalDescriptionScroll(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    // arrows are for. The whole box becomes a window the wheel moves, figures included. Its slider
+    // stands inside the right edge beside the words, as on the original's armour still. The stretch
+    // the unscrolled box cut is drawn once it stands at the foot. Leaves the hub on the armour tab.
+    private static void OriginalDescriptionScroll(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, MenuLayout layout)
     {
         var armourTab = Row(shell, "PX_B_ARMOR")!;
         Click(host, seat, Pointer(fit, armourTab.X + 5f, armourTab.Y + 5f, pressed: true, clicked: true));
@@ -637,6 +639,19 @@ internal static class MenuHangarSuites
         var bar = GridWindow(shell, OriginalHangarScreen.DescriptionListKey);
         ctx.Check(bar.Scrolls && bar.Count == rows.Total && bar.Rows == rows.Fits,
             $"and the box stands as a window the pointer can move ({bar.Count} lines, {bar.Rows} showing)");
+        var armourPage = layout.Screen("Armor");
+        float boxX = Field(armourPage, "AR_S_ARMORDESC", "X");
+        float boxY = Field(armourPage, "AR_S_ARMORDESC", "Y");
+        float boxWidth = Field(armourPage, "AR_S_ARMORDESC", "Width");
+        float boxHeight = Field(armourPage, "AR_S_ARMORDESC", "Height");
+        ctx.Check(bar.X == boxX && bar.Y == boxY && bar.Width == boxWidth && bar.Height == boxHeight,
+            $"the window is the whole authored box ({bar.X}, {bar.Y}, {bar.Width}, {bar.Height})");
+        var narrowed = shell.Compose();
+        var words = narrowed.Notes.FirstOrDefault();
+        ctx.Check(bar.ThumbX + bar.ThumbWidth <= boxX + boxWidth && words != null && words.X + words.Width <= bar.ThumbX,
+            $"its slider inside the box's right edge, the words wrapping short of it ({bar.ThumbX}, {words?.X + words?.Width})");
+        ctx.Check(narrowed.Pictures.Any(p => p.X == bar.ThumbX && p.Y == bar.ThumbY && p.Height == bar.ThumbHeight),
+            $"its thumb stretched to the share of the body shown ({bar.ThumbHeight} of {bar.TrackHeight})");
         Press(host, seat, new MenuCommands { Pointer = new MenuPointer(fit.X(bar.X + 10f), fit.Y(bar.Y + 10f), false, false, bar.LastTop) });
         var scrolled = shell.Compose().Notes.FirstOrDefault();
         ctx.Check(scrolled?.Skip == bar.LastTop && GridWindow(shell, OriginalHangarScreen.DescriptionListKey).Top == bar.LastTop,

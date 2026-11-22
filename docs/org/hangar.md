@@ -224,13 +224,17 @@ which is why hardpoints reads `HISTORY` where the other five read `DESCRIPTION`.
 The paint box takes no callback at all: `PAINT.SCRIPT` fills `pt_s_paintdesc` with
 `callback($$NB$$, 1158, PLA.BC)`, the string fetch, so the whole box is that one row.
 
-**A body longer than the box scrolls inside it.** The `S` row's fourth, fifth and sixth fields are
-its slider and its two arrows (`PH_B_ScrollBar.png`, `PH_B_ScrollUp.png`, `PH_B_ScrollDown.png`),
-and `OriginalScreenshots/CustomPlane Armor.png` draws all three in a column inside the box's right
-edge, the arrows at its top and foot and a thumb between them, over a last visible line clipped
-mid-glyph. The armour and hardpoint bodies are the two the shipped box cannot hold whole: 1155
-carries 560 characters of prose under its `DESCRIPTION` heading and 1157 about 330 under `HISTORY`,
-against room for roughly six wrapped lines under the figures.
+**A body longer than the box scrolls inside it, as one string.** The `S` row's fourth, fifth and
+sixth fields are its slider and its two arrows (`PH_B_ScrollBar.png`, `PH_B_ScrollUp.png`,
+`PH_B_ScrollDown.png`), and `OriginalScreenshots/CustomPlane Armor.png` draws all three in a
+16-pixel column inside the box's one-pixel border at its right edge. The column runs the box's
+full height: the up arrow under the top border, the down arrow over the bottom one, and the thumb
+between them stretched to about six sevenths of the track, which is the share of the whole body
+(figures, blank line, heading and prose) the box shows, not of the prose alone. The words wrap
+short of the column while it stands; on `CustomPlane Guns.png`, whose body fits and which carries
+no slider, they run to the box's edge. The last visible line is clipped mid-glyph. The armour and
+hardpoint bodies are the two the shipped box cannot hold whole: 1155 carries 560 characters of
+prose under its `DESCRIPTION` heading and 1157 about 330 under `HISTORY`.
 
 **The prose blocks and how they are indexed.** `IDS_AIRFRAMEDESCRIPTION` is 3040 to 3050, one row
 per airframe id. `IDS_ENGINEDESCRIPTION` is **3240 to 3305**, 66 rows on the same

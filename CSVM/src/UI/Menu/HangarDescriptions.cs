@@ -14,6 +14,29 @@ public sealed record HangarInfo(IReadOnlyList<string> Figures, string Heading, s
 {
     /// <summary>An empty box.</summary>
     public static readonly HangarInfo None = new(Array.Empty<string>(), string.Empty, string.Empty);
+
+    /// <summary>The box's whole text in the shipped string's own lines: the figures, a blank line
+    /// and the heading, then the prose as one paragraph. The original's box is one string, so this
+    /// is what scrolls, figures included.</summary>
+    public string Body
+    {
+        get
+        {
+            var lines = new List<string>(Figures);
+            if (Heading.Length > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add(Heading);
+            }
+
+            if (Prose.Length > 0)
+            {
+                lines.Add(Prose);
+            }
+
+            return string.Join("\n", lines);
+        }
+    }
 }
 
 /// <summary>

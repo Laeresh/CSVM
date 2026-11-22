@@ -455,9 +455,9 @@ public class OriginalHangarTests : IDisposable
         Assert.Single(host.Rows.Where(r => r.Visible && r.Kind == OriginalRowKind.ListRow).Select(r => r.X).Distinct());
     }
 
-    /// <summary>The tab pages' description box: the component's figures on their own lines, the
-    /// heading the shipped info string ends with, and the component's prose flowed as a note that
-    /// stays inside the authored box. The engine figures are the still's, for the airframe the
+    /// <summary>The tab pages' description box is one note filling the authored box, as the
+    /// original's box is one string. It holds the figures, the heading the shipped info string ends
+    /// with and the component's prose. The engine figures are the still's, for the airframe the
     /// default configuration opens on.</summary>
     [Fact]
     public void TheTabPagesDescriptionBoxCarriesTheHeadingAndTheComponentsProse()
@@ -467,38 +467,61 @@ public class OriginalHangarTests : IDisposable
         Click(host, "PX_B_ENGINE");
 
         var board = Compose(host);
-        Assert.Contains(board.Lines, l => l.Text == "COST: $1700" && l.Italic);
-        Assert.Contains(board.Lines, l => l.Text == "WEIGHT: 2000 lbs.");
-        Assert.Contains(board.Lines, l => l.Text == "TOP SPEED: 251 m.p.h.");
-        Assert.Contains(board.Lines, l => l.Text == "NITRO-BOOST: No");
-
-        // The blank line the shipped string carries stands between the figures and the heading,
-        // and the prose is a note because its wrapped height is a font measurement.
-        var heading = board.Lines.Single(l => l.Text == "DESCRIPTION");
-        Assert.Equal(330f + 4f + (5f * 14f), heading.Y);
-        Assert.True(heading.Italic);
+        Assert.DoesNotContain(board.Lines, l => l.Text == "COST: $1700" || l.Text == "DESCRIPTION");
         var note = Assert.Single(board.Notes);
-        Assert.Equal("A Devastator engine.", Assert.Single(note.Entries));
-        Assert.Equal((416f, heading.Y + 14f), (note.X, note.Y));
+        Assert.Equal(
+            "COST: $1700\nWEIGHT: 2000 lbs.\nTOP SPEED: 251 m.p.h.\nNITRO-BOOST: No\n\nDESCRIPTION\nA Devastator engine.",
+            Assert.Single(note.Entries));
+        Assert.Equal((416f, 334f, 325f - 12f, 160f - 8f), (note.X, note.Y, note.Width, note.Height));
         Assert.True(note.Italic && note.Cut);
-        Assert.True(note.Y + note.Height <= 330f + 160f, "the prose stays inside the authored box");
 
         // Armour names itself off the shipped string and carries its prose inside it.
         Click(host, "PX_B_ARMOR");
         board = Compose(host);
         Assert.Contains(board.Lines, l => l.Text == "ABOUT ARMOR");
-        Assert.Contains(board.Lines, l => l.Text == "COST: $20/5 units" && l.Italic);
-        Assert.Contains(board.Lines, l => l.Text == "NOTE: Left and right wings must be balanced!");
-        Assert.Contains(board.Lines, l => l.Text == "DESCRIPTION");
-        Assert.Equal("Aero-armor.", Assert.Single(Assert.Single(board.Notes).Entries));
+        Assert.Equal(
+            "COST: $20/5 units\nWEIGHT: 20 lbs./5 units\nNOTE: Left and right wings must be balanced!\n\nDESCRIPTION\nAero-armor.",
+            Assert.Single(Assert.Single(board.Notes).Entries));
 
         // An empty gun slot is its own string, with no figures and no heading over it.
         Click(host, "PX_B_GUNS");
         Click(host, "GN_D_GUN0");
         Click(host, "GN_D_GUN0:" + (HangarFeature.GunCycleRows - 1));
         board = Compose(host);
-        Assert.DoesNotContain(board.Lines, l => l.Text == "DESCRIPTION");
         Assert.Equal("No Information Available", Assert.Single(Assert.Single(board.Notes).Entries));
+    }
+
+    /// <summary>A body longer than the box scrolls whole, as the original's armour still shows. The
+    /// window is the entire box, and the slider column stands inside its right border over the
+    /// box's full height. The words wrap short of it, and the thumb is stretched to the share shown.</summary>
+    [Fact]
+    public void AnOverlongDescriptionScrollsWholeWithItsSliderBesideTheWords()
+    {
+        var host = Host(out _, strings: HangarInfoStrings());
+        OpenHub(host, "Ace");
+        Click(host, "PX_B_ARMOR");
+        var counted = Assert.Single(Compose(host).Notes).Counted!;
+        Assert.Empty(Lists(host));
+
+        // The renderer's measurement, handed back the way a drawn frame hands it.
+        counted(20, 10);
+        var board = Compose(host);
+        var note = Assert.Single(board.Notes);
+        var list = Assert.Single(Lists(host));
+        Assert.Equal(OriginalHangarScreen.DescriptionListKey, list.Key);
+        var window = list.Window;
+        Assert.Equal((410f, 330f, 325f, 160f), (window.X, window.Y, window.Width, window.Height));
+        Assert.Equal((20, 10), (window.Count, window.Rows));
+        Assert.Equal(410f + 325f - 1f, window.ThumbX + window.ThumbWidth);
+        Assert.True(note.X + note.Width <= window.ThumbX, "the words wrap short of the slider");
+        Assert.Equal(334f, note.Y);
+        Assert.Contains(board.Pictures, p => p.Art.Name == "PH_B_ScrollUp.png" && p.Y == 331f);
+        Assert.Contains(board.Pictures, p => p.Art.Name == "PH_B_ScrollDown.png" && p.Y == window.TrackTop + window.TrackHeight);
+        Assert.Contains(board.Pictures, p => p.Art.Name == "PH_B_ScrollBar.png" && p.Height == window.ThumbHeight);
+
+        // The wheel's furthest top skips the figures with the prose.
+        list.ScrollTo(window.LastTop);
+        Assert.Equal(10, Assert.Single(Compose(host).Notes).Skip);
     }
 
     [Fact]

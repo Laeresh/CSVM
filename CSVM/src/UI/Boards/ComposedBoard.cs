@@ -452,18 +452,28 @@ public sealed record BoardNote(
         }
 
         string head = Fit(entry, (Skip * line) + 1f, height);
-        return head.Length == 0 || head.Length >= entry.Length ? entry : entry[head.Length..].TrimStart();
+        if (head.Length == 0 || head.Length >= entry.Length)
+        {
+            return entry;
+        }
+
+        // One authored break goes with the head, so a blank line under it stays a line.
+        string rest = entry[head.Length..];
+        return rest[0] == '\n' ? rest[1..] : rest.TrimStart(' ');
     }
 
-    // The longest head of an entry that fits the room left, cut at a word: the last word that
-    // still fits is found by halving, so the measurer is called a handful of times rather than
-    // once per word. Nothing fits under one line's worth of room.
+    // The longest head of an entry that fits the room left, cut at a word or an authored line
+    // break. The last break that still fits is found by halving, so the measurer is called a
+    // handful of times rather than once per word. Nothing fits under one line's worth of room.
     private string Fit(string entry, float room, Func<string, float, float> height)
     {
         var breaks = new List<int>();
-        for (int i = entry.IndexOf(' ', StringComparison.Ordinal); i > 0; i = entry.IndexOf(' ', i + 1))
+        for (int i = 1; i < entry.Length; i++)
         {
-            breaks.Add(i);
+            if (entry[i] is ' ' or '\n')
+            {
+                breaks.Add(i);
+            }
         }
 
         int low = 0;
