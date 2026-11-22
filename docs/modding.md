@@ -38,7 +38,7 @@ a mod changes need to be present. Once an output exists, it replaces that archiv
 is not merged entry by entry with the game file. An unpacked `C1/M02/zrdr/` therefore needs every
 mission reader the mod still uses; a folder holding only `objectives.zrd.json` makes every other
 reader in that mission scope absent. The campaign-specific export rules are in
-[Campaign mission bundles and Godot authoring](formats/missions/campaign-authoring.md).
+[Campaign mission bundles](formats/missions/campaign-authoring.md).
 
 ## Which archives CSVM reads
 

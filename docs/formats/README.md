@@ -82,8 +82,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 
 - [spawns.md](spawns.md) and [net-spawns.md](net-spawns.md).
 - [missions.md](missions.md), stunt and campaign Danger Zones and target labels.
-  - [Campaign mission bundles and Godot authoring](missions/campaign-authoring.md), the complete
-    story-mission input set, cross-file joins, and safe external-mod export boundary.
+  - [Campaign mission bundles](missions/campaign-authoring.md), the complete story-mission input
+    set, cross-file joins, and whole-scope modding rules.
 - [objectives.md](objectives.md).
 - [mission-entities.md](mission-entities.md).
   - [Enemy generators](mission-entities/enemy-generators.md), host, launch cycle, and capacity rules.

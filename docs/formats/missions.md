@@ -7,8 +7,8 @@ per-mission overrides. The current readers are `Messages.cs`, `MissionTargets.cs
 `StuntMission.cs`, and `CampaignDangerZones.cs`. The campaign missions' choreography script,
 `objectives.zrd`, which consumes these danger zones and target-display flags from its own
 directives, is decoded in [objectives.md](objectives.md). The complete story-mission bundle and a
-safe Godot editing boundary are mapped in
-[Campaign mission bundles and Godot authoring](missions/campaign-authoring.md).
+whole-scope modding rules are mapped in
+[Campaign mission bundles](missions/campaign-authoring.md).
 
 ## Contents
 
@@ -23,9 +23,8 @@ safe Godot editing boundary are mapped in
 
 A story mission combines its own reader archive with shared and chapter readers, the chapter
 world, compiled animations, and a per-mission setup script. The archive census, cross-file joins,
-whole-scope modding rule, and proposed Godot workflow are in
-[Campaign mission bundles and Godot authoring](missions/campaign-authoring.md). This page remains
-the reference for the Danger Zone and target-label readers within that bundle.
+and whole-scope modding rule are in [Campaign mission bundles](missions/campaign-authoring.md).
+This page remains the reference for the Danger Zone and target-label readers within that bundle.
 
 ## Stunt objective
 
