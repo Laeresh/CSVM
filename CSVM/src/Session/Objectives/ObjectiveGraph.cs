@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using CSVM.Utils;
 
 namespace CSVM.Session.Objectives;
 
@@ -866,20 +868,37 @@ public sealed class ObjectiveGraph
         return met.Value;
     }
 
+    // Names a step of one objective that held the frame past the hitch floor (docs/org/hitch.md).
+    // --perf can only say the Campaign phase took it.
+    private void Timed(ObjectiveDef def, string step, long start)
+    {
+        double ms = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        if (ms >= 30.0)
+        {
+            Log.Info("perf", $"slow objective step: objective {def.Number} {step} took {ms:0} ms");
+        }
+    }
+
     private void Complete(Live live)
     {
         var def = live.Def;
         live.Complete = true;
         live.State = ObjectiveState.Retired;
         live.Zones.Clear();
+        long t = Stopwatch.GetTimestamp();
         Note(live, ObjectiveTransitionKind.Completed, 0f);
+        Timed(def, "transition listeners", t);
         RunCompletionActions(def);
         _source = def.Number;
+        t = Stopwatch.GetTimestamp();
         RunChaining(def);
+        Timed(def, "chaining (wake/kill/nap/sleep/hide)", t);
         _source = 0;
         string? classSound = MarkRow(def);
+        t = Stopwatch.GetTimestamp();
         Completed?.Invoke(new ObjectiveCompleted(
             def.Number, def.CompletedSoundGroup, classSound, def.Identity));
+        Timed(def, "completed listeners", t);
         if (def.InstantWin)
         {
             End(MissionOutcome.Won, 0.1f);
@@ -892,23 +911,37 @@ public sealed class ObjectiveGraph
 
     private void RunCompletionActions(ObjectiveDef def)
     {
+        long t = Stopwatch.GetTimestamp();
         if (def.CompletedSoundGroup is { } group)
         {
             _world.PlaySoundGroup(group);
+            Timed(def, "completed sound", t);
         }
 
         if (def.Warp is { } warp)
         {
+            t = Stopwatch.GetTimestamp();
             _world.WarpVehicle(warp.Vehicle, warp.Points);
+            Timed(def, "warp", t);
         }
 
+        t = Stopwatch.GetTimestamp();
         _world.SetAiTeam(def.SetAiTeam);
         _world.SetAiNet(def.SetAiNet);
         _world.SetAiAttackRadius(def.SetAiAttackRadius);
+        Timed(def, "AI team/net/radius", t);
+        t = Stopwatch.GetTimestamp();
         _world.CompletedZepcannons(def.CompletedZepcannons);
+        Timed(def, "zeppelin cannons", t);
+        t = Stopwatch.GetTimestamp();
         _world.CompletedStoppoint(def.CompletedStoppoint);
+        Timed(def, "zeppelin stop point", t);
+        t = Stopwatch.GetTimestamp();
         EditTargets(def);
+        Timed(def, "target edits", t);
+        t = Stopwatch.GetTimestamp();
         _world.StartTaxi(def.StartTaxi);
+        Timed(def, "taxi", t);
         if (def.HelpLabel is { } label)
         {
             foreach (var target in label.Names)
@@ -916,10 +949,14 @@ public sealed class ObjectiveGraph
                 _helpLabels[target.Key] = label.MessageKey;
             }
 
+            t = Stopwatch.GetTimestamp();
             TargetsChanged?.Invoke();
+            Timed(def, "help label targets", t);
         }
 
+        t = Stopwatch.GetTimestamp();
         _world.StopQueuedSounds(def.StopQueuedSounds);
+        Timed(def, "stop queued sounds", t);
         RunTimerActions(def);
     }
 
@@ -1051,22 +1088,32 @@ public sealed class ObjectiveGraph
         live.State = ObjectiveState.Awake;
         live.Timer = 0f;
         live.Zones.Clear();
+        long t = Stopwatch.GetTimestamp();
         _world.WakeupEnemies(def.WakeupEnemies);
+        Timed(def, "wake enemies", t);
+        t = Stopwatch.GetTimestamp();
         _world.WakeupTurrets(def.WakeupTurrets);
         _world.WakeupZepTurrets(def.WakeupZepTurrets);
+        Timed(def, "wake turrets", t);
         if (def.WakeupGenerator is { } generator)
         {
+            t = Stopwatch.GetTimestamp();
             _world.WakeupGenerator(generator.Name, generator.Count);
+            Timed(def, "wake generator", t);
         }
 
         if (def.WakeAnim is { } anim)
         {
+            t = Stopwatch.GetTimestamp();
             _world.WakeAnim(anim.Anim, anim.Node);
+            Timed(def, $"wake anim '{anim.Anim}'", t);
         }
 
         if (def.WakeSoundGroup is { } group)
         {
+            t = Stopwatch.GetTimestamp();
             _world.PlaySoundGroup(group);
+            Timed(def, "wake sound", t);
         }
 
         if (fromDormant && def.ResetTimer is { } seconds)
@@ -1076,8 +1123,10 @@ public sealed class ObjectiveGraph
         }
 
         MarkRowAwake(def);
+        t = Stopwatch.GetTimestamp();
         Note(live, ObjectiveTransitionKind.Woke, 0f);
         Woke?.Invoke(new ObjectiveWoke(def.Number, def.WakeSoundGroup, def.Identity));
+        Timed(def, "woke listeners", t);
     }
 
     private string? MarkRow(ObjectiveDef def)

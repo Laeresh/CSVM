@@ -203,6 +203,9 @@ public sealed class CampaignDirector
     /// <summary>The mission's parsed choreography script.</summary>
     public ObjectiveScript Script { get; }
 
+    /// <summary>Whether this mission scores a danger zone, and so may photograph one.</summary>
+    public bool HasDangerZones => _dangerZones is { Count: > 0 };
+
     /// <summary>The objectives runtime, null until <see cref="Attach"/> has run. D33 reads its
     /// <see cref="ObjectiveGraph.Rows"/> and subscribes to its wake/complete events.</summary>
     public ObjectiveGraph? Graph { get; private set; }
@@ -754,15 +757,21 @@ public sealed class CampaignDirector
             return;
         }
 
+        long t = System.Diagnostics.Stopwatch.GetTimestamp();
         StepPlayerLost();
         TakeLostLeadersNets(_roster, _netTrailers, _minAiActiveDist, _leaderlessReported);
+        t = Timed("player lost / leaderless nets", t);
         Graph?.Step(dt);
+        t = Timed("objective graph", t);
         if (_dangerZones != null && _world is { } world)
         {
             _dangerZones.Update(world.SnapshotHumans(), NotifyDangerZoneCompleted);
         }
+        t = Timed("danger zones", t);
         _paths?.Step(dt);
+        t = Timed("scripted paths", t);
         StepMusic(dt);
+        Timed("music scan", t);
     }
 
     /// <summary>The cutscene hold: while a cutscene owns the session the objectives update stops
@@ -1259,6 +1268,20 @@ public sealed class CampaignDirector
         // The empty choice keeps the two machines' spawns identical.
         WingmanFit = CampaignLoadout.For(wingman.Fit, StockLoadouts.Load()) ?? new LoadoutChoice();
         Log.Info("core", $"campaign: {WingmanName} flies the host's airframe {wingman.Airframe} as {WingmanNode}, bound for the roster spawn");
+    }
+
+    // Names a part of the Campaign phase that held the frame past the hitch floor. The objective
+    // graph names its own steps inside. Answers the next part's start.
+    private long Timed(string part, long start)
+    {
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        double ms = (now - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        if (ms >= 30.0)
+        {
+            Log.Info("perf", $"slow campaign step: {part} took {ms:0} ms (mission {_mission.Ordinal})");
+        }
+
+        return now;
     }
 
     // The music channel's battle detector: the decoded five-second proximity scan, which runs only
