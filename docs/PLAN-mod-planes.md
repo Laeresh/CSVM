@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the Avenger model (Blender, previewed as a Brigand pack)
 
-1. ☐ Export the Brigand and Warhawk as templates and read their node trees
+1. ☑ Export the Brigand and Warhawk as templates and read their node trees
 2. ☐ Clean and orient the model: stand, gear, modelled rockets, frame
 3. ☐ Cut and hinge the control surfaces, split the props, apply stock names
 4. ☐ Model the canopy (frame + glass) and the pilot `head`
@@ -147,7 +147,58 @@ custom-plane code.
 
 # Wave A, the Avenger model (Blender, previewed as a Brigand pack)
 
-## A1 ☐ Export the Brigand and Warhawk as templates and read their node trees
+## A1 ☑ Export the Brigand and Warhawk as templates and read their node trees
+
+**Landed.** Both planes export with `RunProbe.ps1 --viewer --plane=player_brigand
+--export-gltf=Z:\CSVM\.scratchKeep\mod-planes\templates\brigand\brigand.gltf` (and the same for
+`player_warhawk` into `templates\warhawk\`), after a `dotnet build` of the worktree;
+`--plane=` chooses the viewer plane, and each run also writes `cockpit1.gltf` beside the airframe.
+The templates live in `.scratchKeep/mod-planes/templates/`, untracked game data.
+
+- **Frame.** Metres, Y up, nose toward -Z, verified from the bounds: the Brigand's `nosecone`
+  reaches z -2.73 and its tail z +4.19, `ground_level` sits at y -1.33 and the pilot's head tops
+  out at y +0.96.
+- **Brigand size.** Wing span 11.55 m (wing meshes to x ±5.78, wingtip `pdp2_h`/`pdp3_h` to
+  ±5.95), length 6.93 m, height 2.18 m without the prop disc (3.37 m diameter, so 3.37 m with it).
+- **Brigand tree, viewer build.** `player_brigand > geometry > {healthy, dontmove, markers}`.
+  `healthy > nearest > {nose, tail, leftwing, rightwing, pilot_pos, player_damage_on}` and
+  `healthy > l13 > brigand_turret1 > brigturret > {g12436, hgun > {hfirepoint, g935, hfirepoint1}}`.
+  `dontmove > {staticprop1, nosecone}`. The export drops what the static viewer skips: `shadow`,
+  the `l12`/`l14` LOD groups, `brig_hook` (inactive), `destroyed > piece1..4`, `pdp1..pdp8`, and
+  `prop1`, `prop1b`, `nitroprop1`, `wing_flare1/2` (all present in planes.zbd's `nodes.json`).
+- **Control surfaces.** Hinge group, then surface: `lailer1 > l_aileron1`, `railer1 >
+  r_aileron1` (under `leftwing`/`rightwing`), `lft_elev > l_elevator1`, `rt_elev >
+  r_elevator1`, `lrudder1 > l_rudder1`, `rrudder1 > r_rudder1` (under `tail`, twin rudders at the
+  boom ends, x ±1.70). Each surface's origin is its hinge group's origin; the groups carry the
+  tilt (elevators rolled ±6.2° about Z, ailerons about 11° about Z plus a few degrees of X/Y).
+- **Props.** One nose prop: `staticprop1` at (0, 0, -2.10), with `prop1`, `prop1b`,
+  `nitroprop1` in the full tree; `nosecone` is a separate mesh. No `propN` reaches the viewer
+  export.
+- **Pilot.** `pilot_pos > pilot > body > head`; `body` is the torso at (0, 0.33, 0.93), `head`
+  the helmeted head at (0, 0.63, 0.88). The Warhawk names it differently: its `head` is the torso
+  and the head is its child `g1149`.
+- **Markers.** `cockpit_camera` (0, 0.83, 0.72); `firepoint1..8` at two positions per side,
+  each used twice: fp1 ≡ fp4 (+1.40, -0.50, -1.30), fp2 ≡ fp3 (-1.40, -0.50, -1.30),
+  fp5 ≡ fp8 (-2.34, -0.32, -1.15), fp6 ≡ fp7 (+2.34, -0.32, -1.15); `pylon1/3/5/7` port at
+  x -3.26, -2.76, -2.26, -1.79 and `pylon2/4/6/8` starboard at x +3.20, +2.72, +2.21, +1.74
+  (y -0.37 to -0.69, z 1.05 to 1.22); plus `exhaust1/2`, `ground_level`, `target`,
+  `cockpit_light`, `map`, `ladder_pos`, `cf_light`.
+- **Stock loadout** (`stock_loadouts.json` `pbrigand`): W1 Outer Wing Guns cal 60 on fp7,8; W2
+  Outer Wing Guns 2 cal 30 on fp5,6; W3 empty (fp3,4); W4 Rear Turret cal 30 on fp1,2
+  (`turret: true`, a nominal binding, the turret fires from `hfirepoint`/`hfirepoint1`);
+  hardpoints `count` 4, four `wep_06`, which take `PylonFillOrder`'s prefix: pylons 1, 5, 2, 6.
+  This matches the eight firepoints and eight pylons on the model.
+- **Warhawk.** Three engines (`staticprop1..3` nose and wing nacelles at x ±8.1), wing span
+  18.46 m, length 15.02 m, height 3.75 m without props. Eight distinct firepoints, pairs (1,2)
+  outermost x ∓4.4 to (7,8) innermost ∓2.6, odd port; eight pylons, odd port. Its `l_rudder1`
+  hangs directly under `leftwing` with no hinge group while `r_rudder1` sits under `rrudder`.
+  `cockpit1.gltf` is in its own units, eye at the origin, extent 355 x 74 x 251 units (14.2 x
+  3.0 x 10.0 m at `PlaneBuilder.InteriorScale` 0.04), and carries its own `*_aileron2`,
+  `*_elevator2`, `*_rudder2` surfaces.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The Brigand's node names, frame, slot count (`firepointN`, `pylonN`), turret mount nodes
 and `head` node are known, and the Warhawk's `cockpit1` export is on disk as the cockpit reference.
@@ -255,7 +306,15 @@ fuselage) where the count is even; render with markers shown.
 
 **Verify.** User approves the marker render; A7 shows rounds leaving the barrels.
 
-**⚠ Traps.** <TODO: the Brigand's slot count and whether its firepoints are ordered by pair>
+**⚠ Traps.** The Brigand carries eight `firepointN` and eight `pylonN`, and the Avenger keeps
+all sixteen names. Guns bind by slot, W*n* to `firepoint(9-2n)`,`firepoint(10-2n)`, so each
+binding pair (1,2), (3,4), (5,6), (7,8) must be one port and one starboard marker; the Brigand
+does not keep a fixed side per number (fp1 starboard, fp3 port), so place each pair by side, not by
+odd/even. Its stock W1 and W2 share one outer-wing position and W3 and W4 share the inner one;
+the Avenger may separate them (inner/outer, lower/upper). W4 is the Brigand's Rear Turret on
+fp1,2, so with `"turrets": []` that slot needs a decision in B13 before fp1,2 are treated as a
+forward gun. Pylons are odd to port and even to starboard, numbered outboard to inboard, and a
+stock 4-rocket fit lands on pylons 1, 5, 2, 6, so those four must sit on the visible rails.
 
 ## A6 ☐ UV unwrap and bake the procedural 2048 px texture and tint mask
 
