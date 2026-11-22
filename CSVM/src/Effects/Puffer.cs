@@ -230,10 +230,7 @@ public sealed partial class Puffer : Node3D
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
         bool sustained = false, bool? softParticles = null, EffectAmbience? ambience = null, string stream = Rng.Puffer)
     {
-        bool sequenced = state.TextureSequence.Count > 0;
-        var frameNames = sequenced
-            ? state.TextureSequence.Select(f => f.Texture).ToList()
-            : state.Textures.ToList();
+        var (frameNames, sequenced) = FramesOf(state);
         var (atlas, diesDark) = BuildAtlas(frameNames, textures, sequenced);
         if (atlas == null)
             return null;
@@ -258,6 +255,17 @@ public sealed partial class Puffer : Node3D
             softParticles ?? !(state.Colors.Count > 0 || diesDark), fire, smoke),
             activeDuration, sustained, ambience, fireColumns: fire, stream: stream);
         return puffer;
+    }
+
+    /// <summary>Bakes the atlas <see cref="Create"/> would bake for <paramref name="state"/>, and
+    /// builds no emitter. The first emitter of that frame list then skips the bake. Returns
+    /// whether a frame list was baked that was not cached already.</summary>
+    public static bool BakeAtlasFor(PufferState state, TextureArchive textures)
+    {
+        var (frameNames, sequenced) = FramesOf(state);
+        int before = AtlasCache.GetOrCreateValue(textures).Count;
+        BuildAtlas(frameNames, textures, sequenced);
+        return AtlasCache.GetOrCreateValue(textures).Count > before;
     }
 
     /// <summary>Builds an emitter over a supplied <paramref name="renderer"/>, the same modes and
@@ -549,6 +557,11 @@ public sealed partial class Puffer : Node3D
         : 1f;
 
     // The cached form of BakeAtlas: one bake per (archive, frame list, sequenced).
+    private static (List<string> Names, bool Sequenced) FramesOf(PufferState state) =>
+        state.TextureSequence.Count > 0
+            ? (state.TextureSequence.Select(f => f.Texture).ToList(), true)
+            : (state.Textures.ToList(), false);
+
     private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {

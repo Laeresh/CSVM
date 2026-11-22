@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Threading.Tasks;
 using CSVM.Utils;
 using Godot;
 
@@ -71,7 +72,7 @@ public sealed class SoundArchive : IDisposable
         // FlightAudio forces it true on a firing loop and ProjectilePool false on everything else,
         // so WorldSounds' prewarm (which reads the definition's flag) cannot cover those reads.
         var key = $"{wavName}|{looped}";
-        if (_cache.TryGetValue(key, out var cached))
+        if (TryCached(key, out var cached))
             return cached;
 
         AudioStream? stream = null;
@@ -85,17 +86,34 @@ public sealed class SoundArchive : IDisposable
         }
         else
         {
-            try
-            {
-                stream = WavStream(WavFile.Parse(bytes), looped);
-            }
-            catch (Exception e)
-            {
-                Log.Warn("sound", $"sound '{wavName}' failed to decode: {e.Message}");
-            }
+            stream = DecodeOriginal(wavName, bytes, looped);
         }
-        _cache[key] = stream;
+        Store(key, stream);
         return stream;
+    }
+
+    /// <summary><see cref="Find"/> for a long track, the music. The bytes are read on the calling
+    /// thread and the decode runs on a worker, off the frame that cues it. A cached stream comes
+    /// back completed. A null result from a pack's file means the pack refused
+    /// it, and a later <see cref="Find"/> plays the original.</summary>
+    public Task<AudioStream?> FindOffThread(string wavName, bool looped)
+    {
+        if (SoundModeSetting.EnhancedOn && Extraction.HdSounds.Current.Replaces(wavName))
+        {
+            // A cached null is a refused pack file, which plays the original below.
+            var hdKey = $"hd|{wavName}|{looped}";
+            if (!TryCached(hdKey, out var hdHit) && Extraction.HdSounds.Current.For(wavName) is { } replacement)
+                return Task.Run(() => Store(hdKey, DecodeReplacement(wavName, replacement, looped)));
+            if (hdHit != null)
+                return Task.FromResult(hdHit);
+        }
+
+        var key = $"{wavName}|{looped}";
+        if (TryCached(key, out var cached))
+            return Task.FromResult(cached);
+        if (ReadBytes(wavName) is not { } bytes)
+            return Task.FromResult(Find(wavName, looped, warn: false));
+        return Task.Run(() => Store(key, DecodeOriginal(wavName, bytes, looped)));
     }
 
     /// <summary>The raw bytes of one WAV, or null when the archive lacks it or cannot read it.
@@ -150,32 +168,68 @@ public sealed class SoundArchive : IDisposable
         return ogg;
     }
 
+    // Pure decode, no shared state: FindOffThread runs it on a worker.
+    private static AudioStream? DecodeReplacement(string wavName, Extraction.HdSound replacement, bool looped)
+    {
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var stream = replacement.Format == Extraction.HdSoundFormat.Ogg
+                ? (AudioStream)OggStream(replacement.Bytes, looped)
+                : WavStream(WavFile.ParseMonoOrStereo(replacement.Bytes), looped);
+            Log.Info("sound", $"HD sound: {wavName} plays {replacement.Source} (decoded in {System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms)");
+            return stream;
+        }
+        catch (Exception e)
+        {
+            Log.Warn("sound", $"HD sound {replacement.Source} was refused ({e.Message}), {wavName} plays the original");
+            return null;
+        }
+    }
+
+    private static AudioStream? DecodeOriginal(string wavName, byte[] bytes, bool looped)
+    {
+        try
+        {
+            return WavStream(WavFile.Parse(bytes), looped);
+        }
+        catch (Exception e)
+        {
+            Log.Warn("sound", $"sound '{wavName}' failed to decode: {e.Message}");
+            return null;
+        }
+    }
+
     // The stream is all a pack replaces. The definition's VOLUME, RANGE and FREQUENCY and a group's
     // weights still apply, and a pitch scales the file's own rate. Null plays the original.
     private AudioStream? FindReplacement(string wavName, bool looped)
     {
         // Keyed apart from the original, so either mode finds its own; a failure caches null and warns once.
         var key = $"hd|{wavName}|{looped}";
-        if (_cache.TryGetValue(key, out var cached))
+        if (TryCached(key, out var cached))
             return cached;
 
-        AudioStream? stream = null;
-        if (Extraction.HdSounds.Current.For(wavName) is { } replacement)
-        {
-            try
-            {
-                stream = replacement.Format == Extraction.HdSoundFormat.Ogg
-                    ? OggStream(replacement.Bytes, looped)
-                    : WavStream(WavFile.ParseMonoOrStereo(replacement.Bytes), looped);
-                Log.Info("sound", $"HD sound: {wavName} plays {replacement.Source}");
-            }
-            catch (Exception e)
-            {
-                Log.Warn("sound", $"HD sound {replacement.Source} was refused ({e.Message}), {wavName} plays the original");
-            }
-        }
+        var stream = Extraction.HdSounds.Current.For(wavName) is { } replacement
+            ? DecodeReplacement(wavName, replacement, looped)
+            : null;
+        return Store(key, stream);
+    }
 
-        _cache[key] = stream;
+    // The cache is the one state FindOffThread's worker shares with the calling thread.
+    private bool TryCached(string key, out AudioStream? stream)
+    {
+        lock (_cache)
+        {
+            return _cache.TryGetValue(key, out stream);
+        }
+    }
+
+    private AudioStream? Store(string key, AudioStream? stream)
+    {
+        lock (_cache)
+        {
+            _cache[key] = stream;
+        }
         return stream;
     }
 

@@ -71,6 +71,11 @@ public sealed partial class MusicPlayer : Node
     /// <see cref="WorldSounds.Loader"/> uses. The bool is the stream's own forward-loop flag.</summary>
     public Func<SoundDef, bool, AudioStream?>? Loader;
 
+    /// <summary>The off-thread form of <see cref="Loader"/>, which the game wires and the suites
+    /// leave unset. A cue whose decode is still running starts on the first <see cref="Tick"/>
+    /// after it finishes. A null result falls back to <see cref="Loader"/>.</summary>
+    public Func<SoundDef, bool, System.Threading.Tasks.Task<AudioStream?>>? LoaderOffThread;
+
     private readonly IReadOnlyDictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
 
@@ -91,6 +96,8 @@ public sealed partial class MusicPlayer : Node
     private float _battleHold;
     private float _duck = 1f;
     private bool _paused;
+    private System.Threading.Tasks.Task<AudioStream?>? _pending;
+    private SoundDef? _pendingDef;
 
     public MusicPlayer(IReadOnlyDictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -101,6 +108,10 @@ public sealed partial class MusicPlayer : Node
 
     /// <summary>The WAV file playing on the channel, or empty when it is silent.</summary>
     public string Current => _wav;
+
+    /// <summary>Whether the cued track's off-thread decode is still running, so it has not
+    /// started yet.</summary>
+    public bool Decoding => _pending != null;
 
     /// <summary>The state the last accepted cue put the channel in.</summary>
     public MusicState State => _state;
@@ -185,14 +196,27 @@ public sealed partial class MusicPlayer : Node
         }
 
         bool loopForever = ForcedLoop(name) || (def.Looped && loops <= 0);
-        var stream = Loader?.Invoke(def, loopForever);
-        if (stream == null)
+        var pending = LoaderOffThread?.Invoke(def, loopForever);
+        AudioStream? stream = null;
+        if (pending is not { IsCompleted: false })
         {
-            Log.Warn("sound", $"music track has no stream cue={name} wav={def.WavName}");
-            return null;
+            stream = pending is { IsCompletedSuccessfully: true } ? pending.Result : null;
+            stream ??= Loader?.Invoke(def, loopForever);
+            pending = null;
+            if (stream == null)
+            {
+                Log.Warn("sound", $"music track has no stream cue={name} wav={def.WavName}");
+                return null;
+            }
         }
 
-        _player.Stream = stream;
+        // A track still decoding cuts the old one now and starts on a later Tick.
+        _pending = pending;
+        _pendingDef = def;
+        if (pending == null)
+            _player.Stream = stream;
+        else
+            _player.Stop();
         _wav = def.WavName;
         _cue = name;
         _loopForever = loopForever;
@@ -201,9 +225,12 @@ public sealed partial class MusicPlayer : Node
         SetGain(1f);
         _target = 1f;
         _fadeRate = 0f;
-        _player.Play();
-        _player.StreamPaused = _paused;
-        Log.Info("sound", $"music play cue={name} wav={def.WavName} loop={(loopForever ? "forever" : _loopsLeft.ToString())}");
+        if (pending == null)
+        {
+            _player.Play();
+            _player.StreamPaused = _paused;
+        }
+        Log.Info("sound", $"music play cue={name} wav={def.WavName} loop={(loopForever ? "forever" : _loopsLeft.ToString())}{(pending == null ? string.Empty : " (decoding)")}");
         return def.WavName;
     }
 
@@ -217,6 +244,7 @@ public sealed partial class MusicPlayer : Node
         }
 
         Log.Info("sound", $"music stop wav={_wav}");
+        _pending = null;
         _player.Stop();
         _wav = string.Empty;
         _cue = string.Empty;
@@ -245,6 +273,7 @@ public sealed partial class MusicPlayer : Node
         StepBattle(dt, rng);
         StepFade(dt);
         StepDuck(dt);
+        StartPending();
         StepLoop();
     }
 
@@ -372,11 +401,34 @@ public sealed partial class MusicPlayer : Node
         SetGain(_gain);
     }
 
+    // Starts the cued track once its off-thread decode is done, from the main thread.
+    private void StartPending()
+    {
+        if (_pending is not { IsCompleted: true } done)
+        {
+            return;
+        }
+
+        _pending = null;
+        var stream = (done.IsCompletedSuccessfully ? done.Result : null)
+            ?? Loader?.Invoke(_pendingDef!, _loopForever);
+        if (stream == null)
+        {
+            Log.Warn("sound", $"music track has no stream cue={_cue} wav={_wav}");
+            Stop();
+            return;
+        }
+
+        _player.Stream = stream;
+        _player.Play();
+        _player.StreamPaused = _paused;
+    }
+
     private void StepLoop()
     {
         // A paused stream reads as not playing, so without the pause test a held track would be
-        // counted as ended and restarted from the top.
-        if (_wav.Length == 0 || _loopForever || _paused || _player.Playing || _loopsLeft <= 1)
+        // counted as ended and restarted from the top. A decoding track has not started yet.
+        if (_wav.Length == 0 || _loopForever || _paused || _pending != null || _player.Playing || _loopsLeft <= 1)
         {
             return;
         }
