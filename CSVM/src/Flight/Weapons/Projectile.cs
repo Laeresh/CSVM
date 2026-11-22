@@ -1288,6 +1288,32 @@ public sealed partial class ProjectilePool : Node3D
     public Node3D? BuildFlyoutBody(WeaponDef weapon) =>
         _flyoutScene == null ? null : BuildFlyoutBody(weapon, _flyoutScene);
 
+    /// <summary>Builds every flyout body and impact model <paramref name="weapons"/> can show once and
+    /// frees it. The first rocket or splash of a session then finds its meshes, materials and fade
+    /// copies made. Call it after <see cref="EffectHandles"/> is wired: a name that runtime plays
+    /// is its own to warm. Returns how many were built.</summary>
+    public int PrewarmModels(IEnumerable<WeaponDef> weapons)
+    {
+        if (_flyoutScene == null || _flyoutGamez == null)
+            return 0;
+        int built = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var weapon in weapons)
+        {
+            if (weapon.Flyout?.Model is { } model && seen.Add(model)
+                && BuildFlyoutBody(weapon, _flyoutScene) is { } body)
+            {
+                body.Free();
+                built++;
+            }
+            foreach (var row in weapon.Impact)
+            {
+                built += PrewarmImpact(row?.Animation, seen) + PrewarmImpact(row?.SurfaceAnimation, seen);
+            }
+        }
+        return built;
+    }
+
     /// <summary>The <see cref="BuildFlyoutBody(WeaponDef)"/> body for <see cref="PylonOrdnance"/>, drawn
     /// through the airframe's builder settings so it is lit and takes shadow as the wing it hangs on.
     /// A stereo body wears the stereo interior's shader and draws under the interior
@@ -2181,6 +2207,18 @@ public sealed partial class ProjectilePool : Node3D
             frames.Add(frame);
         }
         cycler.Add(mat, frames, SplashFlipbookFps, looping: true, "splash01");
+    }
+
+    // One impact model built through the real spawn and dropped at once, which leaves the caches warm.
+    private int PrewarmImpact(string? animName, HashSet<string> seen)
+    {
+        if (animName == null || !seen.Add(animName) || (EffectHandles?.Invoke(animName) ?? false)
+            || !SpawnImpactModel(animName, Vector3.Zero, Basis.Identity))
+            return 0;
+        var fx = _impactFx[^1];
+        _impactFx.RemoveAt(_impactFx.Count - 1);
+        fx.Model.Free();
+        return 1;
     }
 
     private bool SpawnImpactModel(string animName, Vector3 point, Basis orient)

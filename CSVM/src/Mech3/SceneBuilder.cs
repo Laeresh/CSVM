@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using CSVM.Extraction;
 using CSVM.Utils;
 using Godot;
@@ -569,6 +570,9 @@ void fragment() {
     // Every builder's blended materials by instance id, so OverSlabPriority reaches a plane or an effect
     // built by another builder. An id whose material is gone is dropped on the next change.
     private static readonly HashSet<ulong> Blended = new();
+
+    // Every builder's edge-filled copies by source texture, the mode each was made under beside it.
+    private static readonly ConditionalWeakTable<ImageTexture, EdgeFill> EdgeFills = new();
     private static int _overSlabPriority;
 
     private readonly GameZ _gamez;
@@ -1139,6 +1143,19 @@ void light() {{
             }
         img.GenerateMipmaps();
         return TextureUpload.Create(img);
+    }
+
+    // The one edge-filled copy of tex every builder shares, made again when the mode its alpha depth
+    // follows has moved since. Under an HD pack each is an HD readback, a bleed and a mip chain, which
+    // each plane build paid again.
+    internal static ImageTexture SharedEdgeFilled(ImageTexture tex)
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        if (EdgeFills.TryGetValue(tex, out var kept) && kept.Enhanced == enhanced)
+            return kept.Texture;
+        var made = EdgeFilled(tex);
+        EdgeFills.AddOrUpdate(tex, new EdgeFill(made, enhanced));
+        return made;
     }
 
     /// <summary>A copy of soft-alpha <paramref name="tex"/> whose clear texels take its solid texels' mean
@@ -2518,7 +2535,7 @@ void light() {{
             if (keyed == null && blend && _textures.LastAlphaIsSoft && !(_billboardTexture != null && _billboardTexture(texName))
                 && !_edgeFilled.TryGetValue(texName, out filled))
             {
-                _edgeFilled[texName] = filled = EdgeFilled(tex);
+                _edgeFilled[texName] = filled = SharedEdgeFilled(tex);
             }
             if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
@@ -3455,4 +3472,7 @@ void fragment() {{
 
         public Color? Tint { get; set; }
     }
+
+    // One shared edge-filled copy and the graphics mode it was made under (SharedEdgeFilled).
+    private sealed record EdgeFill(ImageTexture Texture, bool Enhanced);
 }

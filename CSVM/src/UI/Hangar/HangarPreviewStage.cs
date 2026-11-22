@@ -22,6 +22,9 @@ namespace CSVM.UI.Hangar;
 /// </summary>
 public sealed partial class HangarPreviewStage : SubViewport
 {
+    /// <summary>TUNE: how long the cursor must rest on an airframe row before the stage builds it.</summary>
+    public const float SettleSeconds = 0.25f;
+
     // The chapter the skins and the rocket prototype are read from. Every chapter's archive
     // carries both (docs/formats/weapon-effects/ordnance.md), and C1 is the one a player meets first.
     private const string Chapter = "C1";
@@ -66,6 +69,8 @@ public sealed partial class HangarPreviewStage : SubViewport
     private Node3D? _model;
     private Node3D? _warm;
     private HangarPreviewPose? _warmPose;
+    private HangarPreviewPose? _pending;
+    private float _pendingSeconds;
     private bool _built;
     private double _warmMs;
     private int _warmMade;
@@ -174,17 +179,33 @@ public sealed partial class HangarPreviewStage : SubViewport
         return stage;
     }
 
-    /// <summary>Shows <paramref name="pose"/>: a new airframe rebuilds the plane, a new hardpoint
+    /// <summary>Shows <paramref name="pose"/>. A new airframe rebuilds the plane, once the pose has
+    /// stood <see cref="SettleSeconds"/> while <paramref name="browsing"/> a list. A new hardpoint
     /// count rehangs the rockets, and a new paint repaints in place. An edit swings the camera to
     /// what it changed (<see cref="HangarPreviewPose.FocusFor"/>). Call it once the stage is in the tree.</summary>
-    public void Show(HangarPreviewPose pose)
+    public void Show(HangarPreviewPose pose, bool browsing = false)
     {
         var before = Shown;
         if (pose == before)
         {
+            _pending = null;
             return;
         }
 
+        // A cursor run down the airframe list moves the pose every row, and a build costs up to a
+        // few hundred ms with HD skins. Only the row it rests on is built.
+        if (browsing && before != null && before.Node != pose.Node && _builder != null)
+        {
+            if (pose != _pending)
+            {
+                _pending = pose;
+                _pendingSeconds = 0f;
+            }
+
+            return;
+        }
+
+        _pending = null;
         Shown = pose;
         if (before == null || before.Node != pose.Node || _builder == null)
         {
@@ -216,6 +237,13 @@ public sealed partial class HangarPreviewStage : SubViewport
             _stand.RemoveChild(_warm);
             _warm.QueueFree();
             _warm = null;
+        }
+
+        if (_pending is { } pending && (_pendingSeconds += dt) >= SettleSeconds)
+        {
+            _pending = null;
+            Shown = pending;
+            Build(pending);
         }
 
         // A step whose frame already built the shown plane warms nothing, so the two never add up.

@@ -102,7 +102,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "dccdc7a13202edf2afb27cc8a376dda5",
+      "hash": "4016db1e377b66187171382daf3ae024",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

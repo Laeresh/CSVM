@@ -2192,6 +2192,12 @@ public partial class GameSession : Node3D
                 state.Textures, state.CrashProgram!, state.WorldRuntime, projectiles); // the rigs' graze reaction plays through the same runtime
         }
 
+        // After EnsureWorldEffects, which tells the pool which impact names that runtime plays.
+        var modelMark = StartupProfile.Mark();
+        int warmedModels = projectiles.PrewarmModels(weaponDefs.All);
+        StartupProfile.Record("weapon_models", modelMark);
+        Log.Info("weapons", $"projectiles: pre-warmed {warmedModels} flyout/impact model(s) in {System.Diagnostics.Stopwatch.GetElapsedTime(modelMark).TotalMilliseconds:0} ms");
+
         // Stunt run: the mission's danger-zone objectives, positions resolved against this chapter
         // world's gamez. Parsed once for the session; each player then races an independent copy.
         StuntMission? stuntZones = null;
@@ -2715,6 +2721,10 @@ public partial class GameSession : Node3D
             BeginSpectate = BeginCampaignSpectate,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
+        if (_campaign is { HasDangerZones: true } && _rigs.Count > 0 && _rigs[0].Controller?.Photograph is { } photo)
+        {
+            photo.Warm();
+        }
 
         // The launch hook's CALLBACK codes, taken after the generator runtime's own bind so the
         // director sits ahead of it and the rest of the chain still answers everything else.
