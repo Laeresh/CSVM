@@ -626,6 +626,7 @@ public sealed class WorldEffectsFactory
         StartupProfile.Record("emitters", warmMark);
         double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
         Log.Info("anim", $"world effects: pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
+        BakeWorldAtlases(worldProgram, textures);
         _worldRoot.AddChild(effects);
         int wanted = 0;
         foreach (var r in roots)
@@ -648,6 +649,29 @@ public sealed class WorldEffectsFactory
         foreach (var unknown in _pools.UnknownRoots(roots))
             Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root, it sizes nothing");
         return effects;
+    }
+
+    // The ambient world runtime builds no emitter ahead. A range-started def's first puffer of a
+    // frame list would bake its atlas on that frame, about 50 ms, so the atlases are baked here.
+    private void BakeWorldAtlases(AnimProgram worldProgram, TextureArchive textures)
+    {
+        var mark = StartupProfile.Mark();
+        int baked = 0;
+        foreach (var def in worldProgram.Defs)
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) >= 1f
+                        && ev.Data.Objects("textures").Any()
+                        && Puffer.BakeAtlasFor(PufferState.FromAnimEvent(ev.Data), textures))
+                        baked++;
+                }
+            }
+        }
+        StartupProfile.Record("emitters", mark);
+        Log.Info("anim", $"world effects: baked {baked} puffer atlas(es) ahead in {Stopwatch.GetElapsedTime(mark).TotalMilliseconds:0} ms");
     }
 
     /// <summary>One per-plane crash rig, mid-build. The four steps are the build's own natural

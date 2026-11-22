@@ -1297,7 +1297,8 @@ internal static class DestroyChoreographySuites
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
                 var stats = PlaneStats.Load(ctx.Zrdr, model);
-                var builder = new PlaneBuilder(planesGamez, textures);
+                // Built as HumanFlightAdapter builds the flown aircraft, spinning props included.
+                var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true, cockpitInterior: true);
                 var planeModel = builder.Build(model);
                 player = new FlightController
                 {
@@ -1331,8 +1332,10 @@ internal static class DestroyChoreographySuites
                 string midCensus = "none";
                 bool onOwnExhaust = false;
                 const int Frames = 180;
+                var prebuilt = rig.Emitters.Census.Select(r => (r.Name, r.HostNode)).ToHashSet();
                 for (int i = 0; i < Frames; i++)
                 {
+                    player.AutoNitro = i < 90;
                     player.SimStep(Dt);
                     if (player.Nitro.EngagedThisTick && engagedAt < 0)
                         engagedAt = i;
@@ -1355,6 +1358,10 @@ internal static class DestroyChoreographySuites
                     }
                 }
                 ctx.Note($"engaged at frame {engagedAt}, exhaust puffers emitting frames {firstEmit}..{lastEmit} of {Frames}; at frame 30 [{midCensus}]");
+                var builtLate = rig.Emitters.Census.Where(r => !prebuilt.Contains((r.Name, r.HostNode)))
+                    .Select(r => $"{r.Name}@{r.Host} [{r.Def}]").ToList();
+                ctx.Check(builtLate.Count == 0,
+                    $"{model}: the boost built no emitter on the frame, the pre-warm made them all [{string.Join(", ", builtLate)}]");
 
                 ctx.Check(player.Nitro.Boosting && player.Nitro.BoostAnimAlive,
                     $"{model}: the held command engaged the boost through the flight step boosting={player.Nitro.Boosting} animAlive={player.Nitro.BoostAnimAlive}");

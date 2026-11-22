@@ -133,12 +133,15 @@ public sealed class EmitterDirector
         // MaterialCreate (EmitterRenderer.Attach, reached through _factory.Create below) is
         // nested inside this scope and is suppressed by it, its cost is folded into this one.
         using var _ = PerfSample.Scope(PerfSite.EffectPoolMiss);
+        long buildStart = System.Diagnostics.Stopwatch.GetTimestamp();
         if (_factory.Create(PufferState.FromAnimEvent(data), out var miss) is not { } emitter)
         {
             if (miss != null)
                 _count(miss);
             return;
         }
+        // The hitch line names only the site; this names the puffer a pre-warm should have made.
+        Log.Debug("anim", $"anim: puffer '{name}' on '{AnimRuntime.NameOf(host)}' built on the frame in {System.Diagnostics.Stopwatch.GetElapsedTime(buildStart).TotalMilliseconds:0.0} ms [def {def.AnimName ?? def.Name}]");
         if (_debug && _defScopedKeys)
         {
             foreach (var other in _emitters)
