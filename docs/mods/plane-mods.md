@@ -154,11 +154,47 @@ safe route.
 
 ## 4. The cockpit
 
+### Borrowing a stock cockpit
+
 Without your own interior the plane mounts a stock one at `cockpit_camera`: the parent's, or the one
-`plane.json`'s `cockpit` key names (`"cockpit": "player_warhawk"`). Fly it in cockpit view and move
-`cockpit_camera` until the stock panel sits right; check that your canopy frame does not cover the
-gunsight. A custom interior is a `cockpit1` node directly under the root, in interior units; start
-from the parent's exported `cockpit1.glb` (the reference has the rules).
+`plane.json`'s `cockpit` key names (`"cockpit": "player_warhawk"`). Fly it in cockpit view
+(`CSVM.exe -- --fly --plane=my_plane --view=cockpit`) and move `cockpit_camera` until the stock panel
+sits right; check that your canopy frame does not cover the gunsight.
+
+### Building your own cockpit
+
+An interior of your own is a `cockpit1` node directly under the mod's root. When the model has one,
+the `cockpit` key is not used. The game finds the instruments by name, so the reliable start is the
+parent's interior: the `--export-gltf` run in step 1 writes it beside the airframe as `cockpit1.glb`,
+with every gauge, lamp and state node in place. Import it into the mod's scene and reshape it from
+there.
+
+| Item | Rule |
+|---|---|
+| Place in the tree | `my_plane > cockpit1 > ...`, a sibling of `geometry` and `markers`. |
+| Units | Interior units, about 25 to the metre, never metres: a 1 m wide panel is 25 Blender units wide. The game draws the whole interior at 0.04 scale. |
+| Frame | The pilot's eye is at `cockpit1`'s origin, looking forward (Blender +Y, glTF -Z). The game mounts that origin at `cockpit_camera`. |
+| `cockpit1`'s own transform | Ignored. To preview the interior in place in Blender, move `cockpit1` to `cockpit_camera` and scale it to 0.04; the export keeps that transform and the game drops it. |
+| Instruments | Found by the stock node names (`gauges`, `speed`, `pfhorizon`, `lowalt_on` and the rest the export holds). Keep each name on the part it drives; a renamed needle stops moving. |
+| Belt lights and damage zones | Found by the stock texture names (`ggindicator0` is a belt light). Keep those surfaces' materials named after the texture. |
+| Readouts | A character readout (`4char_ammo`, `6char_type`) needs one surface per character, ordered left to right. |
+
+A material named after an original texture wears that texture from the player's own game files, so
+the mod does not ship it. Model the shapes yourself and keep the stock names; the original's art then
+reaches your panel without being in your files.
+
+Under a VR headset two more rules apply:
+
+- **Head plate:** the flat head-and-shoulders plate behind the eye is hidden so a leaning head never
+  sees it from the front. Keep it flat, facing aft and untextured, or it draws.
+- **Gunsight:** the collimated reticle draws only on glass whose material is named after the stock
+  glass texture (`cockpit6`, the Warhawk's `crosshair`). Keep that glass flat, with its UVs laid flat
+  over it.
+
+To test, fly in cockpit view and check every gauge moves (speed, altitude, horizon, ammo, damage
+lights); with a headset, also look over your shoulder and through the gunsight. The exact rules are
+in the reference, [formats/mod-planes.md](../formats/mod-planes.md) (`plane.glb`, Cockpit) and
+[formats/model-packs.md](../formats/model-packs.md) (What a file must hold).
 
 ## 5. Materials and textures
 
