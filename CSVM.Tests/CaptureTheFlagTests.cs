@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Net;
 using Godot;
@@ -82,6 +83,42 @@ public sealed class CaptureTheFlagTests
         flags.Drop(2, RedHome, Vector3.Up, RedHome.Y);
         var floated = flags.Decide(1, FlagAsk.Home, FlagMatch.NoHolder)!.Value;
         Assert.Equal(0, FlagMatch.Points(floated, TeamOf, Shipped));
+    }
+
+    [Fact]
+    public void ACaptureLineNamesTheScoringTeamAndPutsItsTotalFirst()
+    {
+        Assert.Equal("Red scores! 2 - 1", HudMessages.CaptureLine("Red", 2, 1));
+        Assert.Equal("Blue Angels scores! 10 - -3", HudMessages.CaptureLine("Blue Angels", 10, -3));
+    }
+
+    [Fact]
+    public void ATakeAheadTheHostSendsHomeIsNoCapture()
+    {
+        var flags = Match();
+        Assert.NotNull(flags.TakeAhead(1, 2));
+        var overturned = Assert.Single(flags.Apply(new[] { new FlagRow(1, FlagState.Home, FlagMatch.NoHolder), new FlagRow(2, FlagState.Home, FlagMatch.NoHolder) }));
+        Assert.True(overturned.Scoreless);
+        Assert.False(FlagMatch.BroughtHome(overturned));
+        Assert.Equal(0, FlagMatch.Points(overturned, TeamOf, Shipped));
+
+        // ABLE-TO-FAIL CONTROL: a take ahead the table confirms, then sends home, is a capture.
+        flags.TakeAhead(1, 2);
+        Assert.Empty(flags.Apply(new[] { new FlagRow(1, FlagState.Held, 2) }));
+        var captured = Assert.Single(flags.Apply(new[] { new FlagRow(1, FlagState.Home, FlagMatch.NoHolder) }));
+        Assert.True(FlagMatch.BroughtHome(captured));
+        Assert.Equal(Shipped.FlagCapture, FlagMatch.Points(captured, TeamOf, Shipped));
+    }
+
+    [Fact]
+    public void ARematchSendsAHeldFlagHomeAsNoCapture()
+    {
+        var flags = Match();
+        flags.Decide(1, FlagAsk.Take, 2);
+        var reset = Assert.Single(flags.Reset());
+        Assert.Equal(FlagState.Held, reset.From);
+        Assert.False(FlagMatch.BroughtHome(reset));
+        Assert.Equal(0, FlagMatch.Points(reset, TeamOf, Shipped));
     }
 
     [Fact]

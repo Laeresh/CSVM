@@ -295,6 +295,17 @@ public sealed partial class HudMessages : Control
     public static void PostFlagLine(HudMessages stack, Messages? strings, string key, string team) =>
         stack.Post(FlagLine(strings, key, team), Side.Neutral);
 
+    /// <summary>A Capture the Flag capture's score line: the scoring team's name, then its total and
+    /// the other team's. Remake-only: the original announces a capture by voice and score text
+    /// alone, and its table has no such row.</summary>
+    public static string CaptureLine(string team, int scored, int other) =>
+        FormattableString.Invariant($"{team} scores! {scored} - {other}");
+
+    /// <summary>Posts <see cref="CaptureLine"/> into one pane's stack in its default colour, as
+    /// the flag lines are.</summary>
+    public static void PostCapture(HudMessages stack, string team, int scored, int other) =>
+        stack.Post(CaptureLine(team, scored, other), Side.Neutral);
+
     /// <summary>Posts reason 4's ending so "Game Over:" reads above "No Enemies Left", both in the
     /// stack's default colour.</summary>
     public static void PostAllAlone(HudMessages stack, Messages? strings)

@@ -761,6 +761,12 @@ public sealed class VersusDirector
         _field.NetClock?.Observe(state.HostClock, _field.ClockTime());
         Match.ApplyState(state.ScoreTarget, state.TimeLimitSeconds, state.RemainingSeconds,
             state.End != Net.NetMatchEnd.Running);
+        // An ended match running again is the host's rematch. The flags go home here ahead of its
+        // table, so a flag held at the end is not taken for a capture.
+        if (was != Net.NetMatchEnd.Running && state.End == Net.NetMatchEnd.Running)
+        {
+            Flags?.Restart();
+        }
     }
 
     // Reasons 3 and 4 in words, on every machine the moment its end turns to one. The original's

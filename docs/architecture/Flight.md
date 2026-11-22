@@ -934,9 +934,9 @@ Capture the Flag's rules, engine-free: one flag per lobby team with its home, he
 floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
 `Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
 the host's table on a guest, `Drop` a downed or ejecting carrier's flag and `Advance` its 15 s throw arc, and
-`Points` what a flag brought home scores off the match's `MatchScores`. The host's own-flag-home
-option gates a capture.
-`Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
+`Points` what a flag brought home scores off the match's `MatchScores`. `BroughtHome` excludes a
+`Scoreless` change (a rematch's reset, an overturned take ahead); the host's own-flag-home option
+gates a capture. `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
 `docs/org/multiplayer-ctf.md`.
 
 ## src/Flight/Modes/FlagMarkers.cs
@@ -1100,7 +1100,7 @@ reading pane sees it (its own pilot by name, a wingman with no name, any other a
 title, anything else destroyed), `SideOf` picks the colour arm off the victim's team, `WordsKillLine`
 keeps a hull flown into the world off that line, `PostCrash`/`PostTimeExpired` are the two notices
 that are not a death, and `MatchKillLines` words a Dogfight death the same on every machine and
-`FlagLine` a Capture the Flag row. All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+`FlagLine` a Capture the Flag row and `CaptureLine` a capture's score. All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Hud/PromptLine.cs
 A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's

@@ -111,7 +111,8 @@ internal sealed class FlagRuntime
     /// <summary>The rules as this machine has them, for a suite to read.</summary>
     public FlagMatch Flags => _flags;
 
-    /// <summary>How many flag lines this machine's panes were posted, for a suite to read.</summary>
+    /// <summary>How many flag and capture lines this machine's panes were posted, for a suite to
+    /// read.</summary>
     public int LinesPosted { get; private set; }
 
     /// <summary>The voice lines this machine asked the radio for, in order, for a suite to read.
@@ -321,20 +322,20 @@ internal sealed class FlagRuntime
         return true;
     }
 
-    /// <summary>The host's rematch: every flag home, its table sent, and nothing scored.</summary>
+    /// <summary>A rematch on this machine: every flag home, nothing scored or announced as scored.
+    /// The host then sends its table. A guest runs it on the host's running state, which arrives
+    /// ahead of that table, so the table finds nothing left to move.</summary>
     public void Restart()
     {
-        if (!_in.Net.IsHost)
-        {
-            return;
-        }
-
         foreach (var change in _flags.Reset())
         {
             Show(change);
         }
 
-        SendTable();
+        if (_in.Net.IsHost)
+        {
+            SendTable();
+        }
     }
 
     // The built world's node of that name, else the animation runtime's, in the tree either way.
@@ -461,8 +462,7 @@ internal sealed class FlagRuntime
         var change = _in.Match.Completed ? null : _flags.Decide(request.Team, (FlagAsk)request.Ask, request.Seat);
         if (change is { } moved)
         {
-            Show(moved);
-            Score(moved);
+            Settle(moved);
         }
 
         SendTable();
@@ -508,7 +508,7 @@ internal sealed class FlagRuntime
         }
     }
 
-    // A host decision: shown and scored here, then the table to every guest.
+    // A host decision: settled here, then the table to every guest.
     private void Decided(FlagChange? change)
     {
         if (change is not { } moved)
@@ -516,9 +516,16 @@ internal sealed class FlagRuntime
             return;
         }
 
-        Show(moved);
-        Score(moved);
+        Settle(moved);
         SendTable();
+    }
+
+    // A host decision applied here, scored and then shown. ⚠ Do not show before scoring: the capture
+    // line reads the new score. A guest's score message rides ahead of the table for the same reason.
+    private void Settle(FlagChange change)
+    {
+        Score(change);
+        Show(change);
     }
 
     private void SendTable()
@@ -583,7 +590,7 @@ internal sealed class FlagRuntime
                 break;
             case FlagState.Home:
                 Post(HudMessages.FlagHomeKey, team);
-                if (change.From == FlagState.Held && change.HolderBefore >= 0)
+                if (FlagMatch.BroughtHome(change))
                 {
                     int carrierTeam = change.HolderBefore < _in.SeatTeams.Count ? _in.SeatTeams[change.HolderBefore] : 0;
                     if (carrierTeam == change.Team)
@@ -593,6 +600,7 @@ internal sealed class FlagRuntime
                     else
                     {
                         Speak(carrierTeam == _localTeam ? ScoredLine : EnemyScoredLine);
+                        PostCapture(carrierTeam, change.Team);
                     }
                 }
 
@@ -728,13 +736,27 @@ internal sealed class FlagRuntime
         _in.Radio?.Speak(line, _rng);
     }
 
-    private void Post(string key, string team)
+    private void Post(string key, string team) =>
+        Post(stack => HudMessages.PostFlagLine(stack, _in.Strings, key, team));
+
+    // The capture's score line: the scoring team's total, then that of the team whose flag it took,
+    // read once the capture is scored here.
+    private void PostCapture(int scoring, int other)
+    {
+        var match = _in.Match;
+        string team = match.TeamName(scoring);
+        int scored = match.TeamTotalOf(scoring), against = match.TeamTotalOf(other);
+        Post(stack => HudMessages.PostCapture(stack, team, scored, against));
+    }
+
+    // One line into every pane's stack.
+    private void Post(Action<HudMessages> post)
     {
         foreach (var pane in _in.Panes)
         {
             if (pane.Controller?.MessageStack is { } stack)
             {
-                HudMessages.PostFlagLine(stack, _in.Strings, key, team);
+                post(stack);
                 LinesPosted++;
             }
         }

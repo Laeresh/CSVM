@@ -38,8 +38,11 @@ public enum FlagAsk : byte
 public readonly record struct FlagRow(int Team, FlagState State, int Holder);
 
 /// <summary>One flag that moved: its team, the state and holder before, and the state and holder
-/// after. What the visuals, the voice, the HUD lines and the host's scoring are driven by.</summary>
-public readonly record struct FlagChange(int Team, FlagState From, int HolderBefore, FlagState To, int HolderAfter);
+/// after. What the visuals, the voice, the HUD lines and the host's scoring are driven by. With
+/// <paramref name="Scoreless"/> set, a held flag went home without being brought there. That is a
+/// rematch's reset, or the host's table overturning this machine's own take ahead.</summary>
+public readonly record struct FlagChange(int Team, FlagState From, int HolderBefore, FlagState To, int HolderAfter,
+    bool Scoreless = false);
 
 /// <summary>
 /// Capture the Flag's rules: one flag per team and the proximity asks a pilot's machine makes. It
@@ -113,15 +116,20 @@ public sealed class FlagMatch
     /// <summary>The points a change scores its carrier: a flag carried home scores
     /// <see cref="MatchScores.FlagReturn"/> when it is the carrier's own and
     /// <see cref="MatchScores.FlagCapture"/> otherwise. Nothing else scores, a floating flag's return
-    /// included (<c>FUN_0049a300</c>).</summary>
+    /// included (<c>FUN_0049a300</c>), and so does no <see cref="FlagChange.Scoreless"/> change.</summary>
     public static int Points(FlagChange change, Func<int, int> teamOf, MatchScores scores)
     {
         ArgumentNullException.ThrowIfNull(teamOf);
         ArgumentNullException.ThrowIfNull(scores);
-        if (change.From != FlagState.Held || change.To != FlagState.Home || change.HolderBefore < 0)
+        if (!BroughtHome(change))
             return 0;
         return teamOf(change.HolderBefore) == change.Team ? scores.FlagReturn : scores.FlagCapture;
     }
+
+    /// <summary>Whether a change is a flag its carrier brought home, the one change that scores
+    /// and is announced as a return or a capture.</summary>
+    public static bool BroughtHome(FlagChange change) =>
+        change is { From: FlagState.Held, To: FlagState.Home, HolderBefore: >= 0, Scoreless: false };
 
     /// <summary>The flag of <paramref name="team"/>, or null for a team with none.</summary>
     public FlagRow? RowOf(int team) => Find(team)?.Row;
@@ -188,12 +196,19 @@ public sealed class FlagMatch
 
     /// <summary>A guest's own take, applied at once without waiting for its host, as the
     /// original's <c>FUN_0049a050</c> does. The host's table corrects it if another pilot won.</summary>
-    public FlagChange? TakeAhead(int team, int seat) =>
-        Find(team) is { } flag && flag.State != FlagState.Held ? Set(flag, FlagState.Held, seat) : null;
+    public FlagChange? TakeAhead(int team, int seat)
+    {
+        if (Find(team) is not { } flag || flag.State == FlagState.Held)
+            return null;
+        var change = Set(flag, FlagState.Held, seat);
+        flag.Ahead = true;
+        return change;
+    }
 
     /// <summary>The host's table applied, <c>FUN_0049a300</c>: every row whose state or holder
     /// differs moves. A floating row is this machine's own to reach, so the table never moves one.
-    /// </summary>
+    /// A take ahead the table sends home was never the host's, so that change is
+    /// <see cref="FlagChange.Scoreless"/>.</summary>
     public List<FlagChange> Apply(IReadOnlyList<FlagRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -202,8 +217,10 @@ public sealed class FlagMatch
         {
             if (row.State is not (FlagState.Held or FlagState.Home) || Find(row.Team) is not { } flag)
                 continue;
+            bool ahead = flag.Ahead;
+            flag.Ahead = false;
             if (Set(flag, row.State, row.State == FlagState.Held ? row.Holder : NoHolder) is { } change)
-                changes.Add(change);
+                changes.Add(change with { Scoreless = ahead && row.State == FlagState.Home });
         }
 
         return changes;
@@ -226,15 +243,15 @@ public sealed class FlagMatch
         return change;
     }
 
-    /// <summary>Every flag home with nobody holding it, the host's rematch. The changes it made.
-    /// </summary>
+    /// <summary>Every flag home with nobody holding it, a rematch. The changes it made, each
+    /// <see cref="FlagChange.Scoreless"/>.</summary>
     public List<FlagChange> Reset()
     {
         var changes = new List<FlagChange>();
         foreach (var flag in _flags)
         {
             if (Set(flag, FlagState.Home, NoHolder) is { } change)
-                changes.Add(change);
+                changes.Add(change with { Scoreless = true });
         }
 
         _cooldown.Clear();
@@ -291,6 +308,7 @@ public sealed class FlagMatch
         var change = new FlagChange(flag.Team, flag.State, flag.Holder, state, holder);
         flag.State = state;
         flag.Holder = holder;
+        flag.Ahead = false;
         if (state != FlagState.Floating)
             flag.Flown = 0f;
         return change;
@@ -327,6 +345,8 @@ public sealed class FlagMatch
         public float FloorY;
         public float Flown;
         public bool Resting;
+        // Held by this machine's own take ahead, which no table of the host's has confirmed yet.
+        public bool Ahead;
 
         public FlagRow Row => new(Team, State, Holder);
     }

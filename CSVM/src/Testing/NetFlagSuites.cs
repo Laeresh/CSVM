@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
@@ -118,7 +119,7 @@ internal static class NetFlagSuites
         + "the enemy flag at its base, the flag hangs on its "
         + "aeroplane on every machine, the base flag hides and the away marker and the carrier's tag "
         + "name the carrier; bringing it home "
-        + "scores score_enemy_flag; a carrier's death floats the flag on every machine; a pilot catches its own "
+        + "scores score_enemy_flag and every pane shows the capture line with the new team score; a carrier's death floats the flag on every machine; a pilot catches its own "
         + "floating flag and returning it scores score_return_flag; a guest carrier's ejectflag typed into the chat "
         + "floats its flag on every machine through the host and sends no chat line, its marker back on its "
         + "callsign; the uncaught flag goes home "
@@ -751,6 +752,7 @@ internal static class NetFlagSuites
 
         // ABLE-TO-FAIL CONTROL: inside the take's cooldown the carrier at its own base asks nothing.
         int before = peers[0].Dogfight!.Match.ScoreOf(2);
+        int teamBefore = peers[0].Dogfight!.Match.TeamTotalOf(2);
         Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "ABLE-TO-FAIL CONTROL: at its own base inside the take's 5 s cooldown the flag stays held", team: 1, holder: 2);
@@ -761,9 +763,26 @@ internal static class NetFlagSuites
         Home(ctx, peers, "carried to team 2's base it goes home on every machine", team: 1);
         ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == before + p.Dogfight!.Match.Scores.FlagCapture && p.Dogfight!.Match.KillsOf(2) == 0),
             $"and the capture scores its carrier {peers[0].Dogfight!.Match.Scores.FlagCapture} on every machine ({Scores(peers)})");
+        CaptureLine(ctx, peers, teamBefore);
         ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed),
             $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget(ctx)}-point target and the match runs ({Scores(peers)})");
         Park(peers, seat: 2);
+    }
+
+    // Every machine's pane shows the capture's score line with the host's score after the capture,
+    // and none shows it with the score before.
+    private static void CaptureLine(TestContext ctx, GameSession[] peers, int teamBefore)
+    {
+        var host = peers[0].Dogfight!.Match;
+        string name = host.TeamName(2);
+        string line = HudMessages.CaptureLine(name, host.TeamTotalOf(2), host.TeamTotalOf(1));
+        string stale = HudMessages.CaptureLine(name, teamBefore, host.TeamTotalOf(1));
+        var shown = peers.Select((p, i) => Enumerable.Range(0, HudMessages.Slots)
+            .Select(s => p.SeatRigs[i].Controller!.MessageStack?.LineAt(s)).ToArray()).ToArray();
+        ctx.Check(host.TeamTotalOf(2) == teamBefore + host.Scores.FlagCapture && shown.All(lines => lines.Contains(line)),
+            $"and every machine's pane shows the capture line '{line}' ({string.Join(" | ", shown.Select(l => string.Join(" / ", l)))})");
+        ctx.Check(shown.All(lines => !lines.Contains(stale)),
+            $"ABLE-TO-FAIL CONTROL: no pane shows the score before the capture, '{stale}'");
     }
 
     // The carrier goes down with the flag and it floats everywhere. The host's own pilot on team 1

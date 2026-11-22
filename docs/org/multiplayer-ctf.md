@@ -207,6 +207,12 @@ shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The diffe
 - A downed or inert aircraft asks for nothing, so a wreck cannot catch the flag it dropped. Whether
   the original's tick skips a dead aircraft was not read.
 - The host may require the capturing team's own flag at home, an option the original lacks.
+- A capture posts one more line on every pane, after row 201: the scoring team's name and the two
+  team totals after the capture, the scoring team's first ("Red scores! 2 - 1"). The original posts
+  no such line, and its message table holds no row for one, so the wording is the remake's. It is
+  there because the original announces a capture only by voice and the rebuilt score text, so a
+  pilot who misses the voice cannot tell a capture from a return, or who scored it. A rematch's reset
+  and a guest's overturned take ahead send a held flag home unscored and post no capture line.
 - The lobby refuses a Capture the Flag launch with a team numbered above 2, under 10519, since
   such a team would fly with no flag.
 - The markers are the mission's own site entries labelled per pane rather than per machine
