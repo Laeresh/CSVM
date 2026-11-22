@@ -38,6 +38,10 @@ public sealed class ModPlane
     private readonly IReadOnlyDictionary<string, string> _files;
     private readonly bool _zip;
 
+    // The ordinal BindCampaign resolved a mission or chapter unlock to; null before it ran and for an
+    // id the campaign does not hold.
+    private int? _unlockOrdinal;
+
     internal ModPlane(string id, string name, string kindOf, IReadOnlyDictionary<string, double> overrides, bool clearsTurrets,
         string unlock, string? cockpit, string? sound, string? portrait, string source, bool zip, IReadOnlyDictionary<string, string> files, string hash)
     {
@@ -73,6 +77,13 @@ public sealed class ModPlane
 
     /// <summary><see cref="UnlockStart"/>, <see cref="UnlockWithParent"/> or a mission or chapter id.</summary>
     public string Unlock { get; }
+
+    /// <summary>When the campaign hangar offers the plane, in the stat table's availability units
+    /// (<see cref="HangarEconomy.Airframes"/>). <see cref="UnlockStart"/> is 1. A mission or chapter id
+    /// <see cref="BindCampaign"/> found is that mission's ordinal, or the chapter's first. Anything
+    /// else is the parent's.</summary>
+    public int CampaignAvailability =>
+        Unlock == UnlockStart ? 1 : _unlockOrdinal ?? HangarEconomy.Airframes[StockAirframes.IdOf(KindOf) ?? 0].Availability;
 
     /// <summary>The stock node whose cockpit interior the plane borrows, or null for its own or the parent's.</summary>
     public string? Cockpit { get; }
@@ -178,6 +189,33 @@ public sealed class ModPlane
         }
     }
 
+    /// <summary>Checks a mission or chapter <see cref="Unlock"/> against the campaign's
+    /// <paramref name="missions"/>: <c>c1b</c> names a chapter by its world folder, <c>c1b/m02</c> one
+    /// mission. An id the list does not hold is warned about and the plane unlocks with its parent.</summary>
+    public void BindCampaign(IReadOnlyList<CampaignMission> missions)
+    {
+        _unlockOrdinal = null;
+        if (Unlock is UnlockStart or UnlockWithParent)
+        {
+            return;
+        }
+
+        foreach (var m in missions)
+        {
+            bool named = string.Equals(Unlock, m.ChapterFolder, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Unlock, $"{m.ChapterFolder}/{m.MissionFolder}", StringComparison.OrdinalIgnoreCase);
+            if (named && m.ChapterFolder.Length > 0 && (_unlockOrdinal == null || m.Ordinal < _unlockOrdinal))
+            {
+                _unlockOrdinal = m.Ordinal;
+            }
+        }
+
+        if (_unlockOrdinal == null)
+        {
+            Log.Warn("flight", $"mod plane {Id}: unlock {Unlock} names no campaign mission or chapter, it unlocks with its parent {KindOf}");
+        }
+    }
+
     private LoadoutDef? ParentFit(StockLoadouts stock)
     {
         if (stock.ForModel(KindOf) is not { } fit || !ClearsTurrets)
@@ -228,6 +266,9 @@ public sealed class ModPlanes
     // About six times the stat table's heaviest row, the Balmoral's 15,760 lb. A typo of an extra
     // digit or two still fails.
     private const int MaxHangarCapacity = 100_000;
+
+    // Mod ids already warned about, so a picker or a price redrawn every frame warns once.
+    private static readonly HashSet<string> MissingMods = new(StringComparer.OrdinalIgnoreCase);
 
     private ModPlanes(IReadOnlyList<ModPlane> planes, IReadOnlyList<SkippedMod> skipped)
     {
@@ -291,6 +332,27 @@ public sealed class ModPlanes
     /// <summary>The mod whose id is <paramref name="id"/>, matched without case, or null.</summary>
     public ModPlane? Find(string id) =>
         Planes.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The mod a saved record names, or null when it is not installed: the record then flies
+    /// as its stored <paramref name="parent"/> and keeps the id. The first miss per id logs one
+    /// warning naming <paramref name="record"/>.</summary>
+    public ModPlane? FindOrWarn(string id, string record, int parent)
+    {
+        if (Find(id) is { } mod)
+        {
+            return mod;
+        }
+
+        lock (MissingMods)
+        {
+            if (MissingMods.Add(id))
+            {
+                Log.Warn("flight", $"{record}: mod airframe {id} is not installed, it flies as {StockAirframes.Node(parent)}");
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The stock fit <paramref name="node"/> flies: a loaded mod's <see cref="ModPlane.StockLoadout"/>,
     /// else the stock table's fit for the node.</summary>

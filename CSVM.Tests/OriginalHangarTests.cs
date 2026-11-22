@@ -986,7 +986,7 @@ public class OriginalHangarTests : IDisposable
 
         public bool CanAfford(int cost) => cost <= Funds;
 
-        public bool IsAirframeAvailable(int airframe) => true;
+        public bool IsAirframeAvailable(int airframe, ModPlane? mod = null) => true;
 
         public bool IsSpecial(string planeName) => false;
 
@@ -996,7 +996,7 @@ public class OriginalHangarTests : IDisposable
 
         public IReadOnlyList<CustomPlaneDef> OwnedBuilds() => Array.Empty<CustomPlaneDef>();
 
-        public void Purchase(string planeName, int airframe, int cost)
+        public void Purchase(string planeName, int airframe, int cost, string? modAirframe = null)
         {
         }
 
@@ -1017,7 +1017,7 @@ public class OriginalHangarTests : IDisposable
 
         public bool CanAfford(int cost) => true;
 
-        public bool IsAirframeAvailable(int airframe) => true;
+        public bool IsAirframeAvailable(int airframe, ModPlane? mod = null) => true;
 
         public bool IsSpecial(string planeName) => false;
 
@@ -1028,7 +1028,7 @@ public class OriginalHangarTests : IDisposable
 
         public IReadOnlyList<CustomPlaneDef> OwnedBuilds() => _owned.ToList();
 
-        public void Purchase(string planeName, int airframe, int cost) =>
+        public void Purchase(string planeName, int airframe, int cost, string? modAirframe = null) =>
             _owned.Add(new CustomPlaneDef { Name = planeName, Airframe = airframe });
 
         public bool Sell(string planeName)

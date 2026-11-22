@@ -353,8 +353,8 @@ JSON persistence for one campaign profile under `user://Profiles/<folder>/profil
 `ScoreStore` and `CustomPlaneStore`: funds, owned planes with their ammunition and ordnance picks,
 each mission's latest and best-of record with its failed-attempt counter, the completed-mission
 count, granted awards, the chosen memento and the destruction log. An owned plane names a build in
-`user://Planes/` rather than copying it. A field a file predates reads at rest. The folder is the
-identity: `Save` writes a loaded profile back to its `Folder`, and a file whose `"name"` points at
+`user://Planes/` rather than copying it; one on a plane mod adds `modAirframe` beside its parent's id, and `OwnedPlane.ModIn`/`FlownNode` fly the parent while the mod is missing, never rewriting the id.
+A field a file predates reads at rest. The folder is the identity: `Save` writes a loaded profile back to its `Folder`, and a file whose `"name"` points at
 another folder (a copy, a hand rename) is read under the folder's name with a warning. `ForSession`
 is a launch's store, `--profiles=` or `user://Profiles/`. Format: [../formats/saved-games.md](../formats/saved-games.md).
 

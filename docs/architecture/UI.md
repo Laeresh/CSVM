@@ -1187,7 +1187,7 @@ nothing and standing on the pick the network door kept, `GuestCoopFit` is its am
 original's own words; the mission operations settle which `cm_sequence` entry the screens after the
 cabin are about, with its briefing, wingman flag, per-slot change-plane rules and story aircraft;
 the writes save the loadout, planes, memento (refused unless held), an exported build and the
-mission exit. The co-op runs through it: `OfferCoop` is a host's word to its guests each frame (advert, hangar, board, debrief result), `CoopLaunchWaits` its wait on every guest's Ready, and `OpenCoopGuest`, `FollowCoopHost`, `StepGuestPlane` and `CoopGuestExit` a guest's campaign, pick and launch behind its host. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
+mission exit, whose seat flies an owned mod plane as the mod's node (`ModSet`) unless networked. The co-op runs through it: `OfferCoop` is a host's word to its guests each frame (advert, hangar, board, debrief result), `CoopLaunchWaits` its wait on every guest's Ready, and `OpenCoopGuest`, `FollowCoopHost`, `StepGuestPlane` and `CoopGuestExit` a guest's campaign, pick and launch behind its host. It carries the host's `ChapterCinema` and `ClosingCinema`. Read `CampaignFlow.cs` next.
 
 ## src/UI/Menu/BriefingScript.cs
 The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
@@ -1232,11 +1232,11 @@ runs identically rather than a drawing.
 ## src/UI/Menu/CampaignWallet.cs
 The seated campaign profile as the hangar's `IHangarWallet`, built by `CampaignFeature.Wallet()`
 for the cabin's Plane Construction and null on every wallet-free door: the funds and the
-affordability answer, the airframe availability threshold against campaign progress, whether a
+affordability answer, the airframe availability threshold against campaign progress (a mod build's `ModPlane.CampaignAvailability`, its `unlock`), whether a
 plane is a reward and whether it may be sold, the owned builds resolved to their stored build or
 their award template or the campaign's starting spec, the sale price, and the purchase and sale
-writes that move the funds, the ownership record and the build together. Off-engine coverage:
-`CSVM.Tests/CampaignWalletTests.cs`. The thresholds, prices and decoded comparisons:
+writes that move the funds, the ownership record (a mod build's id beside its parent's) and the build together.
+Off-engine coverage: `CSVM.Tests/CampaignWalletTests.cs`, `CSVM.Tests/ModPlaneCampaignTests.cs`. The thresholds, prices and decoded comparisons:
 [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/TypedCheat.cs

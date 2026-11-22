@@ -1648,6 +1648,12 @@ public partial class Launcher : Node3D
                 Flight.Hangar.ModPlanes.Current = Flight.Hangar.ModPlanes.Current.Skip(mod, e.Message);
             }
         }
+
+        var missions = CampaignSequence.Load(_paths.Data.Zrdr);
+        foreach (var mod in Flight.Hangar.ModPlanes.Current.Planes)
+        {
+            mod.BindCampaign(missions);
+        }
     }
 
     // The screen's screenshot doors, through --menu= like the menu's own: source-picker[:<folder>]

@@ -127,8 +127,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, saves, campaign, bots, multiplayer
 
-31. ☐ Saves keep the mod id; a missing mod flies as its parent
-32. ☐ Campaign unlock field
+31. ☑ Saves keep the mod id; a missing mod flies as its parent
+32. ☑ Campaign unlock field
 33. ☐ Bot seats may fly mod planes
 34. ☐ Multiplayer: string airframe id and a matching mod set
 
@@ -957,7 +957,61 @@ art (`PX_ICON`, portraits) and never a model (`model-packs.md:128`).
 
 # Wave D, saves, campaign, bots, multiplayer
 
-## D31 ☐ Saves keep the mod id; a missing mod flies as its parent
+## D31 ☑ Saves keep the mod id; a missing mod flies as its parent
+
+**Landed.** Custom planes already kept the id (C25); this item adds the campaign profile. An owned
+plane is `OwnedPlane { Airframe, ModAirframe }` in `Session/Campaign/CampaignProfileStore.cs`, the
+parent's stock id beside the mod's id, the same pair as `CustomPlaneDef`.
+
+- **Profile field.** `profile.json` writes `"modAirframe"` right after a plane's `"airframe"`, only
+  for a mod plane, so a stock profile is byte for byte as before. No version bump: the reader takes
+  each field by name and a missing one reads at rest, the rule every optional field of this store
+  follows; version 3 stays. An older build reads such a file and flies the parent, and drops the key
+  if it saves.
+- **Missing mod.** `ModPlanes.FindOrWarn(id, record, parent)` is the one lookup for a saved record's
+  mod id, with the per-id warning set moved there from `CustomPlaneDef`; `CustomPlaneDef.ModIn` and
+  the new `OwnedPlane.ModIn`/`FlownNode` call it. A missing mod resolves to null, the plane flies and
+  is named as `Airframe`, the log says `campaign plane <name>: mod airframe <id> is not installed, it
+  flies as <parent>` once per id, and nothing writes the record back changed.
+- **Campaign sites and how each resolves a mod.**
+  - `CampaignWallet.Purchase` takes the build's `ModAirframe` (through `IHangarWallet.Purchase`,
+    from `HangarFeature.Commit`) and records it; a rebuild on a stock airframe clears it. Its
+    starting-spec fallback in `BuildFor` copies the id.
+  - `CampaignFeature.BuildExit`, the flight check's FLY MISSION: the seat's node is
+    `plane.ModIn(ModSet)?.Id`, else the parent's node; the build is the stored one, which carries
+    the id. `CampaignFeature.Mods` (null reads `ModPlanes.Current`) mirrors `HangarFeature.Mods`.
+  - `CampaignDirector.ResolveSeatedPlane`, a `--campaign=` launch: `plane.FlownNode(ModPlanes.Current)`.
+  - `CampaignFlightField.CopyOf`, a local split-screen seat's copy, keeps the id.
+  - `CampaignPlaneSelectionPage` and `CampaignFlightCheckPage` name an installed mod's plane by its
+    plane.json `name` (slot label, combo entry, export notice); a missing mod's by the parent.
+  - Kept on the parent's stock id: a co-op host's launch (`BuildExit(networked: true)`, which
+    `OriginalCampaignScreen` passes for a co-op host, since a guest sees the host's seat through the
+    stock-index wire), the co-op hangar words and wingman message (`CampaignFeature`, D34), the
+    wingman's own plane (`CampaignDirector.BindWingman`, so the host's and a guest's wingman stay one
+    airframe), the mission records (`MissionRun.Airframe`, the per-airframe kill tallies), the art
+    (`PC_P_HANGAR<n>`, the plane diagram, the inventory icon) and the stock-fit fallbacks for an
+    unbuilt plane (a mod plane is always built). `CampaignDirector.CreditKill` reads scripted
+    enemies, which stay stock (Decision 17).
+- Docs: `docs/formats/mod-planes.md` "The campaign", `docs/formats/saved-games.md` "Funds and the
+  plane list", the `CampaignProfileStore`, `CampaignWallet`, `CampaignFeature` and `ModPlanes`
+  architecture entries.
+- Coverage: `CSVM.Tests/ModPlaneCampaignTests.cs` (a stock profile writes no `modAirframe` and
+  round-trips; a mod plane round-trips its id; an installed mod seats as its node and as the parent
+  on a networked launch; a missing mod seats as the parent with one warning and the file stays
+  byte-identical through the launch's save; a purchase records the id and a stock rebuild clears it)
+  and the `campaign-mod-plane` suite: a `--campaign=` launch over a `--profiles=` store seats an
+  installed mod and builds the seat from its `plane.glb`, seats the parent without it, and a load and
+  save leave the profile byte-identical with the id. Probe, the local Avenger in a scratch
+  `--profiles=` store at seq 0 (C3/M01): with `--mods=Z:\CSVM\Mods` the log reads `campaign:
+  'D31Probe' seated in "D31 Probe Blue" as avenger_e1c` and the launch cutscene shows the Avenger in
+  the zeppelin hangar (`Z:\CSVM\.scratchKeep\mod-planes\d31\campaign-avenger.png`); without it
+  `campaign plane D31 Probe Blue: mod airframe avenger_e1c is not installed, it flies as
+  player_brigand`, the Brigand in the same pose (`campaign-missing-mod.png`), and the profile file's
+  hash unchanged.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Campaign saves and custom planes store a mod plane's id with its parent; without the mod
 the plane loads as the parent with a notice, and the record stays untouched.
@@ -972,7 +1026,38 @@ the plane loads as the parent with a notice, and the record stays untouched.
 
 **⚠ Traps.** A load must never rewrite the stored id to the parent's.
 
-## D32 ☐ Campaign unlock field
+## D32 ☑ Campaign unlock field
+
+**Landed.** The stock unlock is `HangarEconomy.Airframes[id].Availability`, compared by
+`CampaignWallet.IsAirframeAvailable` as `MissionsCompleted + 1 >= Availability` (`FUN_00410120`), so
+availability is the 1-based ordinal of the mission from which the hangar offers the airframe. A mod
+gets a number in the same units, `ModPlane.CampaignAvailability`, and the wallet compares it in
+place of the parent's row: `IsAirframeAvailable(airframe, mod)` on `IHangarWallet`, which
+`HangarFeature.Refusal` calls with `Scratch.ModIn(ModSet)`. The purchase refusal is the only gate
+(the airframe list offers every row and refuses at the commit, as for stock airframes).
+
+- **The rule.** `start` is 1, offered from the first mission. `with_parent` and an absent field are
+  the parent's availability. A mission id is `<world folder>/<mission folder>` as `cm_sequence`
+  stores it (`c1b/m02`), and a chapter id the world folder alone (`c1b`), matched without case; the
+  mission's ordinal, or the chapter's first mission's, is the availability, so the hangar offers the
+  mod once the missions before it are completed. An id the sequence does not hold warns `mod plane
+  <id>: unlock <value> names no campaign mission or chapter, it unlocks with its parent <parent>` and
+  uses the parent's. The unlock-everything cheat (`fAllowAll`) unlocks mods too.
+- **When it is checked.** `ModPlane.BindCampaign(missions)`, which `Launcher.BindModPlanes` runs at
+  each game data bind after the grafts, over `CampaignSequence.Load(_paths.Data.Zrdr)`. B11 still
+  accepts any non-empty string at load. Before a bind (an off-engine test), a mission or chapter id
+  reads as the parent's.
+- Docs: `docs/formats/mod-planes.md` (`unlock` row, "The campaign" table, Evidence), the
+  `CampaignWallet` and `ModPlanes` architecture entries.
+- Coverage: `ModPlaneCampaignTests.TheUnlockFieldSetsWhenTheHangarOffersTheMod` (`start`,
+  `with_parent`, `C1B/m02`, `c1b`, an unknown `c9/m01` with its one warning, over a four-mission
+  list, and the wallet's answer either side of the mission) and the `campaign-mod-plane` suite (a
+  mod unlocking at the mission id of `cm_sequence` seq 6 read from the install, offered from that
+  seq and not before; an unknown id at the parent's availability).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A mod plane enters the campaign hangar at `start`, with its parent (default) or at the
 named mission.

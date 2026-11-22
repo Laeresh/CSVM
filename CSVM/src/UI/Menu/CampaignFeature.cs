@@ -107,6 +107,13 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>The langui table every label here is read from.</summary>
     public UiStrings Strings { get; }
 
+    /// <summary>The plane mods an owned plane's mod id resolves against; null reads
+    /// <see cref="ModPlanes.Current"/> at each use, which is what the game wants.</summary>
+    public ModPlanes? Mods { get; init; }
+
+    /// <summary><see cref="Mods"/>, else <see cref="ModPlanes.Current"/>.</summary>
+    public ModPlanes ModSet => Mods ?? ModPlanes.Current;
+
     /// <summary>What the original's four menu cheats have switched on. One store for both
     /// presentations, and the only place any of them is read from.</summary>
     public CampaignCheats Cheats { get; } = new();
@@ -889,10 +896,10 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>FLY MISSION: saves the profile and builds the launch at <see cref="MissionSeq"/>,
     /// one seat per joined human with the devices <paramref name="padsPerPlayer"/> names for each.
     /// A seat carries its aircraft's node, stored ammunition and ordnance, and hangar build. A
-    /// reward aircraft with no file takes its award template, and the stock Devastator no build.
-    /// A wingman kept off its saved plane rides as
-    /// <see cref="WingmanOverride"/>. Null with nobody seated.</summary>
-    public CampaignMissionExit? BuildExit(IReadOnlyList<IReadOnlyList<int>> padsPerPlayer)
+    /// reward aircraft with no file takes its award template, and the stock Devastator no build. A
+    /// wingman kept off its saved plane rides as <see cref="WingmanOverride"/>. Null with nobody seated.
+    /// A mod plane flies as its mod's node, except <paramref name="networked"/>: the wire carries stock ids.</summary>
+    public CampaignMissionExit? BuildExit(IReadOnlyList<IReadOnlyList<int>> padsPerPlayer, bool networked = false)
     {
         ArgumentNullException.ThrowIfNull(padsPerPlayer);
         if (Profile is not { } profile)
@@ -913,7 +920,7 @@ public sealed class CampaignFeature : IMenuFeature
                 : Field.IsStock(plane) ? null
                 : Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane);
             seats.Add(new MenuSeatChoice(
-                _nodeOfAirframe(plane.Airframe),
+                (networked ? null : plane.ModIn(ModSet)?.Id) ?? _nodeOfAirframe(plane.Airframe),
                 padsPerPlayer[player],
                 CampaignLoadout.For(plane, Stock),
                 custom));

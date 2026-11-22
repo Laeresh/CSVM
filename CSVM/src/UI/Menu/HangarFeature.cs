@@ -26,8 +26,9 @@ public interface IHangarWallet
     /// <summary>Whether a build's total cost is affordable right now.</summary>
     bool CanAfford(int cost);
 
-    /// <summary>Whether an airframe is offered yet at the profile's progress.</summary>
-    bool IsAirframeAvailable(int airframe);
+    /// <summary>Whether an airframe is offered yet at the profile's progress; a build on
+    /// <paramref name="mod"/> asks by the mod's own unlock rule.</summary>
+    bool IsAirframeAvailable(int airframe, ModPlane? mod = null);
 
     /// <summary>Whether the named owned plane is an unsellable reward aircraft.</summary>
     bool IsSpecial(string planeName);
@@ -41,8 +42,9 @@ public interface IHangarWallet
     /// <summary>The profile's own aircraft as buildable defs, in the ownership list's order.</summary>
     IReadOnlyList<CustomPlaneDef> OwnedBuilds();
 
-    /// <summary>Deducts a completed build's cost and records ownership.</summary>
-    void Purchase(string planeName, int airframe, int cost);
+    /// <summary>Deducts a completed build's cost and records ownership, with the build's mod id
+    /// (<see cref="CustomPlaneDef.ModAirframe"/>) beside its stock airframe.</summary>
+    void Purchase(string planeName, int airframe, int cost, string? modAirframe = null);
 
     /// <summary>Credits the wallet for the named plane, removes it from the profile and deletes its
     /// build. False, with nothing changed, when <see cref="CanSell"/> would refuse.</summary>
@@ -658,7 +660,7 @@ public sealed class HangarFeature : IMenuFeature
                 return HangarFullText();
             }
 
-            if (!wallet.IsAirframeAvailable(Scratch.Airframe))
+            if (!wallet.IsAirframeAvailable(Scratch.Airframe, Scratch.ModIn(ModSet)))
             {
                 return Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " That airframe is not available yet.";
             }
@@ -705,7 +707,7 @@ public sealed class HangarFeature : IMenuFeature
         store.Save(Scratch);
         BuiltPlaneName = Scratch.Name;
         Message = string.Empty;
-        Wallet?.Purchase(Scratch.Name, Scratch.Airframe, cost);
+        Wallet?.Purchase(Scratch.Name, Scratch.Airframe, cost, Scratch.ModAirframe);
         return true;
     }
 

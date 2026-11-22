@@ -501,7 +501,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // record is named for its airframe, and "Devastator   Devastator" is not a second fact.
     private string SlotLabel(OwnedPlane plane)
     {
-        string title = AirframeTitle(plane.Airframe);
+        string title = plane.ModIn(Flow.Feature.ModSet)?.Name ?? AirframeTitle(plane.Airframe);
         return plane.Name == title ? title : $"{plane.Name}   {title}";
     }
 

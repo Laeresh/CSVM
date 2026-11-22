@@ -12,7 +12,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
   [overrides](#overrides), [default loadout](#default-loadout), [`plane.glb`](#planeglb),
   [paint](#paint), [damage](#damage), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
-  [flying a mod](#flying-a-mod), [the hangar](#the-hangar)
+  [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -61,7 +61,7 @@ machine in a network match needs the same mods, which the content hash compares.
 | `kind_of` | Required. The stock parent's `planes.zbd` node, one of `player_autogyro`, `player_avenger`, `player_balmoral`, `player_bhawk`, `player_brigand`, `player_pfighter`, `player_fbrand`, `player_fury`, `player_kestrel`, `player_peacemaker`, `player_warhawk`, matched without case. |
 | `name` | The name a menu shows. Absent, the id. |
 | `overrides` | An object of def field name to number, each a finite JSON number, applied over the parent's def (`vehicle.json`, [vehicle.md](vehicle.md)); the names are in [Overrides](#overrides). `"turrets": []` clears the parent's turret mounts; any other `turrets` value fails. |
-| `unlock` | When the plane enters the campaign hangar: `start`, `with_parent` (the default), or a mission or chapter id. |
+| `unlock` | When the plane enters the campaign hangar: `start`, `with_parent` (the default), or a mission or chapter id, `c1b/m02` or `c1b` (the world folders of `cm_sequence`, [campaign-sequence.md](campaign-sequence.md)), matched without case. The rules are in [The campaign](#the-campaign). |
 | `cockpit` | A stock node whose cockpit interior the plane uses when its model has no `cockpit1` ([`plane.glb`](#planeglb), Cockpit). Absent, the parent's. |
 | `sound` | A stock node whose engine sounds the plane uses: the engine loop, the cockpit-view loop, the damaged loop with its pitch range and the dive whine its def names, in the original and the Enhanced sound mode alike. Absent, the parent's. |
 | `portrait` | The path of an image inside the mod that menus show for the plane. |
@@ -202,8 +202,8 @@ no `--loadout=`, the stock fit (with `"turrets": []` applied). A crash plays the
 mod's own wreck or the auto-wreck ([Damage](#damage)), logging `crash rig '<id>': zones cut from the
 mesh nose N, tail N, leftwing N, rightwing N triangle(s), M effect anchor(s) added`. Its engine sounds
 as its parent's, or as `sound`'s plane, flown or as a bot; the build logs the loop it chose
-(`audio: engine=snd_brigandengine ...`). The campaign, bot seats and the network wire still list the
-stock eleven alone.
+(`audio: engine=snd_brigandengine ...`). Bot seats and the network wire still list the stock eleven
+alone.
 
 ### The hangar
 
@@ -219,8 +219,33 @@ A saved build keeps the mod's id as `modAirframe` beside its parent's stock id i
 CSVM's custom plane file; a stock build's file carries no `modAirframe`. The plane pickers fly such a
 build as the mod's own node. With the mod not installed the record is kept untouched, the build
 flies and prices as the stored parent, and the log says so once per id (`custom plane <name>: mod
-airframe <id> is not installed, it flies as <parent>`). The campaign profile, the network wire and
-the lobbies carry the build as its parent's stock id.
+airframe <id> is not installed, it flies as <parent>`). The network wire and the lobbies carry the
+build as its parent's stock id.
+
+### The campaign
+
+A plane the campaign hangar builds on a mod is owned by the profile with the mod's id as
+`modAirframe` beside its parent's stock id in `airframe` ([saved-games.md](saved-games.md), "Funds
+and the plane list"); a stock plane's record carries no `modAirframe`. With the mod installed the
+plane flies as the mod's own node from the flight check and from a `--campaign=` launch, and the
+plane selection and flight check name it by its `name`. With the mod not installed it flies and is
+named as the stored parent, the log says so once per id (`campaign plane <name>: mod airframe <id>
+is not installed, it flies as <parent>`), and the record is never rewritten. A co-op campaign
+launch, the co-op wire, the wingman and the records keep the parent's stock id.
+
+The hangar offers a mod by `unlock`, against the profile's completed-mission count as it offers a
+stock airframe by the stat table's availability:
+
+| `unlock` | Offered from |
+|---|---|
+| `start` | the first mission |
+| `with_parent` or absent | the mission the parent is offered from |
+| `<chapter>/<mission>`, e.g. `c1b/m02` | that mission: once the missions before it are completed |
+| `<chapter>`, e.g. `c1b` | that world folder's first mission in `cm_sequence` |
+| an id `cm_sequence` does not hold | the parent's mission, with the warning `mod plane <id>: unlock <value> names no campaign mission or chapter, it unlocks with its parent <parent>` |
+
+The id is checked each time the game data binds, after the mods' models are grafted. The menu
+cheat that unlocks every airframe unlocks the mods too.
 
 
 ## Evidence & limits
@@ -259,5 +284,12 @@ the lobbies carry the build as its parent's stock id.
   own `nose` kept; and a mod's own `destroyed > piece1` built from its file. The anchor names are
   those the parent's defs logged as unresolved on a mod without them (`--debug-anim`).
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
-  loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is not
-  checked against the campaign.
+  loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is
+  checked against `cm_sequence` when the game data binds, not when the mod loads, so an unknown id
+  warns and falls back to the parent without skipping the mod.
+- The campaign rules are `OwnedPlane.ModIn`, `CampaignProfileStore`, `CampaignWallet` and
+  `ModPlane.BindCampaign`, covered by `CSVM.Tests/ModPlaneCampaignTests.cs` and the
+  `campaign-mod-plane` suite: a `--campaign=` launch over a `--profiles=` store seats an installed
+  mod's node and builds it from its `plane.glb`, seats the parent without it and leaves the profile
+  byte-identical through a load and save, and a mission `unlock` read from `cm_sequence` offers the
+  mod from that mission.

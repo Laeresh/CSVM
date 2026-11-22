@@ -16,7 +16,14 @@ namespace CSVM.Session.Campaign;
 public sealed class OwnedPlane
 {
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>The stock airframe id, 0-10. A plane built on a mod airframe holds the mod's parent,
+    /// which every int-indexed reader (the co-op wire, the art, the records) uses.</summary>
     public int Airframe { get; set; }
+
+    /// <summary>The mod airframe's id beside <see cref="Airframe"/>, or null for a stock plane. Kept as
+    /// stored whether or not the mod is installed; see <see cref="ModIn"/>.</summary>
+    public string? ModAirframe { get; set; }
 
     /// <summary>Per-gun-slot ammunition index, four slots. The original's no-gun marker (4) and
     /// the ammunition vocabulary (slug/dumdum/ap/magnesium) are <c>loadouts.md</c>'s; a slot with
@@ -32,6 +39,15 @@ public sealed class OwnedPlane
     /// original's class-2 plane record, which the sell handler refuses. Never set on a plane the
     /// player built.</summary>
     public bool Special { get; set; }
+
+    /// <summary>The mod this plane is built on, out of <paramref name="mods"/>, or null for a stock
+    /// plane. A mod that is not installed is null too: the plane flies as the stored parent.</summary>
+    public Flight.Hangar.ModPlane? ModIn(Flight.Hangar.ModPlanes mods) =>
+        ModAirframe is { } id ? mods.FindOrWarn(id, $"campaign plane {Name}", Airframe) : null;
+
+    /// <summary>The planes.zbd node this plane flies as: its installed mod's id, else its stock airframe's node.</summary>
+    public string FlownNode(Flight.Hangar.ModPlanes mods) =>
+        ModIn(mods)?.Id ?? Flight.Hangar.StockAirframes.Node(Airframe);
 }
 
 /// <summary>One run of a mission: the eight scalar fields described by <c>saved-games.md</c>, plus
@@ -263,6 +279,13 @@ public sealed class CampaignProfileStore
                 w.WriteStartObject();
                 w.WriteString("name", plane.Name);
                 w.WriteNumber("airframe", plane.Airframe);
+
+                // Only for a mod plane, so a stock profile's file is byte for byte as before.
+                if (plane.ModAirframe != null)
+                {
+                    w.WriteString("modAirframe", plane.ModAirframe);
+                }
+
                 WriteInts(w, "ammo", plane.Ammo);
                 WriteInts(w, "ordnance", plane.Ordnance);
                 w.WriteBoolean("special", plane.Special);
@@ -354,6 +377,9 @@ public sealed class CampaignProfileStore
                             ? pn.GetString() ?? string.Empty
                             : string.Empty,
                         Airframe = ReadInt(p, "airframe", 0),
+                        ModAirframe = p.TryGetProperty("modAirframe", out var mod) && mod.ValueKind == JsonValueKind.String
+                            ? mod.GetString()
+                            : null,
                     };
                     ReadInts(p, "ammo", plane.Ammo);
                     ReadInts(p, "ordnance", plane.Ordnance);

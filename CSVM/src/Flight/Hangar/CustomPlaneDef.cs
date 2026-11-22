@@ -79,9 +79,6 @@ public sealed class CustomPlaneDef
     // table loaded and the row's own length is unknown.
     private const int MaxShadeWithoutTable = 9;
 
-    // Mod ids already warned about, so a picker or a price redrawn every frame warns once.
-    private static readonly HashSet<string> MissingMods = new(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>The plane's name. Also its identity in the store: the original saves
     /// <c>Planes\%s</c> and overwrites by name, and our store keeps that contract.</summary>
     public string Name { get; set; } = string.Empty;
@@ -205,28 +202,8 @@ public sealed class CustomPlaneDef
     /// <summary>The mod this plane is built on, out of <paramref name="mods"/>, or null for a stock
     /// plane. A mod that is not installed is null too, so the plane builds as its stored parent
     /// (<see cref="Airframe"/>). The first such read per id logs a warning.</summary>
-    public ModPlane? ModIn(ModPlanes mods)
-    {
-        if (ModAirframe is not { } id)
-        {
-            return null;
-        }
-
-        if (mods.Find(id) is { } mod)
-        {
-            return mod;
-        }
-
-        lock (MissingMods)
-        {
-            if (MissingMods.Add(id))
-            {
-                Log.Warn("flight", $"custom plane {Name}: mod airframe {id} is not installed, it flies as {StockAirframes.Node(Airframe)}");
-            }
-        }
-
-        return null;
-    }
+    public ModPlane? ModIn(ModPlanes mods) =>
+        ModAirframe is { } id ? mods.FindOrWarn(id, $"custom plane {Name}", Airframe) : null;
 
     /// <summary>The planes.zbd node this plane flies as: its mod's id when <paramref name="mods"/>
     /// holds it, else its stock airframe's node.</summary>

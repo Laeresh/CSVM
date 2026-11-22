@@ -8,6 +8,8 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Session.Campaign;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -32,6 +34,12 @@ internal static class ModPlaneSuites
     private const string ParentMod = "suite_mod_parent_cockpit";
     private const string WreckId = "suite_mod_wreck";
     private const string OwnWreckId = "suite_mod_own_wreck";
+    private const string CampaignModId = "suite_mod_campaign";
+    private const string UnknownUnlockId = "suite_mod_unknown_unlock";
+    private const string CampaignPilot = "Suite Mod Pilot";
+
+    // The story position the campaign mod's unlock names, a mid-campaign mission.
+    private const int CampaignUnlockSeq = 6;
 
     // Metres: the file keeps float32 positions, so only the glTF round trip separates the two builds.
     private const float Tolerance = 1e-3f;
@@ -340,6 +348,110 @@ internal static class ModPlaneSuites
         ctx.Check(piece != null && Meshes(piece, null).Any(m => m.HasMeta(SceneBuilder.GamezMeshMeta)),
             $"{OwnWreckId}'s own destroyed subtree builds with its piece1 drawn from the file destroyed={own != null} piece1={piece != null}");
         own?.Free();
+    }
+
+    [Suite("campaign-mod-plane",
+        "a campaign profile owning a plane built on a mod keeps the mod id beside its parent's stock id: with the " +
+        "mod installed a --campaign= launch over a --profiles= store seats the mod's node and that seat builds from " +
+        "the mod's plane.glb; with it gone the seat is the parent's and a load and save of the profile leave its file " +
+        "byte-identical, the id included. The mod's unlock, a mission id read from cm_sequence, offers it in the " +
+        "campaign hangar from that mission's ordinal, and an id the campaign does not hold unlocks with the parent")]
+    internal static void CampaignModPlane(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        var missions = CampaignSequence.Load(ctx.Zrdr);
+        if (planes.FindByName(Parent) == null || missions.Count < CampaignUnlockSeq + 1)
+        {
+            throw new SuiteSkippedException($"{Parent} or cm_sequence seq {CampaignUnlockSeq} is not in the data");
+        }
+
+        using var textures = new TextureArchive(texturesPath);
+        string root = Path.Combine(ctx.ScratchDir, "campaign-mod-plane");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        var target = missions.First(m => m.Seq == CampaignUnlockSeq);
+        foreach (var (id, unlock) in new[] { (CampaignModId, $"{target.ChapterFolder}/{target.MissionFolder}"), (UnknownUnlockId, "c9/m09") })
+        {
+            string folder = Path.Combine(ModPlanes.FolderIn(root), id);
+            Directory.CreateDirectory(folder);
+            ctx.Same((long)Error.Ok, (long)WriteWreckFixture(folder, id, ownWreck: false), $"the {id} fixture's write result");
+            File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile), $$"""{ "kind_of": "{{Parent}}", "unlock": "{{unlock}}" }""");
+        }
+
+        var mods = ModPlanes.Open(root);
+        var mod = mods.Find(CampaignModId);
+        ctx.Check(mod != null && mods.Planes.Count == 2, $"both mods load from {root} ({mods.Planes.Count})");
+        if (mod == null)
+        {
+            return;
+        }
+
+        foreach (var each in mods.Planes)
+        {
+            each.BindCampaign(missions);
+        }
+
+        int parent = HangarEconomy.Airframes[StockAirframes.IdOf(Parent)!.Value].Availability;
+        ctx.Check(mod.CampaignAvailability == target.Ordinal && mods.Find(UnknownUnlockId)!.CampaignAvailability == parent,
+            $"unlock {mod.Unlock} offers the mod from ordinal {target.Ordinal} ({mod.CampaignAvailability}), an unknown id at the parent's {parent} ({mods.Find(UnknownUnlockId)!.CampaignAvailability})");
+        ModAirframes.Add(planes, mod.Id, mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+
+        string dir = Path.Combine(root, "Profiles");
+        var store = new CampaignProfileStore(dir);
+        var profile = CampaignProfileDef.NewProfile(CampaignPilot);
+        string planeName = "Suite Mod " + Guid.NewGuid().ToString("N")[..8];
+        profile.Planes.Add(new OwnedPlane { Name = planeName, Airframe = StockAirframes.IdOf(Parent)!.Value, ModAirframe = CampaignModId });
+        profile.SelectedPlane = 2;
+        string path = store.Save(profile);
+        byte[] saved = File.ReadAllBytes(path);
+        var spec = SessionSpec.Parse(new[] { $"--campaign={CampaignPilot}:0", $"--profiles={dir}" });
+
+        var previous = ModPlanes.Current;
+        try
+        {
+            ModPlanes.Current = mods;
+            var seated = CampaignDirector.ResolveSeatedPlane(spec);
+            string node = seated.PlaneNames.Count > 0 ? seated.PlaneNames[0] : "none";
+            ctx.Check(node == CampaignModId, $"the installed mod seats as its own node ({node})");
+            var model = Build(planes, textures, node, out var builder);
+            try
+            {
+                var drawn = Meshes(model, builder.CockpitInterior).ToList();
+                ctx.Check(drawn.Count > 0 && drawn.All(m => m.HasMeta(SceneBuilder.GamezMeshMeta)),
+                    $"the seat builds from the mod's plane.glb ({drawn.Count(m => m.HasMeta(SceneBuilder.GamezMeshMeta))} of {drawn.Count} meshes)");
+            }
+            finally
+            {
+                model.Free();
+            }
+
+            var wallet = new UI.Menu.CampaignWallet(store, profile, new CustomPlaneStore(Path.Combine(root, "Planes")));
+            profile.MissionsCompleted = target.Seq - 1;
+            bool before = wallet.IsAirframeAvailable(profile.Planes[2].Airframe, mod);
+            profile.MissionsCompleted = target.Seq;
+            bool at = wallet.IsAirframeAvailable(profile.Planes[2].Airframe, mod);
+            ctx.Check(!before && at, $"the campaign hangar offers the mod from seq {target.Seq}, not before (before={before}, at={at})");
+
+            ModPlanes.Current = ModPlanes.Open(Path.Combine(root, "none"));
+            seated = CampaignDirector.ResolveSeatedPlane(spec);
+            node = seated.PlaneNames.Count > 0 ? seated.PlaneNames[0] : "none";
+            ctx.Check(node == Parent, $"without the mod the seat is the stored parent ({node})");
+            store.Save(store.Load(CampaignPilot)!);
+            ctx.Check(File.ReadAllBytes(path).SequenceEqual(saved) && File.ReadAllText(path).Contains($"\"modAirframe\": \"{CampaignModId}\""),
+                $"a load and save without the mod leave the profile byte-identical, the mod id kept");
+        }
+        finally
+        {
+            ModPlanes.Current = previous;
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void CheckAutoWreck(TestContext ctx, Node3D model, PlaneStats stats)
