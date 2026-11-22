@@ -768,7 +768,8 @@ public static class GroundCover
         /// <summary>The hangar floors no card stands on.</summary>
         public HangarFootprints Hangars => _hangars;
 
-        /// <summary>Cards the built cells left off a hangar's floor.</summary>
+        /// <summary>Cards kept off a hangar's floor, summed over every cell build since the field was made: a cell freed
+        /// and built again counts again.</summary>
         public int CardsOffHangars { get; private set; }
 
         /// <summary>The cards the built cells hold, by <see cref="Cover"/>.</summary>

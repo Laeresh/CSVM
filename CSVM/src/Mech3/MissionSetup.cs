@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CSVM.Mech3.Anim;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -109,41 +110,50 @@ public sealed class MissionSetup
     /// <summary>Applies the script to a built world. <paramref name="resolve"/> maps a gamez name
     /// (plus an optional <c>FindSubNode</c> scope) to built nodes; <paramref name="setActive"/>,
     /// <paramref name="translate"/> and <paramref name="rotate"/> act on the selection. All four
-    /// come from <see cref="AnimRuntime"/>, reusing its one name resolver.
-    /// <paramref name="setActiveByIndex"/> switches a gamez node index, which is how the area verb
-    /// reaches its selection; null leaves that verb counted and unapplied.</summary>
-    public void Apply(
-        Func<string, Node3D?, IReadOnlyList<Node3D>> resolve,
-        Action<Node3D, bool> setActive,
-        Action<Node3D, Vector3> translate,
-        Action<Node3D, Vector3> rotate,
-        Action<int, bool>? setActiveByIndex = null) =>
+    /// come from <see cref="AnimRuntime"/>'s one name resolver, over its built nodes.
+    /// <paramref name="setActiveByIndex"/> switches a gamez node index, the area verb's way in.
+    /// Null leaves that verb counted and unapplied.</summary>
+    public void Apply<T>(
+        Func<string, T?, IReadOnlyList<T>> resolve,
+        Action<T, bool> setActive,
+        Action<T, Vector3> translate,
+        Action<T, Vector3> rotate,
+        Action<int, bool>? setActiveByIndex = null)
+        where T : class =>
         Run(resolve, setActive, translate, rotate, setActiveByIndex, tally: true);
 
     /// <summary>The switches the script leaves on gamez nodes by node index, true on and false off, absent where it
     /// touches none. A dry run of <see cref="Apply"/> over the gamez records, for what must know a mission's switches
-    /// before the bootstrap applies them. Call <see cref="BindPartitions"/> first, or the area verb switches nothing.</summary>
-    public Dictionary<int, bool> Switches(GameZ gamez)
+    /// before the bootstrap applies them. Call <see cref="BindPartitions"/> first, or the area verb switches nothing.
+    /// <paramref name="built"/> names the built nodes, the only ones Apply reaches; null reads every record as built.
+    /// Names resolve through the bootstrap's own <see cref="NameResolver{TNode}"/>, each record under its nearest built ancestor.</summary>
+    public IReadOnlyDictionary<int, bool> Switches(GameZ gamez, Func<int, bool>? built = null)
     {
-        var state = new Dictionary<int, bool>();
-        IReadOnlyList<GameZNode> Resolve(string name, GameZNode? scope)
+        built ??= _ => true;
+        var names = new NameResolver<GameZNode>();
+        var children = gamez.Nodes.SelectMany(n => n.Children).ToHashSet();
+        var open = new Stack<(int At, GameZNode? Parent)>(gamez.Nodes.Where(n => !children.Contains(n.Index)).Select(n => (n.Index, (GameZNode?)null)));
+        while (open.Count > 0)
         {
-            if (scope == null)
-                return gamez.Nodes.Where(n => NameMatches(n.Name, name)).ToList();
-            var found = new List<GameZNode>();
-            var open = new Stack<int>(scope.Children);
-            while (open.Count > 0)
+            var (at, parent) = open.Pop();
+            var node = gamez.Nodes[at];
+            if (built(at))
             {
-                var node = gamez.Nodes[open.Pop()];
-                if (NameMatches(node.Name, name))
-                    found.Add(node);
-                foreach (int c in node.Children)
-                    open.Push(c);
+                names.Add(node, node.Name, parent, at);
+                parent = node;
             }
-            return found;
+            foreach (int c in node.Children)
+                open.Push((c, parent));
         }
 
-        Run<GameZNode>(Resolve, (n, on) => state[n.Index] = on, (_, _) => { }, (_, _) => { }, (i, on) => state[i] = on, tally: false);
+        var state = new Dictionary<int, bool>();
+        Run<GameZNode>(names.FindAll, (n, on) => state[n.Index] = on, (_, _) => { }, (_, _) => { },
+            (i, on) =>
+            {
+                if (built(i))
+                    state[i] = on;
+            },
+            tally: false);
         return state;
     }
 

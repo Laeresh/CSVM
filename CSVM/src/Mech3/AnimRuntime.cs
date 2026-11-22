@@ -2300,7 +2300,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Pass 0: the per-mission world setup, which switches off the chapter content this mission
         // does not show. ⚠ It must run before any animation state, so a state can still override
         // it and so RestOf records the mission's placed pose as rest.
-        Setup?.Apply(
+        Setup?.Apply<Node3D>(
             (name, scope) => FindAll(name, scope),
             SetSubtreeActive,
             (t, pos) => _opsApplied += Pose.PoseTranslate(t, pos, relative: false),

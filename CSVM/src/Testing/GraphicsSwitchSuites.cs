@@ -62,6 +62,9 @@ internal static class GraphicsSwitchSuites
     // How far the lifted ocean may stand below a ramp: the bilinear lift's rounding, not a gap.
     private const float RampShortfall = 0.05f;
 
+    // The slack a hangar reach test gives up, so a piece cut along a footprint's edge is not read as on it.
+    private const float HangarEdgeSlackM = 0.05f;
+
     // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
@@ -314,7 +317,7 @@ internal static class GraphicsSwitchSuites
         "the Post-processing word on a C1 MP1 Enhanced flight: on grades the world's Environment and every cockpit pass's "
         + "copy, a live move to off puts the bare AgX tonemap back on them and on again regrades them, and a switch "
         + "to Original leaves no grade; at vegetation quality rich the same flight hands its standing rearm hangar's footprint to "
-        + "the vegetation, read off the builders' counters: the added stamps drop candidates on it, the ground cover cards and "
+        + "the vegetation, read off the builders' counters: the added stamps drop candidates on it and no kept Rich or added stamp's card reaches it, the ground cover cards and "
         + "the canopy clumps hold the same footprints, and the cards built around a hangar leave some off its floor")]
     internal static void PostProcessingFollowsLive(TestContext ctx)
     {
@@ -2973,12 +2976,13 @@ internal static class GraphicsSwitchSuites
 
     [Suite("vegetation-hangars",
         "Enhanced flights at vegetation quality rich keep every standing hangar's floor clear: C1 MP2 and C3 MP2 (rabaset1, ctf_1, "
-        + "ctf_2) and C3 MP1 (rabaset1 alone), where no kept Rich or added stamp's card, ground cover card, shell piece (C1's "
+        + "ctf_2), C2 MP1 and C3 MP1 (rabaset1 alone), where no kept Rich or added stamp's card, ground cover card, shell piece (C1's "
         + "cover), canopy clump or crown (C3's painted canopy) reaches a footprint while stamps and cards still grow beside them; "
         + "C3's Instant Action switches every hangar off, so it keeps no footprint")]
     internal static void VegetationHangars(TestContext ctx)
     {
         RequireData(ctx, "C1");
+        RequireData(ctx, "C2");
         RequireData(ctx, "C3");
         bool wasEnhanced = GraphicsMode.Enhanced;
         string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
@@ -2990,7 +2994,7 @@ internal static class GraphicsSwitchSuites
         {
             VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
             GroundCoverSetting.Resolve(GroundCoverSetting.Cards, null, null);
-            foreach (var (chapter, mission, hangars) in new[] { ("C1", "MP2", 3), ("C3", "MP1", 1), ("C3", "MP2", 3) })
+            foreach (var (chapter, mission, hangars) in new[] { ("C1", "MP2", 3), ("C2", "MP1", 1), ("C3", "MP1", 1), ("C3", "MP2", 3) })
             {
                 var live = Open(ctx, true, 1, chapter, $"--mission={mission}");
                 try
@@ -4103,8 +4107,8 @@ internal static class GraphicsSwitchSuites
     private static string Light(DirectionalLight3D light) => string.Create(CultureInfo.InvariantCulture,
         $"layers 0x{light.Layers:X5} casts {light.ShadowEnabled} energy {light.LightEnergy:0.###} colour {light.LightColor.ToHtml(false)} specular {light.LightSpecular:0.###} angular {light.LightAngularDistance:0.##} beam {-light.GlobalBasis.Z}");
 
-    // The vegetation's hand-over of a flight's standing hangars, read off the builders' own counters. The bake drops
-    // added stamps on them, the cards and clumps hold the same footprints, and cards built at a hangar leave some off.
+    // The vegetation's hand-over of a flight's standing hangars. The bake drops added stamps on them and keeps every
+    // Rich card off. The cards and clumps hold the same footprints, and cards built at a hangar leave some off.
     private static void HangarsHandedOver(TestContext ctx, Rig rig)
     {
         if (rig.Session.Vegetation is not { Clutter: { } clutter, GroundCoverCards: { } cards, CanopyClumpField: { } clumps })
@@ -4114,7 +4118,8 @@ internal static class GraphicsSwitchSuites
         }
         var hangars = clutter.Hangars;
         ctx.Check(hangars.Outlines.Count == 1, $"the world session reads the one standing hangar off MP1's script ({hangars.Outlines.Count})");
-        ctx.Check(clutter.AddedOnHangars > 0, $"the added stamps drop {clutter.AddedOnHangars} candidates on it");
+        ctx.Check(clutter.AddedOffHangars > 0, $"the added stamps drop {clutter.AddedOffHangars} candidates on it");
+        StampsClear(ctx, clutter, "C1 MP1");
         ctx.Check(ReferenceEquals(cards.Hangars, hangars) && ReferenceEquals(clumps.Hangars, hangars), $"the ground cover cards and the canopy clumps hold the same footprints");
         // The rearm hangar, the smallest floor, stands on grass; one focus keeps the build to its cells.
         var floor = hangars.Outlines.OrderBy(o => Enumerable.Range(0, o.Length).Sum(i => o[i].Cross(o[(i + 1) % o.Length]))).First();
@@ -4122,27 +4127,33 @@ internal static class GraphicsSwitchSuites
         cards.Update(new[] { new Vector3(centre.X, 300f, centre.Y) }, int.MaxValue);
         ctx.Check(cards.CardsOffHangars > 0, $"the cards built at the rearm hangar leave {cards.CardsOffHangars} off its floor");
     }
+
+    // No kept Rich or added stamp's card reaches a standing hangar, while some stand within 60 m of one. A card reaches
+    // its half width, at the stamp's scale. The Rich bake is read off its placements, which hold where a counter reads none.
+    private static void StampsClear(TestContext ctx, Mech3.ClutterBuilder clutter, string flight)
+    {
+        var hangars = clutter.Hangars;
+        var stamps = (clutter.ExportedKinds ?? new List<Mech3.ClutterBuilder.KindExport>()).Where(k => k.Rich != null)
+            .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Determinant() != 0f).Select(p => (At: p.Origin, Reach: p.Basis.Y.Length() * k.Width / 2f))).ToList();
+        int onFloor = stamps.Count(s => hangars.Covers(s.At, s.Reach - HangarEdgeSlackM)), near = stamps.Count(s => hangars.Covers(s.At, 60f));
+        ctx.Check(onFloor == 0 && near > 0, $"no kept {flight} stamp's card reaches a hangar ({onFloor} of {stamps.Count}), {near} within 60 m of one");
+    }
+
     // One MP flight's checks: every layer the chapter draws keeps off its hangars. C1 draws the ground cover, C3 the crowns.
     private static void ClearOfHangars(TestContext ctx, Rig live, string flight, int standing)
     {
-        // The slack a reach test gives up, so a piece cut along a footprint's edge is not read as on it.
-        const float EdgeSlackM = 0.05f;
-        if (!live.Built || live.Session.Vegetation is not { Clutter: { ExportedKinds: { } kinds, Vegetation: { } entry } clutter } stage
+        if (!live.Built || live.Session.Vegetation is not { Clutter: { ExportedKinds: not null, Vegetation: { } entry } clutter } stage
             || live.Session.SessionTextures is not { } textures)
         {
             ctx.Check(false, $"the Enhanced {flight} flight builds with its clutter and vegetation entry");
             return;
         }
         var hangars = clutter.Hangars;
-        bool OnFloor(Vector3 at, float reach = 0f) => hangars.Covers(at, reach - EdgeSlackM);
+        bool OnFloor(Vector3 at, float reach = 0f) => hangars.Covers(at, reach - HangarEdgeSlackM);
         var areas = hangars.Outlines.Select(o => Enumerable.Range(0, o.Length).Sum(i => o[i].Cross(o[(i + 1) % o.Length])) / 2f).ToList();
         ctx.Check(areas.Count == standing && areas.All(a => a > 5000f && a < 20000f), $"{flight} stands {standing} hangar(s), each a building's floor ({string.Join(", ", areas.Select(a => $"{a:0}"))} m2)");
 
-        // A stamp's card reaches its half width, at the stamp's scale.
-        var stamps = kinds.Where(k => k.Rich != null).SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Determinant() != 0f)
-            .Select(p => (At: p.Origin, Reach: p.Basis.Y.Length() * k.Width / 2f))).ToList();
-        int onFloor = stamps.Count(s => OnFloor(s.At, s.Reach)), near = stamps.Count(s => hangars.Covers(s.At, 60f));
-        ctx.Check(onFloor == 0 && near > 0, $"no kept {flight} stamp's card reaches a hangar ({onFloor} of {stamps.Count}), {near} within 60 m of one");
+        StampsClear(ctx, clutter, flight);
 
         if (entry.Cover.Count > 0)
         {

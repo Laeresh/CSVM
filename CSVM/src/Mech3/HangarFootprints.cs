@@ -41,17 +41,64 @@ public sealed class HangarFootprints
     /// and every ancestor are on, by the script's last switch, else by its built node in <paramref name="world"/>. That
     /// is the built switch, never the record's ACTIVE bit, which a script overrides. A hangar <paramref name="world"/>
     /// never built does not stand. Every hangar stands with neither.</summary>
-    public static HangarFootprints Of(GameZ gamez, MissionSetup? setup = null, Node? world = null, string worldName = "world1")
+    public static HangarFootprints Of(GameZ gamez, MissionSetup? setup = null, Node? world = null, string worldName = "world1") =>
+        Of(gamez, setup, world == null ? null : ClutterBuilder.BuiltByIndex(world).ToDictionary(b => b.Key, b => b.Value.Visible), worldName);
+
+    /// <summary>The convex hull of a point set, counter-clockwise; empty for fewer than three distinct points.</summary>
+    public static Vector2[] Hull(IEnumerable<Vector2> points)
     {
-        var switched = setup?.Switches(gamez) ?? new Dictionary<int, bool>();
-        var built = world != null ? ClutterBuilder.BuiltByIndex(world) : null;
+        var p = points.Distinct().OrderBy(v => v.X).ThenBy(v => v.Y).ToList();
+        if (p.Count < 3)
+            return Array.Empty<Vector2>();
+        var hull = new List<Vector2>();
+        // The lower chain left to right, then the upper chain back, each dropping a corner that does not turn left.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int start = hull.Count;
+            foreach (var v in pass == 0 ? p : Enumerable.Reverse(p))
+            {
+                while (hull.Count >= start + 2 && (hull[^1] - hull[^2]).Cross(v - hull[^2]) <= 0f)
+                    hull.RemoveAt(hull.Count - 1);
+                hull.Add(v);
+            }
+            hull.RemoveAt(hull.Count - 1);
+        }
+        return hull.Count >= 3 ? hull.ToArray() : Array.Empty<Vector2>();
+    }
+
+    /// <summary>Whether a world point lies inside a footprint, or within <paramref name="margin"/> metres outside one.</summary>
+    public bool Covers(float x, float z, float margin = 0f)
+    {
+        var p = new Vector2(x, z);
+        foreach (var o in _outlines)
+        {
+            bool inside = true;
+            for (int i = 0; i < o.Length && inside; i++)
+            {
+                var edge = o[(i + 1) % o.Length] - o[i];
+                inside = edge.Cross(p - o[i]) >= -margin * edge.Length();
+            }
+            if (inside)
+                return true;
+        }
+        return false;
+    }
+
+    /// <inheritdoc cref="Covers(float, float, float)"/>
+    public bool Covers(Vector3 at, float margin = 0f) => Covers(at.X, at.Z, margin);
+
+    /// <summary>As <see cref="Of(GameZ, MissionSetup?, Node?, string)"/>, the built world read as each built node's
+    /// switch by gamez index. An ancestor never built takes no switch, as <see cref="MissionSetup.Apply"/> reaches none.</summary>
+    internal static HangarFootprints Of(GameZ gamez, MissionSetup? setup, IReadOnlyDictionary<int, bool>? built, string worldName = "world1")
+    {
+        var switched = setup?.Switches(gamez, built == null ? null : built.ContainsKey) ?? new Dictionary<int, bool>();
         var parent = new Dictionary<int, int>();
         foreach (var node in gamez.Nodes)
         {
             foreach (int c in node.Children)
                 parent.TryAdd(c, node.Index);
         }
-        bool On(int index) => switched.TryGetValue(index, out bool on) ? on : built?.GetValueOrDefault(index)?.Visible ?? true;
+        bool On(int index) => switched.TryGetValue(index, out bool on) ? on : built == null || built.GetValueOrDefault(index, true);
         bool Stands(GameZNode node)
         {
             if (built != null && !built.ContainsKey(node.Index))
@@ -97,47 +144,4 @@ public sealed class HangarFootprints
         });
         return new HangarFootprints(points.Select(Hull));
     }
-
-    /// <summary>The convex hull of a point set, counter-clockwise; empty for fewer than three distinct points.</summary>
-    public static Vector2[] Hull(IEnumerable<Vector2> points)
-    {
-        var p = points.Distinct().OrderBy(v => v.X).ThenBy(v => v.Y).ToList();
-        if (p.Count < 3)
-            return Array.Empty<Vector2>();
-        var hull = new List<Vector2>();
-        // The lower chain left to right, then the upper chain back, each dropping a corner that does not turn left.
-        for (int pass = 0; pass < 2; pass++)
-        {
-            int start = hull.Count;
-            foreach (var v in pass == 0 ? p : Enumerable.Reverse(p))
-            {
-                while (hull.Count >= start + 2 && (hull[^1] - hull[^2]).Cross(v - hull[^2]) <= 0f)
-                    hull.RemoveAt(hull.Count - 1);
-                hull.Add(v);
-            }
-            hull.RemoveAt(hull.Count - 1);
-        }
-        return hull.Count >= 3 ? hull.ToArray() : Array.Empty<Vector2>();
-    }
-
-    /// <summary>Whether a world point lies inside a footprint, or within <paramref name="margin"/> metres outside one.</summary>
-    public bool Covers(float x, float z, float margin = 0f)
-    {
-        var p = new Vector2(x, z);
-        foreach (var o in _outlines)
-        {
-            bool inside = true;
-            for (int i = 0; i < o.Length && inside; i++)
-            {
-                var edge = o[(i + 1) % o.Length] - o[i];
-                inside = edge.Cross(p - o[i]) >= -margin * edge.Length();
-            }
-            if (inside)
-                return true;
-        }
-        return false;
-    }
-
-    /// <inheritdoc cref="Covers(float, float, float)"/>
-    public bool Covers(Vector3 at, float margin = 0f) => Covers(at.X, at.Z, margin);
 }

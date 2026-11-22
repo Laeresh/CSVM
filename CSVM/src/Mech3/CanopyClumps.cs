@@ -395,9 +395,9 @@ public static class CanopyClumps
         {
             var crowns = CrownModels(mask, CrownsPerCell, CrownBrightness, CrownTint, shapes: crownModels.Count);
             var reaches = Reaches(crownModels);
-            var standing = crowns.Where(c => !hangars.Covers(c.At, c.Scale * reaches[c.Shape])).ToList();
+            var standing = OffHangars(crowns, reaches, hangars);
             field.CrownsOffHangars = crowns.Count - standing.Count;
-            field.Stand(standing, crownModels);
+            field.Stand(standing, crownModels, reaches);
         }
 
         // Painted canopy takes over from no card, so the listed cards (C3's beach palms) keep every distance.
@@ -412,6 +412,11 @@ public static class CanopyClumps
     /// <summary>The clumps' fade-in band: the cards' handover band, or over painted canopy its own.</summary>
     public static Vector2 Band(bool painted) =>
         painted ? new Vector2(PaintedNearM, PaintedFarM) : HandoverBand;
+
+    /// <summary>The crowns that stand clear of <paramref name="hangars"/>: a crown's reach, its scale times its shape's
+    /// in <paramref name="reaches"/>, meets no floor.</summary>
+    internal static List<NearCrown> OffHangars(IEnumerable<NearCrown> crowns, float[] reaches, HangarFootprints hangars) =>
+        crowns.Where(c => !hangars.Covers(c.At, c.Scale * reaches[c.Shape])).ToList();
 
     // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
     // blends tree colour into an edge. The clear texels' black would darken the clumps far off. A near
@@ -826,10 +831,10 @@ public static class CanopyClumps
         // Stands the crown models in cells of VegetationModels.CellM, one MultiMesh per cell and shape, each ranged
         // at the band's far edge past its bounds. A model's top stands ModelRiseM above the painted surface, at its
         // scale. Not solid. The canopy material shades each crown by its normals against the sun, about its mean.
-        internal void Stand(List<NearCrown> crowns, IReadOnlyList<VegetationModels.Model> models)
+        internal void Stand(List<NearCrown> crowns, IReadOnlyList<VegetationModels.Model> models, float[] reaches)
         {
             var boxes = models.Select(m => m.Mesh.GetAabb()).ToList();
-            _reaches = Reaches(models);
+            _reaches = reaches;
             float width = boxes.Max(b => b.Size.X);
             var materials = models.Select((m, i) => VegetationModels.Material(m, lit: false, fogged: true, boxes[i].Size.X, canopy: true)).ToList();
             for (int i = 0; i < materials.Count; i++)
