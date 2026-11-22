@@ -59,7 +59,7 @@ distributed, because the plan's deliverable is the mechanism, not that plane.
 | 16 | Engine sound | **The parent's, overridable by naming another stock plane** |
 | 17 | Bots | **Seats that choose or randomise a plane may use mods**, with the parent's AI def; campaign mission enemies stay scripted |
 | 18 | Avenger distribution | **Local mod, gitignored**; the repo may carry a self-made sample for tests only |
-| 19 | Avenger stats | **Brigand physics, the Fury's `fd_speed` (literal), the Warhawk's cockpit**, from the model's author |
+| 19 | Avenger stats | **Brigand physics, the Warhawk's cockpit**, from the model's author; the speed is Decision 31's, not the Fury's `fd_speed` the author first named |
 | 20 | The Brigand's inherited rear turret | **Cleared with `"turrets": []`**; the Avenger is a forward-gun fighter |
 | 21 | Avenger hardpoints | **The Brigand's slot count**, placed on visible spots; guns may sit in pairs (inner/outer wing, lower/upper fuselage) |
 | 22 | Gear and modelled stores | **Gear deleted; modelled rockets deleted and replaced by `pylonN` empties**, pylon rails and nacelle pods kept |
@@ -69,6 +69,10 @@ distributed, because the plan's deliverable is the mechanism, not that plane.
 | 26 | Canopy | **See-through glass (glTF `BLEND`) plus a painted frame** in the trim region; static |
 | 27 | Pilot | **A new low-poly helmeted head and shoulders named `head`**, as the originals carry it in the plane model; no game data |
 | 28 | Order | **Model first, previewed as a Brigand HD pack**, then the engine work with the Avenger as its first mod |
+| 29 | Avenger size | **Canon size from the aircraft review the user supplied (`tmp/avenger/1932 Grumman E1-C Avenger - Google Docs.pdf`): span 38'5" (11.71 m), length 24'10" (7.57 m)**, a uniform 0.867 scale of the model; the pilot keeps human size |
+| 30 | Avenger guns | **6 × .30 and 2 × .60 by default**, so the Brigand's empty W3 (upper nose, fp3/4) carries a .30 pair; this needs a default-loadout field in plane.json, built in C25 |
+| 31 | Avenger speed | **250 mph (about 112 m/s) as `fd_speed`**, the review's figure |
+| 32 | Avenger armour | **The Brigand's zone armour redistributed by the review's ratios** (nose 50, each wing 60 as lead + tail, tail 30), so the nose is the toughest zone; the literal `<zone>_armor` values are set in E41. Range (+50 % fuel) is not adopted |
 
 ## Ground rules
 
