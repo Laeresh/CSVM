@@ -36,6 +36,11 @@ public sealed class HangarPatternEntry
 
     /// <summary>The three default shade indices, one per paint slot.</summary>
     public IReadOnlyList<int> Shades { get; init; } = Array.Empty<int>();
+
+    /// <summary>The nose, tail and wing decals selecting the pattern loads. The remake's own
+    /// field, not the original's: its table carries no decals, and these are the company's
+    /// scheme in vehicle.json (fortune's the stock template's 40/8/7).</summary>
+    public IReadOnlyList<int> Decals { get; init; } = Array.Empty<int>();
 }
 
 /// <summary>
@@ -283,6 +288,7 @@ public sealed class HangarPaintTables
                 AirframeMask = entry.TryGetProperty("mask", out var m) && m.TryGetInt32(out int mask) ? mask : 0,
                 Colours = Ints(entry, "colours"),
                 Shades = Ints(entry, "shades"),
+                Decals = Ints(entry, "decals"),
             });
         }
 
