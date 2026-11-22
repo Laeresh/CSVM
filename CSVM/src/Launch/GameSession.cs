@@ -2043,7 +2043,7 @@ public partial class GameSession : Node3D
         {
             if (statsCache.TryGetValue(plane, out var cached))
                 return cached;
-            var loaded = PlaneStats.Load(state.Zrdr, plane);
+            var loaded = Flight.Hangar.ModPlanes.Current.Find(plane) is { } mod ? mod.Stats(state.Zrdr) : PlaneStats.Load(state.Zrdr, plane);
             statsCache[plane] = loaded;
             Log.Info("flight", $"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
             return loaded;
@@ -2058,7 +2058,8 @@ public partial class GameSession : Node3D
             string key = aiDef == null ? plane : $"{plane}/{aiDef}";
             if (aiStatsCache.TryGetValue(key, out var cached))
                 return cached;
-            var loaded = PlaneStats.LoadForAi(state.Zrdr, plane, aiDef);
+            var loaded = Flight.Hangar.ModPlanes.Current.Find(plane) is { } mod
+                ? mod.Stats(state.Zrdr, forAi: true, aiDef) : PlaneStats.LoadForAi(state.Zrdr, plane, aiDef);
             aiStatsCache[key] = loaded;
             Log.Info("flight", $"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
             return loaded;

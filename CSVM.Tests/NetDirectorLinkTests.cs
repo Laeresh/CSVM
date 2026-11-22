@@ -216,8 +216,8 @@ public sealed class NetDirectorLinkTests
                 new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             };
-            _hostNet = NetSession.Host(mesh[0], roster, Seed, null, Airframes);
-            _guestNet = NetSession.Guest(mesh[1], Airframes);
+            _hostNet = NetSession.Host(mesh[0], roster, Seed);
+            _guestNet = NetSession.Guest(mesh[1]);
             Host = new ObjectiveGraph(script, HostWorld);
             Guest = new ObjectiveGraph(script, GuestWorld);
             Host.Transitioned += HostLog.Add;

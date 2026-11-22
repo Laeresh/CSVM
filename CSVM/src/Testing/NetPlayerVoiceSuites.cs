@@ -93,7 +93,7 @@ internal static class NetPlayerVoiceSuites
                       && roster[1].Voice == UI.Menu.PilotVoices.Wire(GuestVoice),
                 $"the host's field names its own seat's voice and the voice the guest's pick carried ({string.Join(", ", roster.Select(s => s.Voice))})");
             host = NetCombatSuites.Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                CSVM.Flight.Hangar.StockAirframes.Nodes);
+                null);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -108,7 +108,7 @@ internal static class NetPlayerVoiceSuites
             }
 
             guest = NetCombatSuites.Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                CSVM.Flight.Hangar.StockAirframes.Nodes);
+                null);
             ctx.Check(host.Built && guest.Built, $"both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {

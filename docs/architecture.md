@@ -59,7 +59,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
-- `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
+- `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, tints a mod's surfaces, swaps decals.
 - `src/Mech3/MilitiaFits.cs`, the militia table read once against vehicle.json: each militia's pattern and the def it flies an airframe as, which paint and arm a bot seat.
 - `src/Mech3/MilitiaPaint.cs`, each militia's paint pattern by display name, which is all a militia decides on Instant Action.
 - `src/Mech3/PropParts.cs`, classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
@@ -108,6 +108,9 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
 - `src/Mech3/ArtImage.cs`, the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
+- `src/Mech3/AirframeRegistry.cs`, every player airframe: the eleven stock ones in id order, then mods registered by string id with a stock parent.
+- `src/Mech3/ModAirframes.cs`, a plane mod's `plane.glb` grafted into planes.zbd as an airframe of its own, drawn from the file.
+- `src/Mech3/ModTint.cs`, a plane mod's livery tint: mask and detail map, and the per-texel composite of the scheme's three colours over its base texture.
 - `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and its `rig.json` template, body cockpit included.
 - `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers, prop, surface and flare overrides and the cockpit section, validated loudly at load.
 - `src/Mech3/PlaneRigPatch.cs`, applies a `PlaneRig` to the built plane before any marker read: moves and adds markers, stamps prop/surface overrides, picks flares.
@@ -198,6 +201,7 @@ rows).
 - `src/Flight/Airframe/NitroSystem.cs`, the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
 - `src/Flight/Airframe/Headlight.cs`, the Enhanced-only headlight: the pilot's switch, its tap/hold split with the view cycle, and the lazily built `SpotLight3D` at the nose.
 - `src/Flight/Airframe/PlaneCollider.cs`, derives up to 8 plane-frame convex collision hulls from the built model's triangles, with no per-plane data.
+- `src/Flight/Airframe/AutoWreck.cs`, a plane mod's wreck pieces and fire anchors cut from its own mesh by damage zone, when its model ships none.
 - `src/Flight/Airframe/ConvexHull.cs`, an engine-free convex hull over a point cloud: vertices, faces, thickness padding and the point-distance query.
 - `src/Flight/Airframe/CollisionLayers.cs`, the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/Airframe/CollisionDamage.cs`, the original's collision arithmetic: the severity cosine, the damage pair's terms, the camera kick, and the grace windows.
@@ -375,11 +379,12 @@ rows).
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
 - `src/Flight/Modes/SeatPause.cs`, one seat's pause key and the halt it mirrors, the photo-mode and options-leaf silences, and the network sheet over a running flight.
 
-**`Flight.Hangar`**, the custom plane, its store and economy, and the difficulty setting.
+**`Flight.Hangar`**, the custom plane, its store and economy, the plane mods, and the difficulty setting.
 
 - `src/Flight/Hangar/Difficulty.cs`, the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.
 - `src/Flight/Hangar/CustomPlaneDef.cs`, a custom-built plane as a pure model: the saved record's chosen fields only, with the campaign loadout export alongside.
 - `src/Flight/Hangar/StockAirframes.cs`, the airframe id to stock `planes.zbd` node table and its inverse.
+- `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes (its livery tint's files included), a content hash, the skipped mods with their reasons, a mod's stats and stock fit from its parent's.
 - `src/Flight/Hangar/CustomPlaneStore.cs`, JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
 - `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
@@ -546,6 +551,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Hangar/HangarPreviewPose.cs`, what the hangar's live 3D plane shows under Enhanced and where an edit swings its camera; engine-free.
 - `src/UI/Hangar/HangarPreviewCamera.cs`, the live plane picture's turntable, focus swing and drag orbit; engine-free.
 - `src/UI/Hangar/HangarPreviewStage.cs`, the live plane picture's own-world SubViewport: model, rockets, paint, lights and lacquer.
+- `src/UI/Hangar/ModPlaneArt.cs`, each plane mod's menu pictures: its portrait, else a cached three-quarter render, and plan and head-on silhouettes.
 - `src/UI/Hangar/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
 
 **`UI.Overlays`**, the debug overlays and keys, the HUD readouts drawn over a pane, and the mission chart.
@@ -890,7 +896,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Roster/FlightRosterInputs.cs`, the roster's grouped dependency contracts: aircraft resources, world bindings, human-session bindings and the policy.
 - `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private seat path, a person's or a network bot's: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
 - `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation (a network bot seat's too), model, controller, loadout, damage and crash runtime, and placement.
-- `src/Session/Roster/BotSeats.cs`, a network bot seat as its host seats it: Random resolved to a stock plane, the pilot-name callsign draw, the rolled personality and the tier's offset.
+- `src/Session/Roster/BotSeats.cs`, a network bot seat as its host seats it: a named plane checked, Random resolved (plane mods included off the wire), the pilot-name callsign draw, the rolled personality and the tier's offset.
 - `src/Session/Roster/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
 - `src/Session/Roster/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
 - `src/Session/Roster/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
@@ -1098,6 +1104,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/RouterAccess.cs`, a host's hold on its router: the port mapping and the IPv6 pinhole, each a lease renewed on its own thread and given back on close.
 - `src/Net/NetLobby.cs`, a carrier's first listener before any session binds it: the host's session advert and closing word out, the latest of each in, every other payload held for the session.
 - `src/Net/NetBuildVersion.cs`, the build's MAJOR.MINOR two peers compare before they play, patch ignored and unknown playing only with unknown, and the lobby's `0x56` message that carries it.
+- `src/Net/NetModSet.cs`, a host's plane mods by id, hash and parent, the session's airframe rows a lobby byte names, the join rule a guest checks, and the `0x6E` message.
 - `src/Net/LanDiscovery.cs`, the LAN search's datagram pair outside the carrier: a query and a reply of one width, so a responder never amplifies, and the `ILanSocket` seam.
 - `src/Net/LanResponder.cs`, an open door's answer to a LAN search: each well-formed query answered with the advert and game port, a bounded count per frame.
 - `src/Net/LanSearch.cs`, a guest's broadcast search in rounds under fresh tokens, one query to each target a round: the games that answered, dropped after a round without an answer.

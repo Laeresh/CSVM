@@ -749,7 +749,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on. `OverrideDefField` sets one def field by its vehicle.json name, the hook a plane mod's literal overrides go through, and `TakeEngineSounds` takes another load's engine-slot defs, a plane mod's `sound`.
 
 ## src/Flight/Airframe/PlaneRoster.cs
 Static display-name lookups: `PlaneDisplayName(stats)` and `Humanize(s)`. A plane's display name is
@@ -1478,6 +1478,16 @@ boxes so a hull never moves a cut or a name. Single-sourced: the terrain sweep c
 and `AircraftBody` mounts the same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
 `airframe-hull-coverage` suite measures; `docs/org/weaponRay.md` holds what they present over the mesh.
 
+## src/Flight/Airframe/AutoWreck.cs
+A plane mod's wreck and fire anchors when its model ships no stock `destroyed` subtree or `pdpN`
+panels. `Cut` gives every drawn triangle under `healthy` the zone of the `PlaneCollider` hull holding
+its centroid (`PlaneDamage.MapStruckPart`), so a piece is the zone a hit is charged to. `Build`
+returns `destroyed > piece1..piece4` (nose, tail, left wing, right wing), each piece's origin on its
+zone's centre and drawing that zone's triangles with the source materials, which the stock crash and
+destroy defs fling by name. `AddAnchors` puts an empty node at a zone centre for each stock fire
+anchor the model lacks (`pdpN` from the ladders, the AI-stage names). `WorldEffectsFactory`'s wreck
+step calls both for a mod only. Format: [../formats/mod-planes.md](../formats/mod-planes.md).
+
 ## src/Flight/Airframe/ConvexHull.cs
 A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds
 and volume, plus `Contains` and the point-to-surface `Distance` the fuse and blast passes ask for.
@@ -1666,13 +1676,23 @@ fields the original derives at commit, which are recomputed rather than stored. 
 screens edit it, `HangarEconomy` prices it and `CustomPlaneStore` persists it without a session.
 `Ammo` and `Ordnance` carry the campaign loadout export in `OwnedPlane`'s own encoding, written
 only by `SetLoadout` and left alone by `Clamp`; `AwaitingExport` is the export gate the plane
-pickers read. Record layout: [../formats/paint.md](../formats/paint.md).
+pickers read. `ModAirframe` is a mod build's string id beside its parent's stock id in `Airframe`; `ModIn` resolves it against a `ModPlanes` (null, with one warning per id, when the mod is not installed) and `FlownNode` is the node the build flies as. Record layout: [../formats/paint.md](../formats/paint.md).
 
 ## src/Flight/Hangar/StockAirframes.cs
-The airframe id 0-10 to `planes.zbd` node table and its inverse: `Node` clamps like the def's own
-fields, `IdOf` answers null for a node none of the eleven fly as, and `Nodes` is the list a network
-roster indexes. One table for the plane pickers, the campaign director's own and wingman planes,
-and the wire. Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`.
+The airframe id 0-10 to `planes.zbd` node table and its inverse, read off `Mech3/AirframeRegistry.cs`'s
+stock rows: `Node` clamps like the def's own fields, `IdOf` answers null for a node none of the
+eleven fly as (a mod airframe included), and `Nodes` the eleven in id order, a network session's
+first eleven airframe rows. The int id for the plane pickers, the campaign director's own and wingman planes and saves.
+Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`, `CSVM.Tests/AirframeRegistryTests.cs`.
+
+## src/Flight/Hangar/ModPlanes.cs
+The plane mods in `<dataRoot>/Mods/Planes`: each subfolder and top-level `.zip` is one `ModPlane`,
+its id the folder or zip name, read in name order. `Open` checks `plane.json` (a stock `kind_of`,
+literal overrides, `unlock`, stock `cockpit` and `sound`, a portrait inside the mod, a `tint` whose mask and detail PNGs are in it) and the
+`plane.glb` beside it, and hashes every file by path; `Wire` is the set a network session names. A mod that fails a
+check, or whose id is a stock node, an earlier mod's or past the roster's 31 bytes, is left out with a warning and listed in
+`Skipped`; `ModPlane.Read` reads a mod's file on demand. `Open` takes the mods folder `--mods=` names in place of `Mods`, and `Skip` leaves out a mod that loaded but failed later (its model, its registration) as a load skip does. `Launch/Launcher.cs` opens `Current` (no `--det` or `--run-tests` run reads the default folder) and grafts each mod's model (`Mech3/ModAirframes.cs`); a session takes a mod's stats from `ModPlane.Stats` and, with no `--loadout=`, its fit from `ModPlane.StockLoadout`. `ModPlane.Stats` is the parent's `PlaneStats` (a bot's on the parent's AI def) with each override set through `PlaneStats.OverrideDefField`, an unknown name warned and ignored, and the turret mounts cleared under `"turrets": []`, then a `sound` plane's engine-slot defs through `PlaneStats.TakeEngineSounds`; `ModPlane.StockLoadout` is the parent's fit with each turret slot a forward gun on its own firepoints, then `plane.json`'s `loadout` guns and pylons over it through `CustomPlaneBuild.LoadoutFor`; `ModPlanes.StockFitFor` picks that or the stock table's fit by node. `HangarCapacity` is the hangar weight capacity `HangarEconomy.StatsFor` uses. `FindOrWarn` resolves a saved record's mod id (a custom plane's, a campaign plane's), warning once per missing id. `ModPlane.BindCampaign`, run by the launcher at each data bind, checks a mission or chapter `unlock` against `cm_sequence`; `CampaignAvailability` is the result in the stat table's availability units.
+Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`, `CSVM.Tests/ModPlaneHangarTests.cs`, `CSVM.Tests/ModPlaneCampaignTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
@@ -1690,7 +1710,7 @@ original, so saving over an existing name replaces its file. A missing or malfor
 nothing rather than throwing, since a corrupt save must never break a plane picker. The current
 schema stores paint as the original's index pairs, the first schema still loads and upgrades on
 its next save, and the two optional fields (the exported loadout, the export gate) deliberately did
-not raise the version, both being absent from a file that predates them.
+not raise the version, both being absent from a file that predates them. A mod build's `modAirframe` beside `airframe` follows the same rule, so a stock build's file is unchanged.
 
 ## src/Flight/Hangar/CustomPlaneBuild.cs
 The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and engine-free
@@ -1708,6 +1728,8 @@ tables as data, the per-line cost and weight of everything a build carries, the 
 purchase verdict and the display-only star ratings. Pure, so a build's price resolves session-free.
 The
 verdict covers capacity and engine presence only, because pricing a build never checks funds.
+`StatsFor` is the row a mod build prices on: the parent's, with the mod's `hangar_capacity` and a
+zero turret mask for a mod that clears its turrets.
 Provenance: [../org/hangar.md](../org/hangar.md), "The economy".
 
 ## src/Flight/Hangar/HangarPaintTables.cs
@@ -1907,4 +1929,4 @@ radius the wheel and the drag work in.
 The bridge between a saved `CustomPlaneDef` and the `Net/NetPlaneMessages.cs` build the wire
 carries. `Build` copies every field that decides how the plane flies, takes hits or looks; `Def`
 reads one back held to the decoded ranges, which is what every machine, the owner's included, flies.
-The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.
+The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them. A build on a plane mod names the mod's row of the session's `NetModSet` (`ModRow`), and `Def` reads it back as the id beside the parent.

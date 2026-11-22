@@ -260,7 +260,7 @@ internal static class NetCustomPlaneSuites
             ctx.Check(roster.Length == 2 && builds[1] != null && builds[1]!.Equals(guest.Build),
                 $"[flight] the host's field takes the guest's custom plane off its pick ({builds[1]?.Name ?? "stock"})");
             hostEnd = NetCombatSuites.Ends.Open(ctx, spec.WithSeatedAircraft(planes[0], hostPlane, null),
-                hostLaunch.Transport, isHost: true, HostSeed, roster, StockAirframes.Nodes,
+                hostLaunch.Transport, isHost: true, HostSeed, roster,
                 seatBuild: s => SeatFields.SeatBuildFor(s, builds, null));
             for (int i = 0; i < OpenerSteps && !guestDoor.DogfightLaunchDue; i++)
             {
@@ -280,7 +280,7 @@ internal static class NetCustomPlaneSuites
             var own = CustomPlaneWire.Def(guest.Build);
             guestEnd = NetCombatSuites.Ends.Open(ctx,
                 spec.WithSeatedAircraft(StockAirframes.Node(guest.Airframe), own, null),
-                guestLaunch.Transport, isHost: false, HostSeed + 1, null, StockAirframes.Nodes,
+                guestLaunch.Transport, isHost: false, HostSeed + 1, null,
                 seatBuild: s => SeatFields.SeatBuildFor(s, null, guestDoor));
             ctx.Check(hostEnd.Built && guestEnd.Built, $"[flight] both sessions build ({hostEnd.Built}, {guestEnd.Built})");
             if (!hostEnd.Built || !guestEnd.Built)
@@ -395,7 +395,7 @@ internal static class NetCustomPlaneSuites
             var hostSpec = SessionSpec.FromMenu(spec, spec.Chapter, planeNodes, MenuMode.Versus,
                 loadouts: new LoadoutChoice?[] { null, null }, customPlanes: hostPlanes);
             hostEnd = NetCombatSuites.Ends.Open(ctx, hostSpec,
-                hostLaunch.Transport, isHost: true, HostSeed, roster, StockAirframes.Nodes,
+                hostLaunch.Transport, isHost: true, HostSeed, roster,
                 seatBuild: s => SeatFields.SeatBuildFor(s, builds, null));
             for (int i = 0; i < OpenerSteps && !guestDoor.DogfightLaunchDue; i++)
             {
@@ -415,7 +415,7 @@ internal static class NetCustomPlaneSuites
             var guestSpec = SessionSpec.FromMenu(spec, spec.Chapter, own.Select(def => StockAirframes.Node(def!.Airframe)).ToArray(),
                 MenuMode.Versus, loadouts: new LoadoutChoice?[] { null, null }, customPlanes: own);
             guestEnd = NetCombatSuites.Ends.Open(ctx, guestSpec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                StockAirframes.Nodes, seatBuild: s => SeatFields.SeatBuildFor(s, null, guestDoor));
+                null, seatBuild: s => SeatFields.SeatBuildFor(s, null, guestDoor));
             ctx.Check(hostEnd.Built && guestEnd.Built, $"[seats] both sessions build ({hostEnd.Built}, {guestEnd.Built})");
             if (!hostEnd.Built || !guestEnd.Built)
             {

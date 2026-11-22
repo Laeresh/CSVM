@@ -1096,13 +1096,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             var seat = seats[local];
             var row = seat.Cursor >= 0 && seat.Cursor < roster.Count ? roster[seat.Cursor] : null;
             var fit = CampaignLoadout.FitOf(seat.Fit.IsStock ? null : seat.Fit, _stock());
-            if (row?.Custom is { } def && CSVM.Flight.Hangar.CustomPlaneWire.Build(def) is { } build)
+            if (row?.Custom is { } def && CSVM.Flight.Hangar.CustomPlaneWire.Build(def, lobby.Mods) is { } build)
             {
                 lobby.PickCustom(build, seat.Fit.IsStock ? SavedFit(def) : fit, local);
                 continue;
             }
 
-            int airframe = row != null && StockAirframes.IdOf(row.Node) is { } id ? id : DogfightLobby.DefaultAirframe;
+            int airframe = row != null && lobby.Mods.RowOf(row.Node) is >= 0 and var id ? id : DogfightLobby.DefaultAirframe;
             lobby.PickSeat(local, airframe, fit);
         }
 
@@ -1117,10 +1117,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public MenuExit? GuestLaunch() =>
         _net() is { DogfightLaunchDue: true } net && net.Dogfight is { } lobby ? Exit(net, lobby) : null;
 
-    /// <summary>What a player row's plane column reads: the custom plane's name, else the stock
-    /// airframe's, Random on a bot's Random plane. A person's row whose pick the host has not heard
-    /// reads nothing.</summary>
-    internal static string PlaneText(DogfightLobbySeat seat) => PlaneText(seat.Plane, seat.Airframe, seat.IsBot);
+    /// <summary>What a player row's plane column reads: the custom plane's name, else the airframe
+    /// row's in <paramref name="mods"/>, Random on a bot's Random plane. A person's row whose pick the
+    /// host has not heard reads nothing.</summary>
+    internal static string PlaneText(DogfightLobbySeat seat, NetModSet mods) =>
+        PlaneText(seat.Plane is { Length: > 0 } custom ? custom : ModName(mods, seat.Airframe), seat.Airframe, seat.IsBot);
 
     /// <summary>A plane column's words from a custom plane's name (empty for none), a stock airframe
     /// and whether the row is a bot's. The local lobby's rows read the same.</summary>
@@ -1128,6 +1129,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         custom is { Length: > 0 } ? custom
         : airframe >= 0 && airframe < ShortNames.Length ? ShortNames[airframe]
         : bot ? MultiplayerBoardText.RandomPlaneWord : string.Empty;
+
+    /// <summary>A plane mod row's name in <paramref name="mods"/>, as this machine registered it, else
+    /// its id; empty for a stock row.</summary>
+    internal static string ModName(NetModSet mods, int row) =>
+        row >= DogfightLobby.AirframeCount && mods.NodeOf(row) is { Length: > 0 } id
+            ? CSVM.Mech3.AirframeRegistry.Shared.Find(id)?.DisplayName ?? id
+            : string.Empty;
 
     /// <summary>Whether a mission rule's radio or checkbox stands ticked under
     /// <paramref name="options"/>. The local lobby asks it of its own options.</summary>
@@ -1815,14 +1823,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby.Options;
         var seats = new List<MenuSeatChoice>
         {
-            new(StockAirframes.Node(lobby.Airframe), _pads(0), CampaignLoadout.For(lobby.LaunchFit, _stock()),
-                CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build)),
+            new(lobby.Mods.NodeOf(lobby.Airframe), _pads(0), CampaignLoadout.For(lobby.LaunchFit, _stock()),
+                CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build, lobby.Mods)),
         };
         for (int local = 1; local < lobby.SeatsFlown; local++)
         {
             var (airframe, fit, build) = lobby.SeatPick(local);
-            seats.Add(new MenuSeatChoice(StockAirframes.Node(airframe), _pads(local), CampaignLoadout.For(lobby.Rules.Enforce(fit), _stock()),
-                CSVM.Flight.Hangar.CustomPlaneWire.Def(build)));
+            seats.Add(new MenuSeatChoice(lobby.Mods.NodeOf(airframe), _pads(local), CampaignLoadout.For(lobby.Rules.Enforce(fit), _stock()),
+                CSVM.Flight.Hangar.CustomPlaneWire.Def(build, lobby.Mods)));
         }
 
         return new LaunchExit(
@@ -2000,13 +2008,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(PlaneRow(label, !CustomPlanes || SavedPlanes().Count > 0));
     }
 
-    // The pilot's custom planes the pickers offer: every saved one the campaign has exported.
+    // The pilot's custom planes the pickers offer: every saved one the campaign has exported. One on a
+    // plane mod is offered only where the session holds the mod.
     private List<CustomPlaneDef> SavedPlanes()
     {
         var planes = new List<CustomPlaneDef>();
+        var mods = Lobby?.Mods ?? NetModSet.None;
         foreach (var def in _customs())
         {
-            if (!def.AwaitingExport)
+            if (!def.AwaitingExport && (def.ModAirframe == null || mods.RowOf(def.ModAirframe) >= 0))
             {
                 planes.Add(def);
             }
@@ -2078,11 +2088,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private string EnvironmentWord(int environment) => DogfightLobby.EnvironmentName(environment, _text.Strings);
 
+    // An airframe row's words: a stock airframe's short name, or a plane mod's of the session.
     private string PlaneWord(int airframe) =>
-        _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
+        _text.Word(10565, "Stock") + " " + (ModName(Lobby?.Mods ?? NetModSet.None, airframe) is { Length: > 0 } mod
+            ? mod
+            : ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)]);
 
-    // The bot's lists: Random then the eleven stock planes, the three tiers, no team then each
-    // standing team. Null for any other key.
+
+    // The bot's lists: Random then every airframe row (the stock planes, then the session's plane
+    // mods), the three tiers, no team then each standing team. Null for any other key.
     private DropdownList? BotDropdown(DogfightLobby lobby, string key)
     {
         if (lobby.BotById(PickedBot) is not { } bot)
@@ -2094,7 +2108,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             case BotPlaneKey:
                 {
-                    var items = new string[DogfightLobby.AirframeCount + 1];
+                    var items = new string[lobby.Mods.Rows + 1];
                     items[0] = MultiplayerBoardText.RandomPlaneWord;
                     for (int i = 1; i < items.Length; i++)
                     {
@@ -2102,7 +2116,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     int Airframe(int i) => i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1;
-                    return new DropdownList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, i => lobby.AdmitsBotAirframe(Airframe(i)),
+                    return new DropdownList(items, bot.RandomPlane ? 0 : lobby.BotRow(bot) + 1, i => lobby.AdmitsBotAirframe(Airframe(i)),
                         i => lobby.SetBotAirframe(bot.Id, Airframe(i)));
                 }
 
@@ -2129,11 +2143,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return null;
     }
 
-    // The fit the Select Ammo tab edits over: a custom plane's own guns and pylons, or the stock ones.
+    // The fit the Select Ammo tab edits over: a custom plane's own guns and pylons, or the airframe
+    // row's stock ones. A plane mod's are its own default.
     private LoadoutDef? StockDef(int airframe)
     {
-        var stock = _stock()?.ForModel(StockAirframes.Node(airframe));
-        return stock != null && CSVM.Flight.Hangar.CustomPlaneWire.Def(Lobby?.Build) is { } custom
+        var mods = Lobby?.Mods ?? NetModSet.None;
+        var stock = _stock() is { } table
+            ? ModPlanes.Current.StockFitFor(table, mods.NodeOf(airframe) is { Length: > 0 } node ? node : StockAirframes.Node(airframe))
+            : null;
+        return stock != null && CSVM.Flight.Hangar.CustomPlaneWire.Def(Lobby?.Build, mods) is { } custom
             ? CustomPlaneBuild.LoadoutFor(custom, stock)
             : stock;
     }
@@ -2206,12 +2224,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, current, _ => true, i =>
-                        lobby.PickCustom(CSVM.Flight.Hangar.CustomPlaneWire.Build(saved[i])!, SavedFit(saved[i])));
+                        lobby.PickCustom(CSVM.Flight.Hangar.CustomPlaneWire.Build(saved[i], lobby.Mods)!, SavedFit(saved[i])));
                 }
 
             case PlaneKey:
                 {
-                    var items = new string[DogfightLobby.AirframeCount];
+                    var items = new string[lobby.Mods.Rows];
                     for (int i = 0; i < items.Length; i++)
                     {
                         items[i] = PlaneWord(i);
@@ -2329,7 +2347,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
             var player = players[entry.Player];
             bool own = lobby != null && entry.Player >= lobby.You && entry.Player < lobby.You + lobby.SeatsFlown;
-            ComposePlayerRow(layers, slot, entry.Text, PlaneText(player), own, entry.Team != 0 ? MemberIndent : 0f, player.IsBot, player.Ready);
+            ComposePlayerRow(layers, slot, entry.Text, PlaneText(player, lobby?.Mods ?? NetModSet.None), own, entry.Team != 0 ? MemberIndent : 0f, player.IsBot, player.Ready);
         }
     }
 
@@ -2619,7 +2637,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 ComposeBot(bot, layers);
                 break;
             case LobbyTab.Plane:
-                ComposePlane(lobby.Airframe, StockDef(lobby.Airframe), layers);
+                ComposePlane(Math.Max(0, lobby.Mods.StockOf(lobby.Airframe)), StockDef(lobby.Airframe), layers);
                 break;
             case LobbyTab.Ammo:
                 layers.Lines.Add(_text.Line(10549, "Select Ammo", PageX + 11f, PageY + 43f, 0f, Black));

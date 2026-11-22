@@ -344,7 +344,6 @@ internal sealed class NetFlight
         NetTransport = _wire,
         NetHost = _isHost,
         NetSeats = _roster,
-        NetAirframes = _wire == null ? null : Flight.Hangar.StockAirframes.Nodes,
         NetSeatFit = _coopFlight || _lobbyFlight ? SeatFit : null,
         NetSeatBuild = _coopFlight || _lobbyFlight ? SeatBuild : null,
         NetCoopWingman = _coopFlight && !_isHost && Door is { } coopDoor ? () => coopDoor.CoopWingman : null,

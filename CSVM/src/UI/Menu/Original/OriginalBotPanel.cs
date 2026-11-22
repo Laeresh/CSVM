@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -423,7 +424,16 @@ internal sealed class OriginalBotPanel
     private static OriginalRow Arrow(string key, string art, float x, float y, bool enabled) =>
         new(key, string.Empty, OriginalRowKind.Button, x, y, 16f, 11f, enabled, 0, new BoardArt(BoardArtLibrary.Ui, art, 4));
 
-    private string PlaneWord(int airframe) => _text.Word(10565, "Stock") + " " + AirframeName(airframe);
+    // The plane mods the game registered, in registration order.
+    private static List<AirframeEntry> ModRows() => AirframeRegistry.Shared.All.Where(a => !a.IsStock).ToList();
+
+    // A bot's airframe name: a plane mod's own, else the stock airframe's.
+    private static string BotAirframeName(DogfightBot bot) =>
+        bot.ModAirframe is { } id ? AirframeRegistry.Shared.Find(id)?.DisplayName ?? id : AirframeName(bot.Airframe);
+
+    private string StockWord(string name) => _text.Word(10565, "Stock") + " " + name;
+
+    private string PlaneWord(int airframe) => StockWord(AirframeName(airframe));
 
     // The shipped pilot names, read once off the host's message table before the first row draws
     // one. A missing table leaves every bot "Bot n".
@@ -453,7 +463,7 @@ internal sealed class OriginalBotPanel
     {
         if (_setup.Bots.ById(Picked) is { } bot)
         {
-            string plane = bot.RandomPlane ? MultiplayerBoardText.RandomPlaneWord : PlaneWord(bot.Airframe);
+            string plane = bot.RandomPlane ? MultiplayerBoardText.RandomPlaneWord : StockWord(BotAirframeName(bot));
             rows.Add(Field(OriginalJoinBoard.BotNameKey, BoxText(OriginalJoinBoard.BotNameKey), 0, OriginalRowKind.TextField));
             rows.Add(Field(OriginalJoinBoard.BotPlaneKey, plane, 1, OriginalRowKind.Dropdown));
             rows.Add(Field(OriginalJoinBoard.BotSkillKey, _text.SkillWord(bot.Skill), 2, OriginalRowKind.Dropdown));
@@ -496,16 +506,23 @@ internal sealed class OriginalBotPanel
         {
             case OriginalJoinBoard.BotPlaneKey:
                 {
-                    var items = new string[DogfightLobby.AirframeCount + 1];
+                    // Random, the eleven stock airframes, then each plane mod judged by its parent.
+                    var mods = ModRows();
+                    var items = new string[DogfightLobby.AirframeCount + 1 + mods.Count];
                     items[0] = MultiplayerBoardText.RandomPlaneWord;
                     for (int i = 1; i < items.Length; i++)
                     {
-                        items[i] = PlaneWord(i - 1);
+                        items[i] = i <= DogfightLobby.AirframeCount ? PlaneWord(i - 1) : StockWord(mods[i - DogfightLobby.AirframeCount - 1].DisplayName);
                     }
 
-                    int Airframe(int i) => i == 0 ? DogfightLobbySeat.RandomAirframe : i - 1;
-                    return new BotList(items, bot.RandomPlane ? 0 : bot.Airframe + 1, i => _admits(Airframe(i)),
-                        i => _setup.Bots.SetAirframe(bot.Id, Airframe(i)));
+                    AirframeEntry? Mod(int i) => i > DogfightLobby.AirframeCount ? mods[i - DogfightLobby.AirframeCount - 1] : null;
+                    int Airframe(int i) => i == 0 ? DogfightLobbySeat.RandomAirframe
+                        : Mod(i) is { } mod ? StockAirframes.IdOf(mod.StockNode) ?? 0 : i - 1;
+                    int current = bot.RandomPlane ? 0
+                        : bot.ModAirframe is { } id && mods.FindIndex(m => m.Node == id) is >= 0 and var at ? DogfightLobby.AirframeCount + 1 + at
+                        : bot.Airframe + 1;
+                    return new BotList(items, current, i => _admits(Airframe(i)),
+                        i => _setup.Bots.SetAirframe(bot.Id, Airframe(i), Mod(i)?.Node));
                 }
 
             case OriginalJoinBoard.BotSkillKey:
@@ -569,7 +586,8 @@ internal sealed class OriginalBotPanel
             return;
         }
 
-        layers.Lines.Add(_text.Line(3000 + bot.Airframe, AirframeName(bot.Airframe), PageX, PlaneY + 15f, 300f, Black, faceId: BoxFace));
+        // A plane mod shows its own name over its parent's icon and ratings.
+        layers.Lines.Add(_text.Line(bot.ModAirframe != null ? -1 : 3000 + bot.Airframe, BotAirframeName(bot), PageX, PlaneY + 15f, 300f, Black, faceId: BoxFace));
         layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, IconArt, IconFrames), PageX + 20f, IconY, bot.Airframe));
         var ratings = PlaneRatings.For(PlaneFit.For(bot.Airframe, null, _stock()?.ForModel(StockAirframes.Node(bot.Airframe))));
         for (int i = 0; i < RatingLabels.Length; i++)

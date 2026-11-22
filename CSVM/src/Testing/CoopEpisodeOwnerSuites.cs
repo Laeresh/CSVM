@@ -429,8 +429,8 @@ internal static class CoopEpisodeOwnerSuites
                 new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = HangarAirframes[0] },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = HangarAirframes[1] },
             };
-            var hostNet = NetSession.Host(mesh[0], roster, HangarNetSeed, null, HangarAirframes);
-            var guestNet = NetSession.Guest(mesh[1], HangarAirframes);
+            var hostNet = NetSession.Host(mesh[0], roster, HangarNetSeed);
+            var guestNet = NetSession.Guest(mesh[1]);
             for (int i = 0; i < 200 && !guestNet.Joined; i++)
             {
                 hostNet.Step(StepDt);
@@ -630,8 +630,8 @@ internal static class CoopEpisodeOwnerSuites
                 new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = HangarAirframes[0] },
                 new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = HangarAirframes[1] },
             };
-            var hostNet = NetSession.Host(mesh[0], roster, HangarNetSeed, null, HangarAirframes);
-            var guestNet = NetSession.Guest(mesh[1], HangarAirframes);
+            var hostNet = NetSession.Host(mesh[0], roster, HangarNetSeed);
+            var guestNet = NetSession.Guest(mesh[1]);
             for (int i = 0; i < 200 && !guestNet.Joined; i++)
             {
                 hostNet.Step(StepDt);

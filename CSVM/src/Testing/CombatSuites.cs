@@ -42,7 +42,7 @@ internal static class CombatSuites
         {
             ctx.Note($"cross-binding every plane to loadout={ctx.LoadoutOverride}, not the stock check");
         }
-        ctx.Same(PlayerAirframes, r.Bound, $"stock loadouts bound");
+        ctx.Same(MarkerRig.PlayerAirframes.Count, r.Bound, $"stock loadouts bound");
         ctx.Same(0, r.Failed, $"loadout binding failures");
         foreach (string f in r.Failures)
         {

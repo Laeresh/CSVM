@@ -69,7 +69,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, where the game files and the packs are read from**
-`--data-root` · `--synthetic-data` · `--hd` · `--hd-models` · `--no-hd-models` · `--hd-sounds` · `--mod-folder` · `--city-ground`
+`--data-root` · `--synthetic-data` · `--hd` · `--hd-models` · `--no-hd-models` · `--hd-sounds` · `--mod-folder` · `--mods` · `--city-ground`
 
 **User data, where the player's own files are kept**
 `--portable`
@@ -188,18 +188,18 @@ flags and 221 bullet lines**.
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
 - `--vs-bots=N` (with `--vs` or `--stunt`, whose bots race the course: seat N bots after this
-  machine's panes, or with `--net-host` after the guests: a Random stock plane, veteran, no team,
-  and a callsign drawn from the pilot names. This machine flies them and a host's roster carries
-  them, so a guest passes no flag; one passed there, or beside a local `--ctf` or `--zvz`,
+  machine's panes, or with `--net-host` after the guests: a Random plane (which may be a plane
+  mod), veteran, no team, and a drawn callsign. This machine flies them and a host's roster
+  carries them, so a guest passes no flag; one passed there, or beside a local `--ctf` or `--zvz`,
   is ignored with a warning. Past 16 seats the field is cut, warned, and guests
   that fill it leave the last bots out. `--vs-bot=` entries take the first places. A menu launch
   seats its join board's bots)
 - `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs` or `--stunt`, local or
   `--net-host`, one bot per entry, ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
-  `player_fury`, or `random` or empty for Random; `skill=` takes `--difficulty=`'s words or 0-2,
-  default veteran; `team=` a lobby team 0-16, the command line's pilots flying on 0; `name=` the
-  callsign, cut to 12 characters. A part it cannot read keeps its default with a warning, and the
-  last flag wins)
+  `player_fury` or a plane mod's id, which every guest must hold, or `random` or empty for Random, as
+  is an unknown node; `skill=` takes `--difficulty=`'s words or 0-2, default veteran; `team=` a
+  lobby team 0-16, the command line's pilots flying on 0; `name=` the callsign, cut to 12
+  characters. A part it cannot read keeps its default with a warning, and the last flag wins)
 - `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
   team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's
@@ -221,7 +221,8 @@ flags and 221 bullet lines**.
   the port defaulting to 47500 (or `--net-port-base`) and an IPv6 address written in brackets. The
   launch holds at the load screen until the link stands or 30 seconds pass, because a guest with no
   host has no seats to fly. The roster it flies is the host's, so the plane this end picked is a
-  request, not a promise)
+  request, not a promise. A guest lacking a plane mod the host loaded, or holding it under another
+  hash, logs the mod ids and fails the join)
 - `--net-shape=latency,jitter,loss`, `--net-shape=soak50|soak100|soak200` (shape this end's
   `--net-join` or `--net-host` socket both ways under the loopback's model, in milliseconds,
   milliseconds and per cent, or the soak's three cells by name. Only unreliable payloads are lost.
@@ -392,7 +393,8 @@ flags and 221 bullet lines**.
 - `--hd-models=<folder>` (**the HD model pack folder**, under the data root unless rooted, default `HDModels`, also config.json's `models.hd`; empty reads none. `.glb` files are read from zips and subfolders, `.gltf` from subfolders only; `Extraction/HdModels.cs` has the key rules. Separate from the `--hd=` folder. A `--det` run reads no model pack unless this flag names one)
 - `--no-hd-models` (**read no model pack**, whatever `--hd-models=` or `models.hd` names, in either argument order)
 - `--hd-sounds=<folder>` (**the sound pack folder**, under the data root unless rooted, default `HDSounds`, also config.json's `sounds.hd`; empty reads none. A `.wav` or `.ogg` replaces the original WAV of its file name, and a pack's top-level `enhanced_sound.json` overrides the shipped Enhanced Sound values; both are heard under Enhanced Sound alone. Rules: `docs/formats/sounds.md`, "Sound packs". A `--det` run reads no sound pack unless this flag names one)
-- `--mod-folder=<folder>` (**the modding folder**: a folder of unzbd output, each archive it holds read in place of the game file and everything else from the game files, every read logged as `modding folder: <archive> read from <path>`. It beats the saved `modFolder` option, which Game Options' Modding Folder row sets and which a `--det` or `--synthetic-data` run never reads; empty reads none. Without either, nothing reads unzbd output, an `extracted/` under the data root included. Layout and files: [`docs/modding.md`](modding.md). `Spec/ModdingFolder.cs`)
+- `--mod-folder=<folder>` (**the modding folder**: a folder of unzbd output, each archive it holds read in place of the game file and everything else from the game files, every read logged as `modding folder: <archive> read from <path>`. It beats the saved `modFolder` option, which Game Options' Modding Folder row sets and which a `--det` or `--synthetic-data` run never reads; empty reads none. Without either, nothing reads unzbd output, an `extracted/` under the data root included. Layout and files: [`docs/mods/modding.md`](mods/modding.md). `Spec/ModdingFolder.cs`)
+- `--mods=<folder>` (**the mods folder**, under the data root unless rooted, default `Mods`; its `Planes` folder holds the plane mods, one subfolder or zip each, so `--plane=<mod id>` flies one ([`docs/formats/mod-planes.md`](formats/mod-planes.md)). Empty reads none. A `--det` or `--run-tests` run reads no mods unless this flag names a folder. Not `--mod-folder=`, which replaces game archives. `Flight/Hangar/ModPlanes.cs`)
 - `--city-ground=<folder>` (**dev comparison switch**: read the Enhanced city's block floor images and their `index.json` from `<folder>` instead of the chapter's shipped `data/city_models/<CH>/ground/`, so a second floor set (another brightness) is flown against the shipped one. A relative path resolves against the working directory. The street bands, cells and sets still come from the shipped `ground_layout.json`. The `city ground:` log line names the folder, the floored polygons and the combinations that keep the paint. `Mech3/CityGround.cs`)
 - `--copy-game-files=<source>` (**copy the game files a session reads into `<data-root>/CrimsonSkiesGame` and exit**, where the install lookup then finds them ahead of the remembered install. The source is an install, a disc folder, an `.iso` or a raw `.cue`/`.ccd` image; a disc's chapter cabinets come out unpacked. The tree is written under `CrimsonSkiesGame.partial` and renamed into place last, so a stopped copy is never found. Refuses, exit 1, when the data root already holds `CrimsonSkiesGame` (a dev tree's is the install itself) or the source does not open. Logs each file. `GameFileCopy`)
 - `--mips=authored|generated` (**which mip levels a texture gets**, default `authored`. A chapter ships hand-drawn half- and quarter-resolution siblings (`cblock1_1`, `cblock1_2`) that no gamez material references, the original's own mip chain (`docs/formats/gamez.md`). `authored` installs those siblings as levels 1 and 2 wherever one exists, box-filtering the rest; a texture with no sibling is untouched. `generated` runs `Image.GenerateMipmaps()` all the way down. A sibling whose size disagrees with the level it claims is refused with a warning, never installed. Measure it with `--dump-mips`)

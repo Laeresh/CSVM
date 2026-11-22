@@ -49,7 +49,7 @@ need to be there.
 ## Naming the folder
 
 - **On the command line**, `--mod-folder=<folder>` names it for one launch, ahead of any saved
-  folder; `--mod-folder=` names none ([cli.md](cli.md)).
+  folder; `--mod-folder=` names none ([cli.md](../cli.md)).
 - **In Options**, the GAME OPTIONS page's Modding Folder row picks Off or one of the folders it
   offers: the saved one, the one this launch's `--mod-folder=` named, and an `extracted` folder an
   older CSVM left beside the data. Its last item, **Choose folder...**, opens a folder dialog (the

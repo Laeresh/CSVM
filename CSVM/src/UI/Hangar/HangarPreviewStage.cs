@@ -105,6 +105,10 @@ public sealed partial class HangarPreviewStage : SubViewport
             LightEnergy = KeyEnergy,
             ShadowEnabled = true,
             ShadowBlur = ShadowBlur,
+            // ⚠ One map, no fade. The default four splits put a split edge and the fade band across
+            // the plane. Its shadows then popped as parts crossed them on the turntable.
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
+            DirectionalShadowFadeStart = 1f,
             RotationDegrees = new Vector3(-40f, -25f, 0f),
         };
         _camera.AddChild(_key);
@@ -168,7 +172,7 @@ public sealed partial class HangarPreviewStage : SubViewport
         }
 
         Shown = pose;
-        if (before == null || before.Airframe != pose.Airframe || _builder == null)
+        if (before == null || before.Node != pose.Node || _builder == null)
         {
             Build(pose);
             return;
@@ -272,7 +276,7 @@ public sealed partial class HangarPreviewStage : SubViewport
         }
 
         long start = Stopwatch.GetTimestamp();
-        string node = StockAirframes.Node(pose.Airframe);
+        string node = pose.Node;
         try
         {
             // No spinningProps: the static flight pose, still disc and neutral surfaces.

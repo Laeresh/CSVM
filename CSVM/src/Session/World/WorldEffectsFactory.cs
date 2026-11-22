@@ -854,6 +854,17 @@ public sealed class WorldEffectsFactory
             // ⚠ Keep the whole rig one name scope: a crash def spans this subtree and the plane model's
             // (`healthy`), and only the bind's rig-wide fallback tier resolves both off one context node.
             var destroyed = _planeBuilder.BuildDestroyed(_planeName);
+            // A plane mod without the stock wreck or panel nodes takes both from its own mesh, cut by
+            // the collider's zones. Before the bind, which indexes the rig's names once.
+            if (ModAirframes.MeshesFor(_planeName) != null && _controller.PlaneModel is { } model
+                && _controller.Collider is { } collider)
+            {
+                var cut = AutoWreck.Cut(model, collider.Parts);
+                destroyed ??= cut.Build();
+                int anchors = cut.AddAnchors(_controller.Damage?.Zones.Select(z => z.Def) ?? Enumerable.Empty<DestroyablePart>());
+                Log.Info("anim", $"crash rig '{_planeName}': zones cut from the mesh {string.Join(", ", AutoWreck.Zones.Zip(cut.TriangleCounts, (z, n) => $"{z} {n}"))} triangle(s), {anchors} effect anchor(s) added");
+            }
+
             if (destroyed != null)
             {
                 destroyed.Visible = false;

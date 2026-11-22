@@ -61,13 +61,24 @@ public sealed class VsBotFlagTests
     [InlineData(":skill=godlike")]
     [InlineData(":team=99")]
     [InlineData(":team=red")]
-    [InlineData("player_zeppelin")]
     [InlineData(":colour=blue")]
     public void AnUnreadablePartKeepsItsDefaultAndIsNamed(string entry)
     {
         var s = SessionSpec.Parse(new[] { "--vs", Host, $"--vs-bot={entry}" });
         Assert.Equal(new VsBotEntry(null, NetBotSkill.Veteran, 0, ""), Assert.Single(s.VsBots));
         Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.StartsWith("--vs-bot:", StringComparison.Ordinal));
+    }
+
+    // Plane mods register after the parse, so the plane is kept as written and checked at seating
+    // (BotSeatsTests.ANamedPlaneIsCheckedAtSeating).
+    [Theory]
+    [InlineData("avenger_e1c")]
+    [InlineData("player_zeppelin")]
+    public void APlaneIsKeptAsWrittenForTheSeating(string plane)
+    {
+        var s = SessionSpec.Parse(new[] { "--vs", Host, $"--vs-bot={plane}" });
+        Assert.Equal(new VsBotEntry(plane, NetBotSkill.Veteran, 0, ""), Assert.Single(s.VsBots));
+        Assert.DoesNotContain(s.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
     }
 
     [Theory]

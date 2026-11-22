@@ -108,7 +108,8 @@ public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
 
 /// <summary>One bot seat a scripted network host adds (<c>--vs-bot=</c>, <c>--vs-bots=</c>).
-/// <c>Plane</c> is a stock airframe node, or null for Random, which the host resolves at launch.
+/// <c>Plane</c> is an airframe node as written, stock or a plane mod's id, checked at seating. Null
+/// is Random, which the host resolves at launch.
 /// <c>Team</c> is a lobby team number, 0 for none. An empty <c>Callsign</c> is drawn by the host
 /// from the pilot names.</summary>
 public readonly record struct VsBotEntry(string? Plane, Net.NetBotSkill Skill, int Team, string Callsign);
@@ -1270,6 +1271,10 @@ public sealed record SessionSpec
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
 
+    /// <summary><c>--mods=</c>: the mods folder in place of <c>Mods</c>, under the data root unless rooted;
+    /// its <c>Planes</c> folder holds the plane mods. Empty reads none. Null when absent.</summary>
+    public string? Mods { get; private set; }
+
     /// <summary><c>--hd-sounds=</c>: the sound pack folder, under the data root unless rooted. Empty
     /// reads no pack. Null when absent, which leaves config.json's <c>sounds.hd</c>.</summary>
     public string? HdSounds { get; private set; }
@@ -1867,6 +1872,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--shader-list=")) { s.ShaderList = arg["--shader-list=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--mods=")) { s.Mods = arg["--mods=".Length..]; }
             else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }
             else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--city-ground=")) { s.CityGround = arg["--city-ground=".Length..]; }
@@ -3138,6 +3144,7 @@ public sealed record SessionSpec
     // --vs-bot='s comma list, each entry <plane>[:skill=<tier>][:team=<n>][:name=<callsign>]. A part
     // this cannot read keeps its default and is named, the rule --difficulty= follows: a typo must
     // not quietly change who the bot is. An empty plane or `random` is Random, the host's to draw.
+    // The plane is checked at seating (BotSeats.Resolve), since plane mods register after the parse.
     private static List<VsBotEntry> ParseBots(string value, List<Note> notes)
     {
         var bots = new List<VsBotEntry>();
@@ -3146,12 +3153,6 @@ public sealed record SessionSpec
             var segments = token.Split(':');
             string? plane = segments[0].Trim() is { Length: > 0 } named
                 && !named.Equals(RandomBotPlane, StringComparison.OrdinalIgnoreCase) ? named : null;
-            if (plane != null && Flight.Hangar.StockAirframes.IdOf(plane) == null)
-            {
-                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies a Random one"));
-                plane = null;
-            }
-
             var skill = Net.NetBotSkill.Veteran;
             int team = 0;
             string callsign = "";

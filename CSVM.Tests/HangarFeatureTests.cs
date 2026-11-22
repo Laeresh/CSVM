@@ -357,7 +357,7 @@ public class HangarFeatureTests : IDisposable
 
         public bool CanAfford(int cost) => FundsValue >= cost;
 
-        public bool IsAirframeAvailable(int airframe) => airframe >= AvailableFrom;
+        public bool IsAirframeAvailable(int airframe, ModPlane? mod = null) => airframe >= AvailableFrom;
 
         public bool IsSpecial(string planeName) => Special.Contains(planeName);
 
@@ -368,7 +368,7 @@ public class HangarFeatureTests : IDisposable
 
         public IReadOnlyList<CustomPlaneDef> OwnedBuilds() => Owned.ToList();
 
-        public void Purchase(string planeName, int airframe, int cost) => Purchased = (planeName, airframe, cost);
+        public void Purchase(string planeName, int airframe, int cost, string? modAirframe = null) => Purchased = (planeName, airframe, cost);
 
         public bool Sell(string planeName)
         {

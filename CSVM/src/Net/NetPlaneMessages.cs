@@ -371,8 +371,12 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
     /// <summary>The plane's name as its owner saved it.</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>The airframe id, 0 to 10.</summary>
+    /// <summary>The airframe id, 0 to 10, a plane mod's parent for a build on a mod.</summary>
     public byte Airframe { get; set; }
+
+    /// <summary>The session's airframe row (<see cref="NetModSet"/>) of the plane mod this build
+    /// stands on, or 0 for a build on the stock airframe.</summary>
+    public byte ModRow { get; set; }
 
     /// <summary>The engine id, 0 to 6. Ids 3 to 5 carry the nitrous injector.</summary>
     public byte Engine { get; set; } = NoEngine;
@@ -484,6 +488,7 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
             RightHardpoints = body[7],
             Twins = body[12],
             PaintPattern = body[13],
+            ModRow = body[23],
         };
         for (int i = 0; i < 4; i++)
         {
@@ -501,8 +506,9 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
         return build;
     }
 
-    // The fixed layout ends in three spare bytes. The rest: 0 airframe, 1 engine, 2..5 armour, 6..7
+    // The fixed layout ends in two spare bytes. The rest: 0 airframe, 1 engine, 2..5 armour, 6..7
     // hardpoints, 8..11 guns, 12 twins, 13 pattern, 14..16 colours, 17..19 shades, 20..22 decals.
+    // Byte 23 is the mod row, 0 on a stock build, so a stock build's bytes are what they were.
     private void Pack(Span<byte> body)
     {
         body.Clear();
@@ -512,6 +518,7 @@ public sealed class NetPlaneBuild : IEquatable<NetPlaneBuild>
         body[7] = RightHardpoints;
         body[12] = Twins;
         body[13] = PaintPattern;
+        body[23] = ModRow;
         for (int i = 0; i < 4; i++)
         {
             body[2 + i] = Armour[i];

@@ -25,9 +25,11 @@ public static class PlanePickerRoster
 {
     /// <summary>Builds the picker roster: every stock row in its given order, then one row per
     /// saved custom in the store's own (name-sorted) order. A campaign aeroplane nobody has
-    /// exported yet is not offered (<see cref="CustomPlaneDef.AwaitingExport"/>).</summary>
+    /// exported yet is not offered (<see cref="CustomPlaneDef.AwaitingExport"/>). A build on a mod
+    /// airframe flies the mod's id when <paramref name="mods"/> (else <see cref="ModPlanes.Current"/>)
+    /// holds it, else its stored parent's node.</summary>
     public static IReadOnlyList<PickerPlane> Build(
-        IReadOnlyList<(string Name, string Node)> stock, IReadOnlyList<CustomPlaneDef> customs)
+        IReadOnlyList<(string Name, string Node)> stock, IReadOnlyList<CustomPlaneDef> customs, ModPlanes? mods = null)
     {
         var rows = new List<PickerPlane>(stock.Count + customs.Count);
         foreach (var (name, node) in stock)
@@ -39,7 +41,7 @@ public static class PlanePickerRoster
         {
             if (!def.AwaitingExport)
             {
-                rows.Add(new PickerPlane(def.Name, StockAirframes.Node(def.Airframe), def.Name));
+                rows.Add(new PickerPlane(def.Name, def.FlownNode(mods ?? ModPlanes.Current), def.Name));
             }
         }
 

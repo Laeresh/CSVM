@@ -353,8 +353,8 @@ JSON persistence for one campaign profile under `user://Profiles/<folder>/profil
 `ScoreStore` and `CustomPlaneStore`: funds, owned planes with their ammunition and ordnance picks,
 each mission's latest and best-of record with its failed-attempt counter, the completed-mission
 count, granted awards, the chosen memento and the destruction log. An owned plane names a build in
-`user://Planes/` rather than copying it. A field a file predates reads at rest. The folder is the
-identity: `Save` writes a loaded profile back to its `Folder`, and a file whose `"name"` points at
+`user://Planes/` rather than copying it; one on a plane mod adds `modAirframe` beside its parent's id, and `OwnedPlane.ModIn`/`FlownNode` fly the parent while the mod is missing, never rewriting the id.
+A field a file predates reads at rest. The folder is the identity: `Save` writes a loaded profile back to its `Folder`, and a file whose `"name"` points at
 another folder (a copy, a hand rename) is read under the folder's name with a warning. `ForSession`
 is a launch's store, `--profiles=` or `user://Profiles/`. Format: [../formats/saved-games.md](../formats/saved-games.md).
 
@@ -600,9 +600,9 @@ title, stamps the block's objective marker and the session's race flag, and owns
 What a network bot seat is once its host seats it, engine-free. `Resolve` turns the command line's
 bot field into seats: each bot a militia/airframe pair off the Instant Action militia table
 (`DrawPair`: any pair at equal odds for a Random plane, a militia flying it for a picked one, the
-torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
+torpedo pair capped at one a team in Zeppelin vs Zeppelin; each registered plane mod on a copy of its parent's pairs), that militia's accent, and for an
 unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
-`Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
+`Named` checks a named plane at seating, since mods register after the command line is parsed: an unknown node is Random. Every field, the wire's too, seats mods, since a guest holds the host's. `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
 of a tier's effect. Under a lobby's outlaw list, or a race course's plane list, the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one, never the torpedo. Only the host calls it; a guest reads the roster. Decodes:
 [../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 
@@ -624,7 +624,7 @@ the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PE
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations, and `FollowGraphicsMode` re-reads the replaced-light set and frees the heat shimmer on a live switch. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
-land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The bind step also snapshots the built parent, pose and visibility of the airframe, the wreck and every template a bound def adopts (`OBJECT_ADD_CHILD`'s child, the eject's `cpilot`), which is what a respawn restores. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
+land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The wreck step builds the airframe's `destroyed` subtree, and for a plane mod also runs `Flight/Airframe/AutoWreck.cs` before the bind indexes the rig: its pieces when the model ships no wreck, and its fire anchors for each stock anchor name the model lacks. The bind step also snapshots the built parent, pose and visibility of the airframe, the wreck and every template a bound def adopts (`OBJECT_ADD_CHILD`'s child, the eject's `cpilot`), which is what a respawn restores. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/World/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.

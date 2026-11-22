@@ -567,6 +567,16 @@ public class SessionSpecParserTests
         Assert.Null(SessionSpec.Parse(new[] { "--hd=Packs" }).HdModels);
     }
 
+    /// <summary><c>--mods=</c> names the mods folder, empty naming none, and absent leaves the default.</summary>
+    [Fact]
+    public void TheModsFolderFlagParses()
+    {
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).Mods);
+        Assert.Equal(@"C:\test\Mods", SessionSpec.Parse(new[] { @"--mods=C:\test\Mods" }).Mods);
+        Assert.Equal("", SessionSpec.Parse(new[] { "--mods=" }).Mods);
+        Assert.Null(SessionSpec.Parse(new[] { "--mod-folder=X" }).Mods);
+    }
+
     /// <summary><c>--hd-sounds=</c> names the sound pack folder, empty naming none, and absent leaves
     /// config.json's.</summary>
     [Fact]

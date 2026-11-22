@@ -53,11 +53,13 @@ public static class HangarDescriptions
     private const int YesString = 1167;
 
     /// <summary>The AIRFRAME box over one airframe's stat row and the two star words it is rated
-    /// by, which the original rates from a record carrying the airframe and nothing else.</summary>
-    public static HangarInfo Airframe(UiStrings strings, int airframe, string agility, string armour)
+    /// by. The original rates them from a record carrying the airframe and nothing else. A mod
+    /// airframe passes its own <paramref name="row"/> (<see cref="HangarEconomy.StatsFor(int, ModPlane)"/>)
+    /// beside its parent's id, whose prose it shows.</summary>
+    public static HangarInfo Airframe(UiStrings strings, int airframe, string agility, string armour, AirframeStats? row = null)
     {
         ArgumentNullException.ThrowIfNull(strings);
-        var stats = HangarEconomy.Airframes[airframe];
+        var stats = row ?? HangarEconomy.Airframes[airframe];
         string turrets = stats.Turrets == 0
             ? strings.Text(NoneString, "None")
             : stats.Turrets.ToString(CultureInfo.InvariantCulture);

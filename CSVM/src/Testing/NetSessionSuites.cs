@@ -96,11 +96,11 @@ internal static class NetSessionSuites
         {
             long memBefore = (long)OS.GetStaticMemoryUsage();
             var wall = Stopwatch.StartNew();
-            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, airframes);
+            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
             double hostMs = wall.Elapsed.TotalMilliseconds;
             long memHost = (long)OS.GetStaticMemoryUsage();
             wall.Restart();
-            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null, airframes);
+            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null);
             double guestMs = wall.Elapsed.TotalMilliseconds;
             long memGuest = (long)OS.GetStaticMemoryUsage();
 
@@ -164,8 +164,8 @@ internal static class NetSessionSuites
         Ends? guest = null;
         try
         {
-            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, airframes);
-            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null, airframes);
+            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
+            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null);
             ctx.Check(host.Built && guest.Built,
                 $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
             if (!host.Built || !guest.Built)
@@ -585,7 +585,7 @@ internal static class NetSessionSuites
     // One end of the match: its own pane, its own world, its own session node. The pane renders
     // nothing, the suite reads poses and counters rather than pixels.
     private static Ends Open(TestContext ctx, SessionSpec spec, INetTransport? transport,
-        bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster, IReadOnlyList<string>? airframes = null)
+        bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster)
     {
         var pane = new SubViewport
         {
@@ -621,7 +621,6 @@ internal static class NetSessionSuites
             NetSeats = isHost ? roster : null,
             NetTransport = transport,
             NetHost = isHost,
-            NetAirframes = transport == null ? null : airframes ?? NetCombatSuites.AirframesFor(spec),
         });
         pane.AddChild(session);
         return new Ends(pane, session, session.StartSession());

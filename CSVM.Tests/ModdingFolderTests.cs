@@ -14,7 +14,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The modding folder (<see cref="ModdingFolder"/>, <see cref="GameData.Load"/>): its layout, the
 /// launch's choice of folder, and each archive it holds replacing that one game file alone. The
-/// edited copies are made in a temp folder from today's extraction. Layout: docs/modding.md.
+/// edited copies are made in a temp folder from today's extraction. Layout: docs/mods/modding.md.
 /// </summary>
 public class ModdingFolderTests
 {

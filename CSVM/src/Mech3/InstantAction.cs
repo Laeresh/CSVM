@@ -53,26 +53,18 @@ public static class InstantAction
     private const int DefaultWaveAccentId = -1; // the roster-block constructor's general "unset"
     private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
 
-    // The eleven airframes in the langui 3700 order, the order FUN_00410420's mask flags them in,
-    // each with the planes.zbd root node it builds (docs/formats/instant-action.md). Names are
-    // ia.json's singular vocabulary. CSVM ships one gamez node per airframe, reused for the player
-    // and every AI spawn alike. There is no separate "plain" or wingman model to pick between.
-    private static readonly (string Name, string Node)[] AirframeRows =
+    // The eleven airframes in the langui 3700 order, the order FUN_00410420's mask flags them in
+    // (docs/formats/instant-action.md). Names are ia.json's singular vocabulary. The order is the
+    // stock airframe-id order, so row i builds AirframeRegistry.Stock[i]'s node, for the player and
+    // every AI spawn alike. Mod airframes are not rows: ia.json names none.
+    private static readonly string[] MaskOrder =
     {
-        ("Autogyro", "player_autogyro"),
-        ("Hellhound", "player_avenger"),
-        ("Balmoral", "player_balmoral"),
-        ("Bloodhawk", "player_bhawk"),
-        ("Brigand", "player_brigand"),
-        ("Devastator", "player_pfighter"),
-        ("Firebrand", "player_fbrand"),
-        ("Fury", "player_fury"),
-        ("Kestrel", "player_kestrel"),
-        ("Peacemaker", "player_peacemaker"),
-        ("Warhawk", "player_warhawk"),
+        "Autogyro", "Hellhound", "Balmoral", "Bloodhawk", "Brigand", "Devastator", "Firebrand", "Fury",
+        "Kestrel", "Peacemaker", "Warhawk",
     };
 
-    private static readonly string[] MaskOrder = Array.ConvertAll(AirframeRows, a => a.Name);
+    private static readonly (string Name, string Node)[] AirframeRows =
+        MaskOrder.Select((name, i) => (name, AirframeRegistry.Stock[i].Node)).ToArray();
 
     private static readonly Dictionary<string, string> PlaneNodes =
         AirframeRows.ToDictionary(a => a.Name, a => a.Node, StringComparer.OrdinalIgnoreCase);

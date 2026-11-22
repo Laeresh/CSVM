@@ -186,6 +186,30 @@ public sealed class NetPlaneMessagesTests
         Assert.Null(CustomPlaneWire.Def(null));
     }
 
+    // A custom plane on a plane mod crosses as its parent's airframe with the mod's row in a spare
+    // byte. It reads back as the same pair. A stock build's bytes are as
+    // they were, and a mod the session lacks crosses as its parent's build.
+    [Fact]
+    public void ABuildOnAPlaneModCrossesAsItsParentAndTheModsRow()
+    {
+        var mods = new NetModSet(new[] { new NetMod("other_mod", new string('0', 64), 2), new NetMod("avenger_e1c", new string('1', 64), 4) });
+        var def = new CustomPlaneDef { Name = "Blue Avenger", Airframe = 4, ModAirframe = "avenger_e1c", Engine = 2 };
+
+        var build = CustomPlaneWire.Build(def, mods)!;
+        Assert.Equal((4, 12), (build.Airframe, build.ModRow));
+        var buffer = new byte[PlaneBuildMessage.Size];
+        new PlaneBuildMessage(0xFF, build).Write(buffer);
+        Assert.True(PlaneBuildMessage.TryRead(buffer, out var read));
+        var back = CustomPlaneWire.Def(read.Build, mods)!;
+        Assert.Equal(("avenger_e1c", 4), (back.ModAirframe, back.Airframe));
+
+        // ABLE-TO-FAIL CONTROL: without the mod in the session the build is its parent's, row 0, and a
+        // stock build's mod byte stays zero.
+        Assert.Equal(0, CustomPlaneWire.Build(def, NetModSet.None)!.ModRow);
+        Assert.Null(CustomPlaneWire.Def(build, NetModSet.None)!.ModAirframe);
+        Assert.Equal(0, CustomPlaneWire.Build(new CustomPlaneDef { Airframe = 4 }, mods)!.ModRow);
+    }
+
     // A build with every field away from its default.
     private static NetPlaneBuild Busy()
     {

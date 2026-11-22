@@ -102,9 +102,9 @@ internal static class NetDirectorSuites
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "control", PlaneNode = Airframes[1] },
         };
-        var host = new Peer(ctx, "host", hostWorld, script, mission, NetSession.Host(mesh[0], roster, Seed, null, Airframes), report);
-        var guest = new Peer(ctx, "guest", guestWorld, script, mission, NetSession.Guest(mesh[1], Airframes), report);
-        var control = new Peer(ctx, "control", controlWorld, script, mission, NetSession.Guest(mesh[2], Airframes), report);
+        var host = new Peer(ctx, "host", hostWorld, script, mission, NetSession.Host(mesh[0], roster, Seed), report);
+        var guest = new Peer(ctx, "guest", guestWorld, script, mission, NetSession.Guest(mesh[1]), report);
+        var control = new Peer(ctx, "control", controlWorld, script, mission, NetSession.Guest(mesh[2]), report);
         try
         {
             NetDirectorLink.Publish(host.Net, host.Graph, () => host.Now);

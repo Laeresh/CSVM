@@ -446,6 +446,10 @@ public sealed class SceneBuilder
     /// key. The cockpit interior sets it, so a world pack's generic <c>g366.glb</c> leaves every cockpit alone.</summary>
     internal bool HdAirframeKeysOnly;
 
+    /// <summary>The meshes this builder replaces from in place of the model pack's: a plane mod's own
+    /// file (<see cref="ModAirframes.MeshesFor"/>). Null reads the pack. Set before building.</summary>
+    internal HdModelMeshes? OwnMeshes;
+
     /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
     /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
     /// for. Null keeps none.</summary>
@@ -633,6 +637,9 @@ void fragment() {
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
     // for every slider pixel). Only shader materials carrying an `albedo_tex` are listed.
     private readonly List<(ShaderMaterial Material, string TextureName)> _texturedMaterials = new();
+
+    // A mod's own surfaces the livery reached, with the material name and base texture Repaint paints again.
+    private readonly Dictionary<ShaderMaterial, (string Name, ImageTexture? Albedo)> _ownPainted = new();
     // A built world material against the verdict its shader was generated for. The verdict is a
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
@@ -957,6 +964,9 @@ void fragment() {
     {
         foreach (var (mat, texName) in _texturedMaterials)
             if (Resolve(texName) is { } tex)
+                mat.SetShaderParameter("albedo_tex", tex);
+        foreach (var (mat, (name, albedo)) in _ownPainted)
+            if (_textureSubstitute!(name, albedo) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
     }
 
@@ -1824,9 +1834,9 @@ void light() {{
     private ArrayMesh? Replacement(GameZNode node, int meshIndex, bool forceDoubleSided, bool forceLit,
         bool clutterFade = false)
     {
-        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null))
+        if ((OwnMeshes == null && HdModels.Current.Count == 0) || (HdChapter == null && HdAirframe == null))
             return null;
-        var shared = HdModelMeshes.Current;
+        var shared = OwnMeshes ?? HdModelMeshes.Current;
         // A failed import is null and draws the gamez model; an empty one draws nothing.
         if (Imported(node, shared) is not { } imported || shared.SurfacesOf(imported) is not { } surfaces)
             return null;
@@ -1851,19 +1861,19 @@ void light() {{
         int steps = 0;
         for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
         {
-            if (PackKey(scope.Name) != null
+            if (PackKey(shared.Models, scope.Name) != null
                 && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
                 return scoped;
             path.Insert(0, scope.Name);
         }
-        return PackKey(node.Name) != null
+        return PackKey(shared.Models, node.Name) != null
             ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
             : null;
     }
 
-    // The key HdModelMeshes resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
-    private string? PackKey(string name) =>
-        HdModels.Current.KeyFor(name, HdChapter, HdAirframe) is { } key
+    // The key `models` resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
+    private string? PackKey(HdModels models, string name) =>
+        models.KeyFor(name, HdChapter, HdAirframe) is { } key
         && (!HdAirframeKeysOnly || key.StartsWith($"planes/{HdAirframe?.ToLowerInvariant()}/", StringComparison.Ordinal))
             ? key : null;
 
@@ -1931,10 +1941,15 @@ void light() {{
             }
             else
             {
-                var tex = shared.AlbedoOf(source);
+                var albedo = shared.AlbedoOf(source);
+                // A mod's own surface takes its livery, the tint and the decals, by material name. A pack's never does.
+                string? own = OwnMeshes != null && _textureSubstitute != null ? source?.ResourceName : null;
+                var tex = own != null ? _textureSubstitute!(own, albedo) : albedo;
                 (clampUv, edgeClamp) = tex != null ? ClampFor(unitAxes, Vector2.Zero) : (false, UvClampAxes.None);
                 // A non-original surface is lit by default, whatever the model's flag.
                 material = PackMaterial(source, tex, rank, doubleSided, clampUv, edgeClamp, forceLit || !fileUnlit, fogged, clutterFade);
+                if (own != null && material is ShaderMaterial painted)
+                    _ownPainted[painted] = (own, albedo);
             }
             if (!CountSurface(material, clampUv, edgeClamp))
                 continue;

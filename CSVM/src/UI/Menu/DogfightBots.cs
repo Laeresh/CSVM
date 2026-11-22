@@ -134,12 +134,14 @@ public sealed class DogfightBots
     }
 
     /// <summary>Puts row <paramref name="id"/> on one of the eleven stock airframes or on
-    /// <see cref="DogfightLobbySeat.RandomAirframe"/>.</summary>
-    public bool SetAirframe(int id, int airframe) =>
-        (airframe is >= 0 and < DogfightLobby.AirframeCount || airframe == DogfightLobbySeat.RandomAirframe)
-        && Edit(id, bot => bot with { Airframe = (byte)airframe });
+    /// <see cref="DogfightLobbySeat.RandomAirframe"/>, or on plane mod <paramref name="mod"/> with its
+    /// parent's stock id as <paramref name="airframe"/>.</summary>
+    public bool SetAirframe(int id, int airframe, string? mod = null) =>
+        (airframe is >= 0 and < DogfightLobby.AirframeCount || (airframe == DogfightLobbySeat.RandomAirframe && mod == null))
+        && Edit(id, bot => bot with { Airframe = (byte)airframe, ModAirframe = mod });
 
-    /// <summary>Puts every row on a stock airframe <paramref name="admits"/> refuses back on Random.
+    /// <summary>Puts every row on a stock airframe <paramref name="admits"/> refuses back on Random,
+    /// a plane mod judged by its parent.
     /// A bot has no Ready to refuse, so a rules or course change resets its pick instead.</summary>
     public void ResetRefused(Func<int, bool> admits)
     {
@@ -148,7 +150,7 @@ public sealed class DogfightBots
         {
             if (!_rows[i].RandomPlane && !admits(_rows[i].Airframe))
             {
-                _rows[i] = _rows[i] with { Airframe = DogfightLobbySeat.RandomAirframe };
+                _rows[i] = _rows[i] with { Airframe = DogfightLobbySeat.RandomAirframe, ModAirframe = null };
             }
         }
     }
@@ -190,14 +192,14 @@ public sealed class DogfightBots
     }
 
     /// <summary>The rows as a launch seats them. A Random plane is null, which the host draws
-    /// (<see cref="BotSeats.Resolve"/>), and a stock one is its node.</summary>
+    /// (<see cref="BotSeats.Resolve"/>), a stock one is its node and a plane mod its id.</summary>
     public IReadOnlyList<VsBotEntry> LaunchEntries()
     {
         var entries = new VsBotEntry[_rows.Count];
         for (int i = 0; i < entries.Length; i++)
         {
             var bot = _rows[i];
-            entries[i] = new VsBotEntry(bot.RandomPlane ? null : StockAirframes.Node(bot.Airframe), bot.Skill, bot.Team, bot.Callsign);
+            entries[i] = new VsBotEntry(bot.RandomPlane ? null : bot.ModAirframe ?? StockAirframes.Node(bot.Airframe), bot.Skill, bot.Team, bot.Callsign);
         }
 
         return entries;

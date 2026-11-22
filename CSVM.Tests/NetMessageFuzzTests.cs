@@ -209,7 +209,7 @@ public sealed class NetMessageFuzzTests
             Assert.True(lobby.Held <= NetLobby.HeldPayloads, $"the lobby holds {lobby.Held} payloads");
         }
 
-        var guest = NetSession.Guest(lobby, new[] { "player_pfighter" });
+        var guest = NetSession.Guest(lobby);
         foreach (var subject in Subjects.Value)
         {
             subject.Route(guest);

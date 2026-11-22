@@ -53,6 +53,9 @@ public sealed class HdModelMeshes
         }
     }
 
+    /// <summary>The lookup this cache reads its files through.</summary>
+    internal HdModels Models => _models;
+
     /// <summary>Drops every import keyed under a chapter folder other than <paramref name="chapter"/>'s,
     /// keeping the airframes' and the bare keys. A session then holds one chapter's files at a time.
     /// A mesh already handed out stays valid.</summary>
@@ -147,6 +150,42 @@ public sealed class HdModelMeshes
         }
     }
 
+    /// <summary><paramref name="source"/>'s surfaces placed by <paramref name="at"/>, triangles in the
+    /// original's winding, materials as the importer made them.</summary>
+    internal static IEnumerable<HdSurface> ReversedSurfaces(ImporterMesh source, Transform3D at)
+    {
+        // A mirroring transform reverses the winding itself.
+        bool mirrored = at.Basis.Determinant() < 0;
+        // Built from the importer's own arrays, not its GetMesh(). That compresses the attributes,
+        // moving every vertex by up to 1/65536 of the mesh's extent.
+        for (int i = 0; i < source.GetSurfaceCount(); i++)
+        {
+            // ⚠ Keep the Duplicate(): the importer hands back its own array, and every node of the file reads it.
+            var arrays = source.GetSurfaceArrays(i).Duplicate();
+            var primitive = source.GetSurfacePrimitiveType(i);
+            if (at != Transform3D.Identity)
+            {
+                Place(arrays, at, mirrored);
+            }
+
+            if (primitive == Mesh.PrimitiveType.Triangles && !mirrored)
+            {
+                arrays[(int)Mesh.ArrayType.Index] = ReversedIndices(arrays);
+            }
+
+            yield return new HdSurface(primitive, arrays, source.GetSurfaceName(i), source.GetSurfaceMaterial(i));
+        }
+    }
+
+    /// <summary>A glTF node's name as the file wrote it. The generated name replaces Godot's invalid
+    /// characters, which would lose the dot in a gamez name.</summary>
+    internal static string NameOf(GltfNode node) =>
+        node.OriginalName is { Length: > 0 } original ? original : node.ResourceName;
+
+    /// <summary><paramref name="name"/> without Blender's repeat suffix (<c>wing.001</c>); no gamez name
+    /// ends in a dot and digits.</summary>
+    internal static string WithoutRepeat(string name) => BlenderRepeat.Replace(name, string.Empty);
+
     /// <summary>The surfaces <paramref name="mesh"/> was built from, in surface order, or null for a
     /// mesh this cache did not import. ⚠ Do not edit them; they are the shared mesh's own.</summary>
     internal IReadOnlyList<HdSurface>? SurfacesOf(ArrayMesh mesh)
@@ -179,28 +218,18 @@ public sealed class HdModelMeshes
         }
     }
 
-    private static IEnumerable<HdSurface> ReversedSurfaces(ImporterMesh source, Transform3D at)
+    /// <summary>The parsed file under <paramref name="key"/>, the one this cache imports from, or null
+    /// when it fails to parse. ⚠ Read it, never edit it.</summary>
+    internal GltfState? StateOf(string key)
     {
-        // A mirroring transform reverses the winding itself.
-        bool mirrored = at.Basis.Determinant() < 0;
-        // Built from the importer's own arrays, not its GetMesh(). That compresses the attributes,
-        // moving every vertex by up to 1/65536 of the mesh's extent.
-        for (int i = 0; i < source.GetSurfaceCount(); i++)
+        lock (_byKey)
         {
-            // ⚠ Keep the Duplicate(): the importer hands back its own array, and every node of the file reads it.
-            var arrays = source.GetSurfaceArrays(i).Duplicate();
-            var primitive = source.GetSurfacePrimitiveType(i);
-            if (at != Transform3D.Identity)
+            if (!_files.TryGetValue(key, out var parsed))
             {
-                Place(arrays, at, mirrored);
+                _files[key] = parsed = Parse(key);
             }
 
-            if (primitive == Mesh.PrimitiveType.Triangles && !mirrored)
-            {
-                arrays[(int)Mesh.ArrayType.Index] = ReversedIndices(arrays);
-            }
-
-            yield return new HdSurface(primitive, arrays, source.GetSurfaceName(i), source.GetSurfaceMaterial(i));
+            return parsed.State;
         }
     }
 
@@ -299,14 +328,8 @@ public sealed class HdModelMeshes
     // The node part of a pack key: what follows its chapter or airframe folder.
     private static string NodeOf(string key) => key[(key.LastIndexOf('/') + 1)..];
 
-    // A glTF node's name as the file wrote it. The generated name replaces Godot's invalid
-    // characters, which would lose the dot in a gamez name.
-    private static string NameOf(GltfNode node) =>
-        node.OriginalName is { Length: > 0 } original ? original : node.ResourceName;
-
-    // A glTF node's name as a gamez key. Blender's repeat suffix (`wing.001`) is dropped; no gamez
-    // name ends in a dot and digits.
-    private static string KeyOf(GltfNode node) => HdModels.NodeKey(BlenderRepeat.Replace(NameOf(node), string.Empty));
+    // A glTF node's name as a gamez key, without the repeat suffix.
+    private static string KeyOf(GltfNode node) => HdModels.NodeKey(WithoutRepeat(NameOf(node)));
 
     // The first glTF node named for the gamez node `nodeKey`, an exact name before a suffixed one, or -1.
     private static int MatchedNode(Godot.Collections.Array<GltfNode> nodes, string nodeKey)

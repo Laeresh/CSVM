@@ -34,13 +34,17 @@ public enum HangarPreviewFocus
 public sealed record HangarPreviewPose(
     int Airframe, int LeftHardpoints, int RightHardpoints, int Pattern,
     PaintColour Colour1, PaintColour Colour2, PaintColour Colour3,
-    int NoseDecal, int TailDecal, int WingDecal)
+    int NoseDecal, int TailDecal, int WingDecal, string? Mod = null)
 {
-    /// <summary>The pose of <paramref name="build"/> drawn on <paramref name="airframe"/>, which the
-    /// airframe list's focused row can differ from the build's own.</summary>
-    public static HangarPreviewPose Of(CustomPlaneDef build, int airframe) => new(
+    /// <summary>The planes.zbd node the stage builds: the mod's own root, else the stock airframe's.</summary>
+    public string Node => Mod ?? StockAirframes.Node(Airframe);
+
+    /// <summary>The pose of <paramref name="build"/> drawn on <paramref name="airframe"/>, or on the
+    /// plane mod <paramref name="mod"/> over that parent. The airframe list's focused row can differ
+    /// from the build's own.</summary>
+    public static HangarPreviewPose Of(CustomPlaneDef build, int airframe, string? mod = null) => new(
         airframe, build.LeftHardpoints, build.RightHardpoints, build.PaintPattern,
-        build.Colour1, build.Colour2, build.Colour3, build.NoseDecal, build.TailDecal, build.WingDecal);
+        build.Colour1, build.Colour2, build.Colour3, build.NoseDecal, build.TailDecal, build.WingDecal, mod);
 
     /// <summary>The livery the flown plane would wear, <see cref="CustomPlaneBuild.PaintFor(CustomPlaneDef, string)"/>'s.</summary>
     public PaintScheme Paint() => CustomPlaneBuild.PaintFor(
@@ -48,14 +52,14 @@ public sealed record HangarPreviewPose(
 
     /// <summary>Whether <paramref name="other"/> wears the same paint, whatever its airframe and stores.</summary>
     public bool SamePaint(HangarPreviewPose other) =>
-        this with { Airframe = other.Airframe, LeftHardpoints = other.LeftHardpoints, RightHardpoints = other.RightHardpoints } == other;
+        this with { Airframe = other.Airframe, Mod = other.Mod, LeftHardpoints = other.LeftHardpoints, RightHardpoints = other.RightHardpoints } == other;
 
     /// <summary>Where the camera looks after <paramref name="before"/> became <paramref name="after"/>:
     /// the wing whose hardpoint count moved, else the area whose decal moved. A pattern or colour
     /// edit, an airframe change and the first pose ask for none.</summary>
     public static HangarPreviewFocus FocusFor(HangarPreviewPose? before, HangarPreviewPose after)
     {
-        if (before == null || before.Airframe != after.Airframe)
+        if (before == null || before.Node != after.Node)
         {
             return HangarPreviewFocus.None;
         }

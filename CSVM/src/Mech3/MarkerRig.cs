@@ -23,23 +23,12 @@ public sealed class MarkerRig
     /// "same point" from the next-nearest firepoint (the closest distinct pair here is ~0.5 m).</summary>
     public const float CoLocateTolerance = 1e-2f;
 
-    /// <summary>The 11 player airframes, model-node name → display name (see markers.md's mapping
-    /// table). The dump tool iterates this when no plane is named; a display name only makes the
-    /// table readable, so an airframe missing from the data is skipped, not an error.</summary>
-    public static readonly IReadOnlyList<(string Model, string Display)> PlayerAirframes = new[]
-    {
-        ("player_bhawk", "Bloodhawk"),
-        ("player_pfighter", "Devastator"),
-        ("player_fury", "Fury"),
-        ("player_warhawk", "Warhawk"),
-        ("player_autogyro", "Hoplite"),
-        ("player_avenger", "Hellhound"),
-        ("player_balmoral", "Balmoral"),
-        ("player_brigand", "Brigand"),
-        ("player_fbrand", "Firebrand"),
-        ("player_kestrel", "Kestrel"),
-        ("player_peacemaker", "Peacemaker"),
-    };
+    /// <summary>The 11 stock player airframes in id order, model-node name → display name (see
+    /// markers.md's mapping table). Stock only, since the rig is read from planes.zbd, which holds
+    /// no mod airframe. The dump tool iterates this when no plane is named; an airframe missing from
+    /// the data is skipped, not an error.</summary>
+    public static readonly IReadOnlyList<(string Model, string Display)> PlayerAirframes =
+        AirframeRegistry.Stock.Select(a => (a.Node, a.DisplayName)).ToArray();
 
     // Alternate-state subtrees that may carry their own same-named reference node distinct from
     // the plane's one authored marker in the top-level `markers` group, the cockpit interior

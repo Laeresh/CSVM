@@ -37,6 +37,18 @@ public sealed class HdModels : IDisposable
 
     private readonly PackIndex _index;
 
+    // The one model Holding keeps in memory, under its key; null on a folder's lookup.
+    private readonly string? _heldKey;
+    private readonly HdModel _held;
+
+    private HdModels(string key, HdModel model)
+        : this(PackIndex.Empty())
+    {
+        _heldKey = key;
+        _held = model;
+        Count = 1;
+    }
+
     private HdModels(PackIndex index)
     {
         _index = index;
@@ -82,6 +94,10 @@ public sealed class HdModels : IDisposable
         return models;
     }
 
+    /// <summary>A lookup of one in-memory model under the lower-case pack key <paramref name="key"/>.
+    /// It is a plane mod's <c>plane.glb</c> as its airframe's root file (<c>Mech3.ModAirframes</c>).</summary>
+    public static HdModels Holding(string key, HdModel model) => new(key, model);
+
     /// <summary>The replacement for the gamez node named <paramref name="node"/>, or null. The
     /// airframe's own key beats the chapter's, which beats the bare name. Pass the chapter folder
     /// (<c>C3</c>) for a chapter's gamez and the airframe for the planes gamez.</summary>
@@ -93,7 +109,7 @@ public sealed class HdModels : IDisposable
     public string? KeyFor(string node, string? chapter = null, string? airframe = null)
     {
         string name = NodeKey(node);
-        if (_index.Count == 0 || node.Length == 0 || IsClumpKey(name))
+        if (Count == 0 || node.Length == 0 || IsClumpKey(name))
         {
             return null;
         }
@@ -105,7 +121,8 @@ public sealed class HdModels : IDisposable
 
     /// <summary>The replacement under the pack key <paramref name="key"/>, or null.</summary>
     public HdModel? Read(string key) =>
-        _index.Find(key) is { } entry && _index.Read(key) is { } bytes
+        key == _heldKey ? _held
+        : _index.Find(key) is { } entry && _index.Read(key) is { } bytes
             ? new HdModel(bytes, entry.Extension == ".glb", entry.Extension == ".gltf" ? entry.LoosePath : null)
             : null;
 
@@ -195,5 +212,5 @@ public sealed class HdModels : IDisposable
     private static string DropFlt(string key) =>
         key.EndsWith(Flt, StringComparison.Ordinal) ? key[..^Flt.Length] : key;
 
-    private string? Known(string key) => _index.Find(key) != null ? key : null;
+    private string? Known(string key) => key == _heldKey || _index.Find(key) != null ? key : null;
 }

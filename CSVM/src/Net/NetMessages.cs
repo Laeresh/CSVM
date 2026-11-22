@@ -200,6 +200,10 @@ public enum NetMessageType : ushort
     /// <summary>A Stunt Race host's course, its JSON whole, sent to every guest when the host picks
     /// it and to each guest that joins.</summary>
     LobbyCourse = 0x006D,
+
+    /// <summary>A host's plane mods by id, content hash and parent, sent to every guest on connect
+    /// and at a join. A guest without them refuses the session.</summary>
+    ModSet = 0x006E,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -465,14 +469,15 @@ public interface INetMessage<TSelf>
     int Write(Span<byte> into);
 }
 
-/// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field. A
+/// <summary>One seat as the roster carries it. The callsign and the plane, a stock node or a plane
+/// mod's id, are fixed-width UTF-8 fields. A
 /// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
 /// seat's pilot voice in the pick's form, 0 for none. The nameless flag carries
 /// <see cref="NetSeat.Unnamed"/> to every machine, and <see cref="Pilot"/> and <see cref="Skill"/>
 /// say which seats the host's bots fly. A human entry carries the default skill, and no militia
 /// or accent (<see cref="NetSeat.Unset"/>).</summary>
 public readonly record struct NetSeatEntry(
-    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false,
+    byte Seat, byte Team, string Plane, bool IsHost, string Callsign, byte Voice = 0, bool Unnamed = false,
     NetPilot Pilot = NetPilot.Human, NetBotSkill Skill = NetBotSkill.Veteran,
     byte Militia = NetSeat.Unset, byte Accent = NetSeat.Unset);
 
@@ -1445,12 +1450,16 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
 
     /// <summary>The bytes one seat entry takes. ⚠ Do not change it in a patch release, only in a
     /// minor one: a reader refuses a roster of another width (docs/org/multiplayer-messages.md).</summary>
-    public const int EntrySize = 6 + CallsignBytes;
+    public const int EntrySize = 6 + CallsignBytes + PlaneBytes;
 
     /// <summary>How many callsign bytes an entry carries, UTF-8 and zero padded. It holds the
     /// Callsign box's 12 characters at 3 bytes each, a further seat's " P4" and the terminator.
     /// Every name the box can produce reaches the roster whole; a longer one is cut.</summary>
     public const int CallsignBytes = 40;
+
+    /// <summary>How many plane bytes an entry carries, UTF-8 and zero padded: a stock node or a
+    /// plane mod's id. <c>ModPlanes</c> holds a mod id to 31 bytes, so it reaches the roster whole.</summary>
+    public const int PlaneBytes = 32;
 
     /// <summary>The most seats this message can carry. The original's spawn slot packs its index
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>
@@ -1531,7 +1540,7 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte seat = reader.ReadByte();
             byte team = reader.ReadByte();
             byte flags = reader.ReadByte();
-            byte plane = reader.ReadByte();
+            _ = reader.ReadByte();
             byte militia = reader.ReadByte();
             byte accent = reader.ReadByte();
             bool bot = (flags & BotBit) != 0;
@@ -1546,8 +1555,9 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
                 : militia != NetSeat.Unset || accent != NetSeat.Unset)
                 return false;
 
+            string callsign = reader.ReadText(CallsignBytes);
             seats[i] = new NetSeatEntry(
-                seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
+                seat, team, reader.ReadText(PlaneBytes), (flags & 1) != 0, callsign,
                 (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice), (flags & UnnamedBit) != 0,
                 bot ? NetPilot.Bot : NetPilot.Human, bot ? (NetBotSkill)skill : NetBotSkill.Veteran,
                 militia, accent);
@@ -1575,10 +1585,11 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             int skill = bot && seat.Skill <= NetBotSkill.Ace ? (int)seat.Skill : bot ? (int)NetBotSkill.Veteran : 0;
             writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift) | (seat.Unnamed ? UnnamedBit : 0)
                 | (bot ? BotBit : 0) | (skill << SkillShift)));
-            writer.WriteByte(seat.Plane);
+            writer.WriteByte(0);
             writer.WriteByte(seat.Militia);
             writer.WriteByte(seat.Accent);
             writer.WriteText(seat.Callsign, CallsignBytes);
+            writer.WriteText(seat.Plane, PlaneBytes);
         }
 
         return writer.Close();
@@ -1709,6 +1720,7 @@ public static class NetMessage
         NetMessageType.CoopPersist => CoopPersistMessage.Reliability,
         NetMessageType.RaceTouch => RaceTouchMessage.Reliability,
         NetMessageType.LobbyCourse => LobbyCourseMessage.Reliability,
+        NetMessageType.ModSet => ModSetMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

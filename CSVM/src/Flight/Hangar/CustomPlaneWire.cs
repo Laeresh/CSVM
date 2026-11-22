@@ -8,8 +8,10 @@ namespace CSVM.Flight.Hangar;
 /// </summary>
 public static class CustomPlaneWire
 {
-    /// <summary>The build <paramref name="def"/> sends, or null for no plane.</summary>
-    public static NetPlaneBuild? Build(CustomPlaneDef? def)
+    /// <summary>The build <paramref name="def"/> sends, or null for no plane. A build on a plane mod
+    /// names its row in the session's <paramref name="mods"/>; a mod the session lacks sends its
+    /// parent's build.</summary>
+    public static NetPlaneBuild? Build(CustomPlaneDef? def, NetModSet? mods = null)
     {
         if (def == null)
         {
@@ -24,6 +26,7 @@ public static class CustomPlaneWire
             LeftHardpoints = Byte(def.LeftHardpoints),
             RightHardpoints = Byte(def.RightHardpoints),
             PaintPattern = Byte(def.PaintPattern),
+            ModRow = def.ModAirframe is { } mod && mods?.RowOf(mod) is >= 0 and var row ? Byte(row) : (byte)0,
         };
         build.Armour[0] = Byte(def.ArmourNose);
         build.Armour[1] = Byte(def.ArmourTail);
@@ -48,8 +51,8 @@ public static class CustomPlaneWire
     }
 
     /// <summary>The plane <paramref name="build"/> names, held to the decoded ranges, or null for a
-    /// stock seat.</summary>
-    public static CustomPlaneDef? Def(NetPlaneBuild? build)
+    /// stock seat. Its mod row reads against the session's <paramref name="mods"/>.</summary>
+    public static CustomPlaneDef? Def(NetPlaneBuild? build, NetModSet? mods = null)
     {
         if (build == null)
         {
@@ -72,6 +75,14 @@ public static class CustomPlaneWire
             TailDecal = build.Decals[1],
             WingDecal = build.Decals[2],
         };
+
+        // The mod's parent is the set's, so the pair cannot name two different airframes.
+        if (build.ModRow >= NetModSet.StockRows && mods?.NodeOf(build.ModRow) is { Length: > 0 } mod)
+        {
+            def.ModAirframe = mod;
+            def.Airframe = mods.StockOf(build.ModRow);
+        }
+
         for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
         {
             byte gun = build.Guns[slot];
