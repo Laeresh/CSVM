@@ -43,20 +43,16 @@ public sealed partial class VersusBoard : ResultsBoard
     // A rematch clears Completed, which the shell's _Process turns into the hide and the release.
     protected override bool StillEnded => _match.Completed;
 
-    /// <summary>Builds the (hidden) board and subscribes to the match's completion. Add it to a
-    /// CanvasLayer above the splitscreen panes. It wakes itself on
-    /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch. <paramref name="seats"/>
-    /// is the match's roster by <c>PlayerIndex</c>, which names each seat. A <paramref name="held"/>
-    /// board waits for <see cref="Raise"/> instead. <paramref name="winner"/> is who the end names,
-    /// <see cref="VersusMatch.Winner"/> where none is given.</summary>
+    /// <summary>Builds the (hidden) board. Add it to a CanvasLayer above the splitscreen panes.
+    /// <see cref="Raise"/> wakes it once the end has held; a rematch retires it. The roster by
+    /// <c>PlayerIndex</c> in <paramref name="seats"/> names each seat. The end names
+    /// <paramref name="winner"/>, else <see cref="VersusMatch.Winner"/>.</summary>
     public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu,
         PauseState state, System.Func<int, MenuInput> inputFor, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null,
-        bool held = false, System.Func<int>? winner = null)
+        System.Func<int>? winner = null)
     {
         var board = new VersusBoard { _match = match, _winner = winner ?? match.Winner, _context = context, _seats = seats };
         board.InitShell(state, exitsToMenu, inputFor);
-        if (!held)
-            match.MatchCompleted += board.OnMatchCompleted;
         return board;
     }
 
@@ -78,18 +74,13 @@ public sealed partial class VersusBoard : ResultsBoard
             ? $"{name.ToUpperInvariant()} WINS"
             : "DRAW";
 
-    public override void _ExitTree() => _match.MatchCompleted -= OnMatchCompleted;
-
-    /// <summary>Raises a held board over its ended match, once the end's lines have been up.
+    /// <summary>Raises the board over its ended match, once the end's lines have been up.
     /// </summary>
     public void Raise()
     {
-        if (_match.Completed)
-            OnMatchCompleted();
-    }
+        if (!_match.Completed)
+            return;
 
-    private void OnMatchCompleted()
-    {
         // Log the final standings too, so a match is reviewable from a headless run's log.
         Log.Info("flight", $"dogfight results: {Title(_match, _seats, _winner())}");
         foreach (var team in _match.TeamStandings())

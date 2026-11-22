@@ -306,7 +306,7 @@ public partial class FlightController : Node3D
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> any player's R goes to <see cref="RestartMatch"/>
     /// instead of "respawn me", checked before the crash branch. That is the R-ownership rule
-    /// <see cref="Race"/>/<see cref="RerunRace"/> follow. A local board waits out the end's hold, in
+    /// <see cref="Race"/>/<see cref="RerunRace"/> follow. The board waits out the end's hold, in
     /// which the world flies on and <see cref="RestartMatch"/> does nothing.</summary>
     public VersusMatch? Match;
 

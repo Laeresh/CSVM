@@ -31,7 +31,7 @@ public sealed class VersusDirector
     internal const float RespawnDelay = 3f;
 
     /// <summary>Seconds the ended world flies on, its end lines up, before a lobby match lands on
-    /// Game Scores or a local match's results board rises. It is the original's wait at
+    /// Game Scores or any other match's results board rises. It is the original's wait at
     /// <c>0071c19c</c> (docs/org/multiplayer-scoring.md).</summary>
     internal const float EndHoldS = 5f;
 
@@ -66,7 +66,7 @@ public sealed class VersusDirector
     private Action? _toLobby;
     // The landing on Game Scores, null where a results board takes the ending. Spent once taken.
     private Action? _landOnScores;
-    // Raises a local match's results board once the end has held, null where none waits on it.
+    // Raises the match's results board once the end has held, null where none waits on it.
     private Action? _raiseBoard;
     // Sim seconds since the match ended, counted here because no board halts this world.
     private float _endHeld;
@@ -844,7 +844,7 @@ public sealed class VersusDirector
         }
     }
 
-    // A lobby match's end on Game Scores, or a local match's results board. The world flies on
+    // A lobby match's end on Game Scores, or any other match's results board. The world flies on
     // under its end lines, then this machine lands or raises the board once. A guest's match
     // completes on the host's end message alone, and a match running again starts the next hold
     // from zero.
@@ -1176,8 +1176,7 @@ public sealed class VersusDirector
         // Land on the lobby's Game Scores once the end has held, null where a results board takes
         // the ending instead.
         public Action? LandOnScores;
-        // Raise the results board once the end has held, null where the board rises on the end
-        // itself or none stands.
+        // Raise the results board once the end has held, null where none stands.
         public Action? RaiseBoard;
     }
 

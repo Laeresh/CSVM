@@ -591,6 +591,7 @@ internal static class NetZeppelinVersusSuites
         ctx.Check(peers.All(p => p.Dogfight!.ZvzPlay!.LinesPosted > 0) && peers[2].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_dest")
                   && peers[0].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost") && peers[1].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost"),
             $"and every machine posts the ending, the winners hearing a zeppelin destroyed and the losers theirs lost ({Spoken(peers)})");
+        NetCombatSuites.HoldsTheBoard(ctx, peers, PartSteps);
     }
 
     // The board's Restart on a guest and then the host, each on a finished match. The original's end

@@ -2458,19 +2458,14 @@ public partial class GameSession : Node3D
             // word (NetFlight.LandsOnScores), which already decided whether this landing is set.
             var toScores = LandsInMenu ? _versusLobbyLanding : null;
 
-            // A local match's board waits out the end's hold, so its end lines are read first. A
-            // network board rises on the end itself.
-            bool held = _wire.Link == null;
-
             // The match's shared board, its R the director's rematch, its winner the end line's. A
             // guest's board says why it offers no Restart, except in Zeppelin vs Zeppelin, where each
-            // machine's own Restart takes it to the lobby.
+            // machine's own Restart takes it to the lobby. Every board waits out the end's hold.
             var board = toScores == null
                 ? boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                     dogfight.Restart,
                     dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null,
-                    () => dogfight.DecidedWinner,
-                    held)
+                    () => dogfight.DecidedWinner)
                 : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
@@ -2481,7 +2476,7 @@ public partial class GameSession : Node3D
                 ReportDeath = _wire.ReportDeath,
                 ToLobby = _menuDriven ? _exitSession : null,
                 LandOnScores = toScores,
-                RaiseBoard = held && board != null ? board.Raise : null,
+                RaiseBoard = board == null ? null : board.Raise,
             });
         }
 

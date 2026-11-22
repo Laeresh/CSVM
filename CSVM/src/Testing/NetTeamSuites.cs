@@ -247,7 +247,7 @@ internal static class NetTeamSuites
             $"ABLE-TO-FAIL CONTROL: one kill short of the target the match runs on every machine ({Totals(peers)})");
 
         Down(peers, victim: 2, killer: 0);
-        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget && p.Pause is { Ended: true }),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget),
             $"team 1's total of {target} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
         ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Dogfight!.Match.ScoreOf(seat) < target)),
             $"though no pilot reached it alone ({Totals(peers)})");
@@ -255,6 +255,7 @@ internal static class NetTeamSuites
         ctx.Check(titles.All(t => t == "RED SQUADRON WINS"),
             $"and every machine's board names the winning team by its lobby name ({string.Join(" | ", titles)})");
         NetCombatSuites.EndLines(ctx, peers, peers[0].Dogfight!.Match.TeamName(1));
+        NetCombatSuites.HoldsTheBoard(ctx, peers, GrantSteps);
     }
 
     // The host's rematch puts every score back to zero on every machine.

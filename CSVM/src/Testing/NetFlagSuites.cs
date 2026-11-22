@@ -124,7 +124,8 @@ internal static class NetFlagSuites
         + "floats its flag on every machine through the host and sends no chat line, its marker back on its "
         + "callsign; the uncaught flag goes home "
         + "when its 15 s throw runs out, scoring nobody; a second capture ends the match on the Score limit by team, with team 2's flag "
-        + "held, every pane posting \"Game Over:\" over the capturing team's win line; and the host's rematch from its board stands "
+        + "held, every pane posting \"Game Over:\" over the capturing team's win line; every board waits out the end's hold "
+        + "under those lines, the host's R inside it rematching nothing, then rises on all three machines together; and the host's rematch from its risen board stands "
         + "both flags home and every total at 0 on every machine, no pane posting a capture line and no machine speaking a flag line")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
@@ -884,9 +885,10 @@ internal static class NetFlagSuites
         ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),
             $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
         NetCombatSuites.EndLines(ctx, peers, peers[0].Dogfight!.Match.TeamName(2));
+        NetCombatSuites.HoldsTheBoard(ctx, peers, AskSteps);
     }
 
-    // The host's rematch from its board's R, team 2's flag still held. A guest sends that flag home
+    // The host's rematch from its risen board's R, team 2's flag still held. A guest sends that flag home
     // on the host's running state, ahead of the table, so its table move is no capture there either.
     private static void Rematch(TestContext ctx, GameSession[] peers)
     {

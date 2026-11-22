@@ -77,6 +77,10 @@ internal static class NetCombatSuites
     // Steps that span a whole match-state tick whatever step the window opens on.
     private const int TickSteps = MatchStateCadence.TickStepInterval + 1;
 
+    // How far a guest's board may rise behind the host's, in sim steps: the steps a perfect
+    // loopback takes to carry the host's end message.
+    private const int BoardLagSteps = 2;
+
     // How far one host frame is wound on for the slew reading, in seconds. Past
     // NetClockSlew.SnapSeconds on purpose: a snap is countable and a walk is not.
     private const double SlewLeadSeconds = 6.0;
@@ -270,7 +274,9 @@ internal static class NetCombatSuites
         + "match ended on the kill limit and then level on the time limit holds all three machines with "
         + "the same reason and the same scoreboard, every pane posting \"Game Over:\" over the "
         + "winner the host named (the leader's callsign, then Draw), even on a guest whose own copy "
-        + "of the scores was skewed before the time limit to rank another seat first")]
+        + "of the scores was skewed before the time limit to rank another seat first; after each end "
+        + "every results board waits out the end's hold under those lines, the host's R inside it "
+        + "rematching nothing, then rises on all three machines within two steps of one another")]
     internal static void MatchStateIsTheHostsAlone(TestContext ctx)
     {
         // The scripted climb the star suites fly. This suite is the longest of the three, and a
@@ -556,6 +562,41 @@ internal static class NetCombatSuites
             ctx.Check(top == "Game Over:", $"in the message table's row 135 ({top})");
         }
     }
+
+    // The end's hold on every machine, entered at most `since` steps after the host's end. Every
+    // board waits under the end lines with its world flying on, and the host's R inside the hold
+    // rematches nothing. Every board then rises once the hold is up, a guest's within
+    // BoardLagSteps of the host's, since its hold counts from the host's end message.
+    internal static void HoldsTheBoard(TestContext ctx, GameSession[] peers, int since)
+    {
+        ctx.Check(peers.All(p => p.Boards?.DogfightBoard is { Visible: false } && p.Pause is { Ended: false }),
+            $"every machine's results board waits under the end lines, its world flying on ({Raised(peers)})");
+        peers[0].SeatRigs[0].Controller!.RestartMatch!();
+        Lockstep(1, peers);
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End != NetMatchEnd.Running),
+            $"and the host's R inside the hold rematches nothing ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+
+        int hold = (int)Math.Ceiling(CSVM.Session.World.VersusDirector.EndHoldS / GameClock.FixedDt);
+        var rose = Enumerable.Repeat(-1, peers.Length).ToArray();
+        for (int step = 2; step <= hold + SettleSteps && rose.Contains(-1); step++)
+        {
+            Lockstep(1, peers);
+            for (int i = 0; i < peers.Length; i++)
+            {
+                if (rose[i] < 0 && peers[i].Pause is { Ended: true })
+                {
+                    rose[i] = step;
+                }
+            }
+        }
+
+        ctx.Check(rose.Min() >= hold - since - 1 && rose.Max() <= hold + BoardLagSteps && rose.Max() - rose.Min() <= BoardLagSteps
+                  && peers.All(p => p.Boards?.DogfightBoard is { Visible: true }),
+            $"and every board rises once the end has held {CSVM.Session.World.VersusDirector.EndHoldS:0.#} s, all within {BoardLagSteps} step(s) of one another (risen {string.Join(",", rose)} step(s) in, a hold of {hold} from an end at most {since} back; {Raised(peers)})");
+    }
+
+    private static string Raised(GameSession[] peers) =>
+        string.Join(", ", peers.Select(p => $"board up {p.Boards?.DogfightBoard?.Visible}, halted {p.Pause?.Ended}"));
 
     // One death on clean stacks: each machine's own pane then reads exactly the lines the run's
     // table words, top line newest. A relayed copy posted twice, or one machine silent, fails it.
@@ -1141,6 +1182,7 @@ internal static class NetCombatSuites
             $"seat 1 reaches the host's kill target of {HostKillTarget(ctx)} ({Scoreboard(peers[0])})");
         Held(ctx, peers, "the kill limit", NetMatchEnd.ScoreTarget);
         EndLines(ctx, peers, peers[0].NetSeats[1].Callsign);
+        HoldsTheBoard(ctx, peers, SettleSteps);
     }
 
     // The host's rematch, and the guest's own key before it. Only the host may call one: a guest
@@ -1165,6 +1207,12 @@ internal static class NetCombatSuites
 
         peers[0].SeatRigs[0].Controller!.RestartMatch!();
         Lockstep(SettleSteps, peers);
+        // Each board retires on its own frame, which a suite's fixed steps never run.
+        foreach (var peer in peers)
+        {
+            peer.Boards?.DogfightBoard?._Process(GameClock.FixedDt);
+        }
+
         string scores = string.Join(" | ",
             peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(s => p.Dogfight!.Match.ScoreOf(s)))));
         ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running),
@@ -1195,6 +1243,7 @@ internal static class NetCombatSuites
         ctx.Check(skewed.Winner() == 3,
             $"ABLE-TO-FAIL CONTROL: the first guest's own copy of the scores ranks seat 2 alone first ({Scoreboard(peers[1])})");
         EndLines(ctx, peers, null);
+        HoldsTheBoard(ctx, peers, TickSteps);
 
         // The board a guest ranking its own copy would title, which is what it read before it took
         // the host's winner.
@@ -1204,15 +1253,13 @@ internal static class NetCombatSuites
             $"and every machine's board headline reads the host's draw, the skewed guest's too, whose own ranking would title it '{ownRanking}' ({string.Join(" | ", headlines)})");
     }
 
-    // One ending, read on all three machines. The match over, the board holding the world, the
-    // host's own reason, and one ranked scoreboard derived from the scores each was sent. A guest
-    // whose copy a step skewed on purpose is left out of the last.
+    // One ending, read on all three machines. The match over, the host's own reason, and one
+    // ranked scoreboard derived from the scores each was sent. A guest whose copy a step skewed on
+    // purpose is left out of the last.
     private static void Held(TestContext ctx, GameSession[] peers, string what, NetMatchEnd reason, int skewed = -1)
     {
         ctx.Check(peers.All(p => p.Dogfight!.Match.Completed),
             $"{what}: the match is over on all three machines ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Completed))})");
-        ctx.Check(peers.All(p => p.Pause is { Ended: true }),
-            $"and the wrap-up board holds every one of them ({string.Join(", ", peers.Select(p => p.Pause!.Ended))})");
         ctx.Check(peers.All(p => p.Dogfight!.End == reason),
             $"and each names the host's own reason, {reason} ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
 
