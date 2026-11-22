@@ -381,7 +381,7 @@ rows).
 - `src/Flight/Hangar/Difficulty.cs`, the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.
 - `src/Flight/Hangar/CustomPlaneDef.cs`, a custom-built plane as a pure model: the saved record's chosen fields only, with the campaign loadout export alongside.
 - `src/Flight/Hangar/StockAirframes.cs`, the airframe id to stock `planes.zbd` node table and its inverse.
-- `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes, a content hash, the skipped mods with their reasons.
+- `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes, a content hash, the skipped mods with their reasons, a mod's stats and stock fit from its parent's.
 - `src/Flight/Hangar/CustomPlaneStore.cs`, JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
 - `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.

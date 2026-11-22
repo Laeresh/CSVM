@@ -749,7 +749,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on. `OverrideDefField` sets one def field by its vehicle.json name, the hook a plane mod's literal overrides go through.
 
 ## src/Flight/Airframe/PlaneRoster.cs
 Static display-name lookups: `PlaneDisplayName(stats)` and `Humanize(s)`. A plane's display name is
@@ -1681,9 +1681,8 @@ its id the folder or zip name, read in name order. `Open` checks `plane.json` (a
 literal overrides, `unlock`, stock `cockpit` and `sound`, a portrait inside the mod) and the
 `plane.glb` beside it, and hashes every file by path for multiplayer matching. A mod that fails a
 check, or whose id is a stock node or an earlier mod's, is left out with a warning and listed in
-`Skipped`; `ModPlane.Read` reads a mod's file on demand. Engine-free, reading only
-`StockAirframes`. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage:
-`CSVM.Tests/ModPlanesTests.cs`.
+`Skipped`; `ModPlane.Read` reads a mod's file on demand. `ModPlane.Stats` is the parent's `PlaneStats` (a bot's on the parent's AI def) with each override set through `PlaneStats.OverrideDefField`, an unknown name warned and ignored, and the turret mounts cleared under `"turrets": []`; `ModPlane.StockLoadout` is the parent's fit with each turret slot a forward gun on its own firepoints.
+Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's

@@ -9,7 +9,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
 
 - [Conceptual model](#conceptual-model)
 - [Reference](#reference): [folder and id](#folder-and-id), [`plane.json`](#planejson),
-  [content hash](#content-hash)
+  [overrides](#overrides), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod)
 - [Evidence & limits](#evidence--limits)
 
@@ -52,7 +52,7 @@ machine in a network match needs the same mods, which the content hash compares.
 |---|---|
 | `kind_of` | Required. The stock parent's `planes.zbd` node, one of `player_autogyro`, `player_avenger`, `player_balmoral`, `player_bhawk`, `player_brigand`, `player_pfighter`, `player_fbrand`, `player_fury`, `player_kestrel`, `player_peacemaker`, `player_warhawk`, matched without case. |
 | `name` | The name a menu shows. Absent, the id. |
-| `overrides` | An object of def field name to number, each a finite JSON number, applied over the parent's def (`vehicle.json`, [vehicle.md](vehicle.md)). `"turrets": []` clears the parent's turret mounts; any other `turrets` value fails. |
+| `overrides` | An object of def field name to number, each a finite JSON number, applied over the parent's def (`vehicle.json`, [vehicle.md](vehicle.md)); the names are in [Overrides](#overrides). `"turrets": []` clears the parent's turret mounts; any other `turrets` value fails. |
 | `unlock` | When the plane enters the campaign hangar: `start`, `with_parent` (the default), or a mission or chapter id. |
 | `cockpit` | A stock node whose cockpit interior the plane uses when its model has none. Absent, the parent's. |
 | `sound` | A stock node whose engine sound the plane uses. Absent, the parent's. |
@@ -60,6 +60,33 @@ machine in a network match needs the same mods, which the content hash compares.
 
 Every value is a literal. A key starting with `_` is prose and ignored; any other unknown key, a
 wrong type, an empty string or a name outside the stock list skips the mod.
+
+### Overrides
+
+The mod plane's stats are its parent's, loaded as the parent's are, then each override sets one
+field to its literal value in the units `vehicle.json` authors. Every name is spelt as in
+`vehicle.json`, matched with case.
+
+| Name | Where it lives in the def |
+|---|---|
+| `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `fd_speed`, `drag_factor`, `veh_weight`, `ref_area` | the `dynamics` block |
+| `flight_ceiling`, `fuel` | the def itself |
+| `<zone>_hp`, `<zone>_armor`, zone one of `nose`, `tail`, `leftwing`, `rightwing` | that zone's hit points or armor in `destroyable_parts` |
+
+A name outside this list (a typo, `rec_moments_inertia`, which is a triple, `engine`, which picks
+an engines.json row) is logged as `mod plane <id>: override <name> is no def field CSVM reads,
+ignored` and changes nothing; the mod still loads. The stock engine row stays the parent's, so an
+`fd_speed` copied from another plane still scales by the parent's engine power.
+
+A bot flying the mod plane takes the parent's AI def: its damage model, armament, skills and
+turrets come from that def's chain as for the parent, and the `dynamics` and def-level overrides
+apply as on a flown plane. The zone overrides have nothing to act on there, since an AI load
+carries no zones. The plane keeps the parent's def name, which is what its stock fit is found by.
+
+`"turrets": []` clears the turret mounts on the flown and the bot load alike, and makes each of
+the parent's turret gun slots a forward gun slot firing from the firepoints the slot names, with
+its calibre, ammunition and barrel count unchanged. A Brigand-based mod's W4 Rear Turret becomes a
+forward 30 calibre gun on `firepoint1` and `firepoint2`. The stock planes' fits are unchanged.
 
 ### Content hash
 
@@ -82,6 +109,9 @@ logs `mod planes: N loaded, M skipped from <folder>`.
 ## Evidence & limits
 
 - The folder, id, `plane.json` and hash rules are `Flight/Hangar/ModPlanes.cs`, covered by
-  `CSVM.Tests/ModPlanesTests.cs`.
-- The format is CSVM's own. The override names are not checked against the parent's def when the
-  mod loads, and a mission or chapter `unlock` id is not checked against the campaign.
+  `CSVM.Tests/ModPlanesTests.cs`. The overrides and the turret rule are `ModPlane.Stats`,
+  `ModPlane.StockLoadout` and `PlaneStats.OverrideDefField`, covered by
+  `CSVM.Tests/ModPlaneStatsTests.cs`.
+- The format is CSVM's own. The override names are checked when the stats load, not when the mod
+  loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is not
+  checked against the campaign.

@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Mod discovery and the `plane.json` format
 12. ☑ One airframe registry in place of the fixed eleven-plane lists
-13. ☐ Mod stats: synthetic def from `kind_of` plus literal overrides
+13. ☑ Mod stats: synthetic def from `kind_of` plus literal overrides
 14. ☐ Build a mod plane from its GLB
 
 ### Wave C, the plane's surfaces
@@ -450,7 +450,38 @@ unknown `--vs-bot` plane to a random stock one).
 
 **⚠ Traps.** <TODO>
 
-## B13 ☐ Mod stats: synthetic def from `kind_of` plus literal overrides
+## B13 ☑ Mod stats: synthetic def from `kind_of` plus literal overrides
+
+**Landed.** A post-load override, not a synthetic def in the chain. `ModPlane.Stats(zrdr, forAi,
+aiDefName)` (`Flight/Hangar/ModPlanes.cs`) loads the parent through `PlaneStats.Load` or, for a
+bot, `PlaneStats.LoadForAi` on the parent's AI def (Decision 17), then sets each override through
+`PlaneStats.OverrideDefField(name, value)` and clears `TurretMounts` under `"turrets": []`. It
+lives on `ModPlane` because nothing else in `Flight` may name `Flight.Hangar`
+(`FamilyOrderTests`). A post-load override serves both loads with one rule, since every accepted
+field reads down the player chain on both, and a synthetic def would have needed a single-float
+check (`rec_moments_inertia` is a triple) and a copied `destroyable_parts` block. Accepted names:
+the nine scalar `dynamics` keys (`pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`,
+`ang_momentum_damp`, `fd_speed`, `drag_factor`, `veh_weight`, `ref_area`), `flight_ceiling` and
+`fuel` on the def, and `<zone>_hp` / `<zone>_armor` for `nose`, `tail`, `leftwing`, `rightwing`;
+any other name logs `mod plane <id>: override <name> is no def field CSVM reads, ignored` and the
+mod still loads. `DefName` and `NodeName` stay the parent's, which keys the stock fit and the AI
+def. The turret slot: `ModPlane.StockLoadout(StockLoadouts)` returns the parent's fit with each
+`turret: true` gun slot copied as a forward slot on the firepoints it names (the Brigand's W4 on
+`firepoint1`, `firepoint2`), calibre, ammo and twin bit unchanged; every turret slot in
+`stock_loadouts.json` already names its slot's binding pair. The stock fits are untouched. Format:
+`docs/formats/mod-planes.md`, "Overrides". Coverage: `CSVM.Tests/ModPlaneStatsTests.cs`, four cases
+over the synthetic tree's defs and the committed loadouts.
+
+Wiring left for later items: B14 or the session builds a mod plane's stats with `mod.Stats(zrdr)`
+and its fit with `mod.StockLoadout(stock)` where a stock plane uses `PlaneStats.Load` and
+`StockLoadouts.For(stats.DefName)`; D33 passes `forAi: true`; C25 hands `StockLoadout`'s fit to
+`CustomPlaneBuild` as the stock base, and gives a turret-clearing mod a zero `HangarEconomy`
+turret mask. A turret-converted slot keeps its stock `Mount` label ("Rear Turret"), which only logs
+and labs print.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `PlaneStats` loads a mod plane as its parent's def with the mod's literal overrides
 applied, including `fd_speed` and `"turrets": []`.

@@ -393,6 +393,26 @@ public sealed class PlaneStats
     /// rigs are parsed; carried AI gunner construction consumes only the <c>thirdp</c> entries.</summary>
     public List<TurretMount> TurretMounts = new();
 
+    // The damage zones a mod's <zone>_hp / <zone>_armor override may name, every player def's four.
+    private static readonly string[] OverrideZones = { "nose", "tail", "leftwing", "rightwing" };
+
+    // A mod override's def field name to the field it sets. Only keys read here as a plain scalar
+    // with no conversion, so the literal lands exactly as vehicle.json would author it.
+    private static readonly Dictionary<string, Action<PlaneStats, float>> OverrideFields = new(StringComparer.Ordinal)
+    {
+        ["pitch_torque"] = static (s, v) => s.PitchTorque = v,
+        ["roll_torque"] = static (s, v) => s.RollTorque = v,
+        ["rudder_torque"] = static (s, v) => s.RudderTorque = v,
+        ["return_rate"] = static (s, v) => s.ReturnRate = v,
+        ["ang_momentum_damp"] = static (s, v) => s.AngMomentumDamp = v,
+        ["fd_speed"] = static (s, v) => s.FdSpeed = v,
+        ["drag_factor"] = static (s, v) => s.DragFactor = v,
+        ["veh_weight"] = static (s, v) => s.VehWeight = v,
+        ["ref_area"] = static (s, v) => s.RefArea = v,
+        ["flight_ceiling"] = static (s, v) => s.FlightCeiling = v,
+        ["fuel"] = static (s, v) => s.FuelCapacity = v,
+    };
+
     /// <summary>The player airframe as flown by a person: every property, including the damage
     /// model, resolves down the <c>player_airplane</c> chain.</summary>
     public static PlaneStats Load(ZrdrSet zrdr, string planeNodeName) =>
@@ -485,6 +505,36 @@ public sealed class PlaneStats
         var copy = (PlaneStats)MemberwiseClone();
         copy.EnginePower = power;
         return copy;
+    }
+
+    /// <summary>Sets the def field a plane mod's override names (<c>fd_speed</c>, <c>nose_armor</c>)
+    /// to the literal <paramref name="value"/>. A name that maps to no field answers false for the
+    /// caller to report. A zone override on an AI load finds no part and changes nothing.
+    /// ⚠ Mutates this instance and its parts: call it on a fresh load, never on a shared cache.
+    /// Accepted names: docs/formats/mod-planes.md.</summary>
+    public bool OverrideDefField(string name, float value)
+    {
+        if (OverrideFields.TryGetValue(name, out var set))
+        {
+            set(this, value);
+            return true;
+        }
+
+        int cut = name.LastIndexOf('_');
+        string field = name[(cut + 1)..];
+        if (cut <= 0 || Array.IndexOf(OverrideZones, name[..cut]) < 0 || field is not ("hp" or "armor"))
+            return false;
+        foreach (var part in DestroyableParts)
+        {
+            if (part.Name != name[..cut])
+                continue;
+            if (field == "hp")
+                part.MaxHp = value;
+            else
+                part.MaxArmor = value;
+        }
+
+        return true;
     }
 
     private static PlaneStats LoadCore(ZrdrSet zrdr, string planeNodeName, bool forAi,

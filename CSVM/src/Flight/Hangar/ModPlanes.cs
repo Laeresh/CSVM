@@ -7,6 +7,9 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Utils;
 
 namespace CSVM.Flight.Hangar;
@@ -82,6 +85,59 @@ public sealed class ModPlane
     /// <summary>SHA-256 over every file's path and bytes, lower-case hex. A folder and a zip of the
     /// same files hash alike.</summary>
     public string Hash { get; }
+
+    /// <summary>The plane's stats: the parent's, as <see cref="PlaneStats.Load"/> or, for a bot,
+    /// <see cref="PlaneStats.LoadForAi"/> with the parent's AI def loads them, then the overrides and
+    /// <see cref="ClearsTurrets"/>. An override name no field takes is logged and ignored.
+    /// ⚠ <c>DefName</c> and <c>NodeName</c> stay the parent's: the stock fit and the AI def key on them.</summary>
+    public PlaneStats Stats(ZrdrSet zrdr, bool forAi = false, string? aiDefName = null)
+    {
+        var stats = forAi ? PlaneStats.LoadForAi(zrdr, KindOf, aiDefName) : PlaneStats.Load(zrdr, KindOf);
+        foreach (var (name, value) in Overrides)
+        {
+            if (!stats.OverrideDefField(name, (float)value))
+            {
+                Log.Warn("flight", $"mod plane {Id}: override {name} is no def field CSVM reads, ignored");
+            }
+        }
+
+        if (ClearsTurrets)
+        {
+            stats.TurretMounts.Clear();
+        }
+
+        return stats;
+    }
+
+    /// <summary>The plane's stock fit: the parent's, or null when it has none. With
+    /// <see cref="ClearsTurrets"/> each turret slot is a forward gun slot on the firepoints it names,
+    /// so a turret plane's W4 fires ahead from firepoint1 and firepoint2.</summary>
+    public LoadoutDef? StockLoadout(StockLoadouts stock)
+    {
+        if (stock.ForModel(KindOf) is not { } fit || !ClearsTurrets)
+        {
+            return stock.ForModel(KindOf);
+        }
+
+        return new LoadoutDef
+        {
+            Def = fit.Def,
+            Model = fit.Model,
+            Display = fit.Display,
+            Hardpoints = fit.Hardpoints,
+            Guns = fit.Guns.Select(g => !g.Turret ? g : new GunSpec
+            {
+                Slot = g.Slot,
+                Mount = g.Mount,
+                Caliber = g.Caliber,
+                Ammo = g.Ammo,
+                Markers = g.Markers,
+                Single = g.Single,
+                WeaponId = g.WeaponId,
+                Rounds = g.Rounds,
+            }).ToList(),
+        };
+    }
 
     /// <summary>The bytes of the file at <paramref name="path"/> inside the mod (<see cref="ModPlanes.ModelFile"/>,
     /// the portrait), matched without case, or null when absent or unreadable.</summary>
