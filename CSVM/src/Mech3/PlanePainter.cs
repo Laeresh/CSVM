@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using CSVM.Utils;
 using Godot;
 
@@ -29,6 +30,11 @@ public sealed class PlanePainter
     // Every painter still reachable, so a live graphics-mode switch can repaint the textures whose
     // alpha depth follows the mode (FollowAlphaDepth). Weak, so a plane freed is a painter dropped.
     private static readonly List<WeakReference<PlanePainter>> Live = new();
+
+    // The decal textures made over each archive, by texture name, shared by every painter on it: a
+    // decal is its image whatever the colours. Under an HD pack each is a decode of ~15 ms and several
+    // MB, paid per slot by every hangar rebuild and AI spawn. They go with the archive.
+    private static readonly ConditionalWeakTable<TextureArchive, Dictionary<string, ImageTexture?>> Decals = new();
 
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _library;
@@ -172,27 +178,20 @@ public sealed class PlanePainter
 
     private static int ToByte(float c) => Mathf.Clamp((int)((c * 255f) + 0.5f), 0, 255);
 
-    private static void CopyAlphaFrom(ImageTexture? original, byte[] data, int w, int h)
+    private void CopyAlphaFrom(string baseName, ImageTexture? original, byte[] data, int w, int h)
     {
         if (original == null)
             return;
         // The texture's size is the original skin's, also under an HD replacement (HdArt).
         if (original.GetWidth() != w || original.GetHeight() != h)
             return;
-        var src = original.GetImage();
-        if (src == null)
+        // ⚠ The archive's own pixels, never original.GetImage(). Under an HD pack that reads the
+        // replacement back off the GPU, mipmaps and all, only to shrink it to this size.
+        using var src = _textures.FindImage(baseName, authored: true);
+        if (src == null || src.GetWidth() != w || src.GetHeight() != h)
             return;
-        bool hd = src.GetWidth() != w || src.GetHeight() != h;
-        if (src.GetFormat() != Image.Format.Rgba8 || hd)
-        {
-            src = (Image)src.Duplicate();
-            if (hd)
-            {
-                src.ClearMipmaps();
-                src.Resize(w, h, Image.Interpolation.Bilinear);
-            }
+        if (src.GetFormat() != Image.Format.Rgba8)
             src.Convert(Image.Format.Rgba8);
-        }
         var sd = src.GetData();
         int n = Math.Min(w * h, sd.Length / 4);
         for (int i = 0; i < n; i++)
@@ -204,8 +203,15 @@ public sealed class PlanePainter
     // the substitution does not disturb SceneBuilder's alpha classification.
     private ImageTexture? DecalFor(int slot)
     {
-        var texName = DecalTextureName(slot);
-        return texName != null && DecalImage(texName) is { } img ? TextureUpload.Create(img) : null;
+        if (DecalTextureName(slot) is not { } texName)
+            return null;
+        var made = Decals.GetOrCreateValue(_textures);
+        lock (made)
+        {
+            if (!made.TryGetValue(texName, out var texture))
+                made[texName] = texture = DecalImage(texName) is { } img ? TextureUpload.Create(img) : null;
+            return texture;
+        }
     }
 
     private string? DecalTextureName(int slot) => _textures.FindByDecalIndex(
@@ -307,7 +313,7 @@ public sealed class PlanePainter
 
         // Carries the ZBD skin's alpha so SceneBuilder's blend-vs-scissor choice stays valid.
         // A size mismatch (rof.md) comes back opaque rather than mis-sampled.
-        CopyAlphaFrom(original, data, w, h);
+        CopyAlphaFrom(baseName, original, data, w, h);
 
         var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, data);
         img.GenerateMipmaps();

@@ -1261,7 +1261,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         // Rendered at the picture's drawn size, so it stays sharp at any window size.
         var fit = BoardFit.For(_view.GetViewportRect().Size.X, _view.GetViewportRect().Size.Y);
         _planePreview!.Size = new Vector2I(Math.Max(1, (int)(rect.Width * fit.Scale)), Math.Max(1, (int)(rect.Height * fit.Scale)));
-        _planePreview.Show(pose);
+        _planePreview.Show(pose, browsing: hangar!.OpenHangarDropdown == OriginalHangarScreen.AirframeDropKey);
         float dragX = 0f, dragY = 0f;
         if (pointer is { Pressed: true } held && _planeDrag is { } last)
         {
