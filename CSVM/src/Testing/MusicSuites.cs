@@ -50,6 +50,7 @@ internal static class MusicSuites
             CheckBattleHold(ctx, music, rng, report);
             CheckDuck(ctx, music, rng, report);
             CheckPause(ctx, music, rng, report);
+            CheckOffThread(ctx, music, archive, rng);
         }
         finally
         {
@@ -59,6 +60,56 @@ internal static class MusicSuites
         }
 
         ctx.WriteArtifact("test-music-states.txt", report.ToString());
+    }
+
+    // The game's loader decodes off the main thread. A cue takes the channel at once and its track
+    // starts on the first Tick after the decode. A Stop drops it; a cached track starts at once.
+    private static void CheckOffThread(TestContext ctx, MusicPlayer music, SoundArchive archive, Random rng)
+    {
+        var gate = new System.Threading.Tasks.TaskCompletionSource();
+        music.LoaderOffThread = async (def, looped) =>
+        {
+            await gate.Task;
+            return await archive.FindOffThread(def.WavName, looped);
+        };
+        try
+        {
+            music.Stop();
+            string? wav = music.Cue("snd_music_splash", rng);
+            ctx.Check(wav != null && music.Current == wav && music.Decoding,
+                $"a cue still decoding takes the channel and waits wav={wav} decoding={music.Decoding}");
+            music.Tick(Step, rng);
+            ctx.Check(music.Decoding, $"…and does not start while its decode runs");
+            gate.SetResult();
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (music.Decoding && DateTime.UtcNow < until)
+            {
+                System.Threading.Thread.Sleep(5);
+                music.Tick(Step, rng);
+            }
+            ctx.Check(!music.Decoding && music.Current == wav,
+                $"…then starts on a Tick once decoded decoding={music.Decoding} current={music.Current}");
+
+            music.Stop();
+            music.LoaderOffThread = (def, looped) => archive.FindOffThread(def.WavName, looped);
+            music.Cue("snd_music_splash", rng);
+            ctx.Check(!music.Decoding, $"a decoded track cued again starts at once");
+
+            music.Stop();
+            var held = new System.Threading.Tasks.TaskCompletionSource<Godot.AudioStream?>();
+            music.LoaderOffThread = (_, _) => held.Task;
+            music.Cue("snd_music_splash", rng);
+            music.Stop();
+            held.SetResult(archive.Find("music_splash.wav", false, warn: false));
+            music.Tick(Step, rng);
+            ctx.Check(!music.Decoding && music.Current.Length == 0,
+                $"a Stop drops a decoding track for good current={music.Current}");
+        }
+        finally
+        {
+            music.LoaderOffThread = null;
+            music.Stop();
+        }
     }
 
     private static void CheckStates(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
