@@ -75,6 +75,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/VegetationSidecar.cs`, the shipped per-chapter vegetation list in `CSVM/data/vegetation.json`: the Rich variation per listed model, the sets the texture picks stamp and the textures that grow ground cover, read with warnings, one chapter's entry written by the vegetation lab.
 - `src/Mech3/VegetationMask.cs`, a chapter's vegetation brush mask over the world area, raw bytes beside the sidecar: sampled per listed stamp, painted by the lab's brush, and the density rule that keeps or drops a stamp under Rich.
 - `src/Mech3/GroundCoverShells.cs`, the Ground Cover word's `shells`: stacked shells drawing grass tufts and crop rows over the sidecar's cover textures near the camera, never on a brush-mask texel at 0 (C1's landing strips).
+- `src/Mech3/HangarFootprints.cs`, the floors of the rearm and Capture the Flag hangars a mission stands, which every Rich vegetation layer keeps off.
 - `src/Mech3/VegetationGround.cs`, the ground textures under a world point and the coplanar layer among them that takes stamps, what the vegetation lab's texture pick names.
 - `src/Mech3/CanopyMask.cs`, where forest mass is drawn under Rich: a 32 m grid of canopy density, ground and tree-top height, baked from the Rich card stamps or from ground picked as painted canopy.
 - `src/Mech3/CanopyClumps.cs`, forest mass under Rich on C1 and C3: cards of a few trees composed at load from the listed card textures, placed per canopy-mask cell at the cards' trees per area, taking over from the cards past 1000 to 1600 m and past the map edge; on C3, crowns cut from the painted jungle's own texture rising out of it past 700 to 1300 m, and 3D crown models inside 700 m that dither over to them. A species with a clump tile rendered from its model fills its share of the atlas with it.
@@ -84,7 +85,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/CityModels.cs`, the Enhanced city under Rich: a building model's script-built hull file (a far box and near variants) read from `data/city_models/`, drawn over the building's stamps in place of its original mesh, which keeps its collision; the building seed in the stamp's custom data and the variant it picks.
 - `src/Mech3/CityGround.cs`, the Enhanced city's block floor over a chapter's painted ground: the layout and floor images read from `data/city_models/`, each painted polygon's floor combination, and the world shader's floor arm keeping the paint in the street bands.
 - `src/Mech3/CityDressing.cs`, the low, never solid dressing on the Enhanced block floor: each floor variant's slots from its layout, stood on the blocks the world shader draws that variant on, and drawn in cells through the city and vegetation model materials.
-- `src/Mech3/CityTraffic.cs`, the cars driving the Enhanced city's streets: closed paths round blocks and down streets with U-turns, cut into pieces whose cars the shader moves on the sim clock.
+- `src/Mech3/CityHighway.cs`, the lanes of C5's highway deck: its paint's pieces chained into decks, each split carriageway one-way, and one closed loop per lane from open end to open end.
+- `src/Mech3/CityTraffic.cs`, the cars driving the Enhanced city's streets and highway: closed paths round blocks and down streets and the highway deck with U-turns, cut into pieces whose cars the shader moves on the sim clock.
 - `src/Mech3/VegetationVariation.cs`, one listed stamp's Rich variation: a texture-space jitter clamped into its triangle, a card mirror for the yaw, an instance-colour tint, on its own fixed stream.
 - `src/Mech3/VegetationScatter.cs`, the remake's added stamps on a picked texture under Rich: a set's fixed scatter laid once per texture repeat on the triangle's own UV lattice, its count from the set's density a hectare, kept or dropped by the brush mask.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
@@ -386,7 +388,7 @@ rows).
 - `src/Flight/Hangar/StockAirframes.cs`, the airframe id to stock `planes.zbd` node table and its inverse.
 - `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes (its livery tint's files included), a content hash, the skipped mods with their reasons, a mod's stats and stock fit from its parent's.
 - `src/Flight/Hangar/CustomPlaneStore.cs`, JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
-- `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
+- `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record to a def or a whole install's saves into the store.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
 - `src/Flight/Hangar/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
 - `src/Flight/Hangar/HangarPaintTables.cs`, the paint screen's decoded swatch and pattern tables plus the decal names, as CSVM data; the colour resolver is pure.
@@ -726,7 +728,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
-- `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
+- `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the registered `WordSetting` and the factor the flat disc is drawn at.
+- `src/Utils/BracketScaleSetting.cs`, the player's bracket size (100 to 200 percent): the registered `WordSetting` and the factor the flat on-screen target box is drawn at.
 - `src/Utils/HudModeSetting.cs`, the HUD mode of the outside views (Full, Minimal, None): the saved `WordSetting` lookup, the process-wide mode every pilot pane follows, and the cycle key's step and save.
 - `src/Utils/HudLayoutSetting.cs`, the HUD layout of the outside views (Original, Sides, Custom): the saved word and custom placement, the process-wide layout every pilot pane follows, and the editor's save.
 - `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
@@ -740,6 +743,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs`, the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/LoadProgress.cs`, the load screen's progress under a blocking build: the authored milestone table, the monotonic setter and the throttled repaint pump.
+- `src/Utils/LoadGate.cs`, the gate the load screen holds closed while it stands: no game sound, no input to the flight, the pause board or the menus.
 - `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TextureUpload.cs`, every Image handed to a texture, at creation or repaint, held until the render thread lets go so a queued upload never reads a refilled one or swaps a handle off the main thread.
@@ -759,6 +763,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/CloudGlowSetting.cs`, whether Enhanced's volumetric clouds glow round the frame's most significant point lights (off, on): the flag/saved/config `WordSetting` lookup over on (off on an integrated GPU), read every frame.
 - `src/Utils/SpeedWispsSetting.cs`, whether Enhanced draws the authored speed cue wisps (off, on): the flag/saved/config `WordSetting` lookup over off, read every step; Original always draws them.
+- `src/Utils/ReduceFlashingSetting.cs`, the Reduce Flashing accessibility option (off, on): the flag/saved/config `WordSetting` lookup that keeps the muzzle, round and gun-hit lights dark, read as each light is lit.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.
@@ -979,6 +984,7 @@ both sit on top of these types.
 - `src/Bindings/BindingLabels.cs`, what a rebinding screen prints: an action's name, a control's keycap name, and a row that counts what it is not showing.
 - `src/Bindings/ActionSnapshot.cs`, the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
 - `src/Bindings/PlayerActions.cs`, the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players.
+- `src/Bindings/HandoverLatch.cs`, a control held through a handover reads released until let go: the rule flight's re-entry latch and the load gate share.
 - `src/Bindings/InputContext.cs`, which set of controls a seat is reading (flight, menu, camera), because one control means different things per mode.
 - `src/Bindings/DefaultBindings.cs`, the shipped keymap as data, one map per context, reproducing `docs/controls.md`, and the placeholder a pad default uses.
 - `src/Bindings/BindingProfile.cs`, one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.

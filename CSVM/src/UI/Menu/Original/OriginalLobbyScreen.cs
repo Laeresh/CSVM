@@ -582,14 +582,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     /// <summary>Back from a match onto its lobby's Game Scores page, every Ready cleared, a stunt race's
-    /// table in <paramref name="race"/>. False when the door no longer holds a lobby, and the caller
-    /// then shows the games list.</summary>
-    public bool Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null)
+    /// table in <paramref name="race"/>. A start the host <paramref name="cancelled"/> lands on the
+    /// lobby's first tab instead, the last scores kept. False when the door no longer holds a lobby,
+    /// and the caller then shows the games list.</summary>
+    public bool Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null, bool cancelled = false)
     {
         ArgumentNullException.ThrowIfNull(scores);
         if (_net() is not { CanLaunch: true } || Lobby is not { Shown: true } lobby)
         {
             return false;
+        }
+
+        if (cancelled)
+        {
+            lobby.Land(lobby.Scores, lobby.RaceScores.Count > 0 ? lobby.RaceScores : null);
+            Enter();
+            return true;
         }
 
         lobby.Land(scores, race);
@@ -1777,13 +1785,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     // The original's own refusal at Ready: langui 10517, then 10514, 10515 and 10516 for each
-    // reason, on its OK dialog. A refused host's course adds the remake's own line, its reason.
+    // reason, on its OK dialog. A refused host's course adds the remake's own line, its reason, and a
+    // teamless pilot in a team match adds the Ready box's hint.
     private void Refused(DogfightLobby lobby)
     {
         string text = _text.Word(10517, "You cannot select Ready yet.");
         if (lobby.RefusesCourse)
         {
             text += $" The host's course cannot be flown here: {lobby.CourseRefusal}.";
+        }
+
+        if (lobby.NeedsTeam)
+        {
+            text += $" {DogfightLobby.TeamFirstHint}.";
         }
 
         foreach (var refusal in lobby.ReadyRefusals)
@@ -1916,7 +1930,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, PickedPeer >= 0, 0, 74f, 37f));
         rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, lobby is { Ready: false } && !_outlaw.IsOpen, 0, 131f, 37f));
         rows.Add(new OriginalRow(ReadyKey, string.Empty, OriginalRowKind.Radio, 250f, 325f, 58f, 37f,
-            lobby is { HasOptions: true }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
+            lobby is { HasOptions: true, NeedsTeam: false }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
         if (CopyRow() is { } copy)
         {
             rows.Add(copy);
@@ -2540,7 +2554,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (row.Key == ReadyKey)
         {
             bool host = lobby?.IsHost == true;
-            layers.Lines.Add(_text.Line(host ? 10063 : 10059, "Ready?", row.X - 100f, row.Y - 20f, 160f, ReadyLabel, BoardJustify.Right));
+            string? hint = lobby?.NeedsTeam == true ? DogfightLobby.TeamFirstHint : null;
+            layers.Lines.Add(_text.Line(host ? 10063 : 10059, "Ready?", row.X - 100f, row.Y - 20f, 160f, ReadyLabel, BoardJustify.Right, hint));
         }
         else if (id != 0)
         {

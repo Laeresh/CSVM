@@ -570,8 +570,10 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-lobby-teams",
         "The Multiplayer Lobby's teams over the loopback: the host's Create Team stands the CREATE "
         + "TEAM box with OK greyed while empty, a name of spaces alone is refused, and a typed name "
-        + "creates the team, which reaches the guest as a team row under the host's row. The guest "
-        + "picks that row and its team button joins it, which every end's chat announces. Restrict "
+        + "creates the team, which reaches the guest as a team row under the host's row. While the guest "
+        + "is on no team its Ready box greys under \"Pick a team first\" and a press marks nothing. The guest "
+        + "picks that row and its team button joins it, which every end's chat announces, and its Ready "
+        + "then takes on both ends. Restrict "
         + "Number of Teams makes the count boxes live on the host and greyed on the guest, whose arrows "
         + "reach the guest's options. With one team LAUNCH! raises the original's refusal and hands "
         + "nothing out. The guest's Leave Team and a team of its own let the launch go, and the host's "
@@ -3484,13 +3486,16 @@ internal static class MenuOriginalConnectionSuites
         return team;
     }
 
-    // The guest picks the team row and its team button joins; a Ready guest's button is greyed.
+    // With a team standing the teamless guest's Ready box greys under its hint. The guest picks the
+    // team row and its team button joins. Then Ready takes, and a Ready guest's button is greyed.
     private static void JoinTheTeam(TestContext ctx, End host, End guest, List<End> ends, byte team)
     {
+        var there = guest.Door.Dogfight!;
         ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
-        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.TeamKey) is { Enabled: false },
-            $"ABLE-TO-FAIL CONTROL: a Ready guest's team button is greyed");
-        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.ReadyKey) is { Enabled: false } && !there.Ready && !host.Door.Dogfight!.Players[1].Ready
+                  && Draws(guest.Shell.Compose(), DogfightLobby.TeamFirstHint),
+            $"a teamless guest's Ready box greys under \"{DogfightLobby.TeamFirstHint}\" and a press marks nothing ({there.Ready}, {there.NeedsTeam})");
         ClickRow(ctx, guest, OriginalLobbyScreen.TeamRowKey(team));
         ctx.Check(guest.Shell.Lobby.PickedTeam == team, $"a press picks the team row ({guest.Shell.Lobby.PickedTeam})");
         ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
@@ -3504,6 +3509,14 @@ internal static class MenuOriginalConnectionSuites
             $"Join Team puts the guest on the team on both ends ({guest.Door.Dogfight!.OwnTeam}, {hostLobby.Players[1].Team})");
         ctx.Check(hostLobby.Chat.Any(l => l.Text == "[Nathan joined team Aces.]") && guest.Door.Dogfight!.Chat.Any(l => l.Text == "[Nathan joined team Aces.]"),
             $"and every end's chat announces it");
+
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
+        ctx.Check(there.Ready && hostLobby.Players[1].Ready && Row(guest.Shell, OriginalLobbyScreen.TeamKey) is { Enabled: false }
+                  && !Draws(guest.Shell.Compose(), DogfightLobby.TeamFirstHint),
+            $"ABLE-TO-FAIL CONTROL: on the team the guest's Ready takes on both ends, and a Ready guest's team button is greyed ({there.Ready})");
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        SettleEnds(ends);
     }
 
     // Restrict Number of Teams: the count boxes live on the host only, an arrow reaching the guest.

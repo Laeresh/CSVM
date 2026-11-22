@@ -135,6 +135,7 @@ public class HangarDescriptionsTests
         Assert.Equal("A carrier fighter.", mod.Prose);
         Assert.Equal(parent.Heading, mod.Heading);
         Assert.Equal(parent.Figures, mod.Figures);
+        Assert.EndsWith("\n\nDESCRIPTION\nA carrier fighter.", mod.Body);
     }
 
     [Fact]
@@ -154,6 +155,7 @@ public class HangarDescriptionsTests
         Assert.Equal(new[] { "COST: $410", "WEIGHT: 480 lbs." }, hardpoints.Figures);
         Assert.Equal("HISTORY", hardpoints.Heading);
         Assert.Equal("DeBruin hardpoints.", hardpoints.Prose);
+        Assert.Equal("COST: $410\nWEIGHT: 480 lbs.\n\nHISTORY\nDeBruin hardpoints.", hardpoints.Body);
 
         var paint = HangarDescriptions.Paint(strings);
         Assert.Equal(new[] { "COST: Free" }, paint.Figures);
@@ -170,6 +172,7 @@ public class HangarDescriptionsTests
             info.Figures);
         Assert.Equal(string.Empty, info.Heading);
         Assert.Equal(string.Empty, info.Prose);
+        Assert.Equal("COST: $850\nWEIGHT: 1000 lbs.\nTOP SPEED: 281 m.p.h.\nNITRO-BOOST: No", info.Body);
         Assert.Equal(HangarInfo.None.Figures, HangarDescriptions.Gun(UiStrings.Empty, HangarEconomy.Airframes[7], default, 0).Figures);
     }
 

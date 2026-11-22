@@ -207,7 +207,12 @@ public sealed class WorldSession
             var mask = entry != null && gamez.FindByName("world1") is { HasArea: true } area
                 ? VegetationMask.Load(entry.Mask, area.AreaLeft, area.AreaTop, area.AreaRight, area.AreaBottom) : null;
             // Every chapter is a model chapter: C5 lists no vegetation, and its buildings read their hulls (CityModels).
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes, entry, mask, o.Chapter);
+            // The bake runs before the mission's switches do, so the hangars it stands are read off its script.
+            var hangarWatch = System.Diagnostics.Stopwatch.StartNew();
+            var hangars = entry != null ? HangarFootprints.Of(gamez, missionSetup, root) : HangarFootprints.None;
+            if (hangars.Outlines.Count > 0)
+                Log.Info("world", $"hangar footprints: {hangars.Outlines.Count} kept clear of vegetation for {o.Chapter}/{o.Mission}, {hangarWatch.Elapsed.TotalMilliseconds:0.#} ms");
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps, fogVolumes, entry, mask, o.Chapter) { Hangars = hangars };
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);

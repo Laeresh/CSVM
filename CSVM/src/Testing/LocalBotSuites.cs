@@ -40,13 +40,17 @@ internal static class LocalBotSuites
     // A lethal claim's damage share, the debug kill key's own: far past any hull's pools.
     private const float LethalScale = 1e6f;
 
+    // The panes-alone match's score limit in kills, two so its first kill ends nothing.
+    private const int PaneKillTarget = 2;
+
     [Suite("versus-local-bot",
         "a local Dogfight of one pane and its bots on a seat roster with no wire: the pane and the "
         + "bot kill each other and both score, each death posts its line naming the bot by its "
         + "callsign, both come back on the local rotation, a rematch places both on their opening "
         + "entries; with Auto Respawn off the bot still returns after the crash camera while the "
         + "pane waits for Fire Guns; with one life a living bot keeps the match running and the "
-        + "last bot's death ends it on nobody left to fight; two panes with no bots keep the "
+        + "last bot's death ends it on nobody left to fight, \"Game Over:\" over \"No Enemies Left\" "
+        + "up through the end's hold; two panes with no bots keep the "
         + "rosterless path, scoring, naming and returning as before; and a menu launch of one seat "
         + "and two join board bots flies them in board order, the Random one on a stock plane")]
     internal static void LocalBotsScoreRespawnAndRematch(TestContext ctx)
@@ -67,6 +71,78 @@ internal static class LocalBotSuites
         }
         finally
         {
+            ambient.Restore();
+        }
+    }
+
+    [Suite("versus-local-end",
+        "a local split screen Dogfight of two panes ends as a network one does: the time limit, and "
+        + "after the rematch the score limit, each post \"Game Over:\" over the winner by player tag "
+        + "in both panes; through the end's hold the results board stays down, R rematches nothing "
+        + "and every flying pane's sim poses advance step by step, never a stale pair to jitter "
+        + "between; then the board rises, halts the world and pins each pose, and R there rematches")]
+    internal static void LocalEndHoldsTheBoard(TestContext ctx)
+    {
+        const string cell = "panes alone";
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, "--players=2",
+            $"--vs-kills={PaneKillTarget * MatchScores.Load(ctx.Zrdr).Kill}", "--vs-time=1");
+        var ambient = NetCombatSuites.Ambient.Save();
+        var end = NetCombatSuites.Ends.Open(ctx, spec, transport: null, isHost: true, Seed, roster: null);
+        try
+        {
+            ctx.Check(end.Built && end.Session is { Rigs.Count: 2 } && end.Session.Boards?.DogfightBoard != null,
+                $"[{cell}] the session builds two panes and a results board");
+            if (!end.Built || end.Session.Rigs.Count != 2 || end.Session.Boards?.DogfightBoard == null)
+            {
+                return;
+            }
+
+            var session = end.Session;
+            var director = session.Dogfight!;
+            var p1 = session.Rigs[0].Controller!;
+            var p2 = session.Rigs[1].Controller!;
+
+            // P2 a kill up when the clock runs out.
+            Lift(p1);
+            Lift(p2);
+            p1.DebugForceCrash(p2.PlayerIndex);
+            UntilBack(p1, session);
+            Lift(p1);
+            Lift(p2);
+            // Half a second short, so the clock runs out in flight with each pose pair moving.
+            director.Match.Advance(director.Match.TimeLimit - director.Match.Elapsed - 0.5f);
+            HeldEnd(ctx, session, $"{cell}, time limit", NetMatchEnd.TimeLimit,
+                HudMessages.WinnerLine(NetSeats.PlayerTag(1)));
+
+            // R on the risen board is the rematch. The board retires on its own frame, which a
+            // suite's one frame never runs.
+            p1.RestartMatch!();
+            Step(1, session);
+            session.Boards!.DogfightBoard!._Process(GameClock.FixedDt);
+            ctx.Check(!director.Match.Completed && director.End == NetMatchEnd.Running
+                      && session.Boards.DogfightBoard is { Visible: false } && session.Pause is { Ended: false },
+                $"ABLE-TO-FAIL CONTROL: [{cell}] R on the risen board rematches and retires it (completed {director.Match.Completed}, {director.End}, halted {session.Pause?.Ended})");
+
+            // P1 downs P2 twice, P2 flying again between the two.
+            for (int kill = 0; kill < PaneKillTarget; kill++)
+            {
+                if (kill > 0)
+                {
+                    UntilBack(p2, session);
+                }
+
+                Lift(p1);
+                Lift(p2);
+                Step(HeldSteps, session);
+                p2.DebugForceCrash(p1.PlayerIndex);
+            }
+
+            HeldEnd(ctx, session, $"{cell}, score limit", NetMatchEnd.ScoreTarget,
+                HudMessages.WinnerLine(NetSeats.PlayerTag(0)));
+        }
+        finally
+        {
+            end.Close();
             ambient.Restore();
         }
     }
@@ -261,6 +337,73 @@ internal static class LocalBotSuites
         steps = StepUntil(() => match.Completed, session);
         ctx.Check(match is { Completed: true, AllAlone: true },
             $"[{cell}] the last bot's death leaves the pane alone and ends the match on nobody left to fight (complete {match.Completed}, alone {match.AllAlone}, {steps} step(s))");
+        HeldEnd(ctx, session, cell, NetMatchEnd.NobodyLeft, NetCombatSuites.MatchWording.Read(ctx).Row(HudMessages.AllAloneKey));
+    }
+
+    // A local match's ending as a network one posts it: every pane reads "Game Over:" directly over
+    // `second`. The results board waits out the end's hold, R inside it rematches nothing, and the
+    // world flies on. The board then rises on the hold's last step, halts the world, pins the poses.
+    private static void HeldEnd(TestContext ctx, GameSession session, string cell, NetMatchEnd end, string second)
+    {
+        var director = session.Dogfight!;
+        var key = session.Rigs[0].Controller!;
+        StepUntil(() => director.End != NetMatchEnd.Running, session);
+        string top = NetCombatSuites.MatchWording.Read(ctx).Row(HudMessages.GameOverKey);
+        string pair = $"{top} / {second}";
+        var panes = session.Rigs.Select(r => r.Controller is { } pilot ? PaneLines(pilot) : "no pilot").ToArray();
+        ctx.Check(director.End == end && panes.Length > 0 && panes.All(lines => lines.Contains(pair, StringComparison.Ordinal)),
+            $"[{cell}] the match ends on {end} and every pane reads \"{top}\" over \"{second}\" ({director.End}; {string.Join(" | ", panes)})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(top == "Game Over:", $"[{cell}] in the message table's row 135 ({top})");
+        }
+
+        var board = session.Boards?.DogfightBoard;
+        ctx.Check(board is { Visible: false } && session.Pause is { Ended: false },
+            $"[{cell}] and the results board waits under the lines, the world flying on (board up {board?.Visible}, halted {session.Pause?.Ended})");
+        key.RestartMatch!();
+        ctx.Check(director.Match.Completed && director.End == end,
+            $"[{cell}] R inside the hold rematches nothing ({director.Match.Completed}, {director.End})");
+
+        // Each step's pair starts where the last one ended and moves, so the drawn pose only ever
+        // advances. A frozen seat keeps a stale moving pair, which the renderer jitters between.
+        int hold = Mathf.CeilToInt(VersusDirector.EndHoldS / GameClock.FixedDt);
+        int steps = 0, stale = 0, flown = 0;
+        var flying = session.Rigs.Select(r => r.Controller!).Where(p => !p.Crashed).ToArray();
+        var last = flying.Select(p => p.SimPoses).ToArray();
+        while (board is { Visible: false } && steps < hold + WaitSteps)
+        {
+            Step(1, session);
+            steps++;
+            for (int i = 0; i < flying.Length; i++)
+            {
+                var now = flying[i].SimPoses;
+                if (flying[i].Crashed || board is { Visible: true })
+                {
+                    continue;
+                }
+
+                flown++;
+                if (now.Prev != last[i].Curr || now.Prev.Origin.IsEqualApprox(now.Curr.Origin))
+                {
+                    stale++;
+                }
+
+                last[i] = now;
+            }
+        }
+
+        ctx.Check(flying.Length > 0 && flown > 0 && stale == 0,
+            $"[{cell}] through the hold the ended world flies on, every flying pane's sim poses advancing each step ({stale} stale of {flown} pane step(s), {flying.Length} pane(s) flying)");
+        ctx.Check(board is { Visible: true } && session.Pause is { Ended: true } && steps >= hold - 2 && steps <= hold + 1,
+            $"[{cell}] the board rises once the end has held {VersusDirector.EndHoldS:0.#} s, halting the world ({steps} step(s) against {hold}, halted {session.Pause?.Ended})");
+
+        // A suite's step runs under the board, which the halted clock spares a game. Every pose
+        // then stands still rather than drawing between a stale pair.
+        Step(1, session);
+        var held = flying.Select(p => p.SimPoses).ToArray();
+        ctx.Check(held.All(pair => pair.Prev == pair.Curr),
+            $"[{cell}] and under the board every pane's pose holds, its pair pinned ({held.Count(pair => pair.Prev != pair.Curr)} unpinned)");
     }
 
     // Two panes and no bots keep the path a local match always took: no roster, the panes as seats.
@@ -289,7 +432,7 @@ internal static class LocalBotSuites
             var after = Expect(Board(session), killer: 1, victim: 0, session.Dogfight!.Match.Scores.Kill);
             victim.Body!.TakeProjectileHit(DebugKillTarget.LethalWeapon(killer)!, victim.WorldPosition, 0, killer.PlayerIndex, LethalScale);
             int steps = StepUntil(() => victim.Crashed && Board(session).SequenceEqual(after), session);
-            string tag = UI.Boards.SplitScreen.PlayerTag(1);
+            string tag = NetSeats.PlayerTag(1);
             ctx.Check(victim.Crashed && Board(session).SequenceEqual(after) && PaneLines(victim).Contains(tag, StringComparison.Ordinal),
                 $"[{cell}] P2's kill of P1 scores P2 and P1's pane names its killer {tag} ({Scoreboard(session)}; {PaneLines(victim)}, {steps} step(s))");
             steps = UntilBack(victim, session);

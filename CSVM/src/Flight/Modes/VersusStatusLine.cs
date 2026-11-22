@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using CSVM.Flight.Hud;
 using CSVM.UI.Boards;
 using Godot;
@@ -27,16 +26,16 @@ public sealed partial class VersusStatusLine : Control
 
     private VersusMatch? _match;
     private string? _line;
-    private (VersusMatch Match, int Pane, int Revision, int Clock, Func<int, string?>? BotName) _lineKey;
+    private (VersusMatch Match, int Pane, int Revision, int Clock, Func<int, string?>? SeatName) _lineKey;
 
     /// <summary>What sends the line away while it answers true: the pane's held scores, whose
     /// Original text runs across the top of the pane. Null keeps it.</summary>
     public Func<bool>? StatusHiddenWhile { get; set; }
 
-    /// <summary>A seat's callsign when a bot flies it, else null. The line then names a bot
-    /// leader by callsign and a person by player tag, as the death line does. Null names every seat
-    /// by tag.</summary>
-    public Func<int, string?>? BotName { get; set; }
+    /// <summary>A seat's callsign, a person's nickname or a bot's, else null. The line then names
+    /// the leader as the kill line does, and a seat with no callsign by player tag. Null names every
+    /// seat by tag.</summary>
+    public Func<int, string?>? SeatName { get; set; }
 
     /// <summary>Whether the line draws this frame.</summary>
     public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
@@ -56,23 +55,13 @@ public sealed partial class VersusStatusLine : Control
 
     /// <summary>The sole rank-1 seat's name, or TIED while nobody leads (including 0-0 before the
     /// first kill). A team match names pane <paramref name="playerIndex"/>'s team and its total,
-    /// then the leading team. <paramref name="botName"/> is <see cref="BotName"/>.</summary>
-    public static string LeaderText(VersusMatch match, int playerIndex, Func<int, string?>? botName)
+    /// then the leading team. <paramref name="seatName"/> is <see cref="SeatName"/>.</summary>
+    public static string LeaderText(VersusMatch match, int playerIndex, Func<int, string?>? seatName)
     {
         ArgumentNullException.ThrowIfNull(match);
-        if (match.Teamed)
-        {
-            int own = match.TeamOf(playerIndex);
-            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
-            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
-            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
-        }
-
-        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
-        if (leaders.Count != 1)
-            return "LEADER TIED";
-        int seat = leaders[0].PlayerIndex;
-        return $"LEADER {botName?.Invoke(seat) ?? SplitScreen.PlayerTag(seat)}";
+        int own = match.Teamed ? match.TeamOf(playerIndex) : 0;
+        string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+        return $"{mine}LEADER {match.NameOf(match.Leader(), seatName) ?? "TIED"}";
     }
 
     public override void _Process(double delta)
@@ -106,7 +95,7 @@ public sealed partial class VersusStatusLine : Control
     private string StatusLine(VersusMatch match)
     {
         int clock = match.TimeLimit > 0f ? Mathf.Max(0, Mathf.CeilToInt(match.TimeRemaining)) : -1;
-        var key = (match, PlayerIndex, match.Revision, clock, BotName);
+        var key = (match, PlayerIndex, match.Revision, clock, SeatName);
         if (_line == null || key != _lineKey)
         {
             _lineKey = key;
@@ -120,7 +109,7 @@ public sealed partial class VersusStatusLine : Control
     {
         string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
         string kd = $"K/D {match.KillsOf(PlayerIndex)}/{match.DeathsOf(PlayerIndex)}";
-        return $"{time}{kd}   {LeaderText(match, PlayerIndex, BotName)}";
+        return $"{time}{kd}   {LeaderText(match, PlayerIndex, SeatName)}";
     }
 
     // Draws one horizontally-centred line at `anchor`.X, top-anchored

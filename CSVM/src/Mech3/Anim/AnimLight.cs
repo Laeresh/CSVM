@@ -34,6 +34,9 @@ internal sealed class AnimLight
     // (AnimRuntime.LightReplacedAnimNames). Tracked and tweened as authored, never submitted.
     public bool Replaced;
 
+    // A gun hit's flash, lit on a share of the rounds that strike. Reduce Flashing keeps it dark.
+    public bool GunHit;
+
     // LIGHT_ANIMATION: signed deltas applied over run_time (see HandleLightAnimation).
     public float TweenLeft;
 

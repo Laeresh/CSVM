@@ -89,7 +89,6 @@ public class OptionsChoicesTests
             ThrottlePlate = true,
             HudMode = HudModeSetting.Words[^1],
             HudLayout = HudLayoutSetting.Words[^1],
-            SpyglassScale = SpyglassScaleSetting.Words[^1],
             Subtitles = SubtitlesSetting.Words[^1],
             KeepCameraZoom = false,
             SoundMode = SoundModeSetting.Original,
@@ -107,7 +106,7 @@ public class OptionsChoicesTests
                 saved.DisplayMode, saved.VSync, saved.AudioMaster, saved.AudioMusic, saved.AudioEffects,
                 saved.AudioVoice, saved.NearestAfterKill, saved.Rumble, saved.DefaultView, saved.AutoHeadTurn,
                 saved.Words, saved.VrMode, saved.VrRenderScale, saved.VrVignette,
-                saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate, SpyglassScale: saved.SpyglassScale,
+                saved.LeadingAimAssist, saved.LeadMarker, ThrottlePlate: saved.ThrottlePlate,
                 KeepCameraZoom: saved.KeepCameraZoom, HudMode: saved.HudMode, SoundMode: saved.SoundMode, HitConfirm: saved.HitConfirm, HudLayout: saved.HudLayout,
                 Subtitles: saved.Subtitles),
             choices.ToExit());

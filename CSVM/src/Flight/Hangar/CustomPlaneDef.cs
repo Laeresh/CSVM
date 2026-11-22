@@ -29,6 +29,10 @@ public readonly record struct GunChoice(int? Calibre, bool Twin)
 /// </summary>
 public sealed class CustomPlaneDef
 {
+    /// <summary>The longest name a plane may carry: the original's saved-plane index is 33-byte
+    /// records (docs/formats/paint.md), so 32 characters plus the terminator.</summary>
+    public const int MaxNameLength = 32;
+
     /// <summary>Engine ids run 0-6; 6 is the explicit no-engine pick the purchase gate rejects.</summary>
     public const int EngineNone = 6;
 

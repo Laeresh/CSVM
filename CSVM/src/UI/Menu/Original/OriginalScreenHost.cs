@@ -95,6 +95,10 @@ public interface IOriginalScreenHost
     /// <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION.</summary>
     void OpenHangar(IHangarWallet? wallet);
 
+    /// <summary>Imports the original game's saved planes into the wallet-free store, Instant
+    /// Action's own Import beside Build Custom Plane.</summary>
+    void ImportOriginalPlanes();
+
     /// <summary>Starts the per-seat aircraft walk from Instant Action, the launch itself where
     /// nobody is left to pick.</summary>
     MenuExit? BeginSeatWalk();

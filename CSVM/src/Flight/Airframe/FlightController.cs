@@ -304,10 +304,10 @@ public partial class FlightController : Node3D
     public Action? RecenterHeadset;
 
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
-    /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
-    /// "rematch" instead of "respawn me", checked before the crash branch. That is the R-ownership
-    /// rule <see cref="Race"/>/<see cref="RerunRace"/> follow: the board owns R only while it is
-    /// visible, which mirrors <c>Completed</c> exactly.</summary>
+    /// <see cref="VersusMatch.Completed"/> any player's R goes to <see cref="RestartMatch"/>
+    /// instead of "respawn me", checked before the crash branch. That is the R-ownership rule
+    /// <see cref="Race"/>/<see cref="RerunRace"/> follow. A local board waits out the end's hold, in
+    /// which the world flies on and <see cref="RestartMatch"/> does nothing.</summary>
     public VersusMatch? Match;
 
     /// <summary><c>--debug-scores</c>: this seat reads Display Scores as held for the whole run. It is
@@ -1190,6 +1190,10 @@ public partial class FlightController : Node3D
     /// assert it is bit-identical across the death handover rather than inferring the freeze from
     /// the wreck's retained speed alone.</summary>
     internal FlightInput LastCommand => _lastInput;
+
+    /// <summary>The last two sim poses the rendered frame draws between, for a suite that reads
+    /// whether they advance or stand still.</summary>
+    internal (Transform3D Prev, Transform3D Curr) SimPoses => (_simPrev, _simCurr);
 
     /// <summary>Whether the last step flew the far-field speed-hold plant
     /// (<see cref="FlightModel.FarFieldPlant"/>), for a suite to read off a session's aircraft.
@@ -2170,9 +2174,13 @@ public partial class FlightController : Node3D
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
         // ⚠ The rematch shortcuts are NOT read here; a results board halts the clock, so this step
-        // never runs while one is up. PollResultsShortcuts reads them off the rendered frame.
-        if (Match is { Completed: true })
+        // never runs while one is up. PollResultsShortcuts reads them off the rendered frame. An
+        // ended match with no board up yet flies on, as the original's does through its end wait.
+        if (Match is { Completed: true } && PauseState is { Ended: true })
+        {
+            _simPrev = _simCurr;   // hold the pose, no stale pair left to interpolate
             return;
+        }
 
         if (Race is { Ended: true })
             return;

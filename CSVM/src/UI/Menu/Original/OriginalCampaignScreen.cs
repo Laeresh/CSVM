@@ -1439,7 +1439,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         // A guest with no callsign is asked about by the player tag its chip shows.
         var guest = machines[from];
-        string name = guest.Name.Length > 0 ? guest.Name : SplitScreen.PlayerTag(guest.Slot);
+        string name = guest.Name.Length > 0 ? guest.Name : NetSeats.PlayerTag(guest.Slot);
         var boot = Yes(() => net.Boot(guest.Peer));
         if (from + 1 < machines.Count)
         {

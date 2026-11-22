@@ -303,7 +303,7 @@ rules, teams, wingman, film and Stunt Race `LobbyCourse`); others are held up to
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
 address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
-carrier's hang-up lands. `Mods` is a host's own plane mod set, sent on connect, or its guest's copy; ⚠ a host never takes a peer's. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
+carrier's hang-up lands. A host's `CallOffStart` drops the link of an older build whose loaded word reaches a called-off start. `Mods` is a host's own plane mod set, sent on connect, or its guest's copy; ⚠ a host never takes a peer's. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetModSet.cs
 A host's plane mods (`NetMod`: id, content hash, parent's stock id) and the session's airframe rows:
@@ -467,10 +467,11 @@ the host's `Answered` being the arrivals its relay leaves alone.
 The start barrier of a network flight, and its `0x5B` word. A host's gate takes a fresh `Round`
 and names it in `Hold`; a built guest sends `Loaded` under the first round it heard. The host opens
 when the last one arrives, drops, or after `TimeoutSeconds` (TUNE, under the ENet keepalive
-ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own. ⚠ A `Loaded`
-under another round opens nothing and is answered with `Hold`: a restart reuses the link, and the
-old flight's word would start the new one early. A guest opens on `Start` under its round or on its
-host's link dropping. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
+ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own; one under
+another round is answered with `Hold`. A guest opens on `Start` under its round or on its host's
+link dropping. While held the host sends `Count` for the guests' load boards and puts it in each
+`Hold`; `Cancel` calls the held start off, heard by a build whose `Loaded` is `AnswersCancel`.
+Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session
@@ -494,7 +495,7 @@ aeroplane without a pane.
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
 colour, and `Validate`: seats numbered from zero with no gap, at least one with a pane here, a
-person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalPanes` opens a local match's roster with its panes on `OfflinePeer`, `LocalOrdinal` a seat's pane ordinal, `ShownName` the name a Dogfight machine's first seat shows ("Host" or "Pilot" for one with no callsign), `FurtherSeatName` a further seat's (that name and its pane tag there, "Gabriel P2", which the roster's 40-byte callsign field carries whole), and `LeavingWith` the seats a dropped guest takes with it, never a bot.
+person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalPanes` opens a local match's roster with its panes on `OfflinePeer`, `LocalOrdinal` a seat's pane ordinal, `SeatName` the callsign the match readouts name a seat by (null for none, so they fall back to the player tag), `PlayerTag` that tag (P1 upward), the one spelling every screen and readout uses, `ShownName` the name a Dogfight machine's first seat shows ("Host" or "Pilot" for one with no callsign), `FurtherSeatName` a further seat's (that name and its pane tag there, "Gabriel P2", which the roster's 40-byte callsign field carries whole), and `LeavingWith` the seats a dropped guest takes with it, never a bot.
 Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
 original's one reader takes them (the remake's index is 0-based where the original's was 1-based
 and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat

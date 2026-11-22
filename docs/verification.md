@@ -164,6 +164,12 @@ covers it.
 - **SHOT-49**, **Before calling a line an Enhanced defect, threshold its pixels and read the same
   pixels in the Original frame.** Of the 5,093 px a C5 shore band drew darker than its surroundings
   under Enhanced, 99.6 % were dark in Original too (mean 2.0 against Enhanced's 13.8).
+- **SHOT-50**, **Paint a fade's input, `EMISSION = vec3(fract(log2(x) * 2.0))`, before judging a faceted
+  look from the shaded frame.** The wave ocean's footprint from `fwidth` of its grid parameter painted
+  the displaced triangles, while the shaded C3 frame at 60 m showed only a faint grain.
+- **SHOT-51**, **Reproduce a player's Enhanced report with the options their log names, since
+  `--det` keeps only flags.** A C2 freecam probe drew a grey sea until it was given
+  `--global-illumination=on --post-processing=on`, the player's run log's values.
 
 ## GOLD, golden images
 
@@ -780,6 +786,9 @@ covers it.
 - **INSTR-106**, **Bound a track's turn added up both ways as well as its signed net turn: alternating
   U-turns net to nothing either way.** On a C1 field of eight Stunt Race bots a steering leg turns
   231 degrees signed and 505 both ways, while a bot circling a lead-in point reads 1095 on both.
+- **INSTR-107**, **Read a MultiMesh's instance transforms back only in a windowed process: headless
+  answers the identity, so every instance reads at its node's origin.** A headless check of C1's
+  ground cover put 3,573 of 102,922 cards inside a hangar, all on one cell's centre, and none windowed.
 
 ## SRC, sources and documents
 

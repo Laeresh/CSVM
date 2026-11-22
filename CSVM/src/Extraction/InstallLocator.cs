@@ -274,6 +274,34 @@ public static class InstallLocator
         return found;
     }
 
+    /// <summary>The install folder the original's setup recorded: <c>EXE Path</c> under
+    /// <c>Microsoft Games\Crimson Skies\1.0</c> in the machine's registry. Null off Windows or when
+    /// none is recorded. Not checked here: a copy may since have moved.</summary>
+    public static string? Registered()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        foreach (string key in new[] { @"SOFTWARE\WOW6432Node\Microsoft\Microsoft Games\Crimson Skies\1.0", @"SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0" })
+        {
+            try
+            {
+                using var entry = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(key);
+                if (entry?.GetValue("EXE Path") is string path && path.Length > 0)
+                {
+                    return path;
+                }
+            }
+            catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Where a copy of the game sits beside CSVM: its <c>GAME</c> folder (the disc's
     /// layout), else <paramref name="folder"/> itself, then each <c>.iso</c> in ordinal order. Never
     /// both folders, since <see cref="Check"/> already reads a disc's <c>GAME</c> through its parent.</summary>

@@ -189,9 +189,9 @@ internal sealed partial class VolumetricClouds : Node3D
     /// each frame, and past the four bubble globals (<see cref="CloudShadow.BubbleParams"/>) the rest are.</summary>
     public int HullCount => _hulls.Count;
 
-    /// <summary>Gets the march and resolve shaders' float uniform defaults, read from the shader text so no
-    /// C# copy drifts from it.</summary>
-    internal static IReadOnlyDictionary<string, float> UniformDefaults { get; } = ParseDefaults(MarchCode() + ResolveShader());
+    /// <summary>Gets the slab (which embeds the march) and resolve shaders' float uniform defaults, read from
+    /// the shader text so no C# copy drifts from it.</summary>
+    internal static IReadOnlyDictionary<string, float> UniformDefaults { get; } = ParseDefaults(SlabShader() + ResolveShader());
 
     // The march's colour uniform defaults, read from its text as UniformDefaults reads the floats.
     private static IReadOnlyDictionary<string, Vector3> ColourDefaults { get; } = ParseColourDefaults(MarchCode());

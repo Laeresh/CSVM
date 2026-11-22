@@ -256,6 +256,10 @@ public sealed class ClutterBuilder
     /// <summary>The brush mask the Rich variant was last baked under, null for none.</summary>
     public VegetationMask? Mask => _mask;
 
+    /// <summary>The mission's hangar floors, which every Rich layer keeps off (<see cref="HangarFootprints"/>). Set before
+    /// <see cref="Build"/>, which bakes the Rich and added stamps.</summary>
+    public HangarFootprints Hangars { get; init; } = HangarFootprints.None;
+
     /// <summary>The world archive the clutter was stamped from.</summary>
     public GameZ Gamez => _gamez;
 
@@ -268,6 +272,13 @@ public sealed class ClutterBuilder
 
     /// <inheritdoc cref="AddedCandidates"/>
     public int AddedKept { get; private set; }
+
+    /// <summary>The stamps the last bake kept off a hangar's floor (<see cref="Hangars"/>): the original stamps' Rich
+    /// variant and the added candidates. A stamp reaches the floor when its card's half width does.</summary>
+    public int RichOffHangars { get; private set; }
+
+    /// <inheritdoc cref="RichOffHangars"/>
+    public int AddedOffHangars { get; private set; }
 
     /// <summary>Card kinds the last Build drew blended, and card kinds it cut to a hard silhouette,
     /// the census an isolation capture is read against. Counts KINDS, since a kind is one MultiMesh
@@ -836,7 +847,7 @@ public sealed class ClutterBuilder
             + "        vec3(dir.x, 0.0, dir.y));";
 
     // The first built node per gamez index in tree order, the claimant ClutterActivation binds.
-    private static Dictionary<int, Node3D> BuiltByIndex(Node world)
+    internal static Dictionary<int, Node3D> BuiltByIndex(Node world)
     {
         var built = new Dictionary<int, Node3D>();
         void Collect(Node node)
@@ -1471,6 +1482,7 @@ public sealed class ClutterBuilder
         var seen = new HashSet<(int, int, int)>();
         var stats = new LatticeStats();
         int deduped = 0, overDense = 0, minted = 0, overlaid = 0;
+        AddedOffHangars = 0;
         // A rail, road or decal laid over picked ground shows there instead, so no added stamp stands on it.
         // Transitions are exempt: the forest-edge blends sit over C1's fields, where the hedgerow stamps stand.
         var overlays = VegetationGround.OverlaysOn(_gamez,
@@ -1513,9 +1525,11 @@ public sealed class ClutterBuilder
                 var at = tri.World(cand.U, cand.V) + member.Lift;
                 // Brushed ground is every unpicked texture, so the overlay bins hold it; the painter steers instead.
                 bool covered = !picked.Brushed && overlays.Covers(foot);
-                bool kept = picked.Brushed ? VegetationScatter.BrushKeeps(cand, density, v.Keep)
-                    : !covered && VegetationScatter.Keeps(cand, density, v.Keep);
+                bool onHangar = Hangars.Covers(foot, member.Width / 2f);
+                bool kept = !onHangar && (picked.Brushed ? VegetationScatter.BrushKeeps(cand, density, v.Keep)
+                    : !covered && VegetationScatter.Keeps(cand, density, v.Keep));
                 overlaid += covered ? 1 : 0;
+                AddedOffHangars += onHangar ? 1 : 0;
                 var fade = ClutterKindProps.FadeThresholds(member.FarFadeMin, member.FarFadeMax, fadeDraw);
                 kind.Instances.Add(new Transform3D(Basis.Identity, at));
                 kind.Fades.Add(new Color(fade.X, fade.Y, fade.Z, FogVolumeRow(_fogVolumes, at)));
@@ -1533,7 +1547,7 @@ public sealed class ClutterBuilder
             kind.RichColors = colors.ToArray();
         }
         if (bySet.Count > 0)
-            Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} overlaid={overlaid} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
+            Log.Info("world", $"clutter added stamps: sets={string.Join(",", bySet.Where(s => s.Value != null).Select(s => s.Key))} candidates={AddedCandidates} kept={AddedKept} overlaid={overlaid} off_hangars={AddedOffHangars} dedup_rejected={deduped} over_dense={overDense} skipped_no_clutter_flag={stats.NoClutterFlagged} kinds={string.Join(", ", added.Select(k => $"{k.Kind.Label}{(k.Mass ? " (forest)" : "")} x{k.Kind.Instances.Count}"))}");
         return added;
 
         // The set a texture stamps, or the brush's on unpicked ground, with its members resolved to card kinds, once per set.
@@ -1580,6 +1594,7 @@ public sealed class ClutterBuilder
         }
         var rng = new Random(VegetationVariation.Seed(PlacementSeed, entry.Seed));
         int baked = 0, mirrored = 0, clamped = 0, dropped = 0, thinned = 0;
+        RichOffHangars = 0;
         foreach (var s in _stamps)
         {
             if (s.Target.Veg is not { } veg)
@@ -1589,17 +1604,19 @@ public sealed class ClutterBuilder
             var origin = s.Tri.World(v.U, v.V) + s.Lift;
             // One draw decides both the mask and the kind's keep, so neither moves a stream.
             float density = _mask?.At(origin.X, origin.Z) ?? 1f;
-            bool kept = VegetationVariation.Kept(v, veg, density);
+            bool onHangar = Hangars.Covers(origin, s.Scale * s.Target.Width / 2f);
+            bool kept = VegetationVariation.Kept(v, veg, density) && !onHangar;
             bool maskKept = VegetationMask.Keeps(density, v.Keep, added: false);
+            RichOffHangars += onHangar ? 1 : 0;
             s.Target.RichInstances![s.Index] = new Transform3D(kept ? basis : basis.Scaled(Vector3.Zero), origin);
             s.Target.RichColors![s.Index] = v.Tint;
             baked++;
             mirrored += v.Mirror ? 1 : 0;
             clamped += v.Clamped ? 1 : 0;
             dropped += maskKept ? 0 : 1;
-            thinned += maskKept && !kept ? 1 : 0;
+            thinned += maskKept && !kept && !onHangar ? 1 : 0;
         }
-        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} mask_dropped={dropped} keep_dropped={thinned} seed={entry.Seed}");
+        Log.Info("world", $"clutter rich variation: listed_kinds={_allKinds.FindAll(k => k.Veg != null).Count} stamps={baked} mirrored={mirrored} jitter_clamped={clamped} mask_dropped={dropped} keep_dropped={thinned} off_hangars={RichOffHangars} seed={entry.Seed}");
     }
 
     // The templates.zrd per-kind properties attached to the parsed kinds, and every `substitute`

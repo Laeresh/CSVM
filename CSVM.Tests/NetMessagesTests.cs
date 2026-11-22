@@ -274,6 +274,29 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void AnEndingsWinnerTellsADrawFromNoWinnerNamed()
+    {
+        int? Heard(int? winner)
+        {
+            var sent = new MatchStateMessage(0f, 300f, 10, NetMatchEnd.TimeLimit, 1f, MatchStateMessage.WinnerByte(winner));
+            var buffer = new byte[MatchStateMessage.Size];
+            sent.Write(buffer);
+            Assert.True(MatchStateMessage.TryRead(buffer, out var got));
+            return got.NamedWinner;
+        }
+
+        Assert.Equal(3, Heard(3));
+        Assert.Equal(NetSeats.SeatCapacity, Heard(NetSeats.SeatCapacity));
+        Assert.Equal(0, Heard(0));
+        Assert.Null(Heard(null));
+
+        // A host from before the winner byte sends 0 on a time or score end: no winner named, never
+        // a draw.
+        Assert.Null(new MatchStateMessage(0f, 300f, 10, NetMatchEnd.ScoreTarget, 1f, Winner: 0).NamedWinner);
+        Assert.Equal(0, new MatchStateMessage(0f, 300f, 10, NetMatchEnd.ScoreTarget, 1f, Winner: MatchStateMessage.DrawWinner).NamedWinner);
+    }
+
+    [Fact]
     public void DirectorTransitionRoundTripsItsCodeIdAndStamp()
     {
         var sent = new DirectorTransitionMessage(Code: 2, Id: -1, HostClock: 412.25f);
@@ -1375,6 +1398,27 @@ public class NetMessagesTests
             Assert.Equal(sent, got);
             Assert.Equal(201, buffer[5]);
         }
+
+        var count = new StartGateMessage(NetStartWord.Count, 201, 3, 4);
+        count.Write(buffer);
+        Assert.True(StartGateMessage.TryRead(buffer, out var counted));
+        Assert.Equal(count, counted);
+        Assert.Equal(3, buffer[6]);
+        Assert.Equal(4, buffer[7]);
+
+        var cancel = new StartGateMessage(NetStartWord.Cancel, 201);
+        cancel.Write(buffer);
+        Assert.Equal(5, buffer[4]);
+        Assert.True(StartGateMessage.TryRead(buffer, out var cancelled));
+        Assert.Equal(cancel, cancelled);
+
+        // A loaded word carries the cancel mark in its last byte; an older build's zeros do not.
+        StartGateMessage.LoadedWord(201).Write(buffer);
+        Assert.Equal(1, buffer[7]);
+        Assert.True(StartGateMessage.TryRead(buffer, out var marked));
+        Assert.True(marked.AnswersCancel);
+        Assert.False(new StartGateMessage(NetStartWord.Loaded, 201).AnswersCancel);
+        Assert.False(new StartGateMessage(NetStartWord.Hold, 201, 1, 2).AnswersCancel);
 
         Assert.Equal(0x5B, (int)NetMessageType.StartGate);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.StartGate));

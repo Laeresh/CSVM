@@ -10,9 +10,9 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Cars on the Enhanced city's painted streets, under <see cref="CityDressing"/>'s root so they show exactly with the
-/// city. The lanes follow the street centrelines of every floored polygon (<see cref="CityGround.FloorOf"/>). Every
-/// car drives a closed path: round a block on the grid, or down its street and back after a U-turn. Its pieces, none
-/// longer than <see cref="PieceM"/>, share one pattern of cars, so a car leaving a piece is the next piece's car
+/// city. The lanes follow the street centrelines of every floored polygon (<see cref="CityGround.FloorOf"/>), and the
+/// highway deck's own paint (<see cref="CityHighway"/>). Every car drives a closed path: round a block on the grid, or
+/// down its street or the highway and back after a U-turn. Its pieces, none longer than <see cref="PieceM"/>, share one pattern of cars, so a car leaving a piece is the next piece's car
 /// arriving. The shader moves each car on <c>csky_time</c>, so nothing steps on the CPU.
 /// <c>CSVM_CITY_TRAFFIC=off</c> builds none, the A/B for a cost measurement.
 /// </summary>
@@ -144,6 +144,15 @@ internal static class CityTraffic
             }
         }
 
+        // The highway deck carries no floor, so its lanes come from its own paint, driven after the streets.
+        var deckPolygons = CityHighway.Polygons(gamez);
+        var chained = CityHighway.Chain(deckPolygons);
+        var highways = CityHighway.Loops(chained.Decks, out int unclosed);
+        highways.ForEach(Drive);
+        if (chained.Polygons != deckPolygons.Count || unclosed > 0)
+            Log.Warn("world", $"city traffic: the highway chains {chained.Polygons} of its {deckPolygons.Count} polygons ({chained.Orphans} orphan triangles or polygons) and leaves {unclosed} lane loops unclosed");
+        int highway = highways.Count;
+
         long bytes = 0;
         int nodes = 0;
         var lampMeshes = new Dictionary<bool, ArrayMesh>();
@@ -166,7 +175,7 @@ internal static class CityTraffic
             bytes += (long)kinds * list.Count * 16 * sizeof(float);
             nodes += kinds;
         }
-        Log.Info("world", $"city traffic: {runs.Count} street runs, {uTurns} U-turn loops, {blocks} block loops, {laneKm:0} lane km, {cars} cars in {nodes} nodes holding {bytes / 1048576.0:0.0} MB; streets walked in {walked:0} ms, built in {clock.Elapsed.TotalMilliseconds - walked:0} ms");
+        Log.Info("world", $"city traffic: {runs.Count} street runs, {uTurns} U-turn loops, {blocks} block loops, {highway} highway loops over {chained.Decks.Count} decks of {chained.Polygons} polygons, {laneKm:0} lane km, {cars} cars in {nodes} nodes holding {bytes / 1048576.0:0.0} MB; streets walked in {walked:0} ms, built in {clock.Elapsed.TotalMilliseconds - walked:0} ms");
         return ranged;
     }
 
@@ -613,7 +622,18 @@ internal static class CityTraffic
 
     /// <summary>One piece of a car's path: a straight climbing from Y0 to Y1, or a level turn of signed radius,
     /// positive to the right.</summary>
-    internal readonly record struct Seg(Vector2 Start, Vector2 Dir, float Length, float Radius, float Y0, float Y1);
+    internal readonly record struct Seg(Vector2 Start, Vector2 Dir, float Length, float Radius, float Y0, float Y1)
+    {
+        /// <summary>A car's place and heading <paramref name="s"/> along the piece, as the driving shader puts it.</summary>
+        public (Vector2 At, Vector2 Dir) Along(float s)
+        {
+            if (Radius == 0f)
+                return (Start + (Dir * s), Dir);
+            float a = s / Radius;
+            var right = new Vector2(-Dir.Y, Dir.X);
+            return (Start + (Dir * (Radius * MathF.Sin(a))) + (right * (Radius * (1f - MathF.Cos(a)))), (Dir * MathF.Cos(a)) + (right * MathF.Sin(a)));
+        }
+    }
 
     /// <summary>A closed path built from its start by straights and turns, each straight cut into pieces no longer
     /// than <see cref="PieceM"/>.</summary>

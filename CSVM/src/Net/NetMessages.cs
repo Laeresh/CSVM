@@ -1100,10 +1100,10 @@ public readonly record struct ScoreMessage(byte Seat, short Score, ushort Kills,
 /// <summary>
 /// The match clock, its limits and its ending, written only by the host. A guest applies this
 /// rather than advancing a clock of its own, which keeps two peers showing the same remaining time
-/// and the same end. <c>HostClock</c> is the host's session time at send, and <c>Winner</c> the lobby
-/// team an <see cref="NetMatchEnd.Objective"/> ending names, 0 otherwise. The periodic tick is the
-/// only message a running match repeats, so it is what <see cref="NetClockSlew"/> reads its offset
-/// from. A float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew
+/// and the same end. <c>HostClock</c> is the host's session time at send. <c>Winner</c> is the
+/// winner an ending names (<see cref="WinnerByte"/>, read back by <see cref="NamedWinner"/>).
+/// The periodic tick is the only message a running match repeats, so it is what
+/// <see cref="NetClockSlew"/> reads its offset from. A float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew
 /// calls settled.</summary>
 public readonly record struct MatchStateMessage(
     float RemainingSeconds, float TimeLimitSeconds, short ScoreTarget, NetMatchEnd End,
@@ -1113,11 +1113,35 @@ public readonly record struct MatchStateMessage(
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = 20;
 
+    /// <summary>The <c>Winner</c> byte of an ending with no sole leader. ⚠ Never 0 for a draw: 0
+    /// means no winner named. An older host of the same MAJOR.MINOR sends 0 on every time or
+    /// score end.</summary>
+    public const byte DrawWinner = byte.MaxValue;
+
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.MatchState;
 
     /// <inheritdoc/>
     public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>The winner as <c>VersusMatch.Winner</c> numbers it, 0 for a draw, or null where
+    /// the host named none.</summary>
+    public int? NamedWinner => Winner switch
+    {
+        0 => null,
+        DrawWinner => 0,
+        _ => Winner,
+    };
+
+    /// <summary>The <c>Winner</c> byte for <c>VersusMatch.Winner</c>'s number, 0 for null. The
+    /// number is a seat plus one or a lobby team, both at most <see cref="NetSeats.SeatCapacity"/>,
+    /// so the cast never reaches <see cref="DrawWinner"/>.</summary>
+    public static byte WinnerByte(int? winner) => winner switch
+    {
+        null => 0,
+        <= 0 => DrawWinner,
+        _ => (byte)winner.Value,
+    };
 
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out MatchStateMessage message)

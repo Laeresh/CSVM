@@ -1,3 +1,6 @@
+using System;
+using CSVM.Utils;
+
 namespace CSVM.Bindings;
 
 /// <summary>One player's actions as a polling site sees them: a map, the tick's snapshot, and the
@@ -12,8 +15,18 @@ namespace CSVM.Bindings;
 /// the half it owns, through this gate or a pad-muted <see cref="SeatDeviceState"/>.</summary>
 public sealed class PlayerActions
 {
+    private static readonly InputAction[] Actions = Enum.GetValues<InputAction>();
+
     private readonly ActionSnapshot _snapshot = new();
     private readonly MutedKeyboard _muted = new();
+
+    // The actions down as the load gate opened, read released until each reads under half travel
+    // (ActiveDevice.PressTravel). A throttle or trigger held through the load then does nothing on
+    // the first flying frame.
+    private readonly HandoverLatch _heldThrough = new();
+
+    // Built or polled while the gate was closed: the first poll after it opens arms the latch.
+    private bool _behindGate = LoadGate.Closed;
 
     public PlayerActions()
         : this(new ActionMap(), true)
@@ -39,9 +52,18 @@ public sealed class PlayerActions
     public ActionSnapshot Current => _snapshot;
 
     /// <summary>Resolves every bound action out of this tick's hardware. The one place the map
-    /// touches device state, so a consumer's reads cost nothing and cannot drift apart.</summary>
+    /// touches device state, so a consumer's reads cost nothing and cannot drift apart. Nothing
+    /// reads while <see cref="LoadGate"/> is closed, and a control held through it reads released
+    /// until it reads under half travel (<see cref="ActiveDevice.PressTravel"/>).</summary>
     public void Poll(IDeviceState state)
     {
+        if (LoadGate.Closed)
+        {
+            _behindGate = true;
+            _snapshot.Reset();
+            return;
+        }
+
         if (!ReadsKeyboard)
         {
             _muted.Source = state;
@@ -50,6 +72,7 @@ public sealed class PlayerActions
 
         Map.ResolveInto(_snapshot, state);
         _muted.Source = null;
+        ReleaseHeldThrough();
     }
 
     public bool Held(InputAction action) => _snapshot.Held(action);
@@ -57,6 +80,31 @@ public sealed class PlayerActions
     public float Value(InputAction action) => _snapshot.Value(action);
 
     public float Axis(InputAction positive, InputAction negative) => _snapshot.Axis(positive, negative);
+
+    // ⚠ Never hold the absolute lever through. It rests anywhere on its travel, and LeverTakeover
+    // already waits for it to move. Down is PressTravel, not any travel: the pad axes bind with no
+    // deadzone, so a resting stick's drift would otherwise stay held through until pushed.
+    private void ReleaseHeldThrough()
+    {
+        if (_behindGate)
+        {
+            _behindGate = false;
+            foreach (var action in Actions)
+            {
+                if (!AxisPairs.IsAbsolute(action))
+                    _heldThrough.Arm(action);
+            }
+        }
+
+        if (!_heldThrough.Any)
+            return;
+        foreach (var action in Actions)
+        {
+            bool down = _snapshot.Value(action) >= ActiveDevice.PressTravel;
+            if (!_heldThrough.Read(action, down) && down)
+                _snapshot.Store(action, ControlValue.Digital(false));
+        }
+    }
 
     // The pad-only seat's view of the tick: keyboard and mouse read as idle, every other device
     // passes straight through. A filter rather than a second state, so the registry stays the only

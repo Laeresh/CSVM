@@ -41,8 +41,8 @@ public class OriginalInstantActionTests
             new[]
             {
                 OriginalInstantActionScreen.ContentsUpKey, OriginalInstantActionScreen.ContentsDownKey,
-                OriginalInstantActionScreen.ViewStoryKey, OriginalInstantActionScreen.BuildKey,
-                OriginalInstantActionScreen.PlayerPlaneKey, OriginalInstantActionScreen.WingmenKey,
+                OriginalInstantActionScreen.ViewStoryKey, OriginalInstantActionScreen.ImportKey,
+                OriginalInstantActionScreen.BuildKey, OriginalInstantActionScreen.PlayerPlaneKey, OriginalInstantActionScreen.WingmenKey,
                 OriginalInstantActionScreen.WingmanPlaneKey,
                 OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
                 OriginalInstantActionScreen.EnvironmentKey, OriginalInstantActionScreen.RaceTimeKey,
@@ -79,6 +79,7 @@ public class OriginalInstantActionTests
         // Build stands only where the host says a plane can be made at all; Weapon Loadout needs
         // nothing beyond the feature.
         Assert.False(Row(host, OriginalInstantActionScreen.BuildKey).Enabled);
+        Assert.False(Row(host, OriginalInstantActionScreen.ImportKey).Enabled);
         Assert.True(Row(host, OriginalInstantActionScreen.WeaponLoadoutKey).Enabled);
         Assert.Equal((540f, 540f, 200f, 32f), Rect(Row(host, OriginalInstantActionScreen.ExitKey)));
         Assert.Equal((150f, 440f, 132f, 28f), Rect(Row(host, OriginalInstantActionScreen.ViewStoryKey)));
@@ -107,9 +108,9 @@ public class OriginalInstantActionTests
         Assert.Empty(board.Overlays);
     }
 
-    /// <summary>The cursor walks the page as drawn: the radio pair under Weapon Loadout, then Build
-    /// Custom Plane and Exit as one footer row. Left and Right wrap along that row. The old row-order
-    /// walk took Down from Weapon Loadout onto Fly Mission, the next row built.</summary>
+    /// <summary>The cursor walks the page as drawn: the radio pair under Weapon Loadout, then Import,
+    /// Build Custom Plane and Exit as one footer row. Left and Right wrap along that row. The old
+    /// row-order walk took Down from Weapon Loadout onto Fly Mission, the next row built.</summary>
     [Fact]
     public void TheCursorWalksTheRadiosUnderWeaponLoadoutAndBuildAndExitAsTheFooterRow()
     {
@@ -120,9 +121,31 @@ public class OriginalInstantActionTests
         Assert.Equal(OriginalInstantActionScreen.PlayerRadioKey, host.Press(0, 1));
         Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(0, 1));
         Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.ImportKey, host.Press(1, 0));
         Assert.Equal(OriginalInstantActionScreen.BuildKey, host.Press(1, 0));
+        Assert.Equal(OriginalInstantActionScreen.ImportKey, host.Press(-1, 0));
         Assert.Equal(OriginalInstantActionScreen.ExitKey, host.Press(-1, 0));
         Assert.Equal(OriginalInstantActionScreen.FlyMissionKey, host.Press(0, -1));
+    }
+
+    /// <summary>Import stands left of Build Custom Plane on the screen's own paper strip, centred on
+    /// that strip's frame. A press hands the import to the host.</summary>
+    [Fact]
+    public void ImportStandsLeftOfBuildAndHandsThePressToTheHost()
+    {
+        var host = Open(out _);
+        host.CanBuildPlane = true;
+        var import = Row(host, OriginalInstantActionScreen.ImportKey);
+        var build = Row(host, OriginalInstantActionScreen.BuildKey);
+        var paper = Row(host, OriginalInstantActionScreen.WeaponLoadoutKey);
+
+        Assert.Equal("Import Planes", import.Label);
+        Assert.Equal(paper.Art, import.Art);
+        Assert.Equal(build.X - 12f, import.X + import.Width);
+        Assert.Equal(build.Y + (build.Height / 2f), import.Y + (import.Height / 2f));
+        host.FocusKey(OriginalInstantActionScreen.ImportKey);
+        Accept(host);
+        Assert.Equal(1, host.Imports);
     }
 
     /// <summary>Right from the contents' first row crosses to the right page's first dropdown.

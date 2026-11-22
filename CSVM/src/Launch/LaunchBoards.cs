@@ -59,6 +59,35 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             parts.Length > 2 && parts[2].Length > 0 ? parts[2][0] : 'd');
     }
 
+    /// <summary>The count a Dogfight door's fourth part names as <c>loaded/total</c>, for a board
+    /// held for the other machines with that waiting line written out. Null for a door without one.</summary>
+    public static (int Loaded, int Total)? WaitingDoor(string aid)
+    {
+        System.ArgumentNullException.ThrowIfNull(aid);
+        var parts = aid.Split(':');
+        var count = parts.Length > 3 ? parts[3].Split('/') : System.Array.Empty<string>();
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        return count.Length == 2
+            && int.TryParse(count[0], System.Globalization.NumberStyles.None, invariant, out int loaded)
+            && int.TryParse(count[1], System.Globalization.NumberStyles.None, invariant, out int total)
+            ? (loaded, total)
+            : null;
+    }
+
+    /// <summary>The leave question a Dogfight door's fifth part stands over the board: <c>host</c>
+    /// for the host's, <c>guest</c> for a guest's. Null for a door without one.</summary>
+    public static string? LeaveDoor(string aid)
+    {
+        System.ArgumentNullException.ThrowIfNull(aid);
+        var parts = aid.Split(':');
+        return parts.Length > 4 ? parts[4] switch
+        {
+            "host" => UI.Screens.LoadScreens.HostLeaveQuestion,
+            "guest" => UI.Screens.LoadScreens.GuestLeaveQuestion,
+            _ => null,
+        } : null;
+    }
+
     /// <summary>The load screen for the launch the spec describes. A campaign launch takes the
     /// original's chart sheet for the mission at <paramref name="missionSeq"/>, the spec's own
     /// position by default. Everything else takes its blackboard (docs/org/loading-screen.md).

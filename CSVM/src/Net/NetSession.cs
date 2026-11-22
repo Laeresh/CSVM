@@ -382,6 +382,10 @@ public sealed class NetSession : INetTransportListener
     /// </summary>
     public void Step(double dt) => _transport.Step(dt);
 
+    /// <summary>Drops the link to <paramref name="peer"/>, which then takes its own lost-link path.
+    /// </summary>
+    public void Disconnect(int peer) => _transport.Disconnect(peer);
+
     /// <inheritdoc/>
     public void OnPeerConnected(int peer)
     {

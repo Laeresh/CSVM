@@ -20,16 +20,37 @@ public class SpyglassScaleTests
     public void TheWordsAreTheFourStepsAndANeverSetWordIsTheDecodedSize()
     {
         Assert.Equal(new[] { "100", "125", "150", "200" }, SpyglassScaleSetting.Words);
-        Assert.Equal(new[] { "100%", "125%", "150%", "200%" }, SpyglassScaleSetting.Labels());
+        Assert.Equal(new[] { "100%", "125%", "150%", "200%" }, SpyglassScaleSetting.Labels);
         Assert.Equal(1f, SpyglassScaleSetting.FactorOf("100"));
         Assert.Equal(1.25f, SpyglassScaleSetting.FactorOf("125"));
         Assert.Equal(1.5f, SpyglassScaleSetting.FactorOf("150"));
         Assert.Equal(2f, SpyglassScaleSetting.FactorOf("200"));
         Assert.Equal(1f, SpyglassScaleSetting.FactorOf(null));
         Assert.Equal(1f, SpyglassScaleSetting.FactorOf("175"));
-        Assert.Equal(SettingSource.Default, SpyglassScaleSetting.Resolve(null).Source);
-        Assert.Equal(SpyglassScaleSetting.Default, SpyglassScaleSetting.Resolve("300").Word);
-        Assert.Equal(SettingSource.Saved, SpyglassScaleSetting.Resolve("150").Source);
+        var lookup = SpyglassScaleSetting.Lookup;
+        Assert.Equal(SettingSource.Default, lookup.Resolve(null, null, null, SpyglassScaleSetting.Default).Source);
+        Assert.Equal(SpyglassScaleSetting.Default, lookup.Resolve(null, "300", null, SpyglassScaleSetting.Default).Word);
+        Assert.Equal(SettingSource.Saved, lookup.Resolve(null, "150", null, SpyglassScaleSetting.Default).Source);
+        Assert.Equal(SpyglassScaleSetting.Default, lookup.Fallback(new SettingContext(false, true, 1)).Word);
+        Assert.Null(lookup.Flag);
+        Assert.Equal("hud.spyglassScale", lookup.Key);
+        Assert.Equal("spyglassScale", lookup.SavedField);
+        Assert.Contains(lookup, WordSettings.All);
+    }
+
+    /// <summary>A file an earlier build saved with both size words loads them through the registry. It
+    /// writes them back under the same fields.</summary>
+    [Fact]
+    public void AnOlderFileWithBothSizeWordsLoadsTheSameWords()
+    {
+        string old = "{\"version\":" + OptionsStore.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + ",\"spyglassScale\":\"150\",\"bracketScale\":\"200\"}";
+        var read = OptionsStore.Deserialize(old);
+        Assert.Equal("150", read!.Words[SpyglassScaleSetting.Lookup]);
+        Assert.Equal("200", read.Words[BracketScaleSetting.Lookup]);
+        string again = OptionsStore.Serialize(read);
+        Assert.Contains("\"spyglassScale\": \"150\"", again, System.StringComparison.Ordinal);
+        Assert.Contains("\"bracketScale\": \"200\"", again, System.StringComparison.Ordinal);
     }
 
     [Fact]
@@ -48,8 +69,8 @@ public class SpyglassScaleTests
     [InlineData("200")]
     public void TheOptionsFileCarriesEachStep(string word)
     {
-        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { SpyglassScale = word }));
-        Assert.Equal(word, read!.SpyglassScale);
+        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [SpyglassScaleSetting.Lookup] = word } }));
+        Assert.Equal(word, read!.Words[SpyglassScaleSetting.Lookup]);
     }
 
     [Theory]
@@ -58,8 +79,8 @@ public class SpyglassScaleTests
     [InlineData("big")]
     public void AnAbsentOrHandEditedWordReadsNeverSet(string? word)
     {
-        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { SpyglassScale = word }));
-        Assert.Null(read!.SpyglassScale);
+        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [SpyglassScaleSetting.Lookup] = word } }));
+        Assert.Null(read!.Words[SpyglassScaleSetting.Lookup]);
     }
 
     [Theory]

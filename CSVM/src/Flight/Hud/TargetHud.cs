@@ -34,6 +34,11 @@ public sealed partial class TargetHud : Control
     /// without, and the picture stepped with the target in a turn.</summary>
     public const int AfterFlightRigs = 1;
 
+    /// <summary>The least sonic or flash wash weight that hides the marker: the first the original's
+    /// 32-level software blend paints any wash colour at. Remake-only rule: docs/org/targeting.md
+    /// "Under a blinding wash".</summary>
+    public const float BlindingFloor = 1f / 32f;
+
     /// <summary>Which pane this draws in (0-based), the identity <see cref="OwnTeam"/> falls
     /// back to with no aircraft bound.</summary>
     public int PlayerIndex;
@@ -73,6 +78,10 @@ public sealed partial class TargetHud : Control
     /// <summary>The live per-zone fog band (near, far) the spyglass's range gate is derived from,
     /// or null on a pane with no weather bound, where the gate is its 2000 m cap alone.</summary>
     public System.Func<Vector2>? FogRange;
+
+    /// <summary>The weight of this pane's sonic or flash wash this frame (<c>ScreenFlash.BlindingFor</c>,
+    /// smoke excluded). Null on a pane with none bound, which is never blinded.</summary>
+    public System.Func<float>? WashWeight;
 
     /// <summary>The hostile and destructive-objective colour, the decoded (200,0,0) in the HUD
     /// palette's desaturation.</summary>
@@ -198,6 +207,11 @@ public sealed partial class TargetHud : Control
     /// gate still run.</summary>
     public bool Textless { get; set; }
 
+    /// <summary>Whether a sonic or flash wash blinds the pilot (<see cref="Blinds"/>). Set, the
+    /// selection's box, label, lead marker and spyglass are not drawn, flat or in the headset. The
+    /// selection, its gates and every other marker run on.</summary>
+    public bool Blinded => WashWeight is { } weight && Blinds(weight());
+
     /// <summary>Whether a stereo session draws this pane's markers in the world
     /// (<see cref="XrMarkers"/>). Set, this control draws none, and the hostile tracker still runs.
     /// The stereo host then answers the spyglass's gates and shows its picture on the head ring.</summary>
@@ -269,6 +283,10 @@ public sealed partial class TargetHud : Control
         hud.AddChild(hud._spyglass);
         return hud;
     }
+
+    /// <summary>Whether a sonic or flash wash at <paramref name="washWeight"/> hides the marker: at or
+    /// above <see cref="BlindingFloor"/>, so for as long as the wash shows.</summary>
+    public static bool Blinds(float washWeight) => washWeight >= BlindingFloor;
 
     /// <summary>The nearest live hostile AI aircraft in <paramref name="scan"/>, or null. Pure
     /// over the candidate snapshot: live (a crashed plane is listed but not live), an
@@ -534,6 +552,31 @@ public sealed partial class TargetHud : Control
     public static int DiscSide(float s, float discScale = 1f) =>
         s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s * discScale)) : 0;
 
+    /// <summary>The on-screen label block's anchor: 3 under the box's bottom, or 30 over its top
+    /// where the block would pass <paramref name="paneHeight"/>. The box's height takes the player's
+    /// <paramref name="bracketScale"/>, the gaps do not.</summary>
+    public static Vector2 InViewLabelAnchor(Vector2 at, float paneHeight, float s, float bracketScale = 1f)
+    {
+        // ⚠ Add the growth last, as EdgeLabelAnchor does: it is exactly 0 at 100%, which keeps the
+        // decoded placement bit for bit.
+        float growth = BracketHalfH(s, bracketScale) - BracketHalfH(s);
+        float below = at.Y + ((RefBracketHalfH + RefLabelGap) * s) + growth;
+        return new Vector2(at.X, at.Y + ((RefBracketHalfH + RefLabelBlock) * s) + growth <= paneHeight
+            ? below
+            : at.Y - ((RefBracketHalfH + RefLabelAbove) * s) - growth);
+    }
+
+    /// <summary>The box's half height in pane pixels at HUD scale <paramref name="s"/> and the
+    /// player's <paramref name="bracketScale"/> (<see cref="HudMetrics.BracketScale"/>). ⚠ Keep the
+    /// factor multiplied last: at 1 the box is then bit for bit the unscaled one.</summary>
+    public static float BracketHalfH(float s, float bracketScale = 1f) => RefBracketHalfH * s * bracketScale;
+
+    /// <summary>The box's half width, the factor multiplied last as in <see cref="BracketHalfH"/>.</summary>
+    public static float BracketHalfW(float s, float bracketScale = 1f) => RefBracketHalfW * s * bracketScale;
+
+    /// <summary>The box's arm length, the factor multiplied last as in <see cref="BracketHalfH"/>.</summary>
+    public static float BracketArm(float s, float bracketScale = 1f) => RefBracketArm * s * bracketScale;
+
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame.
@@ -553,7 +596,7 @@ public sealed partial class TargetHud : Control
     /// still against the drawn target. Read by the suite.</summary>
     public (Vector3 Lead, Vector3 Target)? LeadMark()
     {
-        if (Own is not { LeadMarker: true } own)
+        if (Blinded || Own is not { LeadMarker: true } own)
         {
             return null;
         }
@@ -745,8 +788,13 @@ public sealed partial class TargetHud : Control
             // gun's physics pose, a fly-by shake through a camera on the render pose. The gate in
             // UpdateBrackets stays on the physics pose.
             var pos = TargetPool.TryRenderPosition(target.Source, out var render) ? render : target.Position;
-            into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
-                _bracketed, 0));
+            if (!Blinded)
+            {
+                into.Add(new WorldMark(WorldMarkStyle.Selected, pos, MarkerColor(target, OwnTeam), "", target,
+                    _bracketed, 0));
+            }
+
+            // Set while blinded too, so the hostile fallback never stands in for the hidden marker.
             selected = true;
         }
 
@@ -810,7 +858,7 @@ public sealed partial class TargetHud : Control
     /// pass <paramref name="paneHeight"/>. Any other marker takes a tag just above the point.
     /// <paramref name="lines"/> is the caller's scratch list.</summary>
     internal static void DrawInView(CanvasItem into, Font font, in WorldMark mark, Vector2 at,
-        float paneHeight, float s, int fontSize, List<string> lines)
+        float paneHeight, float s, int fontSize, List<string> lines, float bracketScale)
     {
         lines.Clear();
         if (mark.Style != WorldMarkStyle.Selected)
@@ -821,15 +869,11 @@ public sealed partial class TargetHud : Control
 
         if (mark.Boxed)
         {
-            DrawBrackets(into, at, mark.Color, s);
+            DrawBrackets(into, at, mark.Color, s, bracketScale);
         }
 
         LabelLines(mark.Target, null, lines);
-        float below = at.Y + (RefBracketHalfH + RefLabelGap) * s;
-        float anchor = at.Y + (RefBracketHalfH + RefLabelBlock) * s <= paneHeight
-            ? below
-            : at.Y - (RefBracketHalfH + RefLabelAbove) * s;
-        DrawLabelBlock(into, font, new Vector2(at.X, anchor), lines, mark.Color, s, fontSize);
+        DrawLabelBlock(into, font, InViewLabelAnchor(at, paneHeight, s, bracketScale), lines, mark.Color, s, fontSize);
     }
 
     /// <summary>The label an off-view marker carries, top to bottom. A selection's is its label block
@@ -847,13 +891,14 @@ public sealed partial class TargetHud : Control
 
     /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected
     /// point. It is 20 x 16 reference pixels with 4-pixel arms (<c>0x00607a0c</c>/<c>0x00607a14</c>/
-    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by nothing
-    /// else, least of all by range.</summary>
-    internal static void DrawBrackets(CanvasItem into, Vector2 at, Color color, float s)
+    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by the
+    /// player's <paramref name="bracketScale"/>, never by range. The line width and the shadow's
+    /// offset keep the HUD scale alone.</summary>
+    internal static void DrawBrackets(CanvasItem into, Vector2 at, Color color, float s, float bracketScale)
     {
         // The same drop shadow the arrow and the tags carry, so the box stays readable over sky.
-        Brackets(into, at + new Vector2(1.5f, 1.5f) * s, Shadow, s);
-        Brackets(into, at, color, s);
+        Brackets(into, at + new Vector2(1.5f, 1.5f) * s, Shadow, s, bracketScale);
+        Brackets(into, at, color, s, bracketScale);
     }
 
     /// <summary>The label lines stacked downward from <paramref name="anchor"/> at the original's
@@ -920,9 +965,9 @@ public sealed partial class TargetHud : Control
         return false;
     }
 
-    private static void Brackets(CanvasItem into, Vector2 at, Color color, float s)
+    private static void Brackets(CanvasItem into, Vector2 at, Color color, float s, float bracketScale)
     {
-        float hw = RefBracketHalfW * s, hh = RefBracketHalfH * s, arm = RefBracketArm * s;
+        float hw = BracketHalfW(s, bracketScale), hh = BracketHalfH(s, bracketScale), arm = BracketArm(s, bracketScale);
         float w = Mathf.Max(1f, RefBracketWidth * s);
         for (int side = 0; side < 2; side++)
         {
@@ -983,7 +1028,7 @@ public sealed partial class TargetHud : Control
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in
     // _Draw. Both latch, and a latch that advanced per repaint would depend on how often the pane
     // redraws. A hidden pane (a dead pilot, a cut scene) holds nothing and renders nothing, and
-    // neither does a textless one.
+    // neither does a textless or a blinded one.
     private void StepSpyglass()
     {
         // ⚠ Do not release here under a headset: the stereo host answers the gate later in the
@@ -993,7 +1038,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        if (!Visible || Textless || Selected is not { Source: not null } sel
+        if (!Visible || Textless || Blinded || Selected is not { Source: not null } sel
             || !GodotObject.IsInstanceValid(_camera))
         {
             ReleaseSpyglass();
@@ -1039,9 +1084,9 @@ public sealed partial class TargetHud : Control
         if (placed.OnScreen)
         {
             if (!Textless)
-                DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines);
+                DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines, HudMetrics.BracketScale);
             else if (mark.Boxed)
-                DrawBrackets(this, sp, color, s);
+                DrawBrackets(this, sp, color, s, HudMetrics.BracketScale);
             return;
         }
 

@@ -135,10 +135,11 @@ public static class NetSeats
         return left;
     }
 
-    /// <summary>Seat <paramref name="seat"/>'s callsign when a bot flies it, else null, so a caller
-    /// names a person by player tag. Null too for a seat past the roster or with no roster.</summary>
-    public static string? BotCallsign(IReadOnlyList<NetSeat>? roster, int seat) =>
-        roster != null && seat >= 0 && seat < roster.Count && roster[seat].IsBot ? roster[seat].Callsign : null;
+    /// <summary>Seat <paramref name="seat"/>'s callsign, a person's nickname or a bot's, as the kill
+    /// line names it. Null for an empty callsign, a seat past the roster or no roster, so a caller
+    /// falls back to the player tag.</summary>
+    public static string? SeatName(IReadOnlyList<NetSeat>? roster, int seat) =>
+        roster != null && seat >= 0 && seat < roster.Count && roster[seat].Callsign.Length > 0 ? roster[seat].Callsign : null;
 
     /// <summary>A bot seat at <paramref name="seatIndex"/>, owned and flown by the host whose peer
     /// is <paramref name="hostPeer"/>. It has no pane and no menu pick. Its loadout and build reach
@@ -215,7 +216,7 @@ public static class NetSeats
                 PeerId = localPeer,
                 SeatIndex = seats.Count,
                 FlownHere = true,
-                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Callsign = PlayerTag(i),
                 Unnamed = i == 0,
                 PlaneNode = localPlanes[i],
             });
@@ -255,7 +256,7 @@ public static class NetSeats
                 PeerId = OfflinePeer,
                 SeatIndex = seats.Count,
                 FlownHere = true,
-                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Callsign = PlayerTag(i),
             });
         }
 
@@ -289,7 +290,7 @@ public static class NetSeats
                 FlownHere = local,
                 Callsign = name.Length > 0
                     ? name
-                    : $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    : PlayerTag(i),
                 Unnamed = name.Length == 0 && first,
                 PlaneNode = local ? localPlanes[i] : guests[i - localPlanes.Count].Plane,
             });

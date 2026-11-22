@@ -33,6 +33,7 @@
     "theater-screen": "aims a ray through each pause board row laid out against the root viewport, which headless sizes at 64 px, so every row lies off the screen and no ray lands",
     "trail-world-anchor": "reads the first drawn puff's instance transform back, which the headless renderer does not keep",
     "vegetation-added-stamps": "counts the added stamps drawn from their MultiMesh instance transforms after each edit, which the headless renderer keeps no instances for",
+    "vegetation-hangars": "reads each cover card back from its MultiMesh instance transforms and each shell piece out of the built mesh, which the headless renderer keeps neither of",
     "vegetation-lab": "reads the drawn clutter buffers on the map and past its edge back after each edit, which the headless renderer keeps no instances for",
     "vegetation-light": "renders a night and a day view in a pane and reads its pixels back; headless renders none",
     "vegetation-models": "reads the near models' stamps back from their MultiMesh instance transforms after each crater, hide and switch, which the headless renderer keeps no instances for",

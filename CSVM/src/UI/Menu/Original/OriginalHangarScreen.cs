@@ -88,6 +88,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     /// never deactivates it, and the still shows it drawn like Sell beside it.</summary>
     public const string InventoryExportKey = "HA_B_EXPORTP";
 
+    /// <summary>The wallet-free inventory's Import button, on the Export button's strip and place:
+    /// the original game's saved planes copied into the store.</summary>
+    public const string InventoryImportKey = "HA_B_IMPORTP";
+
     /// <summary>The inventory's Done button, back to the hub.</summary>
     public const string InventoryDoneKey = "HA_B_DONE";
 
@@ -140,11 +144,13 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private const float HubItemFont = 12f;
     private const float HubLabelFont = 14f;
     private const float DescFont = 11f;
-    private const float DescLine = 14f;
 
     // How far inside the description box's own rectangle its text sits, across and down.
     private const float DescInset = 6f;
     private const float DescTop = 4f;
+
+    // The description box's border, which its slider column stands inside.
+    private const float DescBorder = 1f;
 
     // A dropdown's fallback item height where the layout row is missing.
     private const float FallbackHubItemHeight = 15f;
@@ -207,6 +213,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private const string DeleteLabel = "Delete";
     private const string DeletePrompt = "Delete a Plane";
     private const string DeleteQuestion = "Are you sure you want to delete it?";
+
+    // A remake-only word too. The paper strip is 117 pixels wide, too narrow for "Import from
+    // Crimson Skies", so the result line names the game instead.
+    private const string ImportLabel = "Import";
 
     private static readonly Regex FontTag = new(@"\[[A-Za-z0-9]+\]", RegexOptions.Compiled);
 
@@ -373,6 +383,23 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.PlaneName);
     }
 
+    /// <summary>Imports the original game's saved planes into the wallet-free store and shows the
+    /// result line, from the inventory or Instant Action's own Import. The one-button notice keeps
+    /// the exclamation icon every notice of the original's mask 0x1 wears (Export's own included).
+    /// Nothing happens without a feature or a store.</summary>
+    public void ImportOriginalPlanes()
+    {
+        if (_hangar == null || _planes == null)
+        {
+            return;
+        }
+
+        string line = _hangar.ImportOriginalPlanes(_planes);
+        _host.RefreshRosterFromStore();
+        _host.RefreshInstantActionRoster();
+        _host.RaiseDialog(line, DialogIcon.Warning, Ok());
+    }
+
     /// <summary>Opens a hangar tab directly on a default-configuration build named
     /// <paramref name="name"/>, the screenshot aids' door. It is the name screen's OK with the box
     /// checked, then the tab. It runs over <paramref name="wallet"/> when the shot wants the
@@ -497,7 +524,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
-        key is PurchaseNowKey or InventorySellKey or InventoryExportKey;
+        key is PurchaseNowKey or InventorySellKey or InventoryExportKey or InventoryImportKey;
 
     // A list whose rows move the bill. The pricing is kept on the list, so the hub can show what a
     // row under the cursor would cost and weigh without taking it.
@@ -706,12 +733,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key) =>
         OriginalWidgets.PaneOrigin(screen, key, _host.Measure);
 
-    // The scroll-text box as a panel, in its authored back and border colours. The component's
-    // figures go on their own lines, the shipped heading a line under them, the prose flowed in
-    // the room left. The prose is a note because how many lines it wraps to is a font measurement.
-    // A body longer than the room scrolls inside the box, the way the authored widget's own slider
-    // and arrows say it does. The note hands back the two line counts the window is drawn and
-    // clamped from.
+    // The scroll-text box as a panel, in its authored back and border colours. It holds the shipped
+    // string whole as one note, since how many lines it wraps to is a font measurement. A body
+    // longer than the box scrolls as a whole, figures included, the way the original's one-string
+    // box does. The note hands back the line counts the window is drawn and clamped from.
     private void ComposeDescription(MenuLayoutWidget widget, HangarInfo info, BoardLayers layers)
     {
         float x = widget.Int("X");
@@ -728,21 +753,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
             layers.Fills.Add(new BoardFill(x, y, width, height, border.R, border.G, border.B, Border: true));
         }
 
-        int row = 0;
-        foreach (string figure in info.Figures)
-        {
-            layers.Lines.Add(new BoardLine(figure, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
-        }
-
-        if (info.Heading.Length > 0)
-        {
-            // The shipped string's own blank line stands between the figures and the heading.
-            row++;
-            layers.Lines.Add(new BoardLine(info.Heading, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
-        }
-
         _descWindow = null;
-        if (info.Prose.Length == 0)
+        string body = info.Body;
+        if (body.Length == 0)
         {
             _descBody = string.Empty;
             _descLines = 0;
@@ -750,30 +763,34 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
             return;
         }
 
-        if (_descBody != info.Prose)
+        if (_descBody != body)
         {
             // A new body is a new box, so the window goes back to the head. That is where the
             // original's own box stands every time a tab or a picked component changes it.
-            _descBody = info.Prose;
+            _descBody = body;
             _descLines = 0;
             _descTop = 0;
         }
 
-        float top = y + DescTop + (row * DescLine);
-        float room = Math.Max(0f, y + height - DescTop - top);
+        // The words wrap short of the slider while it stands, as the original's do, so it never
+        // covers them. Narrower lines only wrap to more, so the choice cannot flip back.
+        var arrow = StripSize(StripArt(widget.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        bool scrolls = _descFits > 0 && _descLines > _descFits;
+        float text = width - (2f * DescInset) - (scrolls ? arrow.Width : 0f);
         _descTop = Math.Clamp(_descTop, 0, Math.Max(0, _descLines - _descFits));
         layers.Notes.Add(new BoardNote(
-            new[] { info.Prose }, x + DescInset, top, width - (2f * DescInset),
-            room, 0f, DescFont, BoardInk.Row, Italic: true, Cut: true, Skip: _descTop,
+            new[] { body }, x + DescInset, y + DescTop, text,
+            height - (2f * DescTop), 0f, DescFont, BoardInk.Row, Italic: true, Cut: true, Skip: _descTop,
             Counted: (total, fits) => (_descLines, _descFits) = (total, fits)));
-        _descWindow = DescriptionWindow(widget, x + width, top, room);
+        _descWindow = DescriptionWindow(widget, x, y, width, height);
         ComposeDescriptionBar(widget, layers);
     }
 
-    // The prose window as the pointer sees it, counted in wrapped lines rather than in list rows.
-    // It is the box's own text area, with the thumb column inside its right edge between the
-    // arrows. Null while the body fits, which is when the original's box carries no slider either.
-    private ListWindow? DescriptionWindow(MenuLayoutWidget widget, float right, float top, float room)
+    // The body's window as the pointer sees it, counted in wrapped lines rather than in list rows.
+    // It is the whole box, with the slider column inside its border at the right edge, running
+    // the box's full height between the arrows. Null while the body fits, which is when the
+    // original's box carries no slider either.
+    private ListWindow? DescriptionWindow(MenuLayoutWidget widget, float x, float y, float width, float height)
     {
         if (_descFits <= 0 || _descLines <= _descFits)
         {
@@ -782,21 +799,24 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
         var arrow = StripSize(StripArt(widget.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
         var thumb = StripSize(StripArt(widget.Art, 0, 1), arrow.Width, FallbackThumbHeight);
-        float track = Math.Max(1f, room - (2f * arrow.Height));
-        float tall = Math.Min(track, Math.Max(thumb.Height, track * _descFits / _descLines));
+        float top = y + DescBorder;
+        float tall = height - (2f * DescBorder);
+        float track = Math.Max(1f, tall - (2f * arrow.Height));
+        float grip = ListWindow.ThumbHeightFor(track, _descFits, _descLines, thumb.Height);
         return new ListWindow(
-            widget.Int("X"), top, widget.Int("Width", 300), room,
-            right - arrow.Width, ListWindow.ThumbYFor(top + arrow.Height, track, tall, _descTop, _descLines - _descFits),
-            thumb.Width, tall, top + arrow.Height, track, _descLines, _descFits, _descTop);
+            x, y, width, height,
+            x + width - DescBorder - arrow.Width, ListWindow.ThumbYFor(top + arrow.Height, track, grip, _descTop, _descLines - _descFits),
+            thumb.Width, grip, top + arrow.Height, track, _descLines, _descFits, _descTop);
     }
 
     // Puts the description box's window at that line, clamped to the body it holds.
     private void ScrollDescription(int top) => _descTop = Math.Clamp(top, 0, Math.Max(0, _descLines - _descFits));
 
     // The box's own slider column, at its right edge between the two authored arrows, drawn only
-    // while the body is longer than the box. The arrows are pictures rather than rows for the
-    // reason the keys list's are. The wheel and the thumb move this window, and the hub's focus
-    // order is the one the original's tab key walks.
+    // while the body is longer than the box. The thumb is stretched to the share of the body the
+    // box shows. The arrows are pictures rather than rows for the reason the keys list's are. The
+    // wheel and the thumb move this window, and the hub's focus order is the one the original's
+    // tab key walks.
     private void ComposeDescriptionBar(MenuLayoutWidget widget, BoardLayers layers)
     {
         if (_descWindow is not { } window)
@@ -807,17 +827,18 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         var up = StripArt(widget.Art, 1);
         var down = StripArt(widget.Art, 2);
         var bar = StripArt(widget.Art, 0, 1);
-        float arrow = window.TrackTop - window.Y;
+        float top = window.Y + DescBorder;
+        float foot = window.TrackTop + window.TrackHeight;
         if (up != null && down != null && bar != null
             && _host.Measure(up.Name) != null && _host.Measure(down.Name) != null && _host.Measure(bar.Name) != null)
         {
-            layers.Pictures.Add(new BoardPicture(up, window.ThumbX, window.Y));
-            layers.Pictures.Add(new BoardPicture(down, window.ThumbX, window.Y + window.Height - arrow));
-            layers.Pictures.Add(new BoardPicture(bar, window.ThumbX, window.ThumbY));
+            layers.Pictures.Add(new BoardPicture(up, window.ThumbX, top));
+            layers.Pictures.Add(new BoardPicture(down, window.ThumbX, foot));
+            layers.Pictures.Add(new BoardPicture(bar, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
             return;
         }
 
-        layers.Fills.Add(new BoardFill(window.ThumbX, window.Y, window.ThumbWidth, window.Height, 255, 255, 255, 0.3f, Border: true));
+        layers.Fills.Add(new BoardFill(window.ThumbX, top, window.ThumbWidth, window.Height - (2f * DescBorder), 255, 255, 255, 0.3f, Border: true));
         layers.Fills.Add(new BoardFill(window.ThumbX, window.ThumbY, window.ThumbWidth, window.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
@@ -1187,9 +1208,14 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         if (_hangar.Wallet == null)
         {
             // Wallet-free the removal is a delete, and there is nowhere to export to. The export
-            // door's own store is the one the shared pickers already read. So the Export row is
-            // not built at all rather than built dead, and Sell takes the delete word.
+            // door's own store is the one the shared pickers already read. So no Export row is
+            // built, Sell takes the delete word, and the Export strip carries the import instead.
             Relabel(rows, InventorySellKey, DeleteLabel);
+            AddStrip(screen, rows, InventoryExportKey, OriginalRowKind.TextButton, true, 0);
+            if (rows.Count > 0 && rows[^1].Key == InventoryExportKey)
+            {
+                rows[^1] = rows[^1] with { Key = InventoryImportKey, Label = ImportLabel };
+            }
         }
         else
         {
@@ -1618,6 +1644,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
                 return null;
             case InventoryExportKey:
                 ExportPicked();
+                return null;
+            case InventoryImportKey:
+                ImportOriginalPlanes();
                 return null;
             case InventoryDoneKey:
                 ShowHangarScreen(_hangarTab);

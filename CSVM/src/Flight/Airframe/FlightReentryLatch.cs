@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using CSVM.Bindings;
 
@@ -33,9 +32,7 @@ public sealed class FlightReentryLatch
         InputAction.SelectOrdnancePrev,
     };
 
-    private static readonly int ActionCount = Enum.GetValues(typeof(InputAction)).Length;
-
-    private readonly bool[] _armed = new bool[ActionCount];
+    private readonly HandoverLatch _latch = new();
 
     /// <summary>Arms every latched action, whatever the controls read as input comes back.
     /// ⚠ Do not gate this on a button reading taken here. A re-entry point runs inside an input
@@ -47,7 +44,7 @@ public sealed class FlightReentryLatch
     {
         foreach (var action in Latched)
         {
-            _armed[(int)action] = true;
+            _latch.Arm(action);
         }
     }
 
@@ -56,14 +53,5 @@ public sealed class FlightReentryLatch
     /// disarms it the moment <paramref name="held"/> goes false, so the next real press reads
     /// through normally. An action outside <see cref="Latched"/> is never armed and so always
     /// reads through.</summary>
-    public bool Read(InputAction action, bool held)
-    {
-        if (!held)
-        {
-            _armed[(int)action] = false;
-            return false;
-        }
-
-        return !_armed[(int)action];
-    }
+    public bool Read(InputAction action, bool held) => _latch.Read(action, held);
 }

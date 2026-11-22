@@ -21,6 +21,23 @@ using Godot;
 
 namespace CSVM.Launch;
 
+/// <summary>What one frame of a load screen held for the other machines came to.</summary>
+internal enum StartHoldFrame
+{
+    /// <summary>The start was released, or was never held: the screen comes down.</summary>
+    Released,
+
+    /// <summary>Still held: the screen stays up.</summary>
+    Held,
+
+    /// <summary>A guest answered Yes to leaving: it goes to the games list alone.</summary>
+    Left,
+
+    /// <summary>The host called the start off, here or by its word: every machine goes to the lobby.
+    /// </summary>
+    Cancelled,
+}
+
 /// <summary>
 /// Main.tscn's root: the once-per-process bootstrap, and everything that persists across
 /// in-process relaunches. <c>_Ready</c> parses the command line into a <see cref="SessionSpec"/>,
@@ -135,6 +152,7 @@ public partial class Launcher : Node3D
     // the frames since the request and the build runs on the first one that proves a frame rendered.
     // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
     private CanvasLayer? _loadLayer;
+    private UI.Screens.LoadBoard? _loadBoard;
     private int _launchFramesWaited = -1;
     // This is the load screen's second half. Once the session is built, the work it ordered for the
     // load is carried out one step a frame with the screen still up. That is what makes the screen
@@ -179,6 +197,7 @@ public partial class Launcher : Node3D
     {
         _net = new NetFlight(ReturnToMenu, ExitSession);
         _audio = new LaunchAudio(this);
+        LoadGate.Changed += _audio.FollowLoadGate;
         _menu = new ProcessMenu(this, _audio, _net, () => _paths, OnMenuExit)
         {
             // Read on the menu's first show, after _Ready has booted the headset path or not.
@@ -1252,9 +1271,18 @@ public partial class Launcher : Node3D
 
             // A network flight waiting for its other machines keeps the screen up, since its world
             // stands still until they have all loaded.
-            if (_session is { StartHeld: true })
+            var frame = _session is { } held
+                ? HoldLoadBoard(_loadBoard, held, _paths.Data.Messages, _menuDriven)
+                : StartHoldFrame.Released;
+            if (frame == StartHoldFrame.Held)
             {
                 _startHeldFrames++;
+                return;
+            }
+
+            if (frame != StartHoldFrame.Released)
+            {
+                LeaveHeldStart(frame);
                 return;
             }
 
@@ -1379,10 +1407,13 @@ public partial class Launcher : Node3D
     // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null, string? briefing = null)
     {
+        // ⚠ Replace, never stack: a board left standing unreferenced holds the load gate closed for good.
+        HideLoadScreen();
         var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight, briefing);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
+        _loadBoard = board;
     }
 
     private void HideLoadScreen()
@@ -1394,6 +1425,85 @@ public partial class Launcher : Node3D
         RemoveChild(_loadLayer);
         _loadLayer.QueueFree();
         _loadLayer = null;
+        _loadBoard = null;
+    }
+
+#pragma warning disable SA1202, SA1204
+    // The two load-screen calls for the suite that pins the replace rule. A --run-tests launch
+    // builds no session, so nothing else would stand a board on this node. Kept beside them.
+    internal void ShowLoadScreenForTest() => ShowLoadScreen(false, null);
+
+    internal void HideLoadScreenForTest() => HideLoadScreen();
+
+    /// <summary>One frame of the load screen held for the other machines. While another machine is
+    /// still loading, the board writes the waiting line with the count in. With
+    /// <paramref name="offerLeave"/>, Esc asks to leave, and a Yes leaves a guest's start or calls a
+    /// host's off for every machine. Internal for the suite that drives a held start.</summary>
+    internal static StartHoldFrame HoldLoadBoard(
+        UI.Screens.LoadBoard? board, GameSession session, Mech3.Messages messages, bool offerLeave = false)
+    {
+        if (session.Wire.StartCancelled)
+        {
+            return StartHoldFrame.Cancelled;
+        }
+
+        // ⚠ Read the answer before the release. A Yes the board took in the frame the start released
+        // is still the player's word, and a release read first would fly them anyway.
+        bool host = session.Wire.Link is { IsHost: true };
+        if (board is { LeaveConfirmed: true })
+        {
+            if (host)
+            {
+                session.Wire.CancelStart();
+                return StartHoldFrame.Cancelled;
+            }
+
+            return StartHoldFrame.Left;
+        }
+
+        if (!session.StartHeld)
+        {
+            return StartHoldFrame.Released;
+        }
+
+        if (session.Wire.StartWaitsOnOthers)
+        {
+            board?.Wait(UI.Screens.LoadScreens.WaitingText(messages, session.Wire.StartTally));
+        }
+
+        if (board != null)
+        {
+            board.LeaveQuestion = !offerLeave ? string.Empty
+                : host ? UI.Screens.LoadScreens.HostLeaveQuestion : UI.Screens.LoadScreens.GuestLeaveQuestion;
+        }
+
+        return StartHoldFrame.Held;
+    }
+#pragma warning restore SA1202, SA1204
+
+    // A held start left before it was released. A guest that chose to leave drops its wire and lands
+    // on the games list, the others' start going on without it. A start the host called off lands
+    // every machine on the lobby it was launched from, the wire kept for it.
+    private void LeaveHeldStart(StartHoldFrame frame)
+    {
+        Log.Info("ui", $"load screen: the held start {(frame == StartHoldFrame.Left ? "left by this guest" : "called off")} after {_startHeldFrames} held frame(s)");
+        _loadStepsRun = -1;
+        _startHeldFrames = 0;
+        HideLoadScreen();
+        if (!_menuDriven)
+        {
+            BlankAndQuit(); // a command-line guest has no lobby to land on
+            return;
+        }
+
+        if (frame == StartHoldFrame.Left)
+        {
+            _net.LeaveMatch();
+            ReturnToMenu(new LobbyReturn(System.Array.Empty<DogfightScore>()));
+            return;
+        }
+
+        ReturnToMenu(_net.CancelledLanding(_exitDestination));
     }
 
     // Instantiates this launch's session node from the current _spec and
@@ -1414,7 +1524,6 @@ public partial class Launcher : Node3D
             .WithSavedLeadingAimAssist(saved.LeadingAimAssist).WithSavedLeadMarker(saved.LeadMarker)
             .WithSavedThrottlePlate(saved.ThrottlePlate)
             .WithHeadsetView(_xr != null);
-        SpyglassScaleSetting.ApplySaved(_spec.Det, saved);
         HudModeSetting.ApplySaved(_spec.Det, saved);
         HudLayoutSetting.ApplySaved(_spec.Det, saved);
         CameraZoomMemory.ApplySaved(_spec.Det, saved);
@@ -1713,11 +1822,22 @@ public partial class Launcher : Node3D
         string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
         // A build tears the load screen down before anything renders, so a shot needs a door that
         // leaves it standing. The arguments: a campaign mission, an Instant Action mission type,
-        // or a Dogfight's chapter and mode letter.
+        // or a Dogfight's chapter, mode letter, a held start's count and its leave question.
         if (aid.StartsWith("loadboard-mp", System.StringComparison.Ordinal))
         {
             var (chapter, letter) = LaunchBoards.MultiplayerDoor(aid);
             ShowLoadScreen(false, null, briefing: UI.Screens.LoadScreens.MultiplayerKey(chapter, letter));
+            if (LaunchBoards.WaitingDoor(aid) is { } count && _loadBoard is { } board)
+            {
+                board.Wait(UI.Screens.LoadScreens.WaitingText(_paths.Data.Messages, count));
+                board.Chalk(double.MaxValue);
+            }
+
+            if (LaunchBoards.LeaveDoor(aid) is { } question && _loadBoard is { } asked)
+            {
+                asked.LeaveQuestion = question;
+                asked.Press(UI.Screens.LoadKey.Back);
+            }
         }
         else if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
         {

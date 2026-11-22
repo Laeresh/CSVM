@@ -42,8 +42,9 @@ public static class Pads
     private static HashSet<string> _sticks = new();
 
     /// <summary>Whether pad <i>input</i> is currently suppressed, the gate <see cref="For"/>
-    /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
-    public static bool InputBlocked => Disabled || !Focused;
+    /// applies, and while the load screen stands (<see cref="LoadGate"/>). Not a statement about
+    /// which devices exist; see <see cref="Connected"/>.</summary>
+    public static bool InputBlocked => Disabled || !Focused || LoadGate.Closed;
 
     /// <summary>The pads that <b>exist</b>, the roster, for binding players to devices and for
     /// noticing a disconnect, one entry per physical controller (<see cref="KeepXInputView"/>).

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
@@ -118,11 +119,13 @@ internal static class NetFlagSuites
         + "the enemy flag at its base, the flag hangs on its "
         + "aeroplane on every machine, the base flag hides and the away marker and the carrier's tag "
         + "name the carrier; bringing it home "
-        + "scores score_enemy_flag; a carrier's death floats the flag on every machine; a pilot catches its own "
+        + "scores score_enemy_flag and every pane shows the capture line with the new team score; a carrier's death floats the flag on every machine; a pilot catches its own "
         + "floating flag and returning it scores score_return_flag; a guest carrier's ejectflag typed into the chat "
         + "floats its flag on every machine through the host and sends no chat line, its marker back on its "
         + "callsign; the uncaught flag goes home "
-        + "when its 15 s throw runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
+        + "when its 15 s throw runs out, scoring nobody; a second capture ends the match on the Score limit by team, with team 2's flag "
+        + "held, every pane posting \"Game Over:\" over the capturing team's win line; and the host's rematch from its board stands "
+        + "both flags home and every total at 0 on every machine, no pane posting a capture line and no machine speaking a flag line")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
         var spec = Spec(ctx);
@@ -174,6 +177,7 @@ internal static class NetFlagSuites
             ThrowRunsOut(ctx, peers);
             Lockstep(CooledSteps, peers);
             SecondCapture(ctx, peers);
+            Rematch(ctx, peers);
         }
         finally
         {
@@ -751,6 +755,7 @@ internal static class NetFlagSuites
 
         // ABLE-TO-FAIL CONTROL: inside the take's cooldown the carrier at its own base asks nothing.
         int before = peers[0].Dogfight!.Match.ScoreOf(2);
+        int teamBefore = peers[0].Dogfight!.Match.TeamTotalOf(2);
         Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "ABLE-TO-FAIL CONTROL: at its own base inside the take's 5 s cooldown the flag stays held", team: 1, holder: 2);
@@ -761,9 +766,26 @@ internal static class NetFlagSuites
         Home(ctx, peers, "carried to team 2's base it goes home on every machine", team: 1);
         ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == before + p.Dogfight!.Match.Scores.FlagCapture && p.Dogfight!.Match.KillsOf(2) == 0),
             $"and the capture scores its carrier {peers[0].Dogfight!.Match.Scores.FlagCapture} on every machine ({Scores(peers)})");
+        CaptureLine(ctx, peers, teamBefore);
         ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed),
             $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget(ctx)}-point target and the match runs ({Scores(peers)})");
         Park(peers, seat: 2);
+    }
+
+    // Every machine's pane shows the capture's score line with the host's score after the capture,
+    // and none shows it with the score before.
+    private static void CaptureLine(TestContext ctx, GameSession[] peers, int teamBefore)
+    {
+        var host = peers[0].Dogfight!.Match;
+        string name = host.TeamName(2);
+        string line = HudMessages.CaptureLine(name, host.TeamTotalOf(2), host.TeamTotalOf(1));
+        string stale = HudMessages.CaptureLine(name, teamBefore, host.TeamTotalOf(1));
+        var shown = peers.Select((p, i) => Enumerable.Range(0, HudMessages.Slots)
+            .Select(s => p.SeatRigs[i].Controller!.MessageStack?.LineAt(s)).ToArray()).ToArray();
+        ctx.Check(host.TeamTotalOf(2) == teamBefore + host.Scores.FlagCapture && shown.All(lines => lines.Contains(line)),
+            $"and every machine's pane shows the capture line '{line}' ({string.Join(" | ", shown.Select(l => string.Join(" / ", l)))})");
+        ctx.Check(shown.All(lines => !lines.Contains(stale)),
+            $"ABLE-TO-FAIL CONTROL: no pane shows the score before the capture, '{stale}'");
     }
 
     // The carrier goes down with the flag and it floats everywhere. The host's own pilot on team 1
@@ -841,13 +863,18 @@ internal static class NetFlagSuites
             $"and a floating flag's return scores nobody ({Scores(peers)})");
     }
 
-    // The second capture reaches the target on team 2's total and ends the match everywhere.
+    // The second capture reaches the target on team 2's total and ends the match everywhere. The
+    // team 1 guest holds team 2's flag meanwhile, so the match ends with a flag held.
     private static void SecondCapture(TestContext ctx, GameSession[] peers)
     {
         Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken for the second capture", team: 1, holder: 2);
         Park(peers, seat: 2);
+        Put(peers, seat: 1, peers[1].Dogfight!.Flags!.Flags.HomeOf(2));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "and the team 1 guest takes team 2's flag", team: 2, holder: 1);
+        Park(peers, seat: 1);
         Lockstep(CooledSteps, peers);
         Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
@@ -856,6 +883,42 @@ internal static class NetFlagSuites
         var titles = peers.Select(p => VersusBoard.Title(p.Dogfight!.Match)).ToArray();
         ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),
             $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
+        NetCombatSuites.EndLines(ctx, peers, peers[0].Dogfight!.Match.TeamName(2));
+    }
+
+    // The host's rematch from its board's R, team 2's flag still held. A guest sends that flag home
+    // on the host's running state, ahead of the table, so its table move is no capture there either.
+    private static void Rematch(TestContext ctx, GameSession[] peers)
+    {
+        ctx.Check(peers.All(p => p.Dogfight!.Match is { Completed: true } match && match.TeamTotalOf(2) > 0
+                                 && p.Dogfight!.Flags!.Flags.RowOf(2) is { State: FlagState.Held, Holder: 1 }),
+            $"ABLE-TO-FAIL CONTROL: every machine's match ends with seat 1 holding team 2's flag and team 2's total standing ({Rows(peers)}; {Scores(peers)})");
+        var spoken = peers.Select(p => p.Dogfight!.Flags!.Spoken.Count).ToArray();
+        var stacks = peers.Select((p, i) => p.SeatRigs[i].Controller!.MessageStack).ToArray();
+        foreach (var stack in stacks)
+        {
+            stack?.Clear();
+        }
+
+        peers[0].SeatRigs[0].Controller!.RestartMatch!();
+        Lockstep(SettleSteps, peers);
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running),
+            $"the host's rematch runs the round again on every machine ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+        Home(ctx, peers, "after the rematch", team: 1);
+        Home(ctx, peers, "and the flag held at the end", team: 2);
+        ctx.Check(peers.All(p => p.Dogfight!.Match is var match && match.TeamTotalOf(1) == 0 && match.TeamTotalOf(2) == 0
+                                 && Enumerable.Range(0, 3).All(seat => match.ScoreOf(seat) == 0)),
+            $"and every total reads 0 on every machine ({Scores(peers)})");
+
+        // The capture line's words before its score, for each team.
+        var scored = TeamNames.Values.Select(name => HudMessages.CaptureLine(name, 0, 0).Replace("0 - 0", "", StringComparison.Ordinal)).ToArray();
+        string home = HudMessages.FlagLine(ctx.Data.Messages, HudMessages.FlagHomeKey, peers[0].Dogfight!.Match.TeamName(2));
+        var shown = stacks.Select(s => Enumerable.Range(0, HudMessages.Slots).Select(slot => s?.LineAt(slot)).OfType<string>().ToArray()).ToArray();
+        ctx.Check(shown.All(lines => lines.Contains(home) && !lines.Any(l => scored.Any(w => l.StartsWith(w, StringComparison.Ordinal)))),
+            $"and every pane posts '{home}' but no capture line ({string.Join(" | ", shown.Select(l => string.Join(" / ", l)))})");
+        var voiced = peers.Select((p, i) => p.Dogfight!.Flags!.Spoken.Skip(spoken[i]).ToArray()).ToArray();
+        ctx.Check(voiced.All(v => v.Length == 0),
+            $"and no machine speaks a flag line, the score voice included ({string.Join(" | ", voiced.Select(v => string.Join(",", v)))})");
     }
 
     // Every marker line below is read off the run's own table, so a missing row would compare

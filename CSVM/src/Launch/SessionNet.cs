@@ -59,6 +59,13 @@ internal sealed class SessionNet
     private readonly List<ChatPanel> _chatPanels = new();
     // The shaping this end's link runs under, as the trace's first line names it, or null unshaped.
     private readonly Net.LoopbackConditions? _shape;
+    // A host's guests whose loaded word named no round: built before this machine held. Counted in,
+    // though only their answer to the hold opens the gate.
+    private readonly HashSet<int> _builtAhead = new();
+    // A host's guests whose loaded word carried no cancel mark, an older build's.
+    private readonly HashSet<int> _deafToCancel = new();
+    // The menu door's lobby under the wire, null on a command-line launch, which has none.
+    private readonly Net.NetLobby? _lobby;
 
     // Simulation steps traced so far, the trace's own clock, since a step is a fixed slice of
     // time. The wall stamp of a step run in a catch-up burst says when it ran, not what it covers.
@@ -72,6 +79,10 @@ internal sealed class SessionNet
     private AiVoiceRuntime? _voice;
     // Whether this machine's world is built, so a guest answers the host's hold word only then.
     private bool _startBuilt;
+    // The count a guest's host put in its hold word, null from an older host.
+    private (int Loaded, int Total)? _holdTally;
+    // Whether this guest's own load completed the set, so it waits on nobody.
+    private bool _completesStart;
     // Whether a ledger whose zone count differs from its copy's has been logged, once a session.
     private bool _zoneMismatchLogged;
 
@@ -86,6 +97,7 @@ internal sealed class SessionNet
         _clockTime = clockTime;
         _realCarrier = ctx.NetTransport is Net.INetLink;
         _shape = (ctx.NetTransport as Net.ShapedTransport)?.Conditions;
+        _lobby = ctx.NetTransport as Net.NetLobby;
         // Sorted once here, so a seat's position in this list IS its seat index. Everything
         // downstream then reads the roster with the index it reads the rigs with.
         Seats = ctx.NetSeats is { Count: > 0 } seats
@@ -150,6 +162,21 @@ internal sealed class SessionNet
     /// <summary>The start barrier, null outside a network match. While it holds, the clock is
     /// start-held and only the wire is stepped.</summary>
     public Net.NetStartGate? StartGate { get; private set; }
+
+    /// <summary>The players whose machines have built their worlds, and every player still in the
+    /// flight, while its start is held. A host counts its own; a guest takes the host's count, so it
+    /// is null there until the first count arrives.</summary>
+    public (int Loaded, int Total)? StartTally { get; private set; }
+
+    /// <summary>Whether this held machine waits on another one still loading, so its load board
+    /// writes the waiting line. False on the machine whose own load completed the set. A host knows
+    /// it when it counts every machine in. A guest knows it when its host's last word, read before
+    /// its own loaded word left, counted every other player in.</summary>
+    public bool StartWaitsOnOthers =>
+        Link is { IsHost: true } ? StartTally is not { } tally || tally.Loaded < tally.Total : !_completesStart;
+
+    /// <summary>Whether the host called this guest's held start off.</summary>
+    public bool StartCancelled { get; private set; }
 
     /// <summary>AI aircraft and world pools over the wire, null outside a network match.</summary>
     public NetWorldLink? World { get; private set; }
@@ -307,17 +334,26 @@ internal sealed class SessionNet
             return;
         }
 
+        // Takes what arrived during the build first, before the flag so no answer goes yet. A guest
+        // reads the round and the host's count off it; a host, the guests that built before it.
+        net.Step(0.0);
         _startBuilt = true;
         clock.StartHeld = !gate.Open;
         if (net.IsHost)
         {
-            foreach (int peer in gate.Waiting)
+            // The count first, since each hold word carries it. A guest that built first was answered
+            // with its hold in that step.
+            SendCount(gate, net, send: false);
+            foreach (int peer in gate.Waiting.Where(p => !_builtAhead.Contains(p)))
             {
                 SendHold(peer);
             }
         }
-        else if (!gate.Open)
+        else if (!gate.Open && !StartCancelled)
         {
+            int ours = Seats.Count(s => s.FlownHere && !s.IsBot);
+            _completesStart = gate.Round != 0 && (StartTally ?? _holdTally) is { Total: > 0 } tally
+                && tally.Loaded + ours >= tally.Total;
             SendLoaded();
         }
 
@@ -339,6 +375,11 @@ internal sealed class SessionNet
         gate.Step(delta);
         if (!gate.Open)
         {
+            if (Link is { IsHost: true } counting)
+            {
+                SendCount(gate, counting);
+            }
+
             return false;
         }
 
@@ -350,6 +391,28 @@ internal sealed class SessionNet
 
         Log.Info("core", $"net start: released ({gate.Release}) after {gate.WaitedSeconds:0.00} s");
         return true;
+    }
+
+    /// <summary>The host calls its held start off. Every guest is told under the round. An older
+    /// build drops that word unread, so a guest whose loaded word came unmarked loses its link now.
+    /// One still loading loses it to the lobby when its word arrives (<c>CallOffStart</c>). Either
+    /// goes down its lost-link path.</summary>
+    public void CancelStart()
+    {
+        if (Link is not { IsHost: true } net || StartGate is not { } gate)
+        {
+            return;
+        }
+
+        net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Cancel, gate.Round), Net.NetChannels.Events);
+        foreach (int peer in _deafToCancel.ToArray())
+        {
+            net.Disconnect(peer);
+        }
+
+        _lobby?.CallOffStart();
+
+        Log.Info("core", $"net start: called off by the host, round {gate.Round}, {_deafToCancel.Count} older build(s) dropped");
     }
 
     /// <summary>Combat over the wire, wired once the seats, the pool and the catalogue stand. It
@@ -1097,8 +1160,18 @@ internal sealed class SessionNet
 
         if (net.IsHost && word.Word == Net.NetStartWord.Loaded)
         {
+            if (!word.AnswersCancel)
+            {
+                _deafToCancel.Add(peer);
+            }
+
             if (!gate.Current(word.Round))
             {
+                if (word.Round == 0)
+                {
+                    _builtAhead.Add(peer);
+                }
+
                 SendHold(peer);
             }
             else if (!gate.Open)
@@ -1112,14 +1185,29 @@ internal sealed class SessionNet
         }
         else if (!net.IsHost && word.Word == Net.NetStartWord.Hold)
         {
-            if (gate.TakeHold(word.Round) && _startBuilt)
+            if (!gate.TakeHold(word.Round))
+            {
+                return;
+            }
+
+            _holdTally = word.Total > 0 ? (word.Loaded, word.Total) : _holdTally;
+            if (_startBuilt)
             {
                 SendLoaded();
             }
         }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Cancel && gate.Current(word.Round) && !gate.Open)
+        {
+            StartCancelled = true;
+            Log.Info("core", $"net start: the host called the start off, round {word.Round}");
+        }
         else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
         {
             gate.TakeStart(word.Round);
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Count && gate.Current(word.Round))
+        {
+            StartTally = (word.Loaded, word.Total);
         }
     }
 
@@ -1129,15 +1217,54 @@ internal sealed class SessionNet
     {
         if (Link is { } net && StartGate is { } gate)
         {
-            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded, gate.Round), Net.NetChannels.Events);
+            net.Send(net.HostPeer, Net.StartGateMessage.LoadedWord(gate.Round), Net.NetChannels.Events);
         }
+    }
+
+    // The host's count over every human seat still linked, those of machines still loading left
+    // out of the loaded. Sent only when it moves and someone is still out, as the start follows a full one.
+    // ⚠ Send none at the hold: no guest has loaded to read it, and a two-seat start must stay one word.
+    private void SendCount(Net.NetStartGate gate, Net.NetSession net, bool send = true)
+    {
+        var linked = net.Peers;
+        int loaded = 0;
+        int total = 0;
+        foreach (var seat in Seats)
+        {
+            if (seat.IsBot || (!seat.FlownHere && !linked.Contains(seat.PeerId)))
+            {
+                continue;
+            }
+
+            total++;
+            loaded += gate.Waiting.Contains(seat.PeerId) && !_builtAhead.Contains(seat.PeerId) ? 0 : 1;
+        }
+
+        if (StartTally == (loaded, total))
+        {
+            return;
+        }
+
+        StartTally = (loaded, total);
+        if (!send || loaded >= total)
+        {
+            return;
+        }
+
+        net.Broadcast(
+            new Net.StartGateMessage(Net.NetStartWord.Count, gate.Round, (byte)Math.Min(loaded, byte.MaxValue), (byte)Math.Min(total, byte.MaxValue)),
+            Net.NetChannels.Events);
     }
 
     private void SendHold(int peer)
     {
         if (Link is { } net && StartGate is { } gate)
         {
-            net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Hold, gate.Round), Net.NetChannels.Events);
+            var (loaded, total) = StartTally ?? (0, 0);
+            net.Send(
+                peer,
+                new Net.StartGateMessage(Net.NetStartWord.Hold, gate.Round, (byte)Math.Min(loaded, byte.MaxValue), (byte)Math.Min(total, byte.MaxValue)),
+                Net.NetChannels.Events);
         }
     }
 

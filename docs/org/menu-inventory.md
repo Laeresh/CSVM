@@ -88,10 +88,13 @@ convention".
 | `join-board[:pads[:bots\|bot]]` | the join board, drawing `pads` entries posed as signed on; `bots` stands five bot rows of the player setup under the articles, named from the pilot names, the second a Fury at ace and the third a novice, and `bot` opens the Edit Bot panel on that second row |
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog |
 | `loadboard-campaign[:CM]` | the load screen's chart sheet for that campaign mission, `CM01` by default, over the menu; it reads the memento off a `--campaign=` profile the same way |
-| `loadboard-mp[:chapter[:mode]]` | the Dogfight load screen's blackboard for that chapter's lobby environment and mode letter, as `pauseboard-mp` names them, standing rather than torn down by a build |
+| `loadboard-mp[:chapter[:mode[:n/m[:side]]]]` | the Dogfight load screen's blackboard for that chapter's lobby environment and mode letter, as `pauseboard-mp` names them, standing rather than torn down by a build. A count writes a held start's waiting line on it whole, and a side, `host` or `guest`, stands that machine's leave question over it |
 | `pauseboard[:CM[:done]]` | the Original presentation's pause sheet for that campaign mission, `CM01` by default, with that many of its objectives marked. A `--campaign=<profile>:<seq>` beside it hangs that profile's own memento, the way a real pause does; without one the sheet hangs the seeded pin-up |
 | `pauseboard-ia[:chapter[:mission_type]]` | the Original presentation's Instant Action pause blackboard for that chapter's environment and mission type, `C1` and `stunt_flying` by default |
 | `pauseboard-mp[:chapter[:mode]]` | the Original presentation's Dogfight pause blackboard for that chapter's lobby environment and mode letter (`d` Deathmatch, `t` team Deathmatch, `c` Capture the Flag, `z` Zeppelin vs Zeppelin), `C1` and `d` by default |
+
+Every `loadboard` aid's board (`loadboard`, `loadboard-campaign` and `loadboard-mp`) holds the load
+gate (`Utils/LoadGate.cs`), so the process stays muted with its input off while it stands.
 
 ## Part 2: the original as the data ships it
 
@@ -365,7 +368,11 @@ constants rather than reading a layout.
   the Danger Zones, then the chapter's courses by title, live on the host. A guest's box stands for
   the same races and reads its host's course by title, or Danger Zones, greyed. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
   and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
-  (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with
+  (`MP_CREATETEAMBACKGROUND.PNG`). In a team match (Capture the Flag, Zeppelin vs Zeppelin, or a
+  Deathmatch once a team stands or while Restrict Number of Teams asks for one) the Ready box is
+  greyed for a pilot on no team and its Ready? label reads "Pick a team first", the remake's own
+  words; the host does not count a teamless guest Ready either. What the original's Ready does for a
+  teamless pilot is not decoded. The player list draws each team's row in its team colour with
   its members under it, then the players on no team. Restrict Number of Teams and its two count
   boxes, with the script's arrows (`MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`), are live on the
   host. The victory radios arm Time, Score or both, and a press on the only armed one keeps it.

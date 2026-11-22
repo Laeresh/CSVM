@@ -95,6 +95,11 @@ public static class EnhancedLook
     /// is when a load warms the other mode's shaders by default.</summary>
     public static bool HasSwitched { get; private set; }
 
+    /// <summary>Gets a value indicating whether SSR traces at half size while no Enhanced SSR is on: the
+    /// project's setting, half unless project.godot says otherwise.</summary>
+    internal static bool SsrHalfSizeDefault =>
+        ProjectSettings.GetSetting("rendering/environment/screen_space_reflection/half_size", true).AsBool();
+
     /// <summary>The live graphics-mode switch, the one sequence the launcher runs and the round-trip
     /// suite drives. It sets the flag, regenerates the shaders and re-dresses <paramref name="sun"/>
     /// and <paramref name="env"/>. Then the clutter fade and the word settings are resolved again,
@@ -322,9 +327,10 @@ public static class EnhancedLook
         ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.Sun, enhanced, ShadowQualitySetting.HardShadows);
 
     /// <summary>The screen-space passes, the tonemap and the mission sky on one Environment, or a
-    /// fresh Environment's values for each. The faithful path's world is fullbright, so none of
-    /// these passes has anything to work on there. A zone apply writes the ambient and the sky
-    /// colour after this, in either mode.</summary>
+    /// fresh Environment's values for each. ⚠ Restore <see cref="SsrHalfSizeDefault"/> after applying
+    /// Enhanced to a throwaway Environment: the SSR trace size is global to the process. The faithful
+    /// path's world is fullbright, so none of these passes has anything to work on there. A zone apply
+    /// writes the ambient and sky colour after.</summary>
     public static void ApplyEnvironment(Godot.Environment env, bool enhanced, EnhancedPasses skipped)
     {
         var fresh = new Godot.Environment();
@@ -359,6 +365,8 @@ public static class EnhancedLook
         env.SsrFadeIn = ssr ? SsrFadeIn : fresh.SsrFadeIn;
         env.SsrFadeOut = ssr ? SsrFadeOut : fresh.SsrFadeOut;
         env.SsrDepthTolerance = ssr ? SsrDepthTolerance : fresh.SsrDepthTolerance;
+        // Full size: at half, each wave's reflection of the crest beyond it lands as a blocky dash.
+        RenderingServer.EnvironmentSetSsrHalfSize(!ssr && SsrHalfSizeDefault);
 
         // Only C21's glow-arm sprites and the puffer fire flipbook bloom out of the HDR buffer.
         // MultiMeshEmitterRenderer lifts the fire_f01-fire_f06 columns alone over this threshold.

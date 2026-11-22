@@ -100,6 +100,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// rule (<see cref="InstantActionFeature.AdmitsBot"/>) and comes back here.</summary>
     public const string JoinBoardKey = "IA_B_JOINBOARD";
 
+    /// <summary>The remake-only Import beside Build Custom Plane, which copies the original game's
+    /// saved planes into the build store (<see cref="IOriginalScreenHost.ImportOriginalPlanes"/>).</summary>
+    public const string ImportKey = "IA_B_IMPORT";
+
     /// <summary>The layout section the loadout screen is composed from.</summary>
     public const string LoadoutSection = "OrdinanceLayout";
 
@@ -181,6 +185,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const string JoinBoardLabelText = "[join board ...]";
     private const string ContinuedKey = "IA_T_CONTINUED";
     private const float JoinBoardWidth = 82f;
+
+    // The Import plaque: the screen's own label-drawn paper strip (Weapon Loadout's), on the
+    // desk left of Build Custom Plane, where the shipped screen draws nothing. The strip is 132
+    // pixels wide, too narrow for "Import from Crimson Skies".
+    private const string ImportLabelText = "Import Planes";
+    private const float ImportGap = 12f;
 
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
@@ -880,6 +890,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         AddStrip(screen, rows, ViewStoryKey, OriginalRowKind.TextButton, true, 0);
+        AddImport(screen, rows);
         AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _host.CanBuildPlane, 0);
 
         // A box a setting has nothing to say through keeps its place blank and inert rather than
@@ -1130,6 +1141,23 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         string value = live && list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
         rows.Add(new OriginalRow(key, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
             live, column, StripArt(widget.Art, 4)));
+    }
+
+    // Live where Build Custom Plane is, the store being the build door's. Vertically centred on
+    // that strip's frame.
+    private void AddImport(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
+        if (screen.Widget(BuildKey) is not { } build || screen.Widget(WeaponLoadoutKey) is not { } paper)
+        {
+            return;
+        }
+
+        var art = StripArt(paper.Art, 0, paper.Frames);
+        var size = StripSize(art, FallbackButtonWidth, FallbackButtonHeight);
+        var buildSize = StripSize(StripArt(build.Art, 0, build.Frames), FallbackButtonWidth, FallbackButtonHeight);
+        rows.Add(new OriginalRow(ImportKey, ImportLabelText, OriginalRowKind.TextButton,
+            build.Int("X") - ImportGap - size.Width, build.Int("Y") + ((buildSize.Height - size.Height) / 2f),
+            size.Width, size.Height, _host.CanBuildPlane, 0, art));
     }
 
     private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
@@ -1385,6 +1413,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 return null;
             case BuildKey:
                 _host.OpenHangar(null);
+                return null;
+            case ImportKey:
+                _host.ImportOriginalPlanes();
                 return null;
             case WeaponLoadoutKey:
                 OpenLoadout();

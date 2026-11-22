@@ -42,6 +42,7 @@ public static class SyntheticMessages
         ("MSG_STATE_GAMEOVER", "Probe match over"),
         ("MSG_MP_ALL_ALONE", "Probe field cleared"),
         ("MSG_MP_REARMED", "Probe pad rearm"),
+        ("MSG_MP_WAITING", "Probe hold for %1"),
         ("MSG_X_YOUR", "Our"),
         ("MSG_X_ENEMY", "Rival"),
         ("MSG_MP_YOUR_BASE", "Probe home pad"),

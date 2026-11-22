@@ -19,6 +19,14 @@ public enum NetStartWord : byte
     /// to a loaded word under another round. A guest answers it with loaded under that round.
     /// </summary>
     Hold = 3,
+
+    /// <summary>The host's count of the players whose machines have built their worlds, out of
+    /// every player. Sent to every guest whenever it changes while the start is held.</summary>
+    Count = 4,
+
+    /// <summary>The host called the held start off, sent to every guest. Every machine goes back
+    /// to the lobby it was launched from. An older build drops it as unknown.</summary>
+    Cancel = 5,
 }
 
 /// <summary>Why a <see cref="NetStartGate"/> opened, <see cref="Held"/> while it has not.</summary>
@@ -46,9 +54,13 @@ public enum NetStartRelease
 /// <summary>
 /// One word of the start barrier, which the lobby passes to a bound session. It names the round of
 /// its host's flight (<see cref="NetStartGate.Round"/>, 0 for none). A guest sends it
-/// only once its handlers stand, so the host's answer is never unknown.
+/// only once its handlers stand, so the host's answer is never unknown. A
+/// <see cref="NetStartWord.Count"/> and a <see cref="NetStartWord.Hold"/> carry the host's count in
+/// <paramref name="Loaded"/> and <paramref name="Total"/>. A loaded word's <paramref name="Total"/>
+/// is <see cref="AnswersCancel"/>'s mark. An older build writes zeros in all three.
 /// </summary>
-public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0) : INetMessage<StartGateMessage>
+public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0, byte Loaded = 0, byte Total = 0)
+    : INetMessage<StartGateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4;
@@ -59,6 +71,14 @@ public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0
     /// <inheritdoc/>
     public static NetReliability Reliability => NetReliability.Reliable;
 
+    /// <summary>Whether a loaded word came from a build that takes <see cref="NetStartWord.Cancel"/>.
+    /// The host drops an older build's link on a cancel, which it would otherwise not hear.</summary>
+    public bool AnswersCancel => Word == NetStartWord.Loaded && Total != 0;
+
+    /// <summary>A guest's loaded word under <paramref name="round"/>, marked as one that takes a
+    /// cancel.</summary>
+    public static StartGateMessage LoadedWord(byte round) => new(NetStartWord.Loaded, round, 0, 1);
+
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out StartGateMessage message)
     {
@@ -68,7 +88,9 @@ public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0
             return false;
 
         var word = (NetStartWord)reader.ReadByte();
-        message = new StartGateMessage(word, reader.ReadByte());
+        byte round = reader.ReadByte();
+        byte loaded = reader.ReadByte();
+        message = new StartGateMessage(word, round, loaded, reader.ReadByte());
         return true;
     }
 
@@ -78,7 +100,8 @@ public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte((byte)Word);
         writer.WriteByte(Round);
-        writer.WriteUInt16(0);
+        writer.WriteByte(Loaded);
+        writer.WriteByte(Total);
         return writer.Close();
     }
 }

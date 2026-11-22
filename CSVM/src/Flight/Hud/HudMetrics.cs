@@ -35,9 +35,16 @@ public static class HudMetrics
     /// <summary>The lowest allowed spyglass disc multiplier, the disc at its decoded size.</summary>
     public const float MinimumSpyglassScale = SpyglassScaleSetting.Native;
 
+    /// <summary>The lowest allowed target bracket multiplier, the box at its decoded size.</summary>
+    public const float MinimumBracketScale = BracketScaleSetting.Native;
+
     /// <summary>The highest allowed spyglass disc multiplier, the largest Game Options step.</summary>
     public static readonly float MaximumSpyglassScale =
         SpyglassScaleSetting.FactorOf(SpyglassScaleSetting.Words[^1]);
+
+    /// <summary>The highest allowed target bracket multiplier, the largest Game Options step.</summary>
+    public static readonly float MaximumBracketScale =
+        BracketScaleSetting.FactorOf(BracketScaleSetting.Words[^1]);
 
     /// <summary>The user-selected multiplier for flight-status text.</summary>
     public static float StatusTextScale => TextScale("hud.statusTextScale");
@@ -49,6 +56,11 @@ public static class HudMetrics
     /// frame so an options apply resizes the disc in every flat pane at once. The headset's ring keeps
     /// its own factor (<see cref="XrMarkerLaw.SpyglassScale"/>).</summary>
     public static float SpyglassScale => ClampSpyglassScale(SpyglassScaleSetting.Current);
+
+    /// <summary>The player's target bracket multiplier (<see cref="BracketScaleSetting"/>), read every
+    /// frame so an options apply resizes the box in every flat pane at once. The headset's cards keep
+    /// the decoded box.</summary>
+    public static float BracketScale => ClampBracketScale(BracketScaleSetting.Current);
 
     /// <summary>How much this control's viewport is shrunk by splitscreen: 1.0 for a full-screen
     /// single-player view (the pane IS the window), sqrt(½) ≈ 0.71 in a 2P pane, ½ in a 4P pane.
@@ -133,6 +145,10 @@ public static class HudMetrics
     /// <summary>Constrain a spyglass disc multiplier to its supported range.</summary>
     public static float ClampSpyglassScale(float scale) =>
         Mathf.Clamp(scale, MinimumSpyglassScale, MaximumSpyglassScale);
+
+    /// <summary>Constrain a target bracket multiplier to its supported range.</summary>
+    public static float ClampBracketScale(float scale) =>
+        Mathf.Clamp(scale, MinimumBracketScale, MaximumBracketScale);
 
     private static float TextScale(string key) => ClampTextScale(Config.GetFloat(key, 1f));
 }

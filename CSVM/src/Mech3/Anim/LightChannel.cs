@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3.Anim;
@@ -13,6 +14,10 @@ namespace CSVM.Mech3.Anim;
 /// rather than reaching for those two callbacks directly.</summary>
 internal sealed class LightChannel
 {
+    // The light every `*_gunhit` def that authors one names, lit on a 20% roll per round that strikes
+    // (docs/formats/weapon-effects.md, "PLAYER_RANGE 1000").
+    private const string GunHitLight = "gunhit_lt";
+
     // Keyed by (light name, anchor). The anchor identifies the *instance* of the definition,
     // and a definition's `lights` array is its own symbol table, so two refineries each get
     // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
@@ -71,7 +76,7 @@ internal sealed class LightChannel
             return;
         var key = (name, anchor);
         if (!_lights.TryGetValue(key, out var light))
-            _lights[key] = light = new AnimLight { Host = anchor, Replaced = _replaced(def) };
+            _lights[key] = light = new AnimLight { Host = anchor, Replaced = _replaced(def), GunHit = name == GunHitLight };
 
         // AT_NODE arrives as translate:{AtNode:{name, pos}}, node plus a local offset, the same
         // shape (and the same frame) as a puffer's AT_NODE.
@@ -193,7 +198,8 @@ internal sealed class LightChannel
     {
         foreach (var light in _lights.Values)
         {
-            if (!light.Active || light.Replaced || light.RangeMax <= 0f)
+            if (!light.Active || light.Replaced || light.RangeMax <= 0f
+                || (light.GunHit && ReduceFlashingSetting.Active))
                 continue;
             // ⚠ A light inside a deactivated subtree is off. A building's destroyed variant must
             // not keep lighting the ground through its healthy twin, and a retired burst copy

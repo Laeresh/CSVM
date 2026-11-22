@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using CSVM.Mech3;
@@ -160,10 +161,31 @@ public class ComposedBoardTests
         Assert.True(lines[^1].Y + 39f <= 335f + 240f);
     }
 
+    /// <summary>A scrolled note steps over authored line breaks one line at a time. A window over
+    /// figure lines starts on the next figure, and a blank line under them stays a line.</summary>
+    [Fact]
+    public void AScrolledNoteKeepsItsAuthoredLines()
+    {
+        const string body = "COST: $1\nWEIGHT: 2\n\nDESCRIPTION\nThe prose.";
+
+        string Head(int skip) =>
+            new BoardNote(new[] { body }, 0f, 0f, 185f, 13f * 4f, 0f, 11f, BoardInk.Row, Cut: true, Skip: skip)
+                .Flow(Paragraphs)[0].Text;
+
+        Assert.StartsWith("WEIGHT: 2\n\nDESCRIPTION", Head(1));
+        Assert.StartsWith("\nDESCRIPTION", Head(2));
+        Assert.Equal("The prose.", Head(4));
+    }
+
     // Thirty characters is one line, thirteen pixels tall, which is the shape of the real face in
     // the 185-wide column without needing one.
     private static float Measured(string text, float width) =>
         13f * ((text.Length + 29) / 30);
+
+    // The same face over authored line breaks, each paragraph at least a line, as the renderer's
+    // multiline measurement counts them.
+    private static float Paragraphs(string text, float width) =>
+        13f * text.Split('\n').Sum(p => Math.Max(1, (p.Length + 29) / 30));
 
     private static CampaignFlow Opened()
     {

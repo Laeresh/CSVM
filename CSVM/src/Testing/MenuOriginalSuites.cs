@@ -657,7 +657,7 @@ internal static class MenuOriginalSuites
         float left = BoardFit.AuthoredWidth;
         for (int i = 0; i < chips.Count; i++)
         {
-            ok &= chips[i].Text == SplitScreen.PlayerTag(i) && chips[i].Ink == SeatStrip.Ink(i)
+            ok &= chips[i].Text == Net.NetSeats.PlayerTag(i) && chips[i].Ink == SeatStrip.Ink(i)
                 && chips[i].Y == SeatStrip.Inset;
             left = System.Math.Min(left, chips[i].X);
         }

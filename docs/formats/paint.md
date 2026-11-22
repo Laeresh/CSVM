@@ -193,6 +193,7 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 |---|---|---|
 | 0x04 | name, NUL-padded string | the writer's `sprintf` |
 | 0x2c | airframe id | spawn descriptor slot 0 in `FUN_00417090`; first `%d` of the icon filename `PX_Icon_%d_%d_%d.tga` (`0x61f370`) |
+| 0x30 | engine pick 0-6, 6 = none | [`org/hangar.md`](../org/hangar.md), "Engine (record +0x30)" |
 | 0x34, 0x38 | left/right wing hardpoint count, 0-4 | callback 2245 handler at `0x0040ad0f`; the dropdown (callback 2244 at `0x0040b81d`) offers five rows, langui 1165/1168/1169 |
 | 0x40 | paint pattern index 0-13 (13 remaps to 11 for the icon) | handlers at `0x0040d523`/`0x0040d54d`, second `%d` of the icon filename |
 | 0x44-0x4c | per-slot colour index 0-26 into the swatch table at `0x0061dd48` (see below) | callback 2237 get/set at `0x0040d3e2` |
@@ -210,6 +211,21 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 The 204-byte format is import-only. CSVM writes its own JSON, one file per plane under
 `user://Planes/`, named by the plane's name (`CustomPlaneStore`, schema `version` 2): the chosen
 fields above and nothing the original derives at commit.
+
+Instant Action's Import, and the same button on the wallet-free hangar inventory
+(`CustomPlaneRecord.ImportInto`), read the files from an install's `Planes/`. On Windows each
+install's `%LOCALAPPDATA%\VirtualStore\<install path without its drive>\Planes` comes first: the
+game writes `Planes\%s` relative to its install, and Windows redirects that write when the install
+sits under a protected folder such as Program Files, so the copy there is the one the game reads
+back, and it outlives an uninstall. The installs searched are the one the player picked, the game
+files' folder, the one the original's setup records (`EXE Path` under
+`HKLM\SOFTWARE\WOW6432Node\Microsoft\Microsoft Games\Crimson Skies\1.0`), every install the
+locator finds, and the installer's default folder under each Program Files. Every chosen field
+above maps onto the JSON. The record holds no ammunition or rocket pick (the pylon cells at +0xa8
+are display state), so an imported plane carries no `loadout` block and flies its base fit. It
+carries no `awaitingExport` either, so every picker lists it at once. A name the store already
+holds is kept and the import is saved as `name (2)`, `name (3)` and so on, the name trimmed so the
+whole stays within 32 characters.
 
 That file carries one field the original's record has no room for, an optional `loadout` block:
 

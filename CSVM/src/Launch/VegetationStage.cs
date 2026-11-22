@@ -130,7 +130,7 @@ internal sealed class VegetationStage
             || Clutter?.ExportedKinds is not { } kinds || Clutter.Vegetation is not { } entry || Clutter.Canopy() is not { } mask)
             return;
         string chapter = _spec.Chapter?.ToUpperInvariant() ?? "";
-        CanopyClumpField = Mech3.CanopyClumps.Build(mask, kinds, entry, _textures, card => Mech3.CanopyClumps.TileFor(chapter, card), chapter);
+        CanopyClumpField = Mech3.CanopyClumps.Build(mask, kinds, entry, _textures, card => Mech3.CanopyClumps.TileFor(chapter, card), chapter, Clutter.Hangars);
         if (CanopyClumpField == null)
             return;
         _plane.AddChild(CanopyClumpField.Root);
@@ -157,13 +157,13 @@ internal sealed class VegetationStage
             return;
         if (cards && GroundCoverCards == null)
         {
-            GroundCoverCards = Mech3.GroundCover.Build(Clutter.Gamez, _textures, Clutter.Mask, entry, _spec.Chapter ?? "", Clutter.SwitchedOff());
+            GroundCoverCards = Mech3.GroundCover.Build(Clutter.Gamez, _textures, Clutter.Mask, entry, _spec.Chapter ?? "", Clutter.SwitchedOff(), Clutter.Hangars);
             if (GroundCoverCards != null)
                 _plane.AddChild(GroundCoverCards.Root);
         }
         if (shells && GroundCover == null)
         {
-            GroundCover = GroundCoverShells.Build(Clutter.Gamez, Clutter.Mask, _textures, entry, switchedOff: Clutter.SwitchedOff());
+            GroundCover = GroundCoverShells.Build(Clutter.Gamez, Clutter.Mask, _textures, entry, switchedOff: Clutter.SwitchedOff(), hangars: Clutter.Hangars);
             if (GroundCover != null)
                 _plane.AddChild(GroundCover);
         }

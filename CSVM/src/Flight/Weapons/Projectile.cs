@@ -37,6 +37,14 @@ public sealed partial class ProjectilePool : Node3D
     /// <c>DETONATION_TIME</c> ends it long before.</summary>
     public const float DefaultRange = 500f;
 
+    /// <summary>The far range of a gun round's Enhanced light in flight, m. A TUNE.</summary>
+    public const float TracerGlowFar = 14f;
+
+    /// <summary>How far, m, a gun round flies ahead of its shooter before its Enhanced light switches on.
+    /// ⚠ Keep it past <see cref="TracerGlowFar"/> times the clouds' <c>point_reach</c> (42 m). Nearer,
+    /// the round lights the cloud round the shooter, which then flickers at the gun's rate.</summary>
+    public const float TracerGlowStart = 45f;
+
     /// <summary>The impact burst's upper ring's disc normal in its own node's frame. The
     /// <c>he_ringer1</c> model's box is 8.48 m square in X and Y and 1 m deep in Z. Its disc
     /// therefore stands in the XY plane and faces along Z, where the ground ring's lies in
@@ -89,7 +97,7 @@ public sealed partial class ProjectilePool : Node3D
     /// def, so a static instance of its template must not stand in for it. Null carries nothing.</summary>
     public System.Func<string, bool>? EffectHandles;
 
-    /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlend</c>'s
+    /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlinding</c>'s
     /// shape (player index, colour, weight, duration, start delay). Assigned by the session; null (a
     /// lab, a headless view) washes nobody while the AI stun beside it still runs.</summary>
     public System.Action<int, Color, float, float, float>? WashSink;
@@ -239,7 +247,6 @@ public sealed partial class ProjectilePool : Node3D
     // Near and far ranges in metres, the scalar on the colour, and the rank in the set. Each rank
     // sits under an authored lamp's 1, so a burst of fire never takes a beacon's slot.
     private const float TracerGlowNear = 2f;
-    private const float TracerGlowFar = 14f;
     private const float TracerGlowScalar = 0.6f;
     private const float TracerGlowRank = 0.3f;
     private const float RocketGlowNear = 4f;
@@ -3049,7 +3056,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         // A pre-tree volley (the weapon lab engages while still building) has no world transform
         // to place a light in, skip the flash rather than set GlobalPosition out of tree.
-        if (!IsInsideTree())
+        if (!IsInsideTree() || ReduceFlashingSetting.Active)
             return;
         if (FirstPersonView?.Invoke() == true)
         {
@@ -3145,7 +3152,7 @@ public sealed partial class ProjectilePool : Node3D
     // volumetric clouds all take. The original lights no round, so the faithful path submits none.
     private void SubmitInFlight(WorldLights lights)
     {
-        if (!GraphicsMode.Enhanced)
+        if (!GraphicsMode.Enhanced || ReduceFlashingSetting.Active)
             return;
         for (int i = 0; i < _projHigh; i++)
         {
@@ -3154,7 +3161,9 @@ public sealed partial class ProjectilePool : Node3D
                 continue;
             if (p.Weapon.IsRocket)
                 lights.Add(p.Pos, RocketGlow, RocketGlowNear, RocketGlowFar, RocketGlowScalar, RocketGlowRank);
-            else
+            // Its own speed over its age is how far it is ahead of a shooter holding the launch velocity.
+            // The launcher's share rides in Inherited, and a gun round neither accelerates nor steers.
+            else if (p.Vel.Length() * p.Age >= TracerGlowStart)
                 lights.Add(p.Pos, TracerGlow[p.TracerIdx], TracerGlowNear, TracerGlowFar, TracerGlowScalar, TracerGlowRank);
         }
     }

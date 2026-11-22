@@ -22,6 +22,8 @@ public sealed partial class ScreenFlash : Node
     private readonly List<CanvasLayer> _layers = new();
     private readonly List<Ramp> _ramps = new();
     private readonly List<BlendWash> _washes = new();
+    // A sonic or flash hit's own envelope per pane, never painted: what the target marker hides for.
+    private readonly List<BlendWash> _blinding = new();
     // What each pane's rect currently shows: the two channels composited.
     private readonly List<Color> _painted = new();
     // Reused by every Play call, so routing a wash allocates nothing.
@@ -79,6 +81,7 @@ public sealed partial class ScreenFlash : Node
             flash._rects.Add(rect);
             flash._ramps.Add(new Ramp());
             flash._washes.Add(new BlendWash());
+            flash._blinding.Add(new BlendWash());
             flash._painted.Add(new Color(0f, 0f, 0f, 0f));
         }
         return flash;
@@ -121,6 +124,20 @@ public sealed partial class ScreenFlash : Node
         Apply(playerIndex);
     }
 
+    /// <summary>A sonic or flash hit's wash: <see cref="PlayBlend"/>, plus the same envelope kept on
+    /// its own (<see cref="BlindingFor"/>). A smoke wash blending into the pane never reaches that
+    /// one. The target marker hides while it shows.</summary>
+    public void PlayBlinding(int playerIndex, Color colour, float weight, float durationSeconds, float startDelaySeconds)
+    {
+        PlayBlend(playerIndex, colour, weight, durationSeconds, startDelaySeconds);
+        if (playerIndex >= 0 && playerIndex < _blinding.Count)
+            _blinding[playerIndex].Start(colour, weight, durationSeconds, startDelaySeconds);
+    }
+
+    /// <summary>One pane's sonic or flash envelope alone (<see cref="PlayBlinding"/>), unpainted:
+    /// null for a pane this was not built over.</summary>
+    public BlendWash? BlindingFor(int pane) => pane >= 0 && pane < _blinding.Count ? _blinding[pane] : null;
+
     /// <summary>The colour currently washed over one pane's picture: both channels composited,
     /// which is exactly the ramp's own colour while no blend wash runs there.</summary>
     public Color CurrentFor(int pane) =>
@@ -148,6 +165,7 @@ public sealed partial class ScreenFlash : Node
         {
             bool moved = StepRamp(_ramps[i], dt);
             moved |= _washes[i].Step(dt);
+            _blinding[i].Step(dt);
             if (moved)
                 Apply(i);
         }

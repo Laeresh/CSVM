@@ -56,7 +56,7 @@ internal static class ProjectileStage
             // loses their own flash quads, and every other aeroplane keeps theirs.
             CockpitViewOfPilot = inputs.CockpitViewOfPilot,
             BeeperTags = inputs.BeeperTags,
-            WashSink = inputs.ScreenFlash != null ? inputs.ScreenFlash.PlayBlend : null,
+            WashSink = inputs.ScreenFlash != null ? inputs.ScreenFlash.PlayBlinding : null,
             EngineDeadBounds = TanglerChoke.EngineDeadBounds(inputs.WeaponDefs),
         };
         // ⚠ Bind EVERY pane's camera, never player 1's alone. The tracer pixel floor is a

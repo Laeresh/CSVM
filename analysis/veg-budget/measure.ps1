@@ -24,7 +24,7 @@ every vegetation entry, so there the 3D Scenery word reaches only the new city (
 Rich and a word other than off): nomodels is the city off, near, far, veryfar and extreme its reaches, and original
 (Vegetation Quality Original) a second off; noground and xnoground are near and extreme with no block
 floor and so no dressing. A --det enhanced launch draws the city at near. notraffic is enhanced with
-CSVM_CITY_TRAFFIC=off, so no city traffic, the traffic's A/B; C5-air looks down an avenue at it.
+CSVM_CITY_TRAFFIC=off, so no city traffic, the traffic's A/B; C5-air looks down an avenue at it, C5-hwy along the highway.
 Each case also reports the startup line's build times and the city models log line.
 
     $env:CSVM_DATA_ROOT = "Z:\CSVM"; .\analysis\veg-budget\measure.ps1 -Chapters C1,C3 -Launches 3
@@ -87,6 +87,8 @@ $views = @{
     "C5-cb6" = @("--pos=-10750,60,-4100", "--lookat=-10750,15,-3500")
     # air: 300 m over downtown, looking along an avenue about 1.2 km ahead at its traffic.
     "C5-air" = @("--pos=-7000,300,-11200", "--lookat=-7350,5,-12300")
+    # hwy: 75 m up beside the elevated highway, looking 500 m along its deck at its traffic.
+    "C5-hwy" = @("--pos=-10010,75,-4250", "--lookat=-10112,37,-4750")
 }
 $modeArgs = @{
     "faithful" = @("--graphics=original")

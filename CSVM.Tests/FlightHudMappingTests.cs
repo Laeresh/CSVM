@@ -492,6 +492,17 @@ public class FlightHudMappingTests
         Assert.Null(HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.NoKiller, "Ace", "Rook").Under);
     }
 
+    [Fact]
+    public void ATimeOrScoreEndNamesItsWinnerOrADraw()
+    {
+        Assert.Equal("Red Team Wins", HudMessages.WinnerLine("Red Team"));
+        Assert.Equal("Crawford Wins", HudMessages.WinnerLine("Crawford"));
+        Assert.Equal("Draw", HudMessages.WinnerLine(null));
+
+        // An empty name is no winner either, never " Wins".
+        Assert.Equal("Draw", HudMessages.WinnerLine(""));
+    }
+
     // The two rows the prompt reads, as messages.json carries them (ids 181 and 182).
     private static Messages AutoLandMessages() => Messages.ParseExtracted(
         "{\"language_id\":1033,\"entries\":["

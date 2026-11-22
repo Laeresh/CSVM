@@ -168,7 +168,7 @@ frame the control that confirmed it is still down, and one control serves both s
 until that control lets go; `Latched` names the discrete commands covered and
 `SeatControls.Command` is the one read site they share. The arm takes no button reading: a
 re-entry point can run inside an input handler whose snapshot predates the press this exists to
-swallow. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
+swallow. The rule itself is `Bindings/HandoverLatch.cs`, which the load gate shares. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
 
 ## src/Flight/Weapons/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
@@ -451,11 +451,11 @@ impact that follows, the struck material's `IMPACT` row for a ray hit and the `d
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
 muzzle light (via `BindPointLights`, original mode puts both branches into the `WorldLights` point term, and Enhanced
-the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
+the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself; none under `Utils/ReduceFlashingSetting`), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
-ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring. The sprite pools (tracers, tips, muzzle and impact flashes, gun smoke) are `StandardMaterial3D` MultiMeshes. While the volumetric slab stands, each wears a `ShaderMaterial` twin of that material at `Effects/EmitterRenderer.cs`'s `DrawPriority`, its alpha dimmed by `csky_pc_veil_at` as a puffer's is; with no slab it wears its own again.
+ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring; Enhanced's light on each round in flight (`SubmitInFlight`), a gun round's only from `TracerGlowStart` ahead of its shooter and none under Reduce Flashing. The sprite pools (tracers, tips, muzzle and impact flashes, gun smoke) are `StandardMaterial3D` MultiMeshes. While the volumetric slab stands, each wears a `ShaderMaterial` twin of that material at `Effects/EmitterRenderer.cs`'s `DrawPriority`, its alpha dimmed by `csky_pc_veil_at` as a puffer's is; with no slab it wears its own again.
 
 ## src/Flight/Weapons/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round
@@ -845,7 +845,7 @@ Instant Action wrap-up can carry it past the session. The boards draw the same t
 The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
-only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale; `SpyglassScale`, the player's Spyglass Size (`Utils/SpyglassScaleSetting.cs`), clamped to 1..2, multiplies the spyglass disc alone.
+only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale; `SpyglassScale`, the player's Spyglass Size (`Utils/SpyglassScaleSetting.cs`), clamped to 1..2, multiplies the spyglass disc alone, and `BracketScale`, the player's Bracket Size (`Utils/BracketScaleSetting.cs`), clamped the same, the on-screen bracket box alone.
 `ReadingBox`: a full-screen view's box is the reference 16:9 at full height, centred; a splitscreen
 pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a minimal border back.
 `WindowSize` is the window these measure against: the stereo HUD panel's surface
@@ -934,9 +934,9 @@ Capture the Flag's rules, engine-free: one flag per lobby team with its home, he
 floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
 `Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
 the host's table on a guest, `Drop` a downed or ejecting carrier's flag and `Advance` its 15 s throw arc, and
-`Points` what a flag brought home scores off the match's `MatchScores`. The host's own-flag-home
-option gates a capture.
-`Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
+`Points` what a flag brought home scores off the match's `MatchScores`. `BroughtHome` excludes a
+`Scoreless` change (a rematch's reset, an overturned take ahead); the host's own-flag-home option
+gates a capture. `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
 `docs/org/multiplayer-ctf.md`.
 
 ## src/Flight/Modes/FlagMarkers.cs
@@ -1070,7 +1070,7 @@ Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed sco
 and its suicide value per death with no killer to the pilot who died (`MatchScores`, read from `player.zrd`). `RegisterKill`/`RegisterDeath`
 report those facts, `Advance(dt)` is the host-fed match clock (summed in double, so a guest reading it once a second sees whole seconds fall evenly), `MatchCompleted` fires once on a score reaching the target or
 on the time-out (leader wins, equal top scores draw), `Standings()` ranks by score with ties sharing a rank and carries kills
-and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
+and deaths for display, `Leader()` numbers the sole leader by the totals (a team, or a seat plus one, 0 on a tie), `Winner()` is the objective's winner or that leader, which the end message and the board's headline read (the status line reads `Leader()`), and `NameOf` words either number, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
 pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and adding to every other team's term (`TeamTermOf`), which `TeamTotalOf` shows and the Score limit never reads; `RegisterZeppelinKill` sets the term of the side whose hull downed a pilot. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusStatusLine`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
@@ -1086,7 +1086,7 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 
 ## src/Flight/Modes/VersusStatusLine.cs
 The per-pane match status line of every versus mode: remaining time, this pane's kills and deaths, and the
-leader (`LeaderText`: a bot by callsign through `BotName` and a person by player tag, or in a team match this pane's team total and the leading team), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
+leader (`LeaderText`: a seat by its callsign through `SeatName`, a person's nickname or a bot's, and a seat with none by player tag, or in a team match this pane's team total and the leading team, both through `VersusMatch.Leader` and `NameOf`), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
 It steps aside while `StatusHiddenWhile` answers true (the seat's held scores).
 `Build` binds the match and this pane's seat; `HumanFlightAdapter` builds one per local pane, `FlightHud.Attach` adds it to the pane's HUD canvas, and nothing feeds it per frame.
 It draws no per-seat markers: players find and mark each other through `TargetHud`, as in the original. A kill has no banner of its own here: `HudMessages`
@@ -1100,7 +1100,7 @@ reading pane sees it (its own pilot by name, a wingman with no name, any other a
 title, anything else destroyed), `SideOf` picks the colour arm off the victim's team, `WordsKillLine`
 keeps a hull flown into the world off that line, `PostCrash`/`PostTimeExpired` are the two notices
 that are not a death, and `MatchKillLines` words a Dogfight death the same on every machine and
-`FlagLine` a Capture the Flag row. All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+`FlagLine` a Capture the Flag row and `CaptureLine` a capture's score, and `PostAllAlone`, `PostHullLost` and `PostResult` post a match's end under "Game Over:", the last with `WinnerLine` ("X Wins" or "Draw"). All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md), [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
 
 ## src/Flight/Hud/PromptLine.cs
 A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's
@@ -1140,11 +1140,11 @@ pane's seat holds Display Scores (`UI/Overlays/ScoresOverlay.cs`).
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no
 selection exists (a bot tagged by its callsign, `TrackedTag`), and the F16 / `--debug-markers` overlay. Draws the original's
-bracket box and label block and owns the colour table, the label layout, the selected gun's reach
+bracket box (`BracketHalfW`/`BracketHalfH`/`BracketArm`, times `HudMetrics.BracketScale` in the flat views) and label block (`InViewLabelAnchor`) and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture at `DiscRadius`/`DiscSide`, the decoded window times `HudMetrics.SpyglassScale`: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
-read after the flight rigs (`AfterFlightRigs`). `Textless`, the None HUD mode outside the cockpit, draws the selection's box and edge arrow and the lead marker, with no label or other marker, and holds no spyglass. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+read after the flight rigs (`AfterFlightRigs`). `Textless`, the None HUD mode outside the cockpit, draws the selection's box and edge arrow and the lead marker, with no label or other marker, and holds no spyglass. `Blinded`, while the pane's sonic or flash wash shows (`WashWeight` at `BlindingFloor` or more), draws no selection marker or lead marker and holds no spyglass, the selection and the other marks kept. In a race `RaceMarks` labels every other race pilot, none of them a target. `WorldMarks` lists what it draws, which `XrMarkers.cs` places in a stereo session (`MarksInWorld`), where `XrMarkers.AnswerSpyglass` answers the spyglass gates off the head. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/Airframe/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
@@ -1695,12 +1695,14 @@ check, or whose id is a stock node, an earlier mod's or past the roster's 31 byt
 Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`, `CSVM.Tests/ModPlaneHangarTests.cs`, `CSVM.Tests/ModPlaneCampaignTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneRecord.cs
-Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
-`Planes` directory, into `CustomPlaneDef`s. Every paint field is read as the index it is, the
-cached RGBA the engine writes alongside is left out and exposed only for a cross-check, and the
-derived fields are ignored. A file it cannot make sense of reads as null rather than throwing, so
-an import never breaks on one corrupt save. The read is one way: CSVM's own planes persist through
-`CustomPlaneStore` and never in this format. Format: [../formats/paint.md](../formats/paint.md).
+Import-only reader for the original's 204-byte saved-plane files: one record into a
+`CustomPlaneDef`, or every install's saves into a `CustomPlaneStore`. Paint fields are read as
+indices, derived fields are ignored, and an unreadable file is null rather than a throw. `SaveFolders`
+names one install's save folders (its VirtualStore copy, then `Planes`); `FindSaves` gathers them for
+the known installs, `Extraction/InstallLocator.cs`' candidates and the installer's default folder, an
+absent install's VirtualStore copy included. `ImportInto` stores each save, skipping and naming a
+failure, never overwriting a stored name (a numbered suffix inside the name cap) and counting an
+identical stored twin as already there. Format: [../formats/paint.md](../formats/paint.md). Coverage: `CSVM.Tests/CustomPlaneRecordTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneStore.cs
 JSON persistence for `CustomPlaneDef`, one file per plane under `user://Planes/`. The store works

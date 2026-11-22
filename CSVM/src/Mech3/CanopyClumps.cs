@@ -325,10 +325,12 @@ public static class CanopyClumps
 
     /// <summary>Draws the clumps over <paramref name="mask"/>, their atlas composed from the listed card kinds in
     /// <paramref name="kinds"/> where <paramref name="tileFor"/> gives a species no tile, their colour spread
-    /// from <paramref name="entry"/>. Hands the cards over to them. Null when no listed card resolves.</summary>
+    /// from <paramref name="entry"/>. Hands the cards over to them. Null when no listed card resolves. No clump reaches
+    /// over <paramref name="hangars"/>, and no crown stands on one.</summary>
     public static Field? Build(CanopyMask mask, IReadOnlyList<ClutterBuilder.KindExport> kinds, VegetationEntry entry,
-        TextureArchive textures, Func<string, ClumpTile?> tileFor, string? chapter = null)
+        TextureArchive textures, Func<string, ClumpTile?> tileFor, string? chapter = null, HangarFootprints? hangars = null)
     {
+        hangars ??= HangarFootprints.None;
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bool painted = entry.Picks.Any(p => CanopyMask.IsCanopy(entry, p.Texture));
         // A set the remake adds counts only as forest (KindExport.Mass): scattered bushes raise no clumps.
@@ -367,7 +369,8 @@ public static class CanopyClumps
         var grade = painted && used.Count > 0 ? VegetationModels.Grade(crownMean, Mean(new[] { used[0].Image }, 1f), float.PositiveInfinity) : Vector3.One;
         var (atlas, side) = Compose(cards.Select(c => c.Image!).ToList(), sizes, weights, tileHeight, slots, strips);
         var tiles = used.Select(t => $"{species[strips.IndexOf(t)]} in {slots.Count(s => s >= 0 && strips[s] == t)} slots from {t.Tile.Source}").ToList();
-        var clumps = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
+        var placed = Place(mask, rate, cardHeight, tileHeight, brightness, tint, rise: painted ? PaintedRiseM : 0f);
+        var clumps = placed.Where(c => !hangars.Covers(c.Base, c.Width / 2f)).ToList();
         var band = Band(painted);
 
         var material = new ShaderMaterial { Shader = _shader ??= new Shader { Code = ShaderCode() } };
@@ -377,25 +380,43 @@ public static class CanopyClumps
         material.SetShaderParameter("grade", grade);
         material.SetShaderParameter(HandoverParam, band);
         material.SetShaderParameter("grow", painted ? 1f : 0f);
-        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f) { Tiles = tiles, TreesPerClump = meanTrees, HandsOver = !painted };
+        var field = new Field(clumps, material, clumps.Count > 0 ? clumps.Max(c => c.Width) : 0f)
+        {
+            Tiles = tiles,
+            TreesPerClump = meanTrees,
+            HandsOver = !painted,
+            Hangars = hangars,
+            ClumpsOffHangars = placed.Count - clumps.Count,
+        };
         foreach (var chunk in clumps.GroupBy(c => (MathF.Floor(c.Base.X / ChunkM), MathF.Floor(c.Base.Z / ChunkM))))
             field.Root.AddChild(field.Draw(chunk.ToList(), Transform3D.Identity, string.Create(CultureInfo.InvariantCulture, $"chunk_{chunk.Key.Item1}_{chunk.Key.Item2}")));
         int chunks = field.Root.GetChildCount();
         if (crownModels.Count > 0)
-            field.Stand(CrownModels(mask, CrownsPerCell, CrownBrightness, CrownTint, shapes: crownModels.Count), crownModels);
+        {
+            var crowns = CrownModels(mask, CrownsPerCell, CrownBrightness, CrownTint, shapes: crownModels.Count);
+            var reaches = Reaches(crownModels);
+            var standing = OffHangars(crowns, reaches, hangars);
+            field.CrownsOffHangars = crowns.Count - standing.Count;
+            field.Stand(standing, crownModels, reaches);
+        }
 
         // Painted canopy takes over from no card, so the listed cards (C3's beach palms) keep every distance.
         if (!painted)
             Handover(kinds, true);
 
         Log.Info("world",
-            $"canopy clumps: {clumps.Count} over {chunks} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, tiles: {(tiles.Count == 0 ? "all composed" : string.Join("; ", tiles))}, {watch.ElapsedMilliseconds} ms");
+            $"canopy clumps: {clumps.Count} over {chunks} chunks from {cards.Count} card textures ({string.Join(", ", cards.Select(c => c.Texture).Distinct())}), {(painted ? "painted canopy" : $"{stamps:0} card stamps")} at {meanTrees:0.##} trees a clump, tile {TileWidthM:0.#}x{tileHeight:0.#} m at card height {cardHeight:0.#} m, grade {grade.X:0.###} {grade.Y:0.###} {grade.Z:0.###}, {(painted ? "fade-in" : "handover")} {band.X:0}-{band.Y:0} m, tiles: {(tiles.Count == 0 ? "all composed" : string.Join("; ", tiles))}, {field.ClumpsOffHangars} clumps and {field.CrownsOffHangars} crowns kept off hangars, {watch.ElapsedMilliseconds} ms");
         return field;
     }
 
     /// <summary>The clumps' fade-in band: the cards' handover band, or over painted canopy its own.</summary>
     public static Vector2 Band(bool painted) =>
         painted ? new Vector2(PaintedNearM, PaintedFarM) : HandoverBand;
+
+    /// <summary>The crowns that stand clear of <paramref name="hangars"/>: a crown's reach, its scale times its shape's
+    /// in <paramref name="reaches"/>, meets no floor.</summary>
+    internal static List<NearCrown> OffHangars(IEnumerable<NearCrown> crowns, float[] reaches, HangarFootprints hangars) =>
+        crowns.Where(c => !hangars.Covers(c.At, c.Scale * reaches[c.Shape])).ToList();
 
     // Gives every clear texel the mean colour of the solid ones. A filter, a resize or a mip level then
     // blends tree colour into an edge. The clear texels' black would darken the clumps far off. A near
@@ -631,6 +652,10 @@ public static class CanopyClumps
     // A symmetric draw in [-1, 1), the spread the Rich cards' tint takes.
     private static float S(int seed, int cell, int draw) => (2f * U(seed, cell, draw)) - 1f;
 
+    // Each crown model's farthest reach in X or Z from its foot at scale one.
+    private static float[] Reaches(IReadOnlyList<VegetationModels.Model> models) => models.Select(m => m.Mesh.GetAabb())
+        .Select(b => MathF.Max(MathF.Max(-b.Position.X, b.End.X), MathF.Max(-b.Position.Z, b.End.Z))).ToArray();
+
     // The Rich card's look on a clump: the same face, sun side, fog and tint lines, the fade the card's handover
     // turned round. Over painted canopy (grow) a clump sinks below the canopy by its unfaded share instead: a
     // part-clear clump shows as a ghost on the skyline. While the crown models draw it stands at its full height
@@ -727,6 +752,7 @@ public static class CanopyClumps
         // re-bands and re-ranges them with no rebuild.
         private readonly List<ShaderMaterial> _crownMaterials = new();
         private readonly List<(MultiMeshInstance3D Cell, float Pad)> _crownCells = new();
+        private float[] _reaches = Array.Empty<float>();
 
         internal Field(List<Clump> clumps, ShaderMaterial material, float margin)
         {
@@ -757,6 +783,18 @@ public static class CanopyClumps
 
         /// <summary>Whether the clumps take over from cards over <see cref="HandoverBand"/>, false over painted canopy.</summary>
         public bool HandsOver { get; init; }
+
+        /// <summary>The hangar floors no clump reaches over and no crown stands on.</summary>
+        public HangarFootprints Hangars { get; init; } = HangarFootprints.None;
+
+        /// <summary>The clumps whose width reached a hangar's floor, left out.</summary>
+        public int ClumpsOffHangars { get; init; }
+
+        /// <summary>The crowns whose reach (<see cref="CrownReachM"/>) met a hangar's floor, left out.</summary>
+        public int CrownsOffHangars { get; internal set; }
+
+        /// <summary>How far a standing crown spreads from its foot, by its scale and its shape's model.</summary>
+        public float CrownReachM(NearCrown crown) => crown.Scale * _reaches[crown.Shape];
 
         /// <summary>The clumps standing in <paramref name="source"/>, drawn moved by <paramref name="mirror"/>;
         /// null where none stands.</summary>
@@ -793,9 +831,10 @@ public static class CanopyClumps
         // Stands the crown models in cells of VegetationModels.CellM, one MultiMesh per cell and shape, each ranged
         // at the band's far edge past its bounds. A model's top stands ModelRiseM above the painted surface, at its
         // scale. Not solid. The canopy material shades each crown by its normals against the sun, about its mean.
-        internal void Stand(List<NearCrown> crowns, IReadOnlyList<VegetationModels.Model> models)
+        internal void Stand(List<NearCrown> crowns, IReadOnlyList<VegetationModels.Model> models, float[] reaches)
         {
             var boxes = models.Select(m => m.Mesh.GetAabb()).ToList();
+            _reaches = reaches;
             float width = boxes.Max(b => b.Size.X);
             var materials = models.Select((m, i) => VegetationModels.Material(m, lit: false, fogged: true, boxes[i].Size.X, canopy: true)).ToList();
             for (int i = 0; i < materials.Count; i++)

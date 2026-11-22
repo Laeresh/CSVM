@@ -194,11 +194,22 @@ no entry anywhere carries both flags, so the two cycles never contend for one re
 `ap_transmitter` (the radio tower, in six `IA1` files). The rest are per-mission: C3/M02 flags
 eleven of the work
 camp's own buildings (`g_tower1`-`3`, `unit01`-`07`, `dock2`), C1B/M03 flags a tanker, a second
-airship and a decoy lighthouse, C1/M02 a cargo train, C2/M05 a cargo zeppelin and C3/M04 a
-shipwreck. ⚠ The count is what a mission AUTHORS, not what it shows: a record whose node the world
+airship and a decoy lighthouse, C1/M02 a cargo train, C2/M05 a cargo zeppelin, C3/M04 a
+shipwreck and C5/MP1 its Deathmatch rearm base (`rearm_node_1`). ⚠ The count is what a mission AUTHORS, not what it shows: a record whose node the world
 does not build offers nothing. Of the six `IA1` tables that flag `ap_transmitter`, only C1's world
 carries a node of that name, so the radio tower is a live site in C1's Instant Action and in no
 other chapter's; both `MP3` rearm bases resolve in all eight.
+
+**A match's rearm base rides the Enemy/Objective cycle in every chapter but C5's Deathmatch.**
+C1, C1B, C2, C3 and C4 flag the base building `racmplx` `objective` in `MP1` and in `MP2`, so
+the base sorts ahead of every aircraft and Nearest Enemy/Objective lands on it. C5 builds no
+`rabaset1`, so its tables flag the nodes themselves: `MP2` flags `rearm_node_1` and `_2`
+`objective`, one per team, and `MP1` flags `rearm_node_1` `other_target`, the one Deathmatch base
+reached only by the Non-Aircraft keys. C1C and C2B carry no rearm node. The match setup
+`FUN_00495980` stamps no flag onto a base outside Zeppelin vs Zeppelin, and C5's `objectives.zrd`
+holds no target directive, so the original's C5 Deathmatch offers the base on the Non-Aircraft
+cycle alone. CSVM reads the same table, at the spot `mp1.gw` moves `rearm_node_2` to; the
+`mode-target-table` suite pins both C5 tables.
 
 **Every mode reads its own file, and only the campaign edits it.** Which table a session gets is the
 chapter and mission folder it launches with (`C1/IA1`, `C4/MP3`), so the same mode differs per map.
@@ -1204,6 +1215,45 @@ the tag and the clock bearing stacked beside it.
 offset (3 pixels below the marker in the screen's upper half, 45 above in the lower) is decoded
 there.
 
+### Under a blinding wash
+
+**The original has no rule that hides the marker; its victim wash covers it.** `FUN_0049fe70` builds
+the frame first: `FUN_004574d0` places the box, `FUN_004579e0` the label, and `FUN_005c17a0`
+renders. Only then does it take its washes, the `FBFX_COLOR_FROM_TO` ramp (`FUN_0042f290`) and, on
+a tinted frame (the argument the campaign screens pass as 0), the sonic, flash or smoke wash of
+[`ordnanceTypes.md`](ordnanceTypes.md). `FUN_0042ecd0` composites the wash colour
+(`DAT_0064efc0`..`c8`) at its displayed weight `DAT_0064efbc` over the ramp and clamps it, and
+`FUN_005865f0` fills the viewport with the result; the software path (`FUN_005866c0`) blends it into
+every pixel of the finished frame. No HUD routine reads the wash: the only readers of its running
+flag `DAT_0064ef9c` and of the displayed weight are the start `FUN_0042e9d0`, the tick
+`FUN_0042eb80`, the clear `FUN_0042e7b0` and that composite. So the box, the label, the edge arrow
+and the spyglass picture lie under the wash and keep `1 - weight` of their contrast: gone at a
+dead-centre hit's weight 1, half readable at 0.5, whole again the frame the wash is cut.
+
+**The software blend paints wash colour from 1/32 of weight up.** `FUN_005866c0` scales the wash
+colour by `ftol(weight * 32.0)` (the double at `0x006093e8`) and shifts it down by 5, and scales the
+picture by `ftol((1.0 - weight) * 32.0)` (`0x006032e8` is 1.0). A weight under 1/32 truncates to 0,
+so it adds no wash colour at all.
+
+**Remake-only rule: CSVM hides the target marker for a sonic or flash wash's whole duration, in
+both looks.** The original covers the marker by painting the wash over the finished frame. CSVM
+draws its HUD over the wash (`UI/Boards/HudLayers.cs`, `WorldOverlay` under `Hud`), so nothing
+covers it, and the remake hides the marker for the wash instead. That holds in Faithful and
+Enhanced alike, since in both the HUD sits over the wash. `TargetHud.Blinded` reads the sonic
+or flash hit's own envelope (`ScreenFlash.PlayBlinding`, kept apart by `ScreenFlash.BlindingFor`)
+and holds while its displayed weight is at least `TargetHud.BlindingFloor`, 1/32, the first weight
+the original's blend paints any wash colour at. While it holds, the selection's box, its label, the
+lead marker and the spyglass are not drawn, flat or in the headset. The selection and its bracket
+gate run on, so the lock is kept. Every other marker keeps drawing: the `--debug-markers` overlay,
+race and Capture the Flag marks, and the hostile fallback where nothing is selected (a hidden
+selection still counts, so the fallback never stands in for it). A dead-centre hit (weight 1 for
+5 s after its 1 s delay) hides the marker from the start of its attack, where the weight passes 1/32
+within 0.03 s, to its cut, and a weak hit hides it for its own shorter wash; only a hit
+at the very rim, under 1/32 (past `d² = 0.9875 R²`), hides nothing, as the original paints no wash
+colour for it. The smoke screen's wash (`SmokeScreens`, `ScreenFlash.PlayBlend`) never hides the
+marker: the rule is the sonic and flash weapons' alone, though a pilot chasing through a smoke
+screen is re-washed every 1.5 s.
+
 ## What this means for CSVM
 
 | | Original | CSVM today |
@@ -1225,12 +1275,13 @@ there.
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, on one key per class (`TargetNearestEnemy`, `TargetNearestAlly`, `TargetNearestNonAircraft`) and reachable through `--target=nearest` |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |
-| Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below) |
+| Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below). Remake-only: the Game Options **Bracket Size** (100, 125, 150 or 200%, `HudMetrics.BracketScale`) multiplies the half width, half height and arms in the flat views, and the label block keeps its gaps to the bigger box; the line width, the shadow's offset and the headset's cards keep the decoded box, 100% draws it exactly and `--det` reads no saved size |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | the same, `TargetHud.LabelLines` and the flip-above test |
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | the same three lines, off `TargetRef`'s own label halves and display name |
 | Name line's source | the roster block's `title`, else the vehicle def's own `title`, aeroplane and surface hull alike | the same pair: a campaign aeroplane takes the block's `title` (`AiSpawn.PilotName`), else its AI def's (`PlaneStats.AiTitleKey`), resolved in `AiFlightAssembler`. A hull resolves the same pair through `SurfaceVehicleRuntime` into `SurfaceVehicle.MarkerName`, the block's slot first and `VehicleDefs.TitleOf` second |
 | Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same edge position, `EdgeMarker.Resolve`, with `TargetHud.EdgeLabelAnchor` hanging the three lines off it by the decoded +3 / -45; the per-line 3 px clamp is not ported |
+| Under a sonic, flash or smoke wash | covered: the wash is painted over the finished frame, HUD included, at its displayed weight | remake-only rule: the selection's marker and spyglass hide while a sonic or flash wash shows (`TargetHud.Blinded`), the lock kept; a smoke wash hides nothing; "Under a blinding wash" above |
 
 ⚠ **The off-screen marker has a reference to copy.** The original draws an edge arrow with a
 stacked tag and clock bearing, which is what `TargetHud`'s edge branch draws.

@@ -325,7 +325,7 @@ internal static class SeatFields
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
                 FlownHere = true,
-                Callsign = UI.Boards.SplitScreen.PlayerTag(i),
+                Callsign = Net.NetSeats.PlayerTag(i),
                 Unnamed = i == 0,
                 PlaneNode = i < spec.PlaneNames.Count ? spec.PlaneNames[i] : spec.PlaneName,
             });

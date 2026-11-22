@@ -32,6 +32,9 @@ public static class WordSettings
         GlobalIlluminationSetting.Lookup,
         SpeedWispsSetting.Lookup,
         FlagMarksSetting.Lookup,
+        ReduceFlashingSetting.Lookup,
+        SpyglassScaleSetting.Lookup,
+        BracketScaleSetting.Lookup,
     };
 
     /// <summary>The panes the running session draws, which a fallback may read. 1 until

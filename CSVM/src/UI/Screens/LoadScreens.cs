@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
@@ -94,6 +96,20 @@ public sealed record LoadSheet(
 /// </summary>
 public static class LoadScreens
 {
+    /// <summary>What Esc on a guest's held load screen asks: leaving the match for the games list.
+    /// The remake's own words, since the original's start barrier offers no way out.</summary>
+    public const string GuestLeaveQuestion = "Leave this game and go back to the games list?";
+
+    /// <summary>What Esc on a host's held load screen asks: calling the start off for everybody.
+    /// </summary>
+    public const string HostLeaveQuestion = "Call this game off and take every player back to the lobby?";
+
+    // The menus' focus mark round a messagebox answer (OriginalShell.FocusBox), in the layout's
+    // DISABLED grey at three quarters. It stands three pixels clear, so the strip's art cannot cover it.
+    private const byte FocusGrey = 188;
+    private const float FocusOpacity = 0.75f;
+    private const float FocusOutset = 3f;
+
     // The reader file all three load-screen families live in. This install ships no
     // ia_loading.zrd, so it is the file the original opens too.
     private const string DialogFile = "Loading.json";
@@ -136,6 +152,27 @@ public static class LoadScreens
     // The pitch the blurb's wrapped lines take, measured between the same two lines. Our own face
     // leads wider than this, which runs a three-line blurb through the chalk rule below it.
     private const float BodyLeading = 13f;
+
+    // The original's waiting row, "Waiting for %1", which names one loading player there
+    // (docs/org/multiplayer-messages.md's start barrier).
+    private const string WaitingKey = "MSG_MP_WAITING";
+
+    // Where a held start's line is written, all remake-only (docs/org/loading-screen.md). A
+    // blackboard with nothing written in its fourth band down takes that band at the instruction
+    // column's x. One whose rows fill it, Capture the Flag's and Zeppelin vs Zeppelin's, takes the
+    // column heads' row right of INSTRUCTIONS. The chart sheet takes the margin over the bar.
+    private const float BandX = 360f;
+    private const float BandTop = 344f;
+    private const float BandY = 362f;
+    private const float HeadsX = 485f;
+    private const float HeadsY = 78f;
+    private const float PaperWaitingX = BarX;
+    private const float PaperWaitingY = 521f;
+
+    // Viner Hand ITC, the hand-lettered face the original's font table declares (VIN12 to VIN18)
+    // and its scrapbook's notes write in. The larger size goes where a band has room for it.
+    private static readonly LanguiFace HandLarge = LanguiFace.Parse("VIN18")!.Value;
+    private static readonly LanguiFace HandSmall = LanguiFace.Parse("VIN14")!.Value;
 
     /// <summary>The board a node holds before it has one of its own, drawing nothing.</summary>
     public static ComposedBoard Empty { get; } = new(
@@ -240,6 +277,80 @@ public static class LoadScreens
         return new ComposedBoard(
             still.Pictures, still.Strokes, still.Lines, still.Plaques,
             still.Notes, still.Backdrop, still.Fills, overlays);
+    }
+
+    /// <summary>The line a load screen held for the other machines writes. It is the original's
+    /// waiting row, its name slot filled with the other players and the count in. Without a
+    /// <paramref name="tally"/>, a guest the host has not yet counted for, the count is left off.</summary>
+    public static string WaitingText(Messages messages, (int Loaded, int Total)? tally)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        string players = tally is { } count
+            ? string.Create(CultureInfo.InvariantCulture, $"other players ({count.Loaded}/{count.Total})")
+            : "other players";
+        return messages.Format(WaitingKey, players);
+    }
+
+    /// <summary>The still board with <paramref name="written"/>, the part of the waiting line
+    /// chalked so far, over it. It takes the original's hand-lettered face in the board's brightest ink.
+    /// An overlay, as <see cref="Painted"/> is, so the composition under it is untouched.</summary>
+    public static ComposedBoard Written(ComposedBoard still, bool campaign, string written)
+    {
+        ArgumentNullException.ThrowIfNull(still);
+        bool band = !campaign && !still.Lines.Any(l => l.Y >= BandTop && l.Y < ChalkBarY);
+        var face = band ? HandLarge : HandSmall;
+        var (x, y) = campaign ? (PaperWaitingX, PaperWaitingY) : band ? (BandX, BandY) : (HeadsX, HeadsY);
+        var line = new BoardLine(written, x, y, 0f, face.Pixels, BoardInk.Heading, Face: face);
+        var overlays = new List<BoardPanel>(still.Overlays)
+        {
+            new(Array.Empty<BoardFill>(), Array.Empty<BoardPicture>(), new[] { line }),
+        };
+        return new ComposedBoard(
+            still.Pictures, still.Strokes, still.Lines, still.Plaques,
+            still.Notes, still.Backdrop, still.Fills, overlays);
+    }
+
+    /// <summary>The board with <paramref name="question"/> standing over it in the original's query
+    /// box, Yes on the left and No on the right. The focused answer (0 for Yes) carries the menus'
+    /// focus mark, ringing one <paramref name="strip"/> frame. The answer under the pointer,
+    /// <paramref name="lit"/>, stands on its rollover frame. An overlay over the board.</summary>
+    public static ComposedBoard Asked(
+        ComposedBoard board, string question, int focus, int lit, (float Width, float Height) strip)
+    {
+        ArgumentNullException.ThrowIfNull(board);
+        var buttons = new[]
+        {
+            new Campaign.CampaignBoards.DialogButton(
+                Campaign.CampaignBoards.DialogLeftKey, "Yes", ComposedBoard.PlaqueFrame(4, lit == 0, false), ComposedBoard.DialogInk(false)),
+            new Campaign.CampaignBoards.DialogButton(
+                Campaign.CampaignBoards.DialogRightKey, "No", ComposedBoard.PlaqueFrame(4, lit == 1, false), ComposedBoard.DialogInk(false)),
+        };
+        var (x, y, width, height) = AnswerAt(focus, strip);
+        var mark = new BoardFill(
+            x - FocusOutset, y - FocusOutset, width + (2f * FocusOutset), height + (2f * FocusOutset),
+            FocusGrey, FocusGrey, FocusGrey, FocusOpacity, Border: true);
+        var overlays = new List<BoardPanel>(board.Overlays)
+        {
+            Campaign.CampaignBoards.Dialog(question, buttons, Campaign.DialogIcon.Query),
+        };
+        if (focus != lit)
+        {
+            // Its own panel, since the messagebox's background would paint over a fill inside it.
+            // The answer under the pointer shows by its frame instead, as in the menus' boxes.
+            overlays.Add(new(new[] { mark }, Array.Empty<BoardPicture>(), Array.Empty<BoardLine>()));
+        }
+        return new ComposedBoard(
+            board.Pictures, board.Strokes, board.Lines, board.Plaques,
+            board.Notes, board.Backdrop, board.Fills, overlays);
+    }
+
+    /// <summary>Where the leave question's answer stands on the authored board, 0 for Yes and 1 for
+    /// No: its messagebox row, one <paramref name="strip"/> frame in size.</summary>
+    public static (float X, float Y, float Width, float Height) AnswerAt(int answer, (float Width, float Height) strip)
+    {
+        var (_, x, y) = Campaign.CampaignBoards.DialogSlot(
+            answer == 0 ? Campaign.CampaignBoards.DialogLeftKey : Campaign.CampaignBoards.DialogRightKey);
+        return (x, y, strip.Width, strip.Height);
     }
 
     /// <summary>The mission-type letter that completes the dialog name, from the jump table at

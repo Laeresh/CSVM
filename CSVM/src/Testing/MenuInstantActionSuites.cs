@@ -1516,7 +1516,7 @@ internal static class MenuInstantActionSuites
         {
             foreach (var line in overlay.Lines)
             {
-                if (line.Text == SplitScreen.PlayerTag(0) || line.Text == SplitScreen.PlayerTag(1))
+                if (line.Text == Net.NetSeats.PlayerTag(0) || line.Text == Net.NetSeats.PlayerTag(1))
                 {
                     lines++;
                 }

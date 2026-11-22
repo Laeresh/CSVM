@@ -152,6 +152,27 @@ the hardware draw batches one point per light. Neither has a size to copy, so a 
 soft sprites is choosing its own and needs a horizon fade the original does not, since an unfaded
 pixel is swallowed by fog and an unfaded sprite is not.
 
+## C5's highway deck
+
+C5's highway is an elevated deck painted `bridgeroad.tif`, the only road in the chapter that is not a `cblock` block
+paint, so the city floor's layout does not describe it. World1 reaches 102 polygons of it (about 0.52 km2): 98 quads
+and 4 triangles that pair into two quads, none a triangle strip.
+
+- **Geometry.** A deck 26.8 m wide at y 36.9 runs from z 0 south to z -16384, in straight pieces along Z and
+  45 degree diagonals joined by mitred ends (the joint edge bisects the bend). Between z -1104 and z -3700 it splits
+  into two carriageways side by side, each starting as one half of the deck's end edge (13.4 m), widening to about 16 m
+  and climbing to y 63.2 before they merge again. The deck's two outer ends, at z 0 and z -16384, are open.
+- **UVs.** V runs across the width from one kerb to the other (offset by a whole unit or skewed slightly on a few ramp
+  pieces), and U runs along the deck at about one unit per 26.8 m, restarting on every polygon. Two triangles of one quad share the UVs of their
+  shared corners; triangles of neighbouring pieces do not, which is what tells a shared diagonal from a shared end.
+- **Paint.** The 64x64 texture's rows across the width read, by luminance: a kerb and sidewalk on rows 0 to 5 and 58
+  to 63 (kerb edges at 6 and 58), and four lane lines centred on rows 17, 27, 37.5 and 47.5, the middle two bounding a
+  4.4 m median. That is two lanes each way, lane centres at 0.16 and 0.322 of the width from the centre line. The carriageways carry the
+  same texture squeezed across their narrower width, so their paint alone shows two lanes each way too.
+- **Which way a carriageway runs** is not painted. `CityHighway` reads it from the geometry: a carriageway's end is
+  one half of the two-way deck's end edge, and under right-hand traffic, the convention of the street lanes, the half
+  on the right of travel carries that direction. Heading south (-Z) that is the east carriageway.
+
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

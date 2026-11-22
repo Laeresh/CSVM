@@ -191,8 +191,16 @@ What a polling site holds: a player's `ActionMap`, the tick's snapshot, and `Pol
 hardware is read. `ReadsKeyboard` is the player-1-only keyboard rule, kept on the seat rather than in
 the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in their map and simply
 reads none of them. Several of these over one `ActionMap` is the supported shape, for an action whose
-keyboard and pad halves take different processing and are then summed rather than ORed. Read
-`BindingProfile.cs` for the whole seat above this.
+keyboard and pad halves take different processing and are then summed rather than ORed. Nothing
+resolves while `Utils/LoadGate.cs` is closed, and an action held through its opening reads released
+until it reads under half travel (`ActiveDevice.PressTravel`, `HandoverLatch.cs`). Read `BindingProfile.cs` for the whole seat above this.
+
+## src/Bindings/HandoverLatch.cs
+A control held through a handover reads released until it is let go: `Arm` marks an action, and
+`Read` answers released while it stays held and disarms it on the first reading that says up. One
+rule, two arming points: `Flight/Airframe/FlightReentryLatch.cs` arms flight's discrete commands on
+a cutscene skip or a pause dismiss, and `PlayerActions.cs` arms every action but the absolute lever
+as the load gate opens. Pure state with its own unit tests. Read `PlayerActions.cs` next.
 
 ## src/Bindings/InputContext.cs
 Which controls a seat is reading: flight, menu, or the free camera. A seat holds one `ActionMap` per
@@ -293,7 +301,7 @@ Options toggle, held off under `--det`. Every number and why the bearing is drop
 ## src/Bindings/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than
 `Input.GetConnectedJoypads()`. Owns the phantom-device policy (span every pad, never `pads[0]`),
-`Disabled` (`--no-pads`) and the focus gate that suppresses reads without un-joining anyone.
+`Disabled` (`--no-pads`) and the gate that suppresses reads without un-joining anyone, on window focus and while the load screen stands (`Utils/LoadGate.cs`).
 `AssignPads` is the launch-time roster split: P2 to P4 take roster POSITIONS in order and P1 gets
 every pad none of them claimed, so a device occupying a position without producing input takes that
 seat and leaves the real pad in P1's pool, flying P1's plane beside P1's own. `LogPads` records the

@@ -66,7 +66,6 @@ public sealed record OptionsApplyExit(
     bool? LeadMarker = null,
     string? ModFolder = null,
     bool? ThrottlePlate = null,
-    string? SpyglassScale = null,
     bool? KeepCameraZoom = null,
     string? HudMode = null,
     string? SoundMode = null,

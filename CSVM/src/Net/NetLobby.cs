@@ -48,6 +48,9 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
     private readonly List<(int Peer, LobbyTeamActionMessage Action)> _teamActions = new();
 
+    // The guests whose loaded word reached a called-off start unmarked, dropped after the step.
+    private readonly List<int> _deafToCallOff = new();
+
     // Wide enough for the widest lobby message, a course at its limit.
     private readonly byte[] _scratch = new byte[Math.Max(Math.Max(Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size), LobbyCourseMessage.MaxSize), ModSetMessage.MaxSize)];
 
@@ -62,6 +65,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     // opener is held for the next bind, and the old flight says nothing into the new one.
     private CoopFlowMessage? _boundFlow;
     private bool _flightOver;
+
+    // Set by a host that called its held start off, until the next session binds. A start word
+    // arriving meanwhile is that start's, from a guest whose build has just ended.
+    private bool _startCalledOff;
 
     /// <summary>A lobby over <paramref name="inner"/>, which it binds at once. It names this build
     /// to every peer as <paramref name="version"/>. A host's <paramref name="hostPassword"/>, when
@@ -313,6 +320,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _listener = listener ?? throw new ArgumentNullException(nameof(listener));
         _boundFlow = Flow;
         _flightOver = false;
+        _startCalledOff = false;
         _bound.Clear();
         _bound.AddRange(AllPeers);
         foreach (int peer in new List<int>(_bound))
@@ -383,6 +391,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return actions;
     }
 
+    /// <summary>A host called its held start off. Until the next session binds, no start word is
+    /// held for it. An older build never hears a call-off. Its loaded word carries no cancel mark,
+    /// and drops that guest's link, which sends it down its lost-link path.</summary>
+    public void CallOffStart() => _startCalledOff = true;
+
     /// <summary>Drops every held payload. A guest does this whenever the host names a board. What
     /// trails in from a flight that ended is not the next flight's join answer.</summary>
     public void DropHeld() => _held.Clear();
@@ -412,6 +425,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     public void Step(double dt)
     {
         _inner.Step(dt);
+        foreach (int peer in _deafToCallOff)
+        {
+            _inner.Disconnect(peer);
+        }
+
+        _deafToCallOff.Clear();
         foreach (int peer in new List<int>(_waiting.Keys))
         {
             double waited = _waiting[peer] + dt;
@@ -695,6 +714,17 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             }
 
             return false;
+        }
+
+        // Dropped once this step is through, since a carrier delivers from inside its own step.
+        if (_startCalledOff && StartGateMessage.TryRead(payload, out var word))
+        {
+            if (word.Word == NetStartWord.Loaded && !word.AnswersCancel && !_deafToCallOff.Contains(peer))
+            {
+                _deafToCallOff.Add(peer);
+            }
+
+            return true;
         }
 
         // Past the depth the oldest goes. A lobby nobody ever binds must not grow without bound.

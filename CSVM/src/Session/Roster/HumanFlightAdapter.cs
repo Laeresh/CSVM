@@ -668,7 +668,7 @@ internal sealed class HumanFlightAdapter
             controller.VersusStatusLine = VersusStatusLine.Build(versus, pi);
             controller.VersusStatusLine.StatusHiddenWhile = () => controller.ScoresShown;
             var seats = _human.NetSeats;
-            controller.VersusStatusLine.BotName = s => Net.NetSeats.BotCallsign(seats, s);
+            controller.VersusStatusLine.SeatName = s => Net.NetSeats.SeatName(seats, s);
             if (verbose)
                 Log.Info("flight", $"versus HUD: match timer/K-D/leader line");
         }
@@ -685,6 +685,8 @@ internal sealed class HumanFlightAdapter
             var fogRange = _world.FogRange;
             int paneIndex = rig.Index;
             targetHud.FogRange = fogRange == null ? null : () => fogRange(paneIndex);
+            var washWeight = _world.WashWeight;
+            targetHud.WashWeight = washWeight == null ? null : () => washWeight(paneIndex);
             if (verbose)
                 Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 

@@ -119,6 +119,16 @@ Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propell
 `UI/Screens/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).
 
+## src/Utils/LoadGate.cs
+The gate the load screen holds closed while it stands, a network flight's held board included.
+`UI/Screens/LoadBoard.cs` closes it on entering the tree and opens it on leaving, counted, so a
+second board or a theater rehost cannot open it early. The readers are `Bindings/PlayerActions.cs`
+(nothing resolves, and a control held through the drop reads released until it reads under half
+travel, `ActiveDevice.PressTravel`), `Bindings/Pads.cs`'s `InputBlocked`, `UI/Boards/ScreenPointer.cs`,
+`UI/Boards/MenuInput.cs`'s direct Backspace and Delete (read down, so one held through is no press),
+`UI/Screens/MenuSeatDevices.cs`'s join board (primed as the gate opens) and `Launch/LaunchAudio.cs`'s
+mute over `Changed`; the board stops root events. Engine-free. Read `UI/Screens/LoadBoard.cs` next.
+
 ## src/Utils/StartCover.cs
 The ramp behind the cover a session starts under: opaque while the world is still assembling, then
 up from a dark tone over about a second once the session reports the first frame the player is
@@ -423,6 +433,13 @@ Whether a Capture the Flag pane marks the flags and bases that matter beside its
 `--flag-marks=`, the saved `flagMarks` word, the `hud.flagMarks` key, then `on`. It has no live-apply hook: the HUD
 reads `Drawn` every frame. The GAME OPTIONS page shows it as the Flag Markers checkbox under Keep Camera Zoom.
 
+## src/Utils/ReduceFlashingSetting.cs
+The Reduce Flashing accessibility option: `off` or `on`, in both graphics modes. It resolves as `FlagMarksSetting` does:
+`--reduce-flashing=`, the saved `reduceFlashing` word, the `accessibility.reduceFlashing` key, then `off`. It has no live-apply
+hook: `Flight/Weapons/Projectile.cs` reads `Active` as it lights a muzzle flash or a round in flight, and
+`Mech3/Anim/LightChannel.cs` as it submits a gun hit's `gunhit_lt`, so none of them reaches a cloud's glow either. The
+GAME OPTIONS page shows it as the Reduce Flashing checkbox under Flag Markers.
+
 ## src/Utils/ShadowDistanceSetting.cs
 How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
 (2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the
@@ -556,10 +573,18 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 
 ## src/Utils/SpyglassScaleSetting.cs
-The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells.
-`Resolve` takes the saved `spyglassScale` over 100, the decoded size, and `SavedWord` holds the
-`--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
-reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
+The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells, a registered
+word setting with no flag: the saved `spyglassScale` word, the `hud.spyglassScale` key, then 100, the decoded
+size. Its `Take` stores the factor as `Current` at launch and on every options apply; `Flight/Hud/HudMetrics.cs`
+reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor. The GAME
+OPTIONS page shows it as the Spyglass Size dropdown under HUD Layout.
+
+## src/Utils/BracketScaleSetting.cs
+The player's Bracket Size as a word, `100`, `125`, `150` or `200`, and the factor it spells. It resolves as
+`SpyglassScaleSetting` does: the saved `bracketScale` word, the `hud.bracketScale` key, then 100, the decoded box.
+Its `Take` stores the factor as `Current`; `Flight/Hud/HudMetrics.cs` reads it each frame for
+`Flight/Hud/TargetHud.cs`'s flat bracket box. The headset's cards keep the decoded box. The GAME OPTIONS page shows
+it as the Bracket Size dropdown under Spyglass Size.
 
 ## src/Utils/SubtitlesSetting.cs
 Where the voice subtitles show as a word, `off`, `low` or `high`, saved as `subtitles` (null reads
@@ -622,7 +647,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the spyglass size, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync), one word per registered word setting (`WordSettings.All`, each under its own `SavedField`), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the spyglass and bracket sizes, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty (a malformed one moved to `.bad`), an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

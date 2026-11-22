@@ -98,7 +98,7 @@ public sealed partial class OriginalShell
         string name = callsign.Trim();
         if (name.Length == 0)
         {
-            return new CampaignChip(SplitScreen.PlayerTag(seat) + mark, seat, pitches, own, ready);
+            return new CampaignChip(NetSeats.PlayerTag(seat) + mark, seat, pitches, own, ready);
         }
 
         pitches += (Math.Max(0, name.Length - 2) + 2) / 3;

@@ -2000,6 +2000,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     void IOriginalScreenHost.OpenHangar(IHangarWallet? wallet) => OpenHangar(wallet);
 
+    void IOriginalScreenHost.ImportOriginalPlanes() => Hangar?.ImportOriginalPlanes();
+
     MenuExit? IOriginalScreenHost.BeginSeatWalk() => BeginInstantActionSeatWalk();
 
     int IOriginalScreenHost.CheatedMission(int ordinary) => _cheats.Mission(ordinary);

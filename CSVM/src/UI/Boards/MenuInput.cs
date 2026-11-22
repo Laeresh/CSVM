@@ -418,7 +418,7 @@ public sealed class MenuInput
 
         bool unbind = RawUnbind();
         Unbind = unbind && !_unbindPrev;
-        _unbindPrev = unbind;
+        _unbindPrev = unbind || Utils.LoadGate.Closed;
     }
 
     /// <summary>Seeds the edge flags from the current state (no press is reported for anything
@@ -432,7 +432,7 @@ public sealed class MenuInput
         _startPrev = RawStart();
         _loadoutPrev = RawLoadout();
         _presetsPrev = RawPresets();
-        _unbindPrev = RawUnbind();
+        _unbindPrev = RawUnbind() || Utils.LoadGate.Closed;
         _dirPrev = RawDir();
         if (_dirPrev != 0)
             _repeat.Press();
@@ -493,7 +493,7 @@ public sealed class MenuInput
         _typedMark = TypedText.Live.Count;
         _pasteMark = TypedText.Live.Pastes;
         _typedFrame = TypedText.Live.Frame;
-        _erasePrev = KeyDown(Key.Backspace);
+        _erasePrev = KeyDown(Key.Backspace) || Utils.LoadGate.Closed;
         Typed = string.Empty;
         Erase = Paste = false;
     }
@@ -511,10 +511,12 @@ public sealed class MenuInput
         Paste = Keyboard && reading && pasted;
         bool erase = KeyDown(Key.Backspace);
         Erase = erase && !_erasePrev;
-        _erasePrev = erase;
+        _erasePrev = erase || Utils.LoadGate.Closed;
     }
 
-    private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
+    // The keys read off the device rather than through an action map. Their edges store them as down
+    // while the load gate is closed. One held through its opening then reads no press until let go.
+    private bool KeyDown(Key key) => Keyboard && !Utils.LoadGate.Closed && Input.IsKeyPressed(key);
 
     // One resolution of this tick for every read below. The snapshot guarantee is per Poll, so two
     // reads in one frame cannot disagree the way two hardware reads could; the keyboard gate is

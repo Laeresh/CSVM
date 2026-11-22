@@ -2348,6 +2348,7 @@ public partial class GameSession : Node3D
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
             FogRange = rigIndex => _sky?.Weather?.FogOf(rigIndex).Range ?? Vector2.Zero,
+            WashWeight = rigIndex => _screenFlash?.BlindingFor(rigIndex)?.Weight ?? 0f,
             // The session's race flag, keyed off the race itself and not off the pane count. A
             // network race that builds a StuntRace takes the same presence rules.
             Racing = race != null,
@@ -2456,6 +2457,21 @@ public partial class GameSession : Node3D
             // The host's lobby decides the ending for every machine, so a guest follows its host's
             // word (NetFlight.LandsOnScores), which already decided whether this landing is set.
             var toScores = LandsInMenu ? _versusLobbyLanding : null;
+
+            // A local match's board waits out the end's hold, so its end lines are read first. A
+            // network board rises on the end itself.
+            bool held = _wire.Link == null;
+
+            // The match's shared board, its R the director's rematch, its winner the end line's. A
+            // guest's board says why it offers no Restart, except in Zeppelin vs Zeppelin, where each
+            // machine's own Restart takes it to the lobby.
+            var board = toScores == null
+                ? boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                    dogfight.Restart,
+                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null,
+                    () => dogfight.DecidedWinner,
+                    held)
+                : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -2465,17 +2481,8 @@ public partial class GameSession : Node3D
                 ReportDeath = _wire.ReportDeath,
                 ToLobby = _menuDriven ? _exitSession : null,
                 LandOnScores = toScores,
+                RaiseBoard = held && board != null ? board.Raise : null,
             });
-
-            // The match's shared board, its R the director's rematch. A guest's board says why it
-            // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
-            // takes it to the lobby.
-            if (toScores == null)
-            {
-                boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                    dogfight.Restart,
-                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
-            }
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report
@@ -3348,7 +3355,7 @@ public partial class GameSession : Node3D
             Race = race,
             Match = _dogfight?.Match,
             Name = seat => _wire.Seats.FirstOrDefault(s => s.SeatIndex == seat) is { Callsign.Length: > 0 } net
-                ? net.Callsign : SplitScreen.PlayerTag(seat),
+                ? net.Callsign : Net.NetSeats.PlayerTag(seat),
             Carried = seat => _dogfight?.Flags?.Flags.Carried(seat) ?? 0,
             Words = OriginalScoresWords.From(strings),
         };

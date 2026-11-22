@@ -44,6 +44,36 @@ public class VersusMatchTests
     }
 
     [Fact]
+    public void TheWinnerIsTheSoleLeaderAndNoneOnATie()
+    {
+        var free = new VersusMatch(playerCount: 3, killTarget: 0, timeLimit: 0f);
+        Assert.Equal(0, free.Winner());
+        free.RegisterKill(shooter: 2, victim: 0);
+        Assert.Equal(3, free.Winner());
+        Assert.Equal("Crawford", free.NameOf(free.Winner(), seat => seat == 2 ? "Crawford" : null));
+        Assert.Equal("P3", free.NameOf(free.Winner(), null));
+        free.RegisterKill(shooter: 1, victim: 0);
+        Assert.Equal(0, free.Winner());
+        Assert.Null(free.NameOf(free.Winner(), null));
+
+        // A team match names the leading team by its team number, whichever seat scored.
+        var teamed = new VersusMatch(playerCount: 3, killTarget: 0, timeLimit: 0f);
+        teamed.AssignTeams(new[] { 4, 7, 7 }, new Dictionary<int, string> { [7] = "Red Team" });
+        teamed.RegisterKill(shooter: 2, victim: 0);
+        Assert.Equal(7, teamed.Winner());
+        Assert.Equal("Red Team", teamed.NameOf(teamed.Winner(), _ => "Crawford"));
+        teamed.RegisterKill(shooter: 0, victim: 1);
+        Assert.Equal(0, teamed.Winner());
+
+        // An objective's winner stands over the totals, which the hull loss leaves tied here. The
+        // status line's leader still reads the totals.
+        teamed.EndOnHullLoss(losingTeam: 9, winningTeam: 7);
+        Assert.Equal(teamed.TeamTotalOf(4), teamed.TeamTotalOf(7));
+        Assert.Equal(7, teamed.Winner());
+        Assert.Equal(0, teamed.Leader());
+    }
+
+    [Fact]
     public void APilotIsOutOfLivesOnceItsDeathsReachTheLimit()
     {
         var match = new VersusMatch(playerCount: 2, killTarget: 0, timeLimit: 0f, lives: 2);

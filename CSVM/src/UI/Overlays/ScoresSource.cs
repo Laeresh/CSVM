@@ -17,7 +17,7 @@ public sealed class ScoresSource
     public VersusMatch? Match { get; init; }
 
     /// <summary>A seat's name: the network callsign, else the splitscreen tag.</summary>
-    public Func<int, string> Name { get; init; } = SplitScreen.PlayerTag;
+    public Func<int, string> Name { get; init; } = Net.NetSeats.PlayerTag;
 
     /// <summary>The team whose flag a seat carries, 0 for none; null outside Capture the Flag.</summary>
     public Func<int, int>? Carried { get; init; }

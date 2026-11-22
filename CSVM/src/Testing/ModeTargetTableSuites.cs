@@ -13,13 +13,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The curated list in the two modes that run no campaign director: C1's Instant Action
-/// table flags the radio tower and C1's zeppelin match flags the two rearm bases, and each reaches
-/// the pilot's cycles off the table's own keys with no graph behind them. The destructibles
-/// standing in the same world, the chapter's crates among them, are in the pilot's own structure
-/// scan and reach no cycle at all, which is what the curated list is for. The last arm is the
-/// binding rule that decides who gets this feed, including a campaign launch whose profile did not
-/// load and which therefore flies with no director to edit one.</summary>
+/// <summary>The curated list in the modes that run no campaign director. C1's Instant Action table
+/// flags the radio tower and its zeppelin match the two rearm bases. Each reaches the pilot's
+/// cycles off the table's own keys, with no graph behind them. The world's other destructibles,
+/// crates among them, sit in the pilot's structure scan and reach no cycle. C5's two match tables
+/// flag their rearm nodes themselves, on the cycle each table picks. The last arm is the binding
+/// rule, which a campaign launch whose profile did not load also passes.</summary>
 internal static class ModeTargetTableSuites
 {
     private const string Chapter = "C1";
@@ -28,6 +27,12 @@ internal static class ModeTargetTableSuites
     // five chapters' worlds build no node of this name, so their tables offer nothing
     // (docs/org/targeting.md).
     private const string RadioTower = "ap_transmitter";
+
+    // C5 has no rabaset1 building, so its tables flag the rearm nodes themselves. MP1 flags
+    // rearm_node_1 other_target, where the other chapters' MP1 flag racmplx objective (docs/org/targeting.md).
+    private const string C5 = "C5";
+    private const string C5RearmBase = "rearm_node_1";
+    private const string C5MovedNode = "rearm_node_2";
 
     private static readonly string[] RearmBases = { "zep_rearm_node_1", "zep_rearm_node_2" };
     private static readonly string[] MatchAirships = { "multiplayer1zep", "multiplayer2zep" };
@@ -38,13 +43,23 @@ internal static class ModeTargetTableSuites
 
     private static readonly string[] NoKeys = Array.Empty<string>();
 
+    // MP2's objectives less the carried flags cs_flg_light1 and 2. The flag runtime places their
+    // markers, so a feed read without one offers nothing for them.
+    private static readonly string[] C5FlagMatchObjectives =
+    {
+        "ctf_1", "ctf_2", "cs_flag_1", "cs_flag_2", "rearm_node_1", "rearm_node_2",
+    };
+
     [Suite("mode-target-table",
-        "the mission target table of the two director-free modes, read over C1's own world: the "
+        "the mission target table of the director-free modes, read over C1's and C5's own worlds: the "
         + "Instant Action table's one other_target entry, the radio tower, reaches the pilot's "
         + "Non-Aircraft cycle and neither other cycle; the zeppelin match's two rearm bases reach "
         + "it too while the same table's two airships ride the Enemy cycle as objectives; each "
         + "cycle holds its own flagged half and nothing else; not one of the hundred-odd "
         + "destructibles in the same scan, the chapter's crates among them, reaches any cycle; "
+        + "C5's Deathmatch table puts its rearm base on the Non-Aircraft cycle at the spot mp1.gw "
+        + "moved the second node to, and its Capture the Flag table both rearm bases on the Enemy "
+        + "cycle beside the flags; "
         + "and the binding rule itself, which a campaign launch flying without a director passes")]
     internal static void ModeTargetTable(TestContext ctx)
     {
@@ -54,10 +69,13 @@ internal static class ModeTargetTableSuites
         var messages = ctx.Data.Messages;
 
         var report = new StringBuilder();
-        Mode(ctx, messages, report, "IA1", NoKeys, new[] { RadioTower });
-        Mode(ctx, messages, report, "MP3", MatchAirships, RearmBases);
+        Mode(ctx, messages, report, Chapter, "IA1", NoKeys, new[] { RadioTower }, Crates);
+        Mode(ctx, messages, report, Chapter, "MP3", MatchAirships, RearmBases, Crates);
+        Mode(ctx, messages, report, C5, "MP1", NoKeys, new[] { C5RearmBase }, NoKeys,
+            (world, pool) => C5BaseStandsWherePlaced(ctx, world, pool, report));
+        Mode(ctx, messages, report, C5, "MP2", C5FlagMatchObjectives, NoKeys, NoKeys);
         WhoBindsTheTable(ctx, report);
-        ctx.Note($"{Chapter}/IA1 and {Chapter}/MP3 offer their own targets.zrd flags with no director bound");
+        ctx.Note($"{Chapter}/IA1, {Chapter}/MP3, {C5}/MP1 and {C5}/MP2 offer their own targets.zrd flags with no director bound");
         ctx.WriteArtifact($"test-mode-target-table-{Chapter}.txt", report.ToString());
     }
 
@@ -97,14 +115,15 @@ internal static class ModeTargetTableSuites
 
     // One mode's session: its own table, the director-free feed over the built world, and the
     // three cycles a pilot standing in it would walk.
-    private static void Mode(TestContext ctx, Messages messages, StringBuilder report,
-        string mission, IReadOnlyList<string> objectives, IReadOnlyList<string> others)
+    private static void Mode(TestContext ctx, Messages messages, StringBuilder report, string chapter,
+        string mission, IReadOnlyList<string> objectives, IReadOnlyList<string> others,
+        IReadOnlyList<string> crates, Action<TestWorld, TargetPool>? also = null)
     {
-        ZrdrSet missionZrdr = ctx.MissionZrdr(Chapter, mission);
-        ctx.RequireData(missionZrdr, $"{Chapter}/{mission} zrdr");
-        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(Chapter));
+        ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
+        var targets = MissionTargets.Load(missionZrdr, ctx.ChapterZrdr(chapter));
 
-        ctx.WithWorld(Chapter, collision: false, mission, world =>
+        ctx.WithWorld(chapter, collision: false, mission, world =>
         {
             var offered = new List<AimCandidate>();
             new ObjectiveSites(messages, targets, world.Runtime).Collect(offered);
@@ -121,13 +140,14 @@ internal static class ModeTargetTableSuites
                 selection.Rebuild(scan, null, AimAssist.PlayerTeam, self, Vector3.Zero,
                     Basis.Identity, offered);
                 var pool = selection.Pool;
-                report.AppendLine($"{Chapter}/{mission}: {targets.Count} table entr(ies), "
+                report.AppendLine($"{chapter}/{mission}: {targets.Count} table entr(ies), "
                     + $"{offered.Count} site(s) offered, cycles enemy={pool.Enemy.Count} "
                     + $"ally={pool.Ally.Count} nonAircraft={pool.NonAircraft.Count}, beside "
                     + $"{scan.Structures.Count} destructible(s) in the same scan");
 
-                CheckFlagged(ctx, mission, targets, pool, objectives, others);
-                CheckTheUnflaggedStayOff(ctx, mission, world, scan, pool, report);
+                CheckFlagged(ctx, $"{chapter}/{mission}", targets, pool, objectives, others);
+                CheckTheUnflaggedStayOff(ctx, $"{chapter}/{mission}", world, scan, pool, crates, report);
+                also?.Invoke(world, pool);
             }
             finally
             {
@@ -136,14 +156,33 @@ internal static class ModeTargetTableSuites
         });
     }
 
+    // mp1.gw moves rearm_node_2 onto rearm_node_1. A marker within the rearm radius of the moved node
+    // was read after the script placed the world, not at the gamez's 4.7 km split.
+    private static void C5BaseStandsWherePlaced(TestContext ctx, TestWorld world, TargetPool pool,
+        StringBuilder report)
+    {
+        var moved = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(C5MovedNode));
+        ctx.Check(moved != null && moved.IsVisibleInTree(), $"{C5}/MP1 builds and shows '{C5MovedNode}'");
+        if (moved == null || Find(pool.NonAircraft, C5RearmBase) is not { } site)
+        {
+            return;
+        }
+
+        float apart = site.Position.DistanceTo(moved.GlobalPosition);
+        report.AppendLine(FormattableString.Invariant(
+            $"{C5}/MP1: the base's marker stands {apart:0.00} m from the moved {C5MovedNode}"));
+        ctx.Check(apart * apart <= Flight.Modes.RearmBases.InitialRadiusSquared,
+            $"…and the Non-Aircraft cycle's base stands within the rearm radius of it, {apart:0.00} m, where mp1.gw placed it");
+    }
+
     // Each flagged key on the cycle its own flag picks, and on no other.
-    private static void CheckFlagged(TestContext ctx, string mission, MissionTargets targets,
+    private static void CheckFlagged(TestContext ctx, string where, MissionTargets targets,
         TargetPool pool, IReadOnlyList<string> objectives, IReadOnlyList<string> others)
     {
         foreach (string key in others)
         {
             ctx.Check(targets.For(key).OtherTarget && !targets.For(key).Objective,
-                $"{Chapter}/{mission}'s own table flags '{key}' other_target");
+                $"{where}'s own table flags '{key}' other_target");
             ctx.Same(1, Named(pool.NonAircraft, key),
                 $"…and the director-free feed puts it on the Non-Aircraft cycle, once");
             ctx.Same(0, Named(pool.Enemy, key) + Named(pool.Ally, key),
@@ -157,7 +196,7 @@ internal static class ModeTargetTableSuites
         foreach (string key in objectives)
         {
             ctx.Check(targets.For(key).Objective,
-                $"{Chapter}/{mission}'s own table flags '{key}' objective");
+                $"{where}'s own table flags '{key}' objective");
             ctx.Same(1, Named(pool.Enemy, key),
                 $"…so the same feed rides it on the Enemy cycle instead, once");
             ctx.Same(0, Named(pool.NonAircraft, key),
@@ -167,21 +206,21 @@ internal static class ModeTargetTableSuites
         // No aeroplane and no emplacement is in this scan, so each cycle's whole content is the
         // table's own flagged half and the counts are exact.
         ctx.Same(others.Count, pool.NonAircraft.Count,
-            $"{Chapter}/{mission}'s Non-Aircraft cycle is its table's other_target entries and nothing else");
+            $"{where}'s Non-Aircraft cycle is its table's other_target entries and nothing else");
         ctx.Same(objectives.Count, pool.Enemy.Count,
             $"…and its Enemy cycle the table's objective entries and nothing else");
     }
 
     // The whole point of a curated list: the world's other destructibles are in the pilot's scan
     // and stay off every cycle, which a pool reading that scan would undo.
-    private static void CheckTheUnflaggedStayOff(TestContext ctx, string mission, TestWorld world,
-        AimCandidateSet scan, TargetPool pool, StringBuilder report)
+    private static void CheckTheUnflaggedStayOff(TestContext ctx, string where, TestWorld world,
+        AimCandidateSet scan, TargetPool pool, IReadOnlyList<string> crates, StringBuilder report)
     {
         int inScan = 0;
-        foreach (string key in Crates)
+        foreach (string key in crates)
         {
             var node = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(key));
-            ctx.Check(node != null, $"'{key}' is a node {Chapter} actually builds");
+            ctx.Check(node != null, $"'{key}' is a node {where} actually builds");
             if (node == null)
             {
                 continue;
@@ -194,16 +233,16 @@ internal static class ModeTargetTableSuites
 
             ctx.Same(0, Anchored(pool.NonAircraft, node) + Anchored(pool.Enemy, node)
                 + Anchored(pool.Ally, node) + Named(pool.NonAircraft, key),
-                $"…and reaches no cycle in {Chapter}/{mission}, the table never naming it");
+                $"…and reaches no cycle in {where}, the table never naming it");
         }
 
         // How many of them the mode's own world has switched on varies by mission variant, so the
         // count is reported rather than asserted; what is asserted is that none of the scan reaches
         // a cycle at all.
-        report.AppendLine($"{Chapter}/{mission}: {inScan} of {Crates.Length} crate(s) live in the "
+        report.AppendLine($"{where}: {inScan} of {crates.Count} crate(s) live in the "
             + $"structure scan, none of them on any cycle");
         ctx.Check(scan.Structures.Count > pool.NonAircraft.Count,
-            $"{Chapter}/{mission} scans {scan.Structures.Count} destructible(s) against a Non-Aircraft cycle of {pool.NonAircraft.Count}");
+            $"{where} scans {scan.Structures.Count} destructible(s) against a Non-Aircraft cycle of {pool.NonAircraft.Count}");
         ctx.Same(0, scan.Structures.Count(c => AnchorOf(c.Source) is { } a
                 && (Anchored(pool.NonAircraft, a) + Anchored(pool.Enemy, a) + Anchored(pool.Ally, a)) > 0),
             $"…and not one of that scan reaches a cycle, which is what widening the pool to it would undo");

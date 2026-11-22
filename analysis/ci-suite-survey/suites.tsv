@@ -296,7 +296,7 @@ MenuPlayerSetupSuites.cs	menu-player-setup-seats	D	Built-in seats leg is A; Orig
 MenuZoneSuites.cs	menu-zone-layout	A	Built-in launchscreen band metrics over the paint aid; the ZrdrPath gate is incidental (hangar reads degrade to zeros)
 MeshLightSuites.cs	mesh-light-blink	E	C5's authored beacon blink periods 1/2 s from the real gamez (gamez-lights fixture exists but asserts are on C5's set)
 MeshLightSuites.cs	mesh-light-fade	E	C5's authored fade far/slope set and counts
-ModeTargetTableSuites.cs	mode-target-table	E	C1 world: ap_transmitter, rearm bases, multiplayer1zep, crates among the hundred-odd destructibles, IA1/MP3 targets.zrd flags
+ModeTargetTableSuites.cs	mode-target-table	E	C1 world: ap_transmitter, rearm bases, multiplayer1zep, crates among the hundred-odd destructibles, IA1/MP3 targets.zrd flags; C5 world: MP1/MP2 rearm_node_1/2
 MouseFlightSuites.cs	flight-mouse-capture	C	player_bhawk plane stats only; bare-node rig
 MouseFlightSuites.cs	flight-mouse-scheme	C	plane stats only (is_autogyro true on player_autogyro, false on player_bhawk); rig is a bare Node3D model; the control check is shipped-data parity
 MouseFlightSuites.cs	flight-mouse-scheme-live	D	pause Preferences leaf over the Original menu layout fixture (Options/CONTROLS page) + player_bhawk stats

@@ -42,6 +42,9 @@ internal sealed class NetFlight
     // Set by a finished lobby match on its way out, so the door keeps the wire for the lobby.
     private bool _keepLobby;
 
+    // Set by a guest leaving its held start, so the door gives the wire up even in co-op.
+    private bool _leaving;
+
     // A host's fit and custom plane for each seat, by seat, as its launch told the guests. A
     // guest reads its host's word off the door instead.
     private Net.CoopFit[] _seatFits = System.Array.Empty<Net.CoopFit>();
@@ -117,12 +120,12 @@ internal sealed class NetFlight
         door.Stage == NetDoorStage.Failed;
 
     /// <summary>The door's half of a network flight's end. A co-op door, or a lobby whose match
-    /// ran to its end, takes <paramref name="wire"/> back. A host otherwise closes through its
-    /// door, which tells every guest first. Anything else disposes the wire and shuts the door.
-    /// </summary>
-    public static void EndNetWire(NetPlayFeature? door, Net.INetTransport wire, bool keepLobby)
+    /// ran to its end, takes <paramref name="wire"/> back, unless a guest is
+    /// <paramref name="leaving"/> its held start. A host otherwise closes through its door, which
+    /// tells every guest first. Anything else disposes the wire and shuts the door.</summary>
+    public static void EndNetWire(NetPlayFeature? door, Net.INetTransport wire, bool keepLobby, bool leaving = false)
     {
-        if (door != null && (door.IsCoopHost || door.IsCoopGuest || keepLobby) && door.Reclaim())
+        if (!leaving && door != null && (door.IsCoopHost || door.IsCoopGuest || keepLobby) && door.Reclaim())
         {
             return;
         }
@@ -427,6 +430,24 @@ internal sealed class NetFlight
         return landing;
     }
 
+    /// <summary>Where a held start the host called off lands this machine. A lobby flight lands on
+    /// its lobby, the wire kept for it and the last scores left standing. A flight from no lobby
+    /// lands on <paramref name="otherwise"/>; a co-op door keeps its wire anyway.</summary>
+    public MenuReturnDestination CancelledLanding(MenuReturnDestination otherwise)
+    {
+        if (!_lobbyFlight)
+        {
+            return otherwise;
+        }
+
+        _keepLobby = true;
+        return new LobbyReturn(System.Array.Empty<DogfightScore>(), Cancelled: true);
+    }
+
+    /// <summary>A guest leaves its held start for the games list. The flight's close then gives the
+    /// wire up rather than handing it back to the door.</summary>
+    public void LeaveMatch() => _leaving = true;
+
     /// <summary>A co-op guest leaving a flight its host still flies says so before the wire goes
     /// back. The door ignores this once the host has named any other board.</summary>
     public void LeaveCoopMission(GameSession? session)
@@ -450,13 +471,15 @@ internal sealed class NetFlight
 
         var wire = _wire;
         bool keepLobby = _keepLobby;
+        bool leaving = _leaving;
         _wire = null;
         _roster = null;
         _isHost = false;
         _coopFlight = false;
         _lobbyFlight = false;
         _keepLobby = false;
-        EndNetWire(Door, wire, keepLobby);
+        _leaving = false;
+        EndNetWire(Door, wire, keepLobby, leaving);
     }
 
     // The master server the door lists on. --master-server= beats the saved option, which beats the

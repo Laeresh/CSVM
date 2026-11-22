@@ -62,6 +62,9 @@ internal static class GraphicsSwitchSuites
     // How far the lifted ocean may stand below a ramp: the bilinear lift's rounding, not a gap.
     private const float RampShortfall = 0.05f;
 
+    // The slack a hangar reach test gives up, so a piece cut along a footprint's edge is not read as on it.
+    private const float HangarEdgeSlackM = 0.05f;
+
     // The call in the base sheet's fragment-stage discard. The include line alone never matches it.
     private const string HideCall = "csky_ocean_hides_sea(";
 
@@ -311,20 +314,25 @@ internal static class GraphicsSwitchSuites
     }
 
     [Suite("post-processing-live",
-        "the Post-processing word on a C1 Enhanced flight: on grades the world's Environment and every cockpit pass's "
+        "the Post-processing word on a C1 MP1 Enhanced flight: on grades the world's Environment and every cockpit pass's "
         + "copy, a live move to off puts the bare AgX tonemap back on them and on again regrades them, and a switch "
-        + "to Original leaves no grade")]
+        + "to Original leaves no grade; at vegetation quality rich the same flight hands its standing rearm hangar's footprint to "
+        + "the vegetation, read off the builders' counters: the added stamps drop candidates on it and no kept Rich or added stamp's card reaches it, the ground cover cards and "
+        + "the canopy clumps hold the same footprints, and the cards built around a hangar leave some off its floor")]
     internal static void PostProcessingFollowsLive(TestContext ctx)
     {
         RequireData(ctx);
         bool wasEnhanced = GraphicsMode.Enhanced;
         var launched = PostProcessingSetting.Lookup.Current;
+        string launchedQuality = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
         void Word(string word) =>
             PostProcessingSetting.Lookup.ResolveFrom(word, null, new SettingContext(Det: true, Enhanced: true, Panes: 1));
         try
         {
             Word(PostProcessingSetting.On);
-            var rig = Open(ctx, true, 1, "C1");
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            GroundCoverSetting.Resolve(GroundCoverSetting.Cards, null, null);
+            var rig = Open(ctx, true, 1, "C1", "--mission=MP1");
             try
             {
                 if (!rig.Built)
@@ -343,6 +351,7 @@ internal static class GraphicsSwitchSuites
                 Word(PostProcessingSetting.On);
                 EnhancedLook.FollowWordSettings(rig.Session);
                 ctx.Check(Graded(), $"on again regrades");
+                HangarsHandedOver(ctx, rig);
                 Switch(rig, false);
                 ctx.Check(!rig.Env.AdjustmentEnabled, $"Original leaves no grade");
             }
@@ -354,6 +363,8 @@ internal static class GraphicsSwitchSuites
         finally
         {
             PostProcessingSetting.Lookup.Take(launched.Word == null ? PostProcessingSetting.FallbackFor(det: false) : launched);
+            GroundCoverSetting.Resolve(launchedCover, null, null);
+            VegetationQualitySetting.Resolve(launchedQuality, null, null);
             Restore(wasEnhanced);
         }
     }
@@ -1654,6 +1665,7 @@ internal static class GraphicsSwitchSuites
         + "stands, each instance in a block of the variant that pick gives its cell, the cblock2 tiles over cblock4's set "
         + "among them, in nodes with no collider and no shadow "
         + "on the models' layer; the traffic's nodes drive, ranged, and every city shader takes its driving rewrite; "
+        + "the highway's cars stay on its deck; "
         + "the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
     internal static void CityDressingStands(TestContext ctx)
     {
@@ -1744,6 +1756,50 @@ internal static class GraphicsSwitchSuites
                 bool drives = new[] { true, false }.All(near => new[] { false, true }.All(toned => new[] { false, true }.All(paint =>
                     Mech3.CityTraffic.DrivingCode(CityModels.ShaderCode(near, toned: toned), paint) != null)));
                 ctx.Check(drives, $"every city shader a car may draw with holds each text the traffic's driving rewrite edits");
+                // Every highway polygon chains, every lane loop closes on itself, and every highway car stays on the deck.
+                var polygons = Mech3.CityHighway.Polygons(ctx.ChapterGamez("C5")!);
+                var chained = Mech3.CityHighway.Chain(polygons);
+                var loops = Mech3.CityHighway.Loops(chained.Decks, out int unclosed);
+                ctx.Check(polygons.Count > 0 && chained.Polygons == polygons.Count && chained.Orphans == 0,
+                    $"the highway's {polygons.Count} polygons all chain into {chained.Decks.Count} decks ({chained.Polygons} chained, {chained.Orphans} orphans)");
+                float Gap(Mech3.CityTraffic.Path loop) => Enumerable.Range(0, loop.Segs.Count).Max(i =>
+                {
+                    var (end, dir) = loop.Segs[i].Along(loop.Segs[i].Length);
+                    var next = loop.Segs[(i + 1) % loop.Segs.Count];
+                    return Mathf.Max((end - next.Start).Length(), (dir - next.Dir).Length());
+                });
+                ctx.Check(loops.Count > 0 && unclosed == 0 && loops.All(l => Gap(l) < 0.05f),
+                    $"{loops.Count} highway lane loops close on themselves ({unclosed} unclosed, widest gap {loops.Select(Gap).DefaultIfEmpty(0f).Max():0.000})");
+                var deck = new List<Vector3>();
+                foreach (var (corners, _) in polygons)
+                {
+                    for (int i = 1; i + 1 < corners.Length; i++)
+                        deck.AddRange(new[] { corners[0], corners[i], corners[i + 1] });
+                }
+                // C5's streets lie at 5 m and its deck no lower than 36.9 m, so a piece's height alone names a highway car.
+                float above = deck.DefaultIfEmpty().Min(v => v.Y) - 5f;
+                int highway = 0, offDeck = 0;
+                foreach (var body in cars.Where(c => c.Name.ToString().StartsWith("car_near_", StringComparison.Ordinal)))
+                {
+                    for (int i = 0; i < body.Multimesh.InstanceCount; i++)
+                    {
+                        var xf = body.GlobalTransform * body.Multimesh.GetInstanceTransform(i);
+                        var piece = body.Multimesh.GetInstanceCustomData(i);
+                        if (xf.Origin.Y < above)
+                            continue;
+                        highway++;
+                        for (int j = 0; j < 8; j++)
+                        {
+                            float s = piece.R * (j + 0.5f) / 8f, r = piece.A;
+                            var at = xf * (r == 0f ? new Vector3(s, 0f, 0f) : new Vector3(r * Mathf.Sin(s / r), 0f, r * (1f - Mathf.Cos(s / r))));
+                            if (Mech3.CityDressing.Height(deck, new Vector2(at.X, at.Z)) is not { } y || Mathf.Abs(at.Y - y - 0.05f) > 0.25f)
+                                offDeck++;
+                        }
+                    }
+                }
+                int pieces = loops.Sum(l => l.Segs.Count);
+                ctx.Check(highway == pieces && pieces > 0 && offDeck == 0,
+                    $"{highway} pieces of cars above {above:0} m, one per piece of the {pieces} in the lane loops, stay on the deck's surface ({offDeck} of {highway * 8} samples off it)");
                 ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
 
                 bool Shown() => dressing.Root.IsVisibleInTree();
@@ -2918,6 +2974,47 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("vegetation-hangars",
+        "Enhanced flights at vegetation quality rich keep every standing hangar's floor clear: C1 MP2 and C3 MP2 (rabaset1, ctf_1, "
+        + "ctf_2), C2 MP1 and C3 MP1 (rabaset1 alone), where no kept Rich or added stamp's card, ground cover card, shell piece (C1's "
+        + "cover), canopy clump or crown (C3's painted canopy) reaches a footprint while stamps and cards still grow beside them; "
+        + "C3's Instant Action switches every hangar off, so it keeps no footprint")]
+    internal static void VegetationHangars(TestContext ctx)
+    {
+        RequireData(ctx, "C1");
+        RequireData(ctx, "C2");
+        RequireData(ctx, "C3");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = VegetationQualitySetting.Word, launchedCover = GroundCoverSetting.Word;
+        var c3 = ctx.ChapterGamez("C3")!;
+        var ia = Mech3.MissionSetup.Load(ctx.RequireInterp(), "C3", "IA1")!;
+        ia.BindPartitions(c3);
+        ctx.Check(Mech3.HangarFootprints.Of(c3, ia).Outlines.Count == 0, $"C3's Instant Action script switches every hangar off, so it keeps no footprint");
+        try
+        {
+            VegetationQualitySetting.Resolve(VegetationQualitySetting.Rich, null, null);
+            GroundCoverSetting.Resolve(GroundCoverSetting.Cards, null, null);
+            foreach (var (chapter, mission, hangars) in new[] { ("C1", "MP2", 3), ("C2", "MP1", 1), ("C3", "MP1", 1), ("C3", "MP2", 3) })
+            {
+                var live = Open(ctx, true, 1, chapter, $"--mission={mission}");
+                try
+                {
+                    ClearOfHangars(ctx, live, $"{chapter} {mission}", hangars);
+                }
+                finally
+                {
+                    live.Close();
+                }
+            }
+        }
+        finally
+        {
+            GroundCoverSetting.Resolve(launchedCover, null, null);
+            VegetationQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("vegetation-lab",
         "the vegetation lab stands in an Enhanced --freecam C1 session at vegetation quality rich and nowhere in a --fly "
         + "one, opened on the session's entry and the shipped mask, which drops no original stamp: a tint edit of one kind re-bakes that kind's Rich colours "
@@ -4009,6 +4106,90 @@ internal static class GraphicsSwitchSuites
 
     private static string Light(DirectionalLight3D light) => string.Create(CultureInfo.InvariantCulture,
         $"layers 0x{light.Layers:X5} casts {light.ShadowEnabled} energy {light.LightEnergy:0.###} colour {light.LightColor.ToHtml(false)} specular {light.LightSpecular:0.###} angular {light.LightAngularDistance:0.##} beam {-light.GlobalBasis.Z}");
+
+    // The vegetation's hand-over of a flight's standing hangars. The bake drops added stamps on them and keeps every
+    // Rich card off. The cards and clumps hold the same footprints, and cards built at a hangar leave some off.
+    private static void HangarsHandedOver(TestContext ctx, Rig rig)
+    {
+        if (rig.Session.Vegetation is not { Clutter: { } clutter, GroundCoverCards: { } cards, CanopyClumpField: { } clumps })
+        {
+            ctx.Check(false, $"the rich flight builds its clutter, ground cover cards and canopy clumps");
+            return;
+        }
+        var hangars = clutter.Hangars;
+        ctx.Check(hangars.Outlines.Count == 1, $"the world session reads the one standing hangar off MP1's script ({hangars.Outlines.Count})");
+        ctx.Check(clutter.AddedOffHangars > 0, $"the added stamps drop {clutter.AddedOffHangars} candidates on it");
+        StampsClear(ctx, clutter, "C1 MP1");
+        ctx.Check(ReferenceEquals(cards.Hangars, hangars) && ReferenceEquals(clumps.Hangars, hangars), $"the ground cover cards and the canopy clumps hold the same footprints");
+        // The rearm hangar, the smallest floor, stands on grass; one focus keeps the build to its cells.
+        var floor = hangars.Outlines.OrderBy(o => Enumerable.Range(0, o.Length).Sum(i => o[i].Cross(o[(i + 1) % o.Length]))).First();
+        var centre = floor.Aggregate(Vector2.Zero, (s, v) => s + v) / floor.Length;
+        cards.Update(new[] { new Vector3(centre.X, 300f, centre.Y) }, int.MaxValue);
+        ctx.Check(cards.CardsOffHangars > 0, $"the cards built at the rearm hangar leave {cards.CardsOffHangars} off its floor");
+    }
+
+    // No kept Rich or added stamp's card reaches a standing hangar, while some stand within 60 m of one. A card reaches
+    // its half width, at the stamp's scale. The Rich bake is read off its placements, which hold where a counter reads none.
+    private static void StampsClear(TestContext ctx, Mech3.ClutterBuilder clutter, string flight)
+    {
+        var hangars = clutter.Hangars;
+        var stamps = (clutter.ExportedKinds ?? new List<Mech3.ClutterBuilder.KindExport>()).Where(k => k.Rich != null)
+            .SelectMany(k => k.Rich!.Placements.Where(p => p.Basis.Determinant() != 0f).Select(p => (At: p.Origin, Reach: p.Basis.Y.Length() * k.Width / 2f))).ToList();
+        int onFloor = stamps.Count(s => hangars.Covers(s.At, s.Reach - HangarEdgeSlackM)), near = stamps.Count(s => hangars.Covers(s.At, 60f));
+        ctx.Check(onFloor == 0 && near > 0, $"no kept {flight} stamp's card reaches a hangar ({onFloor} of {stamps.Count}), {near} within 60 m of one");
+    }
+
+    // One MP flight's checks: every layer the chapter draws keeps off its hangars. C1 draws the ground cover, C3 the crowns.
+    private static void ClearOfHangars(TestContext ctx, Rig live, string flight, int standing)
+    {
+        if (!live.Built || live.Session.Vegetation is not { Clutter: { ExportedKinds: not null, Vegetation: { } entry } clutter } stage
+            || live.Session.SessionTextures is not { } textures)
+        {
+            ctx.Check(false, $"the Enhanced {flight} flight builds with its clutter and vegetation entry");
+            return;
+        }
+        var hangars = clutter.Hangars;
+        bool OnFloor(Vector3 at, float reach = 0f) => hangars.Covers(at, reach - HangarEdgeSlackM);
+        var areas = hangars.Outlines.Select(o => Enumerable.Range(0, o.Length).Sum(i => o[i].Cross(o[(i + 1) % o.Length])) / 2f).ToList();
+        ctx.Check(areas.Count == standing && areas.All(a => a > 5000f && a < 20000f), $"{flight} stands {standing} hangar(s), each a building's floor ({string.Join(", ", areas.Select(a => $"{a:0}"))} m2)");
+
+        StampsClear(ctx, clutter, flight);
+
+        if (entry.Cover.Count > 0)
+        {
+            if (stage.GroundCoverCards is not { } field)
+            {
+                ctx.Check(false, $"cards, the word set, builds {flight}'s ground cover");
+                return;
+            }
+            var centres = hangars.Outlines.Select(o => o.Aggregate(Vector2.Zero, (s, v) => s + v) / o.Length).ToList();
+            field.Update(centres.Select(c => new Vector3(c.X, 300f, c.Y)).ToList(), int.MaxValue);
+            var cards = field.Draws.SelectMany(m => Enumerable.Range(0, m.Multimesh.InstanceCount).Select(i => m.Position + m.Multimesh.GetInstanceTransform(i).Origin)).ToList();
+            ctx.Check(cards.Count > 0 && cards.Count(c => OnFloor(c)) == 0, $"no {flight} card stands on a hangar ({cards.Count(c => OnFloor(c))} of the {cards.Count} built around them)");
+
+            var shells = Mech3.GroundCoverShells.Build(clutter.Gamez, clutter.Mask, textures, entry, hangars: hangars);
+            var pieces = new List<Vector3>();
+            foreach (var m in shells?.GetChildren().OfType<MultiMeshInstance3D>() ?? Enumerable.Empty<MultiMeshInstance3D>())
+            {
+                var arrays = m.Multimesh.Mesh.SurfaceGetArrays(0);
+                var corners = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                int[] index = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                for (int t = 0; t + 2 < index.Length; t += 3)
+                    pieces.Add(m.Position + ((corners[index[t]] + corners[index[t + 1]] + corners[index[t + 2]]) / 3f));
+            }
+            shells?.Free();
+            ctx.Check(pieces.Count > 0 && pieces.Count(p => OnFloor(p)) == 0, $"no {flight} shell triangle lies on a hangar ({pieces.Count(p => OnFloor(p))} of {pieces.Count})");
+        }
+
+        if (stage.CanopyClumpField is { } clumps)
+        {
+            int over = clumps.Clumps.Count(c => OnFloor(c.Base, c.Width / 2f));
+            int crowns = clumps.Crowns.Count(c => OnFloor(c.At, clumps.CrownReachM(c)));
+            ctx.Check(over == 0 && crowns == 0, $"no {flight} canopy clump or crown reaches over a hangar ({over} of {clumps.Clumps.Count} clumps, {crowns} of {clumps.Crowns.Count} crowns)");
+        }
+        if (flight.StartsWith("C3", StringComparison.Ordinal))
+            ctx.Check(stage.CanopyClumpField is { Crowns.Count: > 0 }, $"{flight} stands its crowns, so the crown check above ran");
+    }
 
     private static void RequireData(TestContext ctx, string? chapter = null)
     {
@@ -5501,6 +5682,8 @@ internal static class GraphicsSwitchSuites
         {
             Session.Free();
             Pane.Free();
+            // Open's Enhanced apply set the process-wide SSR trace size; later suites must not inherit it.
+            RenderingServer.EnvironmentSetSsrHalfSize(EnhancedLook.SsrHalfSizeDefault);
         }
     }
 }
