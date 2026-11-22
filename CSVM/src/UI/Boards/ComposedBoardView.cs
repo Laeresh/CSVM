@@ -112,6 +112,11 @@ public sealed partial class ComposedBoardView : Control
     /// drawing.</summary>
     public ComposedBoard? Board => _board;
 
+    /// <summary>The live pictures a <see cref="BoardArtLibrary.Live"/> name resolves to, each a
+    /// texture its owner renders into on its own, so nothing here repaints for it. The owner adds
+    /// and removes its entry.</summary>
+    public Dictionary<string, Texture2D> LivePictures { get; } = new();
+
     /// <summary>The pictures last handed to <see cref="PresentMoving"/>, which is what the moving
     /// layer holds over that board.</summary>
     public IReadOnlyList<BoardPicture> Moving => _moving;
@@ -1131,6 +1136,11 @@ public sealed partial class ComposedBoardView : Control
         if (art.Library == BoardArtLibrary.Held)
         {
             return Held(art.Pixels);
+        }
+
+        if (art.Library == BoardArtLibrary.Live)
+        {
+            return LivePictures.GetValueOrDefault(art.Name);
         }
 
         if (art.Library == BoardArtLibrary.Rimage)

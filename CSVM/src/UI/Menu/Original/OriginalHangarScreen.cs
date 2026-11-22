@@ -7,6 +7,7 @@ using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Hangar;
+using CSVM.Utils;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -111,6 +112,9 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     /// <summary>The paint tab's nose decal dropdown, the first of its three.</summary>
     public const string NoseDecalKey = "PT_D_DECALS0";
+
+    /// <summary>The <see cref="BoardArtLibrary.Live"/> name the hub's 3D plane is drawn under.</summary>
+    public const string LivePictureName = "hangar-plane";
 
     // The plane picture's authored corner, the four PX_P_PLANE panes' own.
     private const float PlaneX = 16f;
@@ -288,6 +292,17 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     /// <summary>Whether the screen showing is the plane-construction hub, a tab or the purchase
     /// page: where the cash figure and the hub's own name box stand.</summary>
     public bool IsHub => IsHangarTab || _host.Screen == OriginalScreen.HangarPurchase;
+
+    /// <summary>The plane the hub's live picture shows under Enhanced: the airframe the 2D picture
+    /// would show and the build's stores and paint. Null where the 2D picture or none is drawn.</summary>
+    public HangarPreviewPose? Preview =>
+        PreviewRect() != null
+            ? HangarPreviewPose.Of(_hangar!.Scratch, _hangar.StockIdOfRow(FocusedAirframe()), _hangar.ModOfRow(FocusedAirframe())?.Id)
+            : null;
+
+    /// <summary>Where the live picture stands in authored pixels, the rectangle a drag orbits it in;
+    /// null wherever <see cref="Preview"/> is.</summary>
+    public (float X, float Y, float Width, float Height)? PreviewArea => PreviewRect();
 
     /// <summary>The wallet the build showing is priced against, or null where the door opened
     /// wallet-free or no build is open.</summary>
@@ -1785,6 +1800,12 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private void ComposePlanePicture(List<BoardPicture> pictures)
     {
         var hangar = _hangar!;
+        if (PreviewRect() is { } rect)
+        {
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Live, LivePictureName), rect.X, rect.Y, Width: rect.Width, Height: rect.Height));
+            return;
+        }
+
         // A mod's portrait fills the blueprint's box on every tab; a mod without one draws its parent's art.
         int focused = hangar.StockIdOfRow(FocusedAirframe());
         int airframe = hangar.AirframeChosen ? hangar.Scratch.Airframe : focused;
@@ -1823,6 +1844,15 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     // The airframe the airframe tab previews: the focused list item while the list is open, else
     // the standing pick, else the first row.
     private int FocusedAirframe() => HubAirframe() ?? 0;
+
+    // The 2D picture's own rectangle, which the live one takes under Enhanced: the corner the
+    // panes share and the blueprint's size. Null under Original, off the hub, or with no blueprint
+    // art to size it by.
+    private (float X, float Y, float Width, float Height)? PreviewRect() =>
+        GraphicsMode.Enhanced && IsHub && _hangar is { IsOpen: true }
+            && _host.Measure($"PX_{_hangar.StockIdOfRow(FocusedAirframe())}_BLUEPRINT.TGA") is { } size
+            ? (PlaneX, PlaneY, size.Width, size.Height)
+            : null;
 
     // The airframe the hub's figures stand on. It is the row under the cursor in the open airframe
     // list, else the pick already taken. Null before a pilot has chosen one, which is what leaves

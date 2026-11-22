@@ -729,6 +729,29 @@ public sealed class Loadout
         return def;
     }
 
+    /// <summary>The plane's marker nodes (firepoints, pylons, target) by their <c>cs_name</c>, the
+    /// meta SceneBuilder stamps, read off the built tree. The hangar's live picture hangs its rockets
+    /// by it too.</summary>
+    internal static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
+    {
+        var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
+        void Walk(Node node)
+        {
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+                    && MarkerRig.Classify(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), out _, out _))
+                {
+                    // First-wins: marker names are unique per plane.
+                    map.TryAdd(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), n3d);
+                }
+                Walk(child);
+            }
+        }
+        Walk(plane);
+        return map;
+    }
+
     // The hardpoint list read in physical mount order: list positions sorted by pylon number.
     private static int[] StepOrder(List<Hardpoint> hardpoints)
     {
@@ -751,27 +774,6 @@ public sealed class Loadout
             $"loadout {def.Def} ({def.Model}) {where}: marker '{name}' not found on the built plane");
     }
 
-    // Builds a `cs_name → Node3D` map of the plane's marker nodes (firepoints,
-    // pylons, target) from the built tree, the same `cs_name` meta SceneBuilder stamps.
-    private static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
-    {
-        var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
-        void Walk(Node node)
-        {
-            foreach (var child in node.GetChildren())
-            {
-                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
-                    && MarkerRig.Classify(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), out _, out _))
-                {
-                    // First-wins: marker names are unique per plane.
-                    map.TryAdd(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), n3d);
-                }
-                Walk(child);
-            }
-        }
-        Walk(plane);
-        return map;
-    }
 }
 
 /// <summary>One live gun group: its resolved weapon, muzzle nodes, and an <b>independent</b> ammo
