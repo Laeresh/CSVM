@@ -18,16 +18,15 @@ public sealed class NetSessionTests
 {
     private const ulong Seed = 0xfeedfacecafebeefUL;
 
-    // The order both ends read a roster's airframe index against. Real node names, since the
-    // index-to-name mapping is the one thing a roster cannot carry as text.
+    // The two seats' airframes, real node names, which the roster carries as text.
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
 
     [Fact]
     public void A_guest_is_not_joined_until_it_steps_and_then_it_has_the_whole_field()
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(11));
-        var host = NetSession.Host(mesh[0], Roster(), Seed, () => 42.5, Airframes);
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var host = NetSession.Host(mesh[0], Roster(), Seed, () => 42.5);
+        var guest = NetSession.Guest(mesh[1]);
 
         Assert.True(host.Joined);
         Assert.False(guest.Joined);
@@ -47,6 +46,40 @@ public sealed class NetSessionTests
         Assert.Equal(new[] { 0, 1 }, guest.Seats.Select(s => s.PeerId));
     }
 
+    // A host with a plane mod names its set before the handshake. A guest holding it under the same
+    // hash joins and reads the mod's id as a seat's airframe. One missing it, or holding another
+    // hash, never joins and names the mod. A stock host's join stays its two payloads.
+    [Fact]
+    public void A_guest_joins_a_mod_host_only_holding_its_mods()
+    {
+        string hash = new string('c', 64);
+        var mods = new NetModSet(new[] { new NetMod("avenger_e1c", hash, 4) });
+        var seats = Roster();
+        seats[1] = seats[1] with { PlaneNode = "avenger_e1c" };
+
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(23));
+        var host = NetSession.Host(mesh[0], seats.Append(new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "third", PlaneNode = Airframes[0] }).ToArray(), Seed, mods: mods);
+        var holder = NetSession.Guest(mesh[1], new NetModSet(new[] { new NetMod("avenger_e1c", hash, 4), new NetMod("extra", hash, 0) }));
+        var stale = NetSession.Guest(mesh[2], new NetModSet(new[] { new NetMod("avenger_e1c", new string('d', 64), 4) }));
+        holder.Step(0.016);
+        stale.Step(0.016);
+
+        Assert.Equal(6, host.Sent);
+        Assert.True(holder.Joined);
+        Assert.Empty(holder.RefusedMods);
+        Assert.Equal(new[] { Airframes[0], "avenger_e1c", Airframes[0] }, holder.Seats.Select(s => s.PlaneNode));
+        Assert.False(stale.Joined);
+        Assert.Equal(new[] { "avenger_e1c" }, stale.RefusedMods.Select(m => m.Id));
+
+        // ABLE-TO-FAIL CONTROL: the same guest under a stock host joins, and the host sends no set.
+        var stockMesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(24));
+        var stockHost = NetSession.Host(stockMesh[0], Roster(), Seed);
+        var plain = NetSession.Guest(stockMesh[1], new NetModSet(new[] { new NetMod("avenger_e1c", new string('d', 64), 4) }));
+        plain.Step(0.016);
+        Assert.True(plain.Joined);
+        Assert.Equal(2, stockHost.Sent);
+    }
+
     // The seat a guest flies is in the handshake, not the roster. The roster's entries carry no
     // peer id, so without it a guest could not tell which of them is its own.
     [Fact]
@@ -54,9 +87,9 @@ public sealed class NetSessionTests
     {
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(12));
         var seats = Roster().Append(new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "third" }).ToArray();
-        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
-        var second = NetSession.Guest(mesh[1], Airframes);
-        var third = NetSession.Guest(mesh[2], Airframes);
+        var host = NetSession.Host(mesh[0], seats, Seed);
+        var second = NetSession.Guest(mesh[1]);
+        var third = NetSession.Guest(mesh[2]);
 
         second.Step(0.016);
         third.Step(0.016);
@@ -76,9 +109,9 @@ public sealed class NetSessionTests
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(19));
         var seats = NetSeats.CoopField(mesh[0].LocalPeer, new[] { Airframes[0] },
             new[] { (1, Airframes[1], "Lucy"), (1, Airframes[0], ""), (2, Airframes[1], "Ann") });
-        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
-        var pair = NetSession.Guest(mesh[1], Airframes);
-        var single = NetSession.Guest(mesh[2], Airframes);
+        var host = NetSession.Host(mesh[0], seats, Seed);
+        var pair = NetSession.Guest(mesh[1]);
+        var single = NetSession.Guest(mesh[2]);
         var payload = new byte[HandshakeMessage.Size];
         int length = new HandshakeMessage(Seed, 0.0, 3).Write(payload);
 
@@ -107,7 +140,7 @@ public sealed class NetSessionTests
     public void A_handshake_whose_seats_run_past_the_tables_is_malformed()
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var guest = NetSession.Guest(mesh[1]);
         var payload = new byte[HandshakeMessage.Size];
         new HandshakeMessage(Seed, 0.0, 14, 2).Write(payload);
 
@@ -158,7 +191,7 @@ public sealed class NetSessionTests
     {
         var (_, guest) = Joined(17);
         var before = guest.Seats.Select(s => s.Callsign).ToArray();
-        var seats = new List<NetSeatEntry> { new(0, 0, 0, false, "guest"), new(1, 0, 1, true, "host") };
+        var seats = new List<NetSeatEntry> { new(0, 0, "plane0", false, "guest"), new(1, 0, "plane1", true, "host") };
         var payload = new byte[SeatRosterMessage.SizeFor(seats.Count)];
         new SeatRosterMessage(1u, seats).Write(payload);
 
@@ -168,7 +201,7 @@ public sealed class NetSessionTests
         Assert.Equal(before, guest.Seats.Select(s => s.Callsign));
 
         // ABLE-TO-FAIL CONTROL: the same roster with the host at seat 0 is taken.
-        seats = new List<NetSeatEntry> { new(0, 0, 1, true, "host"), new(1, 0, 0, false, "guest") };
+        seats = new List<NetSeatEntry> { new(0, 0, "plane1", true, "host"), new(1, 0, "plane0", false, "guest") };
         new SeatRosterMessage(1u, seats).Write(payload);
         guest.OnPayload(0, 0, payload);
 
@@ -236,7 +269,7 @@ public sealed class NetSessionTests
     public void A_handshake_carrying_a_non_finite_clock_is_malformed()
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(24));
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var guest = NetSession.Guest(mesh[1]);
         var payload = new byte[HandshakeMessage.Size];
         new HandshakeMessage(Seed, double.PositiveInfinity, 1).Write(payload);
 
@@ -276,7 +309,7 @@ public sealed class NetSessionTests
     public void Every_send_carries_the_reliability_its_type_declares()
     {
         var wire = new Recorder();
-        var host = NetSession.Host(wire, Roster(), Seed, null, Airframes);
+        var host = NetSession.Host(wire, Roster(), Seed);
 
         host.Send(1, new AircraftStateMessage(
             0, 1, default, default, default, 0f, 0f, 0f, 0f, false));
@@ -449,7 +482,7 @@ public sealed class NetSessionTests
         var wire = new StrictCarrier();
         var host = NetSession.Host(wire, Roster()
             .Append(new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] })
-            .ToArray(), Seed, null, Airframes);
+            .ToArray(), Seed);
         host.RelayToOthers<FireMessage>();
         int handled = 0;
         host.On<FireMessage>((_, _) => handled++);
@@ -483,8 +516,8 @@ public sealed class NetSessionTests
             .Append(NetSeats.Bot(0, 2, "Ace Bot", Airframes[1], NetBotSkill.Ace, team: 2))
             .Append(NetSeats.Bot(0, 3, "Novice Bot", Airframes[0], NetBotSkill.Novice))
             .ToArray();
-        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var host = NetSession.Host(mesh[0], seats, Seed);
+        var guest = NetSession.Guest(mesh[1]);
 
         guest.Step(0.016);
 
@@ -521,7 +554,7 @@ public sealed class NetSessionTests
             new NetSeat { PeerId = 1, SeatIndex = 1, TeamId = 2, Callsign = "guest" },
             NetSeats.Bot(0, 2, "bot", Airframes[0], team: 2),
         };
-        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
+        var host = NetSession.Host(mesh[0], seats, Seed);
 
         Assert.False(host.FliesOnTeam(0, 2));
         Assert.True(host.FliesOnTeam(1, 2));
@@ -541,14 +574,14 @@ public sealed class NetSessionTests
 
         new SeatRosterMessage(1u, new List<NetSeatEntry>
         {
-            new(0, 0, 0, true, "bot", Pilot: NetPilot.Bot),
-            new(1, 0, 1, false, "guest"),
+            new(0, 0, "plane0", true, "bot", Pilot: NetPilot.Bot),
+            new(1, 0, "plane1", false, "guest"),
         }).Write(payload);
         guest.OnPayload(0, 0, payload);
         new SeatRosterMessage(1u, new List<NetSeatEntry>
         {
-            new(0, 0, 0, true, "host"),
-            new(1, 0, 1, false, "bot", Pilot: NetPilot.Bot),
+            new(0, 0, "plane0", true, "host"),
+            new(1, 0, "plane1", false, "bot", Pilot: NetPilot.Bot),
         }).Write(payload);
         guest.OnPayload(0, 0, payload);
 
@@ -559,9 +592,9 @@ public sealed class NetSessionTests
         var three = new byte[SeatRosterMessage.SizeFor(3)];
         new SeatRosterMessage(1u, new List<NetSeatEntry>
         {
-            new(0, 0, 0, true, "host"),
-            new(1, 0, 1, false, "guest"),
-            new(2, 0, 1, true, "bot", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+            new(0, 0, "plane0", true, "host"),
+            new(1, 0, "plane1", false, "guest"),
+            new(2, 0, "plane1", true, "bot", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
         }).Write(three);
         guest.OnPayload(0, 0, three);
 
@@ -600,9 +633,9 @@ public sealed class NetSessionTests
         var seats = Roster()
             .Append(new NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] })
             .ToArray();
-        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
-        var first = NetSession.Guest(mesh[1], Airframes);
-        var second = NetSession.Guest(mesh[2], Airframes);
+        var host = NetSession.Host(mesh[0], seats, Seed);
+        var first = NetSession.Guest(mesh[1]);
+        var second = NetSession.Guest(mesh[2]);
         first.Step(0.016);
         second.Step(0.016);
         return (host, first, second);
@@ -612,8 +645,8 @@ public sealed class NetSessionTests
     private static (NetSession Host, NetSession Guest) Joined(int seed)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
-        var host = NetSession.Host(mesh[0], Roster(), Seed, null, Airframes);
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var host = NetSession.Host(mesh[0], Roster(), Seed);
+        var guest = NetSession.Guest(mesh[1]);
         guest.Step(0.016);
         return (host, guest);
     }

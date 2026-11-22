@@ -79,6 +79,14 @@ public sealed class CustomPlaneStore
             w.WriteNumber("version", Version);
             w.WriteString("name", def.Name);
             w.WriteNumber("airframe", def.Airframe);
+
+            // Written only for a mod build, beside its parent in "airframe". A stock plane's file stays
+            // the one earlier builds wrote, and a reader without the mod flies the parent.
+            if (def.ModAirframe != null)
+            {
+                w.WriteString("modAirframe", def.ModAirframe);
+            }
+
             w.WriteNumber("engine", def.Engine);
             w.WriteStartObject("armour");
             w.WriteNumber("nose", def.ArmourNose);
@@ -160,6 +168,8 @@ public sealed class CustomPlaneStore
                     ? name.GetString() ?? string.Empty
                     : string.Empty,
                 Airframe = ReadInt(root, "airframe", 0),
+                ModAirframe = root.TryGetProperty("modAirframe", out var mod) && mod.ValueKind == JsonValueKind.String
+                    && mod.GetString() is { Length: > 0 } id ? id : null,
                 Engine = ReadInt(root, "engine", CustomPlaneDef.EngineNone),
             };
             if (root.TryGetProperty("armour", out var armour) && armour.ValueKind == JsonValueKind.Object)

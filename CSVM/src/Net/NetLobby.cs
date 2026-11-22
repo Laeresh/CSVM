@@ -49,7 +49,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<(int Peer, LobbyTeamActionMessage Action)> _teamActions = new();
 
     // Wide enough for the widest lobby message, a course at its limit.
-    private readonly byte[] _scratch = new byte[Math.Max(Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size), LobbyCourseMessage.MaxSize)];
+    private readonly byte[] _scratch = new byte[Math.Max(Math.Max(Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size), LobbyCourseMessage.MaxSize), ModSetMessage.MaxSize)];
+
+    // Whether this end was handed its own mods, a host's. It then never takes a peer's set, so no
+    // guest can push one through it.
+    private readonly bool _hosting;
     private INetTransportListener? _listener;
     private SessionAdvertMessage? _advertising;
 
@@ -63,11 +67,15 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// to every peer as <paramref name="version"/>. A host's <paramref name="hostPassword"/>, when
     /// not empty, is asked of every peer before it is admitted. A guest's
     /// <paramref name="joinPassword"/> answers a host whose advert asks one; null answers nothing.
+    /// A host's <paramref name="mods"/> are named to every peer on connect.
     /// </summary>
-    public NetLobby(INetTransport inner, NetBuildVersion version = default, string hostPassword = "", string? joinPassword = null)
+    public NetLobby(INetTransport inner, NetBuildVersion version = default, string hostPassword = "", string? joinPassword = null,
+        NetModSet? mods = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _version = version;
+        _hosting = mods != null;
+        Mods = mods ?? NetModSet.None;
         _hostPassword = hostPassword ?? "";
         _joinPassword = joinPassword;
         _inner.Bind(this);
@@ -75,6 +83,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
     /// <summary>The carrier under this lobby, for the link readout a real socket offers.</summary>
     public INetTransport Inner => _inner;
+
+    /// <summary>The session's plane mods: a host's own, or on a guest the set its host last named,
+    /// empty until one arrives. Every lobby airframe byte is a row of it.</summary>
+    public NetModSet Mods { get; private set; }
 
     /// <summary>The build version this end names to its peers.</summary>
     public NetBuildVersion Version => _version;
@@ -462,6 +474,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         // newcomer never reaches it. An unbound lobby announces every peer when a session binds.
         Tell(peer, new BuildVersionMessage(_version));
         SendAdvert(peer);
+        if (Mods.Mods.Count > 0)
+        {
+            Tell(peer, new ModSetMessage(Mods));
+        }
+
         Changes++;
 
         // A banned address is refused before its password is asked, so the right password does
@@ -557,6 +574,16 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (Outside(peer))
         {
             return false;
+        }
+
+        if (ModSetMessage.TryRead(payload, out var mods))
+        {
+            if (!_hosting)
+            {
+                Mods = mods.Set;
+            }
+
+            return true;
         }
 
         if (SessionAdvertMessage.TryRead(payload, out var advert))

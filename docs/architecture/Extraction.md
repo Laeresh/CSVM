@@ -202,7 +202,7 @@ gamez node name to a `.glb` from a zip or subfolder, or a loose `.gltf` with its
 match without case or a trailing `.flt`. `KeyFor` names the pack key a node resolves to without
 reading it, which `Mech3/HdModelMeshes.cs` caches on. An airframe is its model node
 (`player_bhawk`), and `RigFor` returns `planes/<airframe>/rig.json` for `Mech3/PlaneRigPatch.cs`. `Clump` returns a clump tile's
-files (`<chapter>/<card>.clump.png`, `.clump.json`, `.clump.side.png`) for `Mech3/ClumpTile.cs`, keyed with their extension, so `KeyFor` never reaches one. Engine-free, apart from the texture folder. Coverage: `CSVM.Tests/HdModelsTests.cs`.
+files (`<chapter>/<card>.clump.png`, `.clump.json`, `.clump.side.png`) for `Mech3/ClumpTile.cs`, keyed with their extension, so `KeyFor` never reaches one. `Holding` is a lookup of one in-memory model under one key, a plane mod's `plane.glb` as its airframe's root file (`Mech3/ModAirframes.cs`). Engine-free, apart from the texture folder. Coverage: `CSVM.Tests/HdModelsTests.cs`.
 
 ## src/Extraction/HdSounds.cs
 The sound packs in `<dataRoot>/HDSounds` (`sounds.hd`, `--hd-sounds=`; `FolderFor` holds the rule

@@ -379,7 +379,10 @@ internal sealed class HumanFlightAdapter
                 Log.Warn("weapons", $"weapons: loadout bind failed for '{militiaDef}': {e.Message}");
             }
         }
-        else if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
+        // A plane mod's stock fit is its parent's with "turrets": [] applied (ModPlane.StockLoadout).
+        else if ((_policy.LoadoutOverride == null && Flight.Hangar.ModPlanes.Current.Find(planeName) is { } mod
+                     ? mod.StockLoadout(_aircraft.StockLoadouts)
+                     : _aircraft.StockLoadouts.For(loadoutDefName)) is { } stockDef)
         {
             // A custom plane's guns and hardpoints replace the stock ones and the Ammo Selection
             // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still

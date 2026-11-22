@@ -206,6 +206,11 @@ public static class CoopDoorText
     public static string VersionMismatch(NetBuildVersion host, NetBuildVersion own) =>
         $"Host runs {host}, you run {own}";
 
+    /// <summary>Why a guest refused a host whose plane mods it lacks or holds in another version,
+    /// naming each mod to install from the host.</summary>
+    public static string ModsMissing(IReadOnlyList<NetMod> missing) =>
+        $"Install the host's plane mods: {string.Join(", ", System.Linq.Enumerable.Select(missing, mod => mod.Id))}";
+
     /// <summary>Whether a games list row may be picked: a session this build knows, with a seat.
     /// </summary>
     public static bool Joinable(SessionAdvertMessage advert) =>

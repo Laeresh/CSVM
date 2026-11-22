@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Weapons;
+using CSVM.Utils;
 
 namespace CSVM.Flight.Hangar;
 
@@ -28,9 +29,6 @@ public readonly record struct GunChoice(int? Calibre, bool Twin)
 /// </summary>
 public sealed class CustomPlaneDef
 {
-    /// <summary>Airframe ids run 0-10, the stat table's 11 rows.</summary>
-    public const int MaxAirframe = 10;
-
     /// <summary>Engine ids run 0-6; 6 is the explicit no-engine pick the purchase gate rejects.</summary>
     public const int EngineNone = 6;
 
@@ -73,6 +71,10 @@ public sealed class CustomPlaneDef
     /// values are one-based for exactly this reason).</summary>
     public const int NoOrdnancePick = 0;
 
+    /// <summary>The last stock airframe id, 10: <see cref="Airframe"/> is a stock id, the stat
+    /// table's row. A mod airframe has no int id here.</summary>
+    public static readonly int MaxAirframe = StockAirframes.Nodes.Count - 1;
+
     // The longest shipped ramp is ten, so this is the ceiling a shade clamps to when no swatch
     // table loaded and the row's own length is unknown.
     private const int MaxShadeWithoutTable = 9;
@@ -81,8 +83,13 @@ public sealed class CustomPlaneDef
     /// <c>Planes\%s</c> and overwrites by name, and our store keeps that contract.</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Airframe id, 0-10 (record +0x2c).</summary>
+    /// <summary>Airframe id, 0-10 (record +0x2c). A plane built on a mod airframe holds the mod's
+    /// parent here, which every int-indexed reader (the stat table, campaign, wire) flies.</summary>
     public int Airframe { get; set; }
+
+    /// <summary>The mod airframe's id (a <see cref="ModPlane.Id"/>), or null for a stock plane. Kept
+    /// as stored whether or not the mod is installed; see <see cref="ModIn"/>.</summary>
+    public string? ModAirframe { get; set; }
 
     /// <summary>Engine id, 0-6 with 6 = none (defaults to none, as an unstarted build has no
     /// engine to fly on).</summary>
@@ -191,6 +198,16 @@ public sealed class CustomPlaneDef
         slot >= 0 && slot < PaintColours.Length
             ? HangarPaintTables.Default.Resolve(PaintColours[slot], PaintShades[slot])
             : default;
+
+    /// <summary>The mod this plane is built on, out of <paramref name="mods"/>, or null for a stock
+    /// plane. A mod that is not installed is null too, so the plane builds as its stored parent
+    /// (<see cref="Airframe"/>). The first such read per id logs a warning.</summary>
+    public ModPlane? ModIn(ModPlanes mods) =>
+        ModAirframe is { } id ? mods.FindOrWarn(id, $"custom plane {Name}", Airframe) : null;
+
+    /// <summary>The planes.zbd node this plane flies as: its mod's id when <paramref name="mods"/>
+    /// holds it, else its stock airframe's node.</summary>
+    public string FlownNode(ModPlanes mods) => ModIn(mods)?.Id ?? StockAirframes.Node(Airframe);
 
     /// <summary>Picks a slot's colour, resetting its shade to that swatch row's own default. The
     /// reset is the original's (callback 2237 at <c>0x0040d402</c>) and is why picking a colour in

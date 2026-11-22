@@ -460,7 +460,7 @@ internal static class MenuOriginalConnectionSuites
                 $"the host's field builds each seat's custom plane, the guest's second seat's off its pick ({string.Join(",", builds.Select(b => b?.Name ?? "stock"))})");
 
             before = guestExits.Count;
-            _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, airframes: StockAirframes.Nodes);
+            _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
             for (int frame = 0; frame < 4 && guestExits.Count == before; frame++)
             {
                 Pump(guest);
@@ -3041,7 +3041,7 @@ internal static class MenuOriginalConnectionSuites
     private static void GuestFliesBothSeats(TestContext ctx, MenuNetLaunch wire, NetSeat[] roster, End guest, List<MenuExit> exits, int guestPlane)
     {
         int before = exits.Count;
-        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, airframes: StockAirframes.Nodes);
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && exits.Count == before; frame++)
         {
             Pump(guest);
@@ -3056,7 +3056,7 @@ internal static class MenuOriginalConnectionSuites
             return;
         }
 
-        var session = NetSession.Guest(guestWire.Transport, StockAirframes.Nodes);
+        var session = NetSession.Guest(guestWire.Transport);
         ctx.Check(session is { Joined: true, LocalSeat: 2, LocalSeatCount: 2 } && session.Seats.Count == 4
                   && session.Seats[3] is { FlownHere: true } flown && flown.PlaneNode == StockAirframes.Node(guestPlane),
             $"the host's join names the guest seats 2 and 3, both flown there ({session.LocalSeat}, {session.LocalSeatCount}, {session.Seats.Count})");
@@ -4022,7 +4022,7 @@ internal static class MenuOriginalConnectionSuites
             $"the host's field seats the bots after the guest, the Random plane drawn on a stock node ({string.Join(", ", roster.Select(s => $"{s.Callsign}:{s.PlaneNode}"))})");
 
         int heard = guestExits.Count;
-        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL, null, StockAirframes.Nodes);
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && guestExits.Count == heard; frame++)
         {
             Pump(guest);
@@ -4035,7 +4035,7 @@ internal static class MenuOriginalConnectionSuites
             return;
         }
 
-        var session = NetSession.Guest(guestWire.Transport, StockAirframes.Nodes);
+        var session = NetSession.Guest(guestWire.Transport);
         for (int step = 0; step < 8 && !session.Joined; step++)
         {
             session.Step(Dt);

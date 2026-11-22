@@ -362,6 +362,15 @@ public sealed class GameZ
         return xf;
     }
 
+    /// <summary>Drops the maps built lazily over the node and mesh tables, after a caller appended to
+    /// them (<see cref="ModAirframes"/>). ⚠ A map sized to the old tables would miss or overrun the new rows.</summary>
+    internal void TablesGrew()
+    {
+        _parent = null;
+        _placed = null;
+        _markerGizmo = null;
+    }
+
     private static Transform3D ParseTransform(JsonElement tf)
     {
         // Scale is unit on every node of every chapter and of planes.zbd (0 of 4181 non-unit), so

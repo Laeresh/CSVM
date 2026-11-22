@@ -161,7 +161,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
     /// <summary>The roster rule every picker shares: the stock rows in their given order, then one
     /// row per saved custom plane in the store's order. Each custom flies its airframe's stock node
-    /// (<paramref name="nodeOfAirframe"/>, the picker roster's table). A
+    /// (<paramref name="nodeOfAirframe"/>, the picker roster's table), a build on a loaded mod
+    /// airframe its mod's id (<see cref="CustomPlaneDef.ModIn"/>). A
     /// campaign aeroplane nobody has exported yet is not offered
     /// (<see cref="CustomPlaneDef.AwaitingExport"/>).</summary>
     public static IReadOnlyList<MenuAircraft> BuildRoster(
@@ -182,7 +183,7 @@ public sealed class PlayerSetupFeature : IMenuFeature
         {
             if (!def.AwaitingExport)
             {
-                rows.Add(new MenuAircraft(def.Name, nodeOfAirframe(def.Airframe), def));
+                rows.Add(new MenuAircraft(def.Name, def.ModIn(ModPlanes.Current)?.Id ?? nodeOfAirframe(def.Airframe), def));
             }
         }
 

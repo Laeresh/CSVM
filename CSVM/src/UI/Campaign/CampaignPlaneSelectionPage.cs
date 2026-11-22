@@ -371,7 +371,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     // own rule: "Devastator   Devastator" is not a second fact.
     private string SlotLabel(OwnedPlane plane)
     {
-        string title = AirframeTitle(plane.Airframe);
+        string title = AirframeTitle(plane);
         return plane.Name == title ? title : $"{plane.Name}   {title}";
     }
 
@@ -379,11 +379,13 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     // record is named for its airframe, and "Devastator - Devastator" is not a second fact.
     private string EntryLabel(OwnedPlane plane)
     {
-        string title = AirframeTitle(plane.Airframe);
+        string title = AirframeTitle(plane);
         return plane.Name == title ? title : $"{plane.Name} - {title}";
     }
 
-    private string AirframeTitle(int airframe) => Flow.Strings.Text(3000 + airframe, $"Airframe {airframe}");
+    // An installed mod's plane.json name, else the stock airframe's (a missing mod's stored parent).
+    private string AirframeTitle(OwnedPlane plane) =>
+        plane.ModIn(Flow.Feature.ModSet)?.Name ?? Flow.Strings.Text(3000 + plane.Airframe, $"Airframe {plane.Airframe}");
 
     // Every row this screen draws: a combo and an EXPORT per active crew slot, then the two commit
     // buttons. A slot with no aircraft to pick from still draws its combo, which is then empty.
@@ -504,7 +506,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return false;
         }
 
-        Flow.RaiseModal(ExportedText(AirframeTitle(plane.Airframe)));
+        Flow.RaiseModal(ExportedText(AirframeTitle(plane)));
         return true;
     }
 

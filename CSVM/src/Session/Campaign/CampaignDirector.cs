@@ -330,7 +330,7 @@ public sealed class CampaignDirector
 
         int at = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
         var plane = profile.Planes[at];
-        string node = Flight.Hangar.StockAirframes.Node(plane.Airframe);
+        string node = plane.FlownNode(Flight.Hangar.ModPlanes.Current);
         // A named entry 0 wins whether it came from --plane= or from the launchscreen's own seat,
         // which is already this node. Comparing the node rather than tracking where the name came
         // from is what keeps a cabin launch silent: it seated the same aeroplane.

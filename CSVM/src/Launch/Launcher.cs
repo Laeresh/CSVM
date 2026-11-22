@@ -518,6 +518,12 @@ public partial class Launcher : Node3D
         {
             HdModels.Current = HdModels.Open(dataRoot, modelFolder);
         }
+        // Plane mods follow the packs' rule, so no suite or golden reads a user's Mods folder; --mods= survives it.
+        // BindGameData grafts each into planes.zbd.
+        if ((_spec.Mods ?? (_spec.Det || _spec.RunTests ? null : Flight.Hangar.ModPlanes.DefaultFolder)) is { Length: > 0 } modsFolder)
+        {
+            Flight.Hangar.ModPlanes.Current = Flight.Hangar.ModPlanes.Open(dataRoot, modsFolder);
+        }
         // After the asset shape, which the unpacked-folder preference reads. The chapter-dependent
         // gamez/texture/mission paths resolve per session in StartSession.
         // A synthetic tree's build bound the Original shell's view to its root; its game data takes that view.
@@ -1612,6 +1618,46 @@ public partial class Launcher : Node3D
             Extraction.RofFiles.Bind(_paths.DataRoot, _paths.Data.Rof);
             _paths.Data.Planes?.ApplyShippedPolygonPatches("planes");
         }
+
+        BindModPlanes();
+    }
+
+    // Each plane mod's airframe into the game data's planes.zbd, and its id into the airframe registry
+    // once. A mod whose model or id fails here is skipped as a load skip is.
+    private void BindModPlanes()
+    {
+        if (_paths.Data.Planes is not { } planes)
+        {
+            return;
+        }
+
+        foreach (var mod in Flight.Hangar.ModPlanes.Current.Planes)
+        {
+            try
+            {
+                byte[] Bytes(string path) => mod.Read(path) ?? throw new InvalidDataException($"{path} is unreadable");
+                ModAirframes.Add(planes, mod.Id, mod.Cockpit ?? mod.KindOf, Bytes(Flight.Hangar.ModPlanes.ModelFile),
+                    mod.Tint is { } tint ? ModTint.Decode(tint.Materials, Bytes(tint.Mask), Bytes(tint.Detail)) : null);
+                if (AirframeRegistry.Shared.Find(mod.Id) == null)
+                {
+                    AirframeRegistry.Shared.Register(mod.Id, mod.Name, mod.KindOf);
+                }
+            }
+            catch (System.Exception e) when (e is InvalidDataException or System.ArgumentException)
+            {
+                Flight.Hangar.ModPlanes.Current = Flight.Hangar.ModPlanes.Current.Skip(mod, e.Message);
+            }
+        }
+
+        var missions = CampaignSequence.Load(_paths.Data.Zrdr);
+        foreach (var mod in Flight.Hangar.ModPlanes.Current.Planes)
+        {
+            mod.BindCampaign(missions);
+        }
+
+        UI.Hangar.ModPlaneArt.Bind(planes, Flight.Hangar.ModPlanes.Current, Path.Combine(OS.GetUserDataDir(), UI.Hangar.ModPlaneArt.CacheFolder));
+        // The launch's own chapter's textures, which its first session then holds already.
+        Callable.From(() => UI.Hangar.ModPlaneArt.RenderPending(this, () => _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission).Textures)).CallDeferred();
     }
 
     // The screen's screenshot doors, through --menu= like the menu's own: source-picker[:<folder>]
@@ -2133,10 +2179,9 @@ public sealed record LauncherContext
     /// Meaningless without a <see cref="NetTransport"/>.</summary>
     public bool NetHost { get; init; }
 
-    /// <summary>The airframe order every peer reads a roster's airframe index against, since the
-    /// roster carries an index and a seat flies a named node. Empty leaves a guest's seats without
-    /// a pick, which falls back to this machine's own launch flags.</summary>
-    public IReadOnlyList<string>? NetAirframes { get; init; }
+    /// <summary>This machine's plane mods as a session names them. A host's go to each joiner, and a
+    /// guest refuses a host whose mods it lacks. Null reads <c>ModPlanes.Current</c>.</summary>
+    public Net.NetModSet? NetMods { get; init; }
 
     /// <summary>The fit a seat flown elsewhere carries, by seat index, or null for its stock fit.
     /// Read once the field is known, which on a guest is after the host's roster arrived. A seat

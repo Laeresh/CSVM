@@ -102,6 +102,7 @@ public sealed class PlaneBuilder
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
     private string? _skinPrefix;
+    private ModTint? _tint;
     private ShaderMaterial? _flareMaterial;
 
     /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies damage panels.</param>
@@ -302,13 +303,15 @@ public sealed class PlaneBuilder
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
         EnsurePainter(root);
-        // Every node under the root resolves its model pack replacement under this airframe.
+        // Every node under the root resolves its model pack replacement under this airframe, a plane
+        // mod's from its own file.
         _scene.HdAirframe = rootName;
+        _scene.OwnMeshes = ModAirframes.MeshesFor(rootName);
         int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(root, Skip)!;
         if (_scene.ReplacedMeshCount > replacedBefore)
         {
-            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {rootName} drawn from the model pack");
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {rootName} drawn from {(_scene.OwnMeshes != null ? "its mod's plane.glb" : "the model pack")}");
         }
 
         FlareChoice? flares = null;
@@ -383,6 +386,7 @@ public sealed class PlaneBuilder
         if (found == null)
             return null;
         _scene.HdAirframe = rootName;
+        _scene.OwnMeshes = ModAirframes.MeshesFor(rootName);
         int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(found.Value.Node, _ => false);
         if (built != null)
@@ -403,7 +407,7 @@ public sealed class PlaneBuilder
     {
         _scheme = scheme;
         _painter = scheme != null && _skinPrefix != null
-            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
+            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix, _tint)
             : null;
         _scene.Repaint();
         _interiorScene?.Repaint();
@@ -454,6 +458,7 @@ public sealed class PlaneBuilder
     private void EnsurePainter(GameZNode root)
     {
         _skinPrefix ??= PlanePainter.PrefixFor(_gamez, root);
+        _tint ??= ModAirframes.TintFor(root.Name);
         if (_scheme == null || _painter != null)
             return;
         if (_skinPrefix == null)
@@ -461,7 +466,7 @@ public sealed class PlaneBuilder
             Log.Info("world", $"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material, building unpainted");
             return;
         }
-        _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
+        _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix, _tint);
         Log.Info("world", $"[paint] {root.Name} ({_skinPrefix}): {_scheme}{(_painter.PatternMissesAircraft ? $", pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only" : "")}");
     }
 
@@ -561,8 +566,11 @@ public sealed class PlaneBuilder
             _interiorScene.OmittedPolygons = xr && !body ? CockpitPlate.Find(_gamez, node) : null;
             // The airframe's own keys alone, so cockpit1.glb and the airframe's node files reach the
             // interior and a bare file does not. Its replacements are this builder's own, which bakes the interior's bias.
-            _interiorScene.HdAirframe = _scene.HdAirframe;
+            // ⚠ A mod's copied donor interior draws gamez meshes alone. Its generic names would take same-named file nodes.
+            bool copied = _scene.OwnMeshes != null && !ModAirframes.HasOwnInterior(root.Name);
+            _interiorScene.HdAirframe = copied ? null : _scene.HdAirframe;
             _interiorScene.HdAirframeKeysOnly = true;
+            _interiorScene.OwnMeshes = _scene.OwnMeshes;
             // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
             _interiorScene.NoShadowReceive = body;
             if (body)
@@ -676,6 +684,7 @@ public sealed class PlaneBuilder
 
         _stereoBodyScene = AirframeScene(raceGhost: false, stereo: true);
         _stereoBodyScene.HdAirframe = _scene.HdAirframe;
+        _stereoBodyScene.OwnMeshes = _scene.OwnMeshes;
         if (_stereoBodyScene.BuildSubtree(root, Skip) is not { } copy)
         {
             return;

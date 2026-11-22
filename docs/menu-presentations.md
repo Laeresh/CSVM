@@ -606,7 +606,8 @@ signed on and `join-board:<pads>` with that many entries posed as signed on, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,
 `plane-construction:defaults` with the airframe swap's three-button question standing over an
-edited build and
+edited build, `plane-construction:mod` on the first plane mod's airframe (`--mods=`) with the
+airframe list standing open on it, and
 `plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`, `connection` on the Multiplayer
 Games list, `connection:gameinfo` and `connection:playerinfo` with GAME INFORMATION or PLAYER

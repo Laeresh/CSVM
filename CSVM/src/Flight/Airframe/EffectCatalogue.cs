@@ -316,11 +316,11 @@ public static class EffectCatalogue
 
     /// <summary>The DESTROY def this rig plays when its hull reaches zero: the fixed
     /// <see cref="PlayerDestroyAnim"/> for a human rig, the airframe's own self-named def
-    /// otherwise (<see cref="AirframeDestroyAnims"/>). Null for a plane node the map does not
-    /// carry, which leaves that rig with no destroy anim rather than a guessed one.</summary>
+    /// otherwise (<see cref="AirframeDestroyAnims"/>). A mod airframe takes its parent's. Null for
+    /// a plane node the map does not carry, which leaves that rig with no destroy anim.</summary>
     public static string? DestroyAnimFor(bool humanPiloted, string planeNodeName) =>
         humanPiloted ? PlayerDestroyAnim
-            : AirframeDestroyAnims.TryGetValue(planeNodeName, out var name) ? name : null;
+            : AirframeDestroyAnims.TryGetValue(AirframeRegistry.Shared.StockNodeOf(planeNodeName), out var name) ? name : null;
 
     /// <summary>Whether <paramref name="destroyAnim"/> flies the hull itself, it authors an
     /// <c>ObjectMotion</c> on the <c>MAIN_ROOT_NODE</c> sentinel, which takes the wreck over and

@@ -73,8 +73,8 @@ internal static class NetBotRearmSuites
         NetCombatSuites.Ends? guest = null;
         try
         {
-            host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, Airframes);
-            guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null, Airframes);
+            host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
+            guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null);
             ctx.Check(host.Built && guest.Built, $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
             if (!host.Built || !guest.Built)
             {

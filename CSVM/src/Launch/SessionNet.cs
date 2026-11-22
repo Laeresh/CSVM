@@ -103,8 +103,8 @@ internal sealed class SessionNet
             : null;
         Link = ctx.NetTransport is { } transport
             ? ctx.NetHost
-                ? Net.NetSession.Host(transport, Seats, masterSeed, clockTime, ctx.NetAirframes)
-                : Net.NetSession.Guest(transport, ctx.NetAirframes)
+                ? Net.NetSession.Host(transport, Seats, masterSeed, clockTime, ctx.NetMods ?? Flight.Hangar.ModPlanes.Current.Wire)
+                : Net.NetSession.Guest(transport, ctx.NetMods ?? Flight.Hangar.ModPlanes.Current.Wire)
             : null;
     }
 
@@ -194,7 +194,7 @@ internal sealed class SessionNet
         // ⚠ Claim the start words before pumping, or that hold is dropped as unknown.
         net.On<Net.StartGateMessage>(TakeStartWord);
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; !net.Joined && (i < NetJoinSteps
+        for (int i = 0; !net.Joined && net.RefusedMods.Count == 0 && (i < NetJoinSteps
                  || (_realCarrier && waited.Elapsed.TotalSeconds < NetJoinWallSeconds)); i++)
         {
             net.Step(GameClock.FixedDt);
@@ -202,6 +202,12 @@ internal sealed class SessionNet
             {
                 System.Threading.Thread.Sleep(1);
             }
+        }
+
+        if (net.RefusedMods.Count > 0)
+        {
+            Log.Error("core", $"net: the host flies plane mods this machine lacks or holds in another version, the join failed: {string.Join(", ", net.RefusedMods.Select(m => m.Id))}");
+            return false;
         }
 
         if (!net.Joined)

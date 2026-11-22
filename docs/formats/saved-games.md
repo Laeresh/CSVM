@@ -189,6 +189,11 @@ clears exactly 26 x 204 bytes); slot 25 is the hangar's build-in-progress scratc
 holds nine planes and a selection index of 4, whose slot name and airframe match the plane recorded
 against the most recent mission attempt.
 
+CSVM's own `profile.json` keeps the airframe id the same way, 0 to 10. A plane built on a
+[plane mod](mod-planes.md#the-campaign) also carries `"modAirframe"`, the mod's id, right after
+`"airframe"`, which then holds the mod's stock parent. A stock plane's record has no such key, so a
+profile without mod planes is written exactly as before and the schema version stays 3.
+
 ### Where the ammunition and ordnance picks live
 
 `docs/formats/loadouts.md` states there is no player loadout anywhere in the ZBD data. It is in the

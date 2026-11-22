@@ -301,9 +301,9 @@ public class NetMessagesTests
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 1, 3, true, "Falcon"),
-            new(1, 2, 0, false, "Nathan Zachary"),
-            new(2, 2, 7, false, string.Empty),
+            new(0, 1, "plane3", true, "Falcon"),
+            new(1, 2, "plane0", false, "Nathan Zachary"),
+            new(2, 2, "plane7", false, string.Empty),
         };
         var sent = new SeatRosterMessage(0xc0ffee01u, seats);
 
@@ -325,9 +325,9 @@ public class NetMessagesTests
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 1, 3, true, "host", Voice: 1),
-            new(1, 2, 0, false, "guest", Voice: CoopPickMessage.MaxVoice),
-            new(2, 2, 7, false, "quiet"),
+            new(0, 1, "plane3", true, "host", Voice: 1),
+            new(1, 2, "plane0", false, "guest", Voice: CoopPickMessage.MaxVoice),
+            new(2, 2, "plane7", false, "quiet"),
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
         new SeatRosterMessage(5u, seats).Write(buffer);
@@ -341,7 +341,7 @@ public class NetMessagesTests
 
         // ABLE-TO-FAIL CONTROL: a voice past the three bits is sent as none rather than spilling
         // into the next field.
-        new SeatRosterMessage(5u, new List<NetSeatEntry> { new(0, 0, 0, false, "x", Voice: 9) }).Write(buffer);
+        new SeatRosterMessage(5u, new List<NetSeatEntry> { new(0, 0, "plane0", false, "x", Voice: 9) }).Write(buffer);
         Assert.True(SeatRosterMessage.TryRead(buffer.AsSpan(0, SeatRosterMessage.SizeFor(1)), out var clipped));
         Assert.Equal(CoopPickMessage.NoVoice, clipped.Seats[0].Voice);
     }
@@ -353,9 +353,9 @@ public class NetMessagesTests
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 0, 0, true, "P1", Voice: CoopPickMessage.MaxVoice, Unnamed: true),
-            new(1, 0, 1, false, "Lucy", Voice: 2),
-            new(2, 0, 2, false, "guest 7", Unnamed: true),
+            new(0, 0, "plane0", true, "P1", Voice: CoopPickMessage.MaxVoice, Unnamed: true),
+            new(1, 0, "plane1", false, "Lucy", Voice: 2),
+            new(2, 0, "plane2", false, "guest 7", Unnamed: true),
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
         new SeatRosterMessage(5u, seats).Write(buffer);
@@ -375,11 +375,11 @@ public class NetMessagesTests
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 1, 3, true, "host", Voice: 2, Unnamed: true),
-            new(1, 2, 0, false, "guest"),
-            new(2, 1, 7, true, "Novice", Pilot: NetPilot.Bot, Skill: NetBotSkill.Novice),
-            new(3, 2, 1, true, "Veteran", Pilot: NetPilot.Bot, Skill: NetBotSkill.Veteran),
-            new(4, 0, 2, true, "Ace", Voice: 1, Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+            new(0, 1, "plane3", true, "host", Voice: 2, Unnamed: true),
+            new(1, 2, "plane0", false, "guest"),
+            new(2, 1, "plane7", true, "Novice", Pilot: NetPilot.Bot, Skill: NetBotSkill.Novice),
+            new(3, 2, "plane1", true, "Veteran", Pilot: NetPilot.Bot, Skill: NetBotSkill.Veteran),
+            new(4, 0, "plane2", true, "Ace", Voice: 1, Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
 
@@ -402,24 +402,25 @@ public class NetMessagesTests
         Assert.False(SeatRosterMessage.TryRead(buffer, out _));
     }
 
-    // A bot's militia and accent ride the two bytes after its airframe. A guest then arms, paints
-    // and voices the bot as its host drew it. A person's entry carries neither.
+    // A bot's militia and accent ride the two bytes after the reserved one where the airframe index
+    // stood. A guest then arms, paints and voices the bot as its host drew it. A person's entry
+    // carries neither.
     [Fact]
-    public void SeatRosterCarriesABotsMilitiaAndAccentBesideItsAirframe()
+    public void SeatRosterCarriesABotsMilitiaAndAccent()
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 1, 3, true, "host"),
-            new(1, 1, 10, true, "Tex", Pilot: NetPilot.Bot, Militia: 0, Accent: 0),
-            new(2, 2, 7, true, "Jack", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace, Militia: 4, Accent: 15),
+            new(0, 1, "plane3", true, "host"),
+            new(1, 1, "plane10", true, "Tex", Pilot: NetPilot.Bot, Militia: 0, Accent: 0),
+            new(2, 2, "plane7", true, "Jack", Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace, Militia: 4, Accent: 15),
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
 
-        Assert.Equal(SeatRosterMessage.PrefixSize + (46 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.Equal(SeatRosterMessage.PrefixSize + (78 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
         Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(seats, got.Seats.ToList());
         int Entry(int seat) => SeatRosterMessage.PrefixSize + (seat * SeatRosterMessage.EntrySize);
-        Assert.Equal(new byte[] { 7, 4, 15 }, buffer.AsSpan(Entry(2) + 3, 3).ToArray());
+        Assert.Equal(new byte[] { 0, 4, 15 }, buffer.AsSpan(Entry(2) + 3, 3).ToArray());
         Assert.Equal(new[] { NetSeat.Unset, NetSeat.Unset }, new[] { got.Seats[0].Militia, got.Seats[0].Accent });
 
         // ABLE-TO-FAIL CONTROL: a roster of another entry width is no roster this reads.
@@ -437,8 +438,8 @@ public class NetMessagesTests
     {
         var seats = new List<NetSeatEntry>
         {
-            new(0, 0, 3, true, "host"),
-            new(1, 0, 3, true, "Tex", Pilot: NetPilot.Bot, Militia: 12, Accent: NetSeat.MaxAccent),
+            new(0, 0, "plane3", true, "host"),
+            new(1, 0, "plane3", true, "Tex", Pilot: NetPilot.Bot, Militia: 12, Accent: NetSeat.MaxAccent),
         };
         var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
         new SeatRosterMessage(5u, seats).Write(buffer);
@@ -452,12 +453,88 @@ public class NetMessagesTests
         Assert.False(SeatRosterMessage.TryRead(buffer, out _));
     }
 
+    // A seat's airframe rides as its node, a stock one or a plane mod's id, after the callsign. Any
+    // node of the registry and any mod id ModPlanes admits (31 bytes) reads back whole.
+    [Theory]
+    [InlineData("player_pfighter")]
+    [InlineData("player_bhawk")]
+    [InlineData("avenger_e1c")]
+    [InlineData("a_mod_id_of_thirty_one_bytes_xx")]
+    public void SeatRosterCarriesTheAirframeAsItsNode(string plane)
+    {
+        Assert.Equal(SeatRosterMessage.PlaneBytes - 1, "a_mod_id_of_thirty_one_bytes_xx".Length);
+        var seats = new List<NetSeatEntry> { new(0, 0, plane, true, "host"), new(1, 0, "player_fury", false, "guest") };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(new[] { plane, "player_fury" }, got.Seats.Select(s => s.Plane).ToArray());
+        int field = SeatRosterMessage.PrefixSize + 6 + SeatRosterMessage.CallsignBytes;
+        Assert.Equal(plane, System.Text.Encoding.UTF8.GetString(buffer, field, plane.Length));
+
+        // ABLE-TO-FAIL CONTROL: a 46-byte entry, the roster of a build that sent an airframe index,
+        // is refused rather than read as seats. The two builds never fly one field.
+        var old = new byte[SeatRosterMessage.PrefixSize + (46 * 2)];
+        buffer.AsSpan(0, old.Length).CopyTo(old);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(old.AsSpan(2), (ushort)old.Length);
+        Assert.False(SeatRosterMessage.TryRead(old, out _));
+    }
+
+    // A host's plane mods cross by id, content hash and parent, in its row order. Every lobby
+    // airframe byte is a row of them: the stock eleven, then the mods.
+    [Fact]
+    public void ModSetRoundTripsAndNamesTheSessionsAirframeRows()
+    {
+        string hashA = new string('a', 62) + "01";
+        string hashB = "0123456789ABCDEF".ToLowerInvariant() + new string('f', 48);
+        var set = new NetModSet(new[] { new NetMod("avenger_e1c", hashA, 2), new NetMod("kestrel_mk2", hashB, 9) });
+        var buffer = new byte[ModSetMessage.SizeFor(2)];
+        Assert.Equal(buffer.Length, new ModSetMessage(set).Write(buffer));
+
+        Assert.True(ModSetMessage.TryRead(buffer, out var got));
+        Assert.Equal(set.Mods, got.Set.Mods);
+        Assert.Equal(13, got.Set.Rows);
+        Assert.Equal(("player_autogyro", 0), (got.Set.NodeOf(0), got.Set.StockOf(0)));
+        Assert.Equal(("avenger_e1c", 2), (got.Set.NodeOf(11), got.Set.StockOf(11)));
+        Assert.Equal(("kestrel_mk2", 9), (got.Set.NodeOf(12), got.Set.StockOf(12)));
+        Assert.Equal(("", -1), (got.Set.NodeOf(13), got.Set.StockOf(13)));
+        Assert.Equal((12, 10, -1), (got.Set.RowOf("kestrel_mk2"), got.Set.RowOf(NetModSet.None.NodeOf(10)), got.Set.RowOf("nope")));
+
+        // ABLE-TO-FAIL CONTROL: a parent past the stock eleven, or a count past the bytes, is refused.
+        buffer[ModSetMessage.PrefixSize] = 11;
+        Assert.False(ModSetMessage.TryRead(buffer, out _));
+        new ModSetMessage(set).Write(buffer);
+        buffer[NetMessage.HeaderBytes] = 3;
+        Assert.False(ModSetMessage.TryRead(buffer, out _));
+    }
+
+    // A guest flies a host's session only holding every host mod under the same hash. Its own extra
+    // mods are no refusal; they are simply no row of the session.
+    [Fact]
+    public void AGuestMissingAHostModOrHoldingAnotherHashIsNamedEachMissingMod()
+    {
+        string one = new string('1', 64);
+        string two = new string('2', 64);
+        var host = new NetModSet(new[] { new NetMod("avenger_e1c", one, 2), new NetMod("kestrel_mk2", one, 9) });
+
+        var matched = new NetModSet(new[] { new NetMod("kestrel_mk2", one.ToUpperInvariant(), 9), new NetMod("avenger_e1c", one, 2), new NetMod("extra", two, 0) });
+        Assert.Empty(host.MissingFrom(matched));
+        Assert.Equal(-1, host.RowOf("extra"));
+
+        var stale = new NetModSet(new[] { new NetMod("avenger_e1c", two, 2) });
+        Assert.Equal(new[] { "avenger_e1c", "kestrel_mk2" }, host.MissingFrom(stale).Select(m => m.Id));
+        Assert.Equal(new[] { "avenger_e1c", "kestrel_mk2" }, host.MissingFrom(NetModSet.None).Select(m => m.Id));
+
+        // ABLE-TO-FAIL CONTROL: a stock host names nothing, whatever the guest holds.
+        Assert.Empty(NetModSet.None.MissingFrom(stale));
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]
     public void SeatRosterTruncatesAnOverLongCallsignAndKeepsItsWidth()
     {
-        var seats = new List<NetSeatEntry> { new(0, 0, 0, false, new string('x', 40)) };
+        var seats = new List<NetSeatEntry> { new(0, 0, "plane0", false, new string('x', 40)) };
         var sent = new SeatRosterMessage(1u, seats);
 
         var buffer = new byte[SeatRosterMessage.SizeFor(1)];
@@ -478,7 +555,7 @@ public class NetMessagesTests
     public void CarriedIsWhatTheRosterReadsBack(string name)
     {
         var buffer = new byte[SeatRosterMessage.SizeFor(1)];
-        new SeatRosterMessage(1u, new List<NetSeatEntry> { new(0, 0, 0, true, name) }).Write(buffer);
+        new SeatRosterMessage(1u, new List<NetSeatEntry> { new(0, 0, "plane0", true, name) }).Write(buffer);
 
         Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(got.Seats[0].Callsign, SeatRosterMessage.Carried(name));
@@ -576,7 +653,7 @@ public class NetMessagesTests
     [Fact]
     public void ARosterWhoseCountDisagreesWithItsLengthIsRefused()
     {
-        var seats = new List<NetSeatEntry> { new(0, 0, 0, false, "A"), new(1, 0, 0, false, "B") };
+        var seats = new List<NetSeatEntry> { new(0, 0, "plane0", false, "A"), new(1, 0, "plane0", false, "B") };
         var buffer = new byte[SeatRosterMessage.SizeFor(2)];
         new SeatRosterMessage(1u, seats).Write(buffer);
         buffer[NetMessage.HeaderBytes + 4] = 3;

@@ -306,6 +306,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// none has arrived. A join board names the session from this.</summary>
     public SessionAdvertMessage? Advert => _transport?.Advert;
 
+    /// <summary>The session's plane mods: a host's own, a guest's host's. Every lobby airframe byte is
+    /// a row of them.</summary>
+    public NetModSet Mods => _transport?.Mods ?? NetModSet.None;
+
     /// <summary>The word this host hands out, or null while the door is not hosting.</summary>
     public SessionAdvertMessage? Advertising => _transport?.Advertising;
 
@@ -1124,6 +1128,14 @@ public sealed class NetPlayFeature : IMenuFeature
             return;
         }
 
+        // And a host flying plane mods this machine lacks, or holds under another hash.
+        if (_transport.Mods.Mods.Count > 0
+            && _transport.Mods.MissingFrom(Flight.Hangar.ModPlanes.Current.Wire) is { Count: > 0 } missing)
+        {
+            Fail(CoopDoorText.ModsMissing(missing));
+            return;
+        }
+
         if (Stage == NetDoorStage.Joined)
         {
             bool hostGone = _hostPeer >= 0 && !Contains(_transport.AllPeers, _hostPeer);
@@ -1220,7 +1232,8 @@ public sealed class NetPlayFeature : IMenuFeature
         EndLinger();
         try
         {
-            _transport = new NetLobby(_openHost(Port, maxGuests, BindAddress), Version, Identity.Password);
+            _transport = new NetLobby(_openHost(Port, maxGuests, BindAddress), Version, Identity.Password,
+                mods: Flight.Hangar.ModPlanes.Current.Wire);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {

@@ -244,6 +244,7 @@ public sealed class CampaignFlightField
     {
         Name = plane.Name,
         Airframe = plane.Airframe,
+        ModAirframe = plane.ModAirframe,
         Ammo = (int[])plane.Ammo.Clone(),
         Ordnance = (int[])plane.Ordnance.Clone(),
         Special = plane.Special,

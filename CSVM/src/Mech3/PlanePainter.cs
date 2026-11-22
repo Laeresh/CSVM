@@ -34,6 +34,7 @@ public sealed class PlanePainter
     private readonly PatternLibrary _library;
     private readonly PaintScheme _scheme;
     private readonly string _prefix;
+    private readonly ModTint? _tint;
     // baseName -> the substitute texture (painted skin or swapped decal); null = leave as is.
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -42,12 +43,14 @@ public sealed class PlanePainter
 
     /// <param name="skinPrefix">The aircraft's skin-texture prefix without the underscore
     /// ("blo", "kes", …). <see cref="PrefixFor"/> derives it from the model's own materials.</param>
-    public PlanePainter(TextureArchive textures, PatternLibrary library, PaintScheme scheme, string skinPrefix)
+    /// <param name="tint">A plane mod's tint (<see cref="ModAirframes.TintFor"/>), null for a stock airframe.</param>
+    public PlanePainter(TextureArchive textures, PatternLibrary library, PaintScheme scheme, string skinPrefix, ModTint? tint = null)
     {
         _textures = textures;
         _library = library;
         _scheme = scheme;
         _prefix = skinPrefix;
+        _tint = tint;
         lock (Live)
         {
             Live.RemoveAll(w => !w.TryGetTarget(out _));
@@ -64,8 +67,9 @@ public sealed class PlanePainter
     public int PaintedSkins { get; private set; }
 
     /// <summary>True when this scheme's pattern ships no skins for this aircraft, so only its
-    /// decals can change. The original's UI never offers such a combination.</summary>
-    public bool PatternMissesAircraft => !_library.Covers(_scheme.FolderName, _prefix);
+    /// decals can change. The original's UI never offers such a combination. A mod's tint takes any
+    /// pattern's colours, so it never misses.</summary>
+    public bool PatternMissesAircraft => _tint == null && !_library.Covers(_scheme.FolderName, _prefix);
 
     /// <summary>Paints again, in place, every live painter's skins and decals over
     /// <paramref name="textures"/> whose alpha depth follows the graphics mode. Runs after the
@@ -122,6 +126,10 @@ public sealed class PlanePainter
                 Walk(gamez.Nodes[c]);
         }
         Walk(root);
+        // A mod's own materials name no original texture. One with its own interior takes the prefix of
+        // its interior donor (docs/formats/mod-planes.md, "Paint").
+        if (found == null && ModAirframes.DonorOf(root.Name) is { } donor && gamez.FindByName(donor) is { } stock)
+            Walk(stock);
         return found;
     }
 
@@ -144,7 +152,9 @@ public sealed class PlanePainter
         // <prefix>_ and no pattern ships a .BM for it anyway.
         int decalSlot = Array.FindIndex(DecalSuffixes,
             s => baseName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
-        ImageTexture? made = decalSlot >= 0 ? DecalFor(decalSlot) : PaintedSkin(baseName, original);
+        ImageTexture? made = decalSlot >= 0 ? DecalFor(decalSlot)
+            : _tint?.Covers(baseName) == true ? TintedSkin(original)
+            : PaintedSkin(baseName, original);
         _cache[baseName] = made;
         _originals[baseName] = original;
         return made ?? original;
@@ -220,6 +230,27 @@ public sealed class PlanePainter
     {
         if (SkinImage(baseName, original) is not { } img)
             return null;
+        PaintedSkins++;
+        return TextureUpload.Create(img);
+    }
+
+    // A mod surface's base texture tinted through its mask and detail map. Null without a base texture,
+    // since the tint shows through a texture's UVs and an untextured surface has none to read.
+    private ImageTexture? TintedSkin(ImageTexture? original)
+    {
+        if (original?.GetImage() is not { } source || source.IsEmpty())
+            return null;
+        // ⚠ A copy: headless hands back the texture's own Image, which every builder of the mod shares.
+        var img = (Image)source.Duplicate();
+        if (img.IsCompressed())
+            img.Decompress();
+        img.ClearMipmaps();
+        img.Convert(Image.Format.Rgba8);
+        int w = img.GetWidth(), h = img.GetHeight();
+        var data = img.GetData();
+        _tint!.Composite(data, w, h, _scheme.Color1, _scheme.Color2, _scheme.Color3);
+        img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, data);
+        img.GenerateMipmaps();
         PaintedSkins++;
         return TextureUpload.Create(img);
     }

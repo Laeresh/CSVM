@@ -83,7 +83,7 @@ internal static class NetBotYieldSuites
             var roster = Field(launch, lobby, pool);
             ctx.Check(roster.Length == NetSeats.MaxPlayers && roster.Count(s => s.IsBot) == NetSeats.MaxPlayers - 1,
                 $"the first launch seats the host and fifteen bots ({roster.Length}, {roster.Count(s => s.IsBot)} bots)");
-            host = NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: true, HostSeed, roster, StockAirframes.Nodes);
+            host = NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: true, HostSeed, roster);
             ctx.Check(host.Built, $"the host's session builds with fifteen bot seats ({host.Built})");
             if (!host.Built)
             {
@@ -207,7 +207,7 @@ internal static class NetBotYieldSuites
         ctx.Check(roster.Length == NetSeats.MaxPlayers && roster[1] is { IsBot: false, Callsign: LateName } && roster[1].PeerId == latePeer
                   && roster.Skip(2).All(s => s.IsBot) && roster.Skip(2).Select(s => s.Callsign).SequenceEqual(kept),
             $"the second launch seats the late guest at seat 1 and fourteen bots after it ({string.Join(", ", roster.Select(s => s.Callsign))})");
-        _ = NetSession.Host((NetLobby)launch.Transport, roster, HostSeed, null, StockAirframes.Nodes);
+        _ = NetSession.Host((NetLobby)launch.Transport, roster, HostSeed);
         for (int step = 0; step < OpenerSteps && !lateDoor.DogfightLaunchDue; step++)
         {
             StepDoors(1, lateDoor);
@@ -220,7 +220,7 @@ internal static class NetBotYieldSuites
             return;
         }
 
-        var session = NetSession.Guest(followed.Transport, StockAirframes.Nodes);
+        var session = NetSession.Guest(followed.Transport);
         for (int step = 0; step < OpenerSteps && !session.Joined; step++)
         {
             session.Step(GameClock.FixedDt);

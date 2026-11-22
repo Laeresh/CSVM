@@ -6,6 +6,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -264,7 +265,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             for (int i = 0; i < _iaPilotRoster.Count; i++)
             {
                 var row = _iaPilotRoster[i];
-                if (row.Node != node)
+                if (StockNodeOf(row) != node)
                 {
                     continue;
                 }
@@ -1191,7 +1192,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         string before = _instantAction.PlayerPlane.Node;
         for (int i = 0; i < airframes.Count; i++)
         {
-            if (airframes[i].Node == pick.Node)
+            if (airframes[i].Node == StockNodeOf(pick))
             {
                 _instantAction.SelectPlayerPlane(i);
                 break;
@@ -1201,6 +1202,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _iaPilotBuild = pick.IsCustom ? pick.Name : null;
         DropPilotFitIfMoved(before);
     }
+
+    // The stock airframe a row stands on in the feature: a build on a mod airframe stands on its parent.
+    private static string StockNodeOf(MenuAircraft row) =>
+        row.Custom is { } build ? StockAirframes.Node(build.Airframe) : row.Node;
 
     // A changed airframe drops the pilot's fit, the wingman rule applied to the pilot. Gun slots
     // and pylons are per airframe, so a fit for one has nowhere to live on another.
@@ -1831,7 +1836,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _loadoutFit = fit;
         _loadoutSeat = seat;
         var stock = _stock?.Invoke();
-        var stockDef = stock?.ForModel(_loadoutNode);
+        var stockDef = stock != null ? ModPlanes.Current.StockFitFor(stock, _loadoutNode) : null;
         _loadoutDef = build != null && stockDef != null ? CustomPlaneBuild.LoadoutFor(build, stockDef) : stockDef;
         _loadoutOptions = stock?.Options ?? new LoadoutOptions();
         for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
@@ -1987,12 +1992,22 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         AddPane(screen, layers.Backdrop, "OL_BACKGROUND");
-        int airframe = _loadoutNode != null ? StockAirframes.IdOf(_loadoutNode) ?? 0 : 0;
+        int airframe = _loadoutNode != null ? StockAirframes.IdOf(AirframeRegistry.Shared.StockNodeOf(_loadoutNode)) ?? 0 : 0;
         foreach (string key in new[] { "OL_P_PLANETOPICON", "OL_P_PLANEFRTICON" })
         {
             if (screen.Widget(key) is { Art.Count: > 0 } diagram)
             {
-                layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], Math.Max(1, diagram.Frames)),
+                // A mod's own silhouette in one diagram frame's box, else the parent's frame.
+                int frames = Math.Max(1, diagram.Frames);
+                var (width, height) = _host.Measure(diagram.Art[0]) ?? (0, 0);
+                var view = key == "OL_P_PLANETOPICON" ? ModArtView.Plan : ModArtView.HeadOn;
+                if (ModPlaneArt.Picture(_loadoutNode, view, diagram.Int("X"), diagram.Int("Y"), width, height / frames) is { } own)
+                {
+                    layers.Pictures.Add(own);
+                    continue;
+                }
+
+                layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], frames),
                     diagram.Int("X"), diagram.Int("Y"), airframe));
             }
         }

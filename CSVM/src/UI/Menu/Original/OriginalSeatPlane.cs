@@ -419,6 +419,9 @@ public sealed partial class OriginalShell
         private const float BodyFont = 12f;
         private const int SilhouetteFrames = 12;
 
+        // One frame of fc_planeicons.png, 80 by 960 over its 12 frames.
+        private const float SilhouetteSize = 80f;
+
         // The plaques after the list field, in the order the campaign board's own page puts them:
         // the crew block's paper button, then the two commit strips. WEAPON LOADOUT stands only over
         // a selection, because a fit needs an aeroplane to hang on and the seat has picked none
@@ -493,14 +496,24 @@ public sealed partial class OriginalShell
         {
             get
             {
-                if (Current is not { } row || StockAirframes.IdOf(row.Node) is not { } airframe)
+                if (Current is not { } row)
                 {
                     return Array.Empty<BoardPicture>();
                 }
 
                 var layout = _shell._campaignLayout;
-                var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
                 var (x, y) = layout.At(Section, "PS_P_PILOTPLANE", SilhouetteX, SilhouetteY);
+                if (ModPlaneArt.Picture(row.Node, ModArtView.Plan, x, y, SilhouetteSize, SilhouetteSize) is { } own)
+                {
+                    return new[] { own };
+                }
+
+                if (StockAirframes.IdOf(row.Node) is not { } airframe)
+                {
+                    return Array.Empty<BoardPicture>();
+                }
+
+                var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
                 return new[] { new BoardPicture(layout.Art(Section, "PS_P_PILOTPLANE", fallback), x, y, airframe) };
             }
         }
@@ -532,13 +545,15 @@ public sealed partial class OriginalShell
 
                 var (nameX, nameY, nameWidth) = layout.Box(Section, "PS_T_PILOTPLANE", PlaneNameX, PlaneNameY, 400f);
                 lines.Add(new BoardLine(row.Name, nameX, nameY, nameWidth, BodyFont, BoardInk.Row));
-                if (StockAirframes.IdOf(row.Node) is not { } airframe)
+                // A mod rates on its parent's stat row and its own stock fit.
+                if (StockAirframes.IdOf(AirframeRegistry.Shared.StockNodeOf(row.Node)) is not { } airframe)
                 {
                     return lines;
                 }
 
+                var stock = _shell._stock?.Invoke();
                 var fit = PlaneFit.For(
-                    airframe, row.Custom, _shell._stock?.Invoke()?.ForModel(row.Node));
+                    airframe, row.Custom, stock != null ? ModPlanes.Current.StockFitFor(stock, row.Node) : null);
                 var ratings = PlaneRatings.For(fit);
                 for (int i = 0; i < RatingLabels.Length; i++)
                 {

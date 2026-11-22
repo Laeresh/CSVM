@@ -20,6 +20,7 @@
     "graphics-live-switch": "reads the drawn clutter buffers and every texture's image back after each switch, which the headless renderer keeps neither of",
     "graphics-retext-compiles": "its able-to-fail control reads a drawn pixel back, and headless draws none",
     "menu-original-tracer": "reads the OS pointer's visibility and the monitor list from the display server, which headless does not provide",
+    "mod-plane-art": "renders a plane mod into a viewport and reads its pixels back; headless renders none",
     "moon-world-up": "reads the moon's rendered pixels back from a viewport; headless renders none",
     "muzzle-flash-rides-muzzle": "reads the flash quads' drawn instance transforms back, which the headless renderer does not keep",
     "nodelab-click-expand": "clicks a laid-out tree row, which a headless window of no size places off screen",

@@ -131,8 +131,8 @@ internal static class CrashRespawnSuites
         NetCombatSuites.Ends? guest = null;
         try
         {
-            host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, Seed, roster, Airframes);
-            guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, Seed + 1, null, Airframes);
+            host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, Seed, roster);
+            guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, Seed + 1, null);
             ctx.Check(host.Built && guest.Built, $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
             if (!host.Built || !guest.Built)
             {

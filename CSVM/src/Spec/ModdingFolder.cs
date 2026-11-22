@@ -11,7 +11,7 @@ namespace CSVM.Spec;
 /// (<see cref="GameData.Load"/>). Its layout is unzbd's: an install path without <c>ZBD/</c>, with
 /// <c>.zip</c> for <c>.zbd</c>. An unpacked folder of the same name is preferred over its zip.
 /// Folders are upper case, file names lower case (<c>Extraction.ZbdTree</c>,
-/// <c>Extraction.SessionPaths</c>). The files read: docs/modding.md.
+/// <c>Extraction.SessionPaths</c>). The files read: docs/mods/modding.md.
 /// </summary>
 public sealed class ModdingFolder
 {

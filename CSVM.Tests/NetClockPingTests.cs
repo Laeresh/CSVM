@@ -64,8 +64,8 @@ public sealed class NetClockPingTests
     public void Only_a_host_answers_and_only_a_guest_asks()
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(3));
-        var host = NetSession.Host(mesh[0], Roster(), 7UL, null, Airframes);
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var host = NetSession.Host(mesh[0], Roster(), 7UL);
+        var guest = NetSession.Guest(mesh[1]);
 
         Assert.Throws<InvalidOperationException>(() => NetClockPing.Answer(guest, () => 0.0));
         Assert.Throws<InvalidOperationException>(() => NetClockPing.Follow(host, new NetClockSlew(0.0), () => 0.0));
@@ -81,8 +81,8 @@ public sealed class NetClockPingTests
     {
         var mesh = LoopbackTransport.Mesh(2, link, new Random(4127));
         double t = 0.0;
-        var host = NetSession.Host(mesh[0], Roster(), 7UL, () => HostLead + t, Airframes);
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var host = NetSession.Host(mesh[0], Roster(), 7UL, () => HostLead + t);
+        var guest = NetSession.Guest(mesh[1]);
         for (int i = 0; i < 600 && !guest.Joined; i++)
         {
             host.Step(Dt);

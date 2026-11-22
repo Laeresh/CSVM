@@ -230,7 +230,8 @@ internal sealed class InspectionLabs
         if (spec.Viewer)
         {
             mark = StartupProfile.Mark();
-            var stats = PlaneStats.Load(state.Zrdr, spec.PlaneName);
+            var stats = Flight.Hangar.ModPlanes.Current.Find(spec.PlaneName) is { } mod
+                ? mod.Stats(state.Zrdr) : PlaneStats.Load(state.Zrdr, spec.PlaneName);
             StartupProfile.Record("zrdr", mark);
             if (stats.DestroyableParts.Count == 0)
             {
@@ -393,7 +394,7 @@ internal sealed class InspectionLabs
             return;
         string? savePath = LightingTable.SourceTreePath();
         _in.WorldRoot.AddChild(new LightingLab(spec.Chapter.ToUpperInvariant(), spec.Mission.ToUpperInvariant(),
-            weather, _in.Camera, savePath, Flight.Hangar.StockAirframes.Nodes, spec.PlaneName,
+            weather, _in.Camera, savePath, AirframeRegistry.Shared.All.Select(a => a.Node).ToArray(), spec.PlaneName,
             plane => ParkedProp(state, livery, plane).Model)
         {
             Debug = spec.DebugLighting,

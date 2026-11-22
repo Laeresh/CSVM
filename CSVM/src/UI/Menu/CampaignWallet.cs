@@ -69,14 +69,13 @@ public sealed class CampaignWallet : IHangarWallet
     public bool CanAfford(int cost) => Profile.Funds >= cost;
 
     /// <summary>Whether airframe <paramref name="airframe"/> is offered yet: the stat table's own
-    /// availability threshold (<see cref="HangarEconomy.Airframes"/>) against the save's progress
-    /// counter (<see cref="CampaignProfileDef.MissionsCompleted"/>), exactly the comparison
-    /// <c>FUN_00410120</c> makes. The unlocking pilot name switches the comparison off, which is
-    /// what <c>fAllowAll</c> does in that function and in its two neighbours
-    /// (<c>docs/org/hangar.md</c>).</summary>
-    public bool IsAirframeAvailable(int airframe) =>
+    /// availability threshold (<see cref="HangarEconomy.Airframes"/>), or a mod's
+    /// <see cref="ModPlane.CampaignAvailability"/>, against <see cref="CampaignProfileDef.MissionsCompleted"/>,
+    /// the comparison <c>FUN_00410120</c> makes. The unlocking pilot name switches it off, as
+    /// <c>fAllowAll</c> does there and in its two neighbours (<c>docs/org/hangar.md</c>).</summary>
+    public bool IsAirframeAvailable(int airframe, ModPlane? mod = null) =>
         _cheats?.AllowAll == true
-        || Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
+        || Profile.MissionsCompleted + 1 >= (mod?.CampaignAvailability ?? HangarEconomy.Airframes[airframe].Availability);
 
     /// <summary>The airframe of the named owned plane, or null when the profile does not own it.</summary>
     public int? OwnedAirframe(string planeName) =>
@@ -125,7 +124,7 @@ public sealed class CampaignWallet : IHangarWallet
     /// <summary>Deducts a completed build's total cost, records ownership and saves the profile.
     /// The build itself is already in <see cref="CustomPlaneStore"/> (the flow's own commit); this
     /// only moves money and names the plane into the profile's ownership list.</summary>
-    public void Purchase(string planeName, int airframe, int cost)
+    public void Purchase(string planeName, int airframe, int cost, string? modAirframe = null)
     {
         Profile.Funds -= cost;
         var owned = Profile.Planes.FirstOrDefault(
@@ -136,10 +135,11 @@ public sealed class CampaignWallet : IHangarWallet
         if (owned != null)
         {
             owned.Airframe = airframe;
+            owned.ModAirframe = modAirframe;
         }
         else
         {
-            Profile.Planes.Add(new OwnedPlane { Name = planeName, Airframe = airframe });
+            Profile.Planes.Add(new OwnedPlane { Name = planeName, Airframe = airframe, ModAirframe = modAirframe });
         }
 
         _store.Save(Profile);
@@ -211,6 +211,7 @@ public sealed class CampaignWallet : IHangarWallet
             built = new CustomPlaneDef
             {
                 Airframe = owned.Airframe,
+                ModAirframe = owned.ModAirframe,
                 Engine = 1,
                 LeftHardpoints = 2,
                 RightHardpoints = 2,

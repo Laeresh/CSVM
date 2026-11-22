@@ -124,9 +124,11 @@ public sealed class CamParams
             }
         }
 
+        // A mod airframe flies on its parent's camera block.
+        string stockNode = AirframeRegistry.Shared.StockNodeOf(planeNodeName);
         foreach (var (model, display) in MarkerRig.PlayerAirframes)
         {
-            if (string.Equals(model, planeNodeName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(model, stockNode, StringComparison.OrdinalIgnoreCase))
             {
                 result.DisplayName = blocks.ContainsKey(display) ? display : null;
                 break;

@@ -26,8 +26,9 @@ public interface IHangarWallet
     /// <summary>Whether a build's total cost is affordable right now.</summary>
     bool CanAfford(int cost);
 
-    /// <summary>Whether an airframe is offered yet at the profile's progress.</summary>
-    bool IsAirframeAvailable(int airframe);
+    /// <summary>Whether an airframe is offered yet at the profile's progress; a build on
+    /// <paramref name="mod"/> asks by the mod's own unlock rule.</summary>
+    bool IsAirframeAvailable(int airframe, ModPlane? mod = null);
 
     /// <summary>Whether the named owned plane is an unsellable reward aircraft.</summary>
     bool IsSpecial(string planeName);
@@ -41,8 +42,9 @@ public interface IHangarWallet
     /// <summary>The profile's own aircraft as buildable defs, in the ownership list's order.</summary>
     IReadOnlyList<CustomPlaneDef> OwnedBuilds();
 
-    /// <summary>Deducts a completed build's cost and records ownership.</summary>
-    void Purchase(string planeName, int airframe, int cost);
+    /// <summary>Deducts a completed build's cost and records ownership, with the build's mod id
+    /// (<see cref="CustomPlaneDef.ModAirframe"/>) beside its stock airframe.</summary>
+    void Purchase(string planeName, int airframe, int cost, string? modAirframe = null);
 
     /// <summary>Credits the wallet for the named plane, removes it from the profile and deletes its
     /// build. False, with nothing changed, when <see cref="CanSell"/> would refuse.</summary>
@@ -118,6 +120,14 @@ public sealed class HangarFeature : IMenuFeature
 
     /// <summary>The langui table every label here is read from.</summary>
     public UiStrings Strings { get; }
+
+    /// <summary>The plane mods the airframe list offers after the eleven stock rows; null reads
+    /// <see cref="ModPlanes.Current"/> at each use, which is what the game wants.</summary>
+    public ModPlanes? Mods { get; init; }
+
+    /// <summary>The airframe list's rows. Row 0-10 is the stock airframe id; row 11 + i is
+    /// <see cref="Mods"/>' plane i, built on its parent. Every int airframe this feature takes is a row.</summary>
+    public int AirframeRows => HangarEconomy.Airframes.Length + ModSet.Planes.Count;
 
     /// <summary>The zrdr scope the stock armour allocations are read from, or null.</summary>
     public ZrdrSet? Zrdr { get; }
@@ -200,10 +210,15 @@ public sealed class HangarFeature : IMenuFeature
     public string? BuiltPlaneName { get; private set; }
 
     /// <summary>The scratch plane priced through the decoded economy, recomputed on demand.</summary>
-    public HangarBill Bill => HangarEconomy.Price(Scratch);
+    public HangarBill Bill => Price(Scratch);
 
     /// <summary>Whether <see cref="Commit"/> would save right now; see <see cref="Refusal"/>.</summary>
     public bool CanCommit => Refusal() == null;
+
+    /// <summary>The stat row the scratch plane is priced on (<see cref="HangarEconomy.StatsFor(int, ModPlane)"/>).</summary>
+    public AirframeStats ScratchStats => HangarEconomy.StatsFor(Scratch.Airframe, Scratch.ModIn(ModSet));
+
+    private ModPlanes ModSet => Mods ?? ModPlanes.Current;
 
     /// <summary>Whether a character may be typed into a plane name: letters, digits and the three
     /// separators a name uses, every one legal in a filename.</summary>
@@ -310,7 +325,7 @@ public sealed class HangarFeature : IMenuFeature
     /// stays as the caller sets it.</summary>
     public void StartDefaultPlane(int airframe = DefaultAirframe)
     {
-        int pick = airframe >= 0 && airframe < HangarEconomy.Airframes.Length ? airframe : DefaultAirframe;
+        int pick = airframe >= 0 && airframe < AirframeRows ? airframe : DefaultAirframe;
         StartNewPlane();
         DefaultsWanted = true;
         LoadAirframeDefaults(pick);
@@ -339,7 +354,7 @@ public sealed class HangarFeature : IMenuFeature
     /// build's swap raises the ask; an unedited one takes the checkbox's answer unasked.</summary>
     public bool PickAirframe(int airframe)
     {
-        if (AirframeChosen && Scratch.Airframe == airframe)
+        if (AirframeChosen && AirframeRowOf(Scratch) == airframe)
         {
             return false;
         }
@@ -348,8 +363,8 @@ public sealed class HangarFeature : IMenuFeature
         // the pattern snap the new airframe forces below.
         bool edited = EditedSinceOpened;
         bool wasChosen = AirframeChosen;
-        int was = Scratch.Airframe;
-        Scratch.Airframe = airframe;
+        int was = AirframeRowOf(Scratch);
+        PutOnRow(Scratch, airframe);
         AirframeChosen = true;
         NormalisePattern(airframe);
         if (was == airframe)
@@ -414,7 +429,7 @@ public sealed class HangarFeature : IMenuFeature
 
         bool chosen = _askPreviousChosen;
         ClearDefaultsAsk();
-        Scratch.Airframe = was;
+        PutOnRow(Scratch, was);
         AirframeChosen = chosen;
         NormalisePattern(was);
     }
@@ -425,7 +440,7 @@ public sealed class HangarFeature : IMenuFeature
     /// stay. The build's opened-as copy is retaken, so this is where an edit is measured from.</summary>
     public void ApplyDefaultConfiguration(bool stock)
     {
-        LoadAirframeDefaults(Scratch.Airframe);
+        LoadAirframeDefaults(AirframeRowOf(Scratch));
         if (!stock)
         {
             StripToBareAirframe();
@@ -434,15 +449,19 @@ public sealed class HangarFeature : IMenuFeature
         RememberAsOpened();
     }
 
-    /// <summary>Loads an airframe's defaults into the scratch plane, the ask's accept arm: gun
-    /// picks and per-wing hardpoint counts read back off the airframe's stock fit, engine id 1
-    /// (the stock Lvl-2 tier), armour the stock zone allocations in units. Paint and name are
-    /// not the airframe's to default and stay as they are.</summary>
+    /// <summary>Loads an airframe's defaults into the scratch plane, the ask's accept arm. Gun
+    /// picks and per-wing hardpoint counts are read back off the airframe's stock fit. The engine
+    /// is id 1 (the stock Lvl-2 tier) and the armour the stock zone allocations in units. Paint
+    /// and name are not the airframe's to default and stay as they are. A mod row's fit is
+    /// <see cref="ModPlane.StockLoadout"/>, its plane.json loadout over the parent's.</summary>
     public void LoadAirframeDefaults(int airframe)
     {
-        Scratch.Airframe = airframe;
+        PutOnRow(Scratch, airframe);
         Scratch.Engine = 1;
-        LoadStockWeapons(Scratch, StockFits?.ForModel(_nodeOfAirframe(airframe)));
+        var mod = ModOfRow(airframe);
+        LoadStockWeapons(Scratch, mod != null
+            ? StockFits is { } fits ? mod.StockLoadout(fits) : null
+            : StockFits?.ForModel(_nodeOfAirframe(airframe)));
         int[] armour = StockArmourUnits(airframe);
         Scratch.ArmourNose = armour[0];
         Scratch.ArmourTail = armour[1];
@@ -641,7 +660,7 @@ public sealed class HangarFeature : IMenuFeature
                 return HangarFullText();
             }
 
-            if (!wallet.IsAirframeAvailable(Scratch.Airframe))
+            if (!wallet.IsAirframeAvailable(Scratch.Airframe, Scratch.ModIn(ModSet)))
             {
                 return Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " That airframe is not available yet.";
             }
@@ -688,7 +707,7 @@ public sealed class HangarFeature : IMenuFeature
         store.Save(Scratch);
         BuiltPlaneName = Scratch.Name;
         Message = string.Empty;
-        Wallet?.Purchase(Scratch.Name, Scratch.Airframe, cost);
+        Wallet?.Purchase(Scratch.Name, Scratch.Airframe, cost, Scratch.ModAirframe);
         return true;
     }
 
@@ -764,14 +783,45 @@ public sealed class HangarFeature : IMenuFeature
         return text.Length > 0 ? text : $"This {AirframeShortName(airframe)}, {planeName}, cannot be sold.";
     }
 
-    /// <summary>The airframe's own name (langui 3000 + id).</summary>
+    /// <summary>The airframe's own name (langui 3000 + id); a mod row's plane.json name.</summary>
     public string AirframeName(int airframe) =>
-        Strings.Text(3000 + airframe, $"Airframe {airframe}");
+        ModOfRow(airframe)?.Name ?? Strings.Text(3000 + airframe, $"Airframe {airframe}");
 
     /// <summary>The airframe's short name (langui 3020 + id), the form the sell strings take
-    /// their %1 in.</summary>
+    /// their %1 in; a mod row's plane.json name.</summary>
     public string AirframeShortName(int airframe) =>
-        Strings.Text(3020 + airframe, $"Airframe {airframe}");
+        ModOfRow(airframe)?.Name ?? Strings.Text(3020 + airframe, $"Airframe {airframe}");
+
+    /// <summary>The airframe row <paramref name="plane"/> stands on: its mod's row when <see cref="Mods"/>
+    /// holds the mod, else its stock id (a missing mod's stored parent).</summary>
+    public int AirframeRowOf(CustomPlaneDef plane)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        var planes = ModSet.Planes;
+        for (int i = 0; plane.ModIn(ModSet) is { } mod && i < planes.Count; i++)
+        {
+            if (ReferenceEquals(planes[i], mod))
+            {
+                return HangarEconomy.Airframes.Length + i;
+            }
+        }
+
+        return plane.Airframe;
+    }
+
+    /// <summary>The mod an airframe row offers, or null for a stock row.</summary>
+    public ModPlane? ModOfRow(int airframe)
+    {
+        int at = airframe - HangarEconomy.Airframes.Length;
+        return at >= 0 && at < ModSet.Planes.Count ? ModSet.Planes[at] : null;
+    }
+
+    /// <summary>The stock airframe id a row's art, prose and engine rows come from: a mod row's parent.</summary>
+    public int StockIdOfRow(int airframe) =>
+        ModOfRow(airframe) is { } mod ? StockAirframes.IdOf(mod.KindOf) ?? 0 : airframe;
+
+    /// <summary>A plane priced on its own airframe row, a mod build's capacity and turret mask included.</summary>
+    public HangarBill Price(CustomPlaneDef plane) => HangarEconomy.Price(plane, plane.ModIn(ModSet));
 
     /// <summary>The engine's name for an airframe (langui 3100 + airframe*6 + id), or the
     /// no-engine line for id 6.</summary>
@@ -852,7 +902,7 @@ public sealed class HangarFeature : IMenuFeature
     public string TotalsLine(CustomPlaneDef plane)
     {
         ArgumentNullException.ThrowIfNull(plane);
-        var bill = HangarEconomy.Price(plane);
+        var bill = Price(plane);
         string line = $"${bill.Total.Cost}   {bill.Total.Weight} / {bill.Capacity} lbs.";
         return bill.Total.Weight > bill.Capacity
             ? line + "   ⚠ " + Strings.Text(1227, "OVERWEIGHT")
@@ -889,8 +939,8 @@ public sealed class HangarFeature : IMenuFeature
     public HangarBill BillWithAirframe(int airframe)
     {
         var preview = Preview();
-        preview.Airframe = airframe;
-        return HangarEconomy.Price(preview);
+        PutOnRow(preview, airframe);
+        return Price(preview);
     }
 
     /// <summary>The whole bill the build would carry were <paramref name="engine"/> picked.</summary>
@@ -898,7 +948,7 @@ public sealed class HangarFeature : IMenuFeature
     {
         var preview = Preview();
         preview.Engine = Math.Clamp(engine, 0, CustomPlaneDef.EngineNone);
-        return HangarEconomy.Price(preview);
+        return Price(preview);
     }
 
     /// <summary>The whole bill the build would carry were zone <paramref name="zone"/> at
@@ -907,7 +957,7 @@ public sealed class HangarFeature : IMenuFeature
     {
         var preview = Preview();
         SetZoneUnits(preview, zone, Math.Clamp(units, 0, CustomPlaneDef.MaxArmourUnits));
-        return HangarEconomy.Price(preview);
+        return Price(preview);
     }
 
     /// <summary>The whole bill the build would carry were slot <paramref name="slot"/> on cycle row
@@ -920,7 +970,7 @@ public sealed class HangarFeature : IMenuFeature
             preview.Guns[slot] = GunOfCycle(cycleRow);
         }
 
-        return HangarEconomy.Price(preview);
+        return Price(preview);
     }
 
     /// <summary>The whole bill the build would carry were wing <paramref name="wing"/> carrying
@@ -938,7 +988,7 @@ public sealed class HangarFeature : IMenuFeature
             preview.RightHardpoints = next;
         }
 
-        return HangarEconomy.Price(preview);
+        return Price(preview);
     }
 
     /// <summary>Drops the open build: the scratch plane, its store and wallet, the roster, the ask
@@ -990,6 +1040,7 @@ public sealed class HangarFeature : IMenuFeature
         var copy = new CustomPlaneDef
         {
             Airframe = Scratch.Airframe,
+            ModAirframe = Scratch.ModAirframe,
             Engine = Scratch.Engine,
             ArmourNose = Scratch.ArmourNose,
             ArmourTail = Scratch.ArmourTail,
@@ -1005,6 +1056,14 @@ public sealed class HangarFeature : IMenuFeature
         }
 
         return copy;
+    }
+
+    // A mod row stores the mod's id beside its parent's stock id, so every int-indexed reader flies the parent.
+    private void PutOnRow(CustomPlaneDef plane, int row)
+    {
+        var mod = ModOfRow(row);
+        plane.Airframe = mod != null ? StockIdOfRow(row) : row;
+        plane.ModAirframe = mod?.Id;
     }
 
     // The roster and the taken-name set together, since a wallet's roster is ownership while the
@@ -1058,8 +1117,9 @@ public sealed class HangarFeature : IMenuFeature
     // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most
     // airframes' availability masks exclude, and a paint screen must never open on a paint job the
     // plane cannot wear.
-    private void NormalisePattern(int airframe)
+    private void NormalisePattern(int row)
     {
+        int airframe = StockIdOfRow(row);
         var tables = HangarPaintTables.Default;
         if (tables.Available(Scratch.PaintPattern, airframe))
         {
@@ -1091,7 +1151,8 @@ public sealed class HangarFeature : IMenuFeature
         {
             try
             {
-                foreach (var part in PlaneStats.Load(zrdr, _nodeOfAirframe(airframe)).DestroyableParts)
+                var stats = ModOfRow(airframe) is { } mod ? mod.Stats(zrdr) : PlaneStats.Load(zrdr, _nodeOfAirframe(airframe));
+                foreach (var part in stats.DestroyableParts)
                 {
                     int zone = Array.IndexOf(ArmourZones, part.Name.ToLowerInvariant());
                     if (zone >= 0)

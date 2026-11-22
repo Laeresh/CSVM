@@ -4,7 +4,8 @@ How CSVM reads a replacement model pack: higher-detail glTF meshes drawn in plac
 gamez meshes, and a per-airframe `rig.json` that moves an aircraft's marker nodes. This is a
 CSVM format, not a decode of the original; it is the reference a pack author works from. A pack
 changes what is drawn and where an airframe's markers sit, never what the game is: every collider,
-hit box and gameplay measurement keeps reading the original's geometry.
+hit box and gameplay measurement keeps reading the original's geometry. A pack therefore cannot
+add an airframe, only redraw one of the eleven; a new airframe is a [plane mod](mod-planes.md).
 
 ## Contents
 
