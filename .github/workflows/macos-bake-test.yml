@@ -1,0 +1,122 @@
+# A one-off test for #365: export the macOS build on a macOS runner, where the preset's Shader
+# Baker has a Metal device to bake with, so a Mac skips the minutes of pipeline compiling an
+# export from Windows leaves it. Runs only on a push to the macos-bake-test branch. The artifact
+# is the zip to hand the tester.
+name: macOS bake test
+
+on:
+  push:
+    branches: [macos-bake-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GODOT_RELEASE: 4.7-stable
+      GODOT_ZIP: Godot_v4.7-stable_mono_macos.universal.zip
+      GODOT_TPZ: Godot_v4.7-stable_mono_export_templates.tpz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Download and verify Godot and its templates
+        run: |
+          $base = "https://github.com/godotengine/godot/releases/download/$env:GODOT_RELEASE"
+          Set-Location $HOME
+          foreach ($f in $env:GODOT_ZIP, $env:GODOT_TPZ, 'SHA512-SUMS.txt') {
+            curl -fsSL --retry 3 -o $f "$base/$f"
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          foreach ($f in $env:GODOT_ZIP, $env:GODOT_TPZ) {
+            $rows = @(Get-Content SHA512-SUMS.txt | Where-Object { ($_ -split '\s+')[-1].TrimStart('*') -eq $f })
+            if ($rows.Count -ne 1) { throw "SHA512-SUMS.txt lists $f $($rows.Count) times, not once" }
+            if ((Get-FileHash -Algorithm SHA512 $f).Hash -ne ($rows[0] -split '\s+')[0]) { throw "$f does not match SHA512-SUMS.txt" }
+          }
+          # ditto keeps the app bundle's modes and symlinks; the templates' folder level is dropped.
+          ditto -x -k $env:GODOT_ZIP godot
+          $templates = "$HOME/Library/Application Support/Godot/export_templates/4.7.stable.mono"
+          New-Item -ItemType Directory -Force $templates | Out-Null
+          unzip -q -j $env:GODOT_TPZ 'templates/*' -d $templates
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $app = @(Get-ChildItem godot -Directory -Filter *.app)
+          if ($app.Count -ne 1) { throw "The Godot zip holds $($app.Count) apps, not one" }
+          $exe = @(Get-ChildItem "$($app[0].FullName)/Contents/MacOS" -File)[0].FullName
+          "GODOT=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: WebRTC extension
+        run: ./scripts/InstallWebRtc.ps1
+
+      - name: Build
+        run: dotnet build CSVM/CSVM.sln --nologo
+
+      - name: Import
+        run: |
+          & $env:GODOT --headless --path CSVM --import
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # The bake needs a live Metal device, so this runs with a window, not --headless (see
+      # ExportRelease.ps1). Godot's own signer is off: its entitlements blob is one the kernel
+      # refuses, and codesign signs below.
+      - name: Export with the Shader Baker
+        run: |
+          $preset = 'CSVM/export_presets.cfg'
+          $text = (Get-Content $preset -Raw).Replace('shader_baker/enabled=false', 'shader_baker/enabled=true').Replace('codesign/codesign=1', 'codesign/codesign=0')
+          Set-Content $preset $text -NoNewline
+          New-Item -ItemType Directory -Force out | Out-Null
+          & $env:GODOT --path CSVM --rendering-driver metal --rendering-method forward_plus --export-release macOS "$PWD/out/CSVM.zip" 2>&1 | Tee-Object out/export.log
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path out/export.log -Pattern 'baking_shaders' -Quiet)) { throw 'The export baked no shaders' }
+
+      - name: Sign and package
+        run: |
+          Set-Location out
+          ditto -x -k CSVM.zip stage
+          @'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>com.apple.security.cs.allow-jit</key><true/>
+          	<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+          	<key>com.apple.security.cs.allow-dyld-environment-variables</key><true/>
+          	<key>com.apple.security.cs.disable-library-validation</key><true/>
+          </dict>
+          </plist>
+          '@ | Set-Content entitlements.plist
+          # Nested code first, then the app itself with the hardened runtime and the .NET entitlements.
+          codesign --force --deep --sign - stage/CSVM.app
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          codesign --force --sign - --options runtime --entitlements entitlements.plist stage/CSVM.app
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          codesign --verify --deep --strict --verbose=2 stage/CSVM.app
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item ../packaging/README-macos.md stage/README.md
+          Copy-Item ../packaging/LICENSE stage/LICENSE
+          Copy-Item ../packaging/LICENSE-thirdparty-macos.txt stage/LICENSE-thirdparty.txt
+          New-Item -ItemType Directory -Force stage/LICENSE-webrtc | Out-Null
+          Copy-Item ../CSVM/addons/webrtc_native/LICENSE.* stage/LICENSE-webrtc/
+          "Test build of $env:GITHUB_SHA, shaders baked on $env:RUNNER_OS ($env:RUNNER_ARCH), run $env:GITHUB_RUN_ID" | Set-Content stage/BUILD-INFO.txt
+          Set-Location stage
+          ditto -c -k --keepParent CSVM.app ../CSVM-macos-baked.zip
+          zip -q -r ../CSVM-macos-baked.zip README.md LICENSE LICENSE-thirdparty.txt LICENSE-webrtc BUILD-INFO.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: csvm-macos-baked
+          if-no-files-found: warn
+          path: |
+            out/CSVM-macos-baked.zip
+            out/export.log
