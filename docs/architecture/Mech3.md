@@ -851,7 +851,7 @@ never defaults an absent field), `HandleLightAnimation` (the signed-delta tween 
 `Tick` (the advance, then the owner's whole `WorldLights` frame or, under
 `AnimRuntime.ContributeLightsTo`, only a registered submission), `Reset` and `DiscardFor`, which
 `PlayEffectAt` also runs on a reused pooled copy so each call starts dark like the original's
-per-call clone. Both handlers report whether they applied through their return value. `Lights` and
+per-call clone. Under `Utils/ReduceFlashingSetting` it submits no gun hit's `gunhit_lt`. `Lights` and
 `LightViewerPositions` stay fields on `AnimRuntime`, read through closures that fold in the
 single-camera fallback. `AnimLight` is constructed nowhere else. Read `WorldLights.cs` next.
 

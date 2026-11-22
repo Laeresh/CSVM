@@ -555,6 +555,7 @@
     "race-ghost-fade": 0.003,
     "race-presence": 0.532,
     "ranked-pool-carried-turret-dedup": 0.058,
+    "reduce-flashing": 0.3,
     "remote-airframe": 0.087,
     "render-poses": 0.004,
     "render-thread-handoffs": 0.247,

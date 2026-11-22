@@ -451,11 +451,11 @@ impact that follows, the struck material's `IMPACT` row for a ray hit and the `d
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
 muzzle light (via `BindPointLights`, original mode puts both branches into the `WorldLights` point term, and Enhanced
-the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
+the third-person flash into the pool's own `WorldLights.ForAircraft` set, which it commits itself; none under `Utils/ReduceFlashingSetting`), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
-ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring. The sprite pools (tracers, tips, muzzle and impact flashes, gun smoke) are `StandardMaterial3D` MultiMeshes. While the volumetric slab stands, each wears a `ShaderMaterial` twin of that material at `Effects/EmitterRenderer.cs`'s `DrawPriority`, its alpha dimmed by `csky_pc_veil_at` as a puffer's is; with no slab it wears its own again.
+ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring; Enhanced's light on each round in flight (`SubmitInFlight`), a gun round's only from `TracerGlowStart` ahead of its shooter and none under Reduce Flashing. The sprite pools (tracers, tips, muzzle and impact flashes, gun smoke) are `StandardMaterial3D` MultiMeshes. While the volumetric slab stands, each wears a `ShaderMaterial` twin of that material at `Effects/EmitterRenderer.cs`'s `DrawPriority`, its alpha dimmed by `csky_pc_veil_at` as a puffer's is; with no slab it wears its own again.
 
 ## src/Flight/Weapons/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round

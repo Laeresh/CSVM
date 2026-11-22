@@ -433,6 +433,13 @@ Whether a Capture the Flag pane marks the flags and bases that matter beside its
 `--flag-marks=`, the saved `flagMarks` word, the `hud.flagMarks` key, then `on`. It has no live-apply hook: the HUD
 reads `Drawn` every frame. The GAME OPTIONS page shows it as the Flag Markers checkbox under Keep Camera Zoom.
 
+## src/Utils/ReduceFlashingSetting.cs
+The Reduce Flashing accessibility option: `off` or `on`, in both graphics modes. It resolves as `FlagMarksSetting` does:
+`--reduce-flashing=`, the saved `reduceFlashing` word, the `accessibility.reduceFlashing` key, then `off`. It has no live-apply
+hook: `Flight/Weapons/Projectile.cs` reads `Active` as it lights a muzzle flash or a round in flight, and
+`Mech3/Anim/LightChannel.cs` as it submits a gun hit's `gunhit_lt`, so none of them reaches a cloud's glow either. The
+GAME OPTIONS page shows it as the Reduce Flashing checkbox under Flag Markers.
+
 ## src/Utils/ShadowDistanceSetting.cs
 How far the Enhanced sun casts: `normal` (the zone's shadow distance, where its haze begins), `far` (1.5 times it) or `extreme`
 (2 times it). It resolves as `VegetationModelsSetting` does: `--shadow-distance=`, the saved `shadowDistance` word, the

@@ -1144,10 +1144,11 @@ internal static class CombatSuites
         }
     }
 
-    // #368: under Enhanced a round in flight lights the world set, a tracer in its streak's colour and
-    // a rocket motor in red. The motorless rear flash stays dark, and Original lights no round at all.
+    // Under Enhanced a round in flight lights the world set, a tracer in its streak's colour and a rocket
+    // motor in red. A tracer waits until it is TracerGlowStart ahead of its shooter, past its glow's reach
+    // in a cloud. A burst then never lights the cloud the shooter sits in. Original lights no round at all.
     [Suite("in-flight-round-lights",
-        "under Enhanced a gun round and a rocket in flight each submit a light to the bound world set, the rocket's red, the drifting rear flash none, and in Original no round submits one")]
+        "under Enhanced a rocket lights the bound world set in red from launch and a gun round only once it flies TracerGlowStart ahead of its moving shooter, which is past its glow's reach in a cloud; the drifting rear flash lights none, and in Original no round does")]
     internal static void InFlightRoundLights(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -1184,16 +1185,89 @@ internal static class CombatSuites
             }
 
             var lit = Committed(true, gun, rocket, flare);
-            ctx.Same(2, lit.Count, $"Enhanced: the gun round and the rocket light the set, the rear flash does not: {string.Join(", ", lit)}");
-            ctx.Same(1, lit.Count(c => c.G < 0.5f * c.R && c.B < 0.5f * c.R), $"Enhanced: one light is the rocket motor's red");
+            ctx.Same(1, lit.Count, $"Enhanced at launch: the rocket lights the set, the gun round and the rear flash do not: {string.Join(", ", lit)}");
+            ctx.Same(1, lit.Count(c => c.G < 0.5f * c.R && c.B < 0.5f * c.R), $"Enhanced: that light is the rocket motor's red");
             ctx.Same(0, Committed(true, flare).Count, $"Enhanced: the rear flash alone submits nothing");
             ctx.Same(0, Committed(false, rocket).Count, $"Original: a rocket in flight submits no light");
+
+            float reach = VolumetricClouds.UniformDefaults["point_reach"];
+            ctx.Check(ProjectilePool.TracerGlowStart >= ProjectilePool.TracerGlowFar * reach,
+                $"the start distance {ProjectilePool.TracerGlowStart} m is past a round's glow in a cloud, {ProjectilePool.TracerGlowFar} m far times point_reach {reach}");
+            var burst = BurstLights(ctx, textures, pools, gun, muzzle, enhanced: true);
+            ctx.Note($"Enhanced burst: {burst.Lit} round light(s) over its frames, the nearest {burst.Nearest:0.#} m from the shooter");
+            ctx.Check(burst.Lit > 0, $"Enhanced: the burst's rounds light the set once they are out ({burst.Lit})");
+            ctx.Check(burst.Nearest >= ProjectilePool.TracerGlowStart - 0.5f,
+                $"Enhanced: no round light stands nearer the moving shooter than the start distance ({burst.Nearest:0.##} m)");
         }
         finally
         {
             GraphicsMode.Set(wasEnhanced);
             foreach (var p in pools)
                 p.Free();
+            textures.Dispose();
+        }
+    }
+
+    // Reduce Flashing keeps every light that flashes with gunfire dark, in both presentations. That is
+    // the muzzle flash (omni or point term), every round in flight and a gun hit's authored light. A light
+    // that is not a gun's, the burst's authored he_light, stays lit beside it.
+    [Suite("reduce-flashing",
+        "with Reduce Flashing on, a shot lights no muzzle omni and holds no point flash in either presentation, a burst's rounds light nothing under Enhanced, and a gun hit's gunhit_lt is not submitted while another effect light is; with it off each of them lights")]
+    internal static void ReduceFlashing(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.Zrdr, null).All;
+        var gun = weapons.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var context = new SettingContext(true, wasEnhanced, 1);
+        var pools = new List<ProjectilePool>();
+        var host = new Node3D { Name = "gun_hit_host" };
+        ctx.Host.AddChild(host);
+        try
+        {
+            ctx.Check(gun != null, $"a gun loaded from the catalogue");
+            if (gun == null)
+                return;
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+            foreach (bool reduced in new[] { false, true })
+            {
+                ReduceFlashingSetting.Lookup.ResolveFrom(reduced ? ReduceFlashingSetting.On : null, null, context);
+                string state = reduced ? "on" : "off (ABLE-TO-FAIL CONTROL)";
+                int lights = reduced ? 0 : 1;
+                foreach (bool enhanced in new[] { false, true })
+                {
+                    GraphicsMode.Set(enhanced);
+                    string mode = enhanced ? "Enhanced" : "Original";
+                    var set = new WorldLights();
+                    foreach (bool firstPerson in new[] { false, true })
+                    {
+                        var p = new ProjectilePool(textures, null, null) { FirstPersonView = () => firstPerson };
+                        pools.Add(p);
+                        ctx.Host.AddChild(p);
+                        p.BindPointLights(set);
+                        p.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+                        int held = p.ActiveMuzzleLights().Count() + p.PendingPointFlashes().Count() + p.PendingAircraftFlashes().Count();
+                        int authored = firstPerson ? 2 : 1;
+                        ctx.Same(lights * authored, held, $"Reduce Flashing {state}, {mode}, {(firstPerson ? "first" : "third")} person: the shot's muzzle lights");
+                    }
+                    set.Dispose();
+                }
+
+                var burst = BurstLights(ctx, textures, pools, gun, muzzle, enhanced: true);
+                ctx.Check(reduced ? burst.Lit == 0 : burst.Lit > 0, $"Reduce Flashing {state}, Enhanced: the burst's round lights ({burst.Lit})");
+                ctx.Same(1 + lights, GunHitLightsCommitted(host), $"Reduce Flashing {state}: the effect lights committed beside a gun hit's gunhit_lt");
+            }
+        }
+        finally
+        {
+            ReduceFlashingSetting.Lookup.ResolveFrom(null, null, context);
+            GraphicsMode.Set(wasEnhanced);
+            foreach (var p in pools)
+                p.Free();
+            host.Free();
             textures.Dispose();
         }
     }
@@ -3704,5 +3778,69 @@ internal static class CombatSuites
         rig.Held = true;
         rig.PlaceHeld(pos, lookAt);
         return rig;
+    }
+
+    // A gun burst from a shooter flying on at 100 m/s: a round a sim step for twenty steps, the set
+    // committed after each. It returns how many round lights the set held over the burst, and the
+    // nearest any of them stood to the shooter.
+    private static (int Lit, float Nearest) BurstLights(TestContext ctx, TextureArchive textures,
+        List<ProjectilePool> pools, WeaponDef gun, Transform3D muzzle, bool enhanced)
+    {
+        const float Dt = 1f / 60f;
+        GraphicsMode.Set(enhanced);
+        var flying = new Vector3(0f, 0f, -100f);
+        var set = new WorldLights();
+        var pool = new ProjectilePool(textures, null, null) { FirstPersonView = () => false };
+        pools.Add(pool);
+        ctx.Host.AddChild(pool);
+        pool.BindPointLights(set);
+        int lit = 0;
+        float nearest = float.MaxValue;
+        try
+        {
+            for (int step = 0; step < 20; step++)
+            {
+                var shooter = muzzle.Origin + (flying * (step * Dt));
+                pool.Spawn(gun, new Transform3D(muzzle.Basis, shooter), flying, shooterId: 0);
+                set.Begin();
+                set.Commit(new[] { shooter });
+                lit += set.CommittedPositions.Count;
+                foreach (var at in set.CommittedPositions)
+                    nearest = Mathf.Min(nearest, at.DistanceTo(shooter));
+                pool.SimStep(Dt);
+            }
+        }
+        finally
+        {
+            set.Dispose();
+        }
+        return (lit, nearest);
+    }
+
+    // A light channel holding a lit gunhit_lt and a lit he_light on one host, committed once: how many
+    // of the two the set takes.
+    private static int GunHitLightsCommitted(Node3D host)
+    {
+        var set = new WorldLights();
+        var channel = new LightChannel(() => set, (_, _, _) => host, () => new[] { host.GlobalPosition },
+            () => false, () => false, _ => false);
+        var def = new AnimDefinition { Name = "3040slug_gunhit" };
+        foreach (string name in new[] { "gunhit_lt", "he_light" })
+        {
+            channel.HandleLightState(new AnimEvent
+            {
+                Kind = "LightState",
+                Data = new AnimData(new Dictionary<string, object?>
+                {
+                    ["name"] = name,
+                    ["active_state"] = true,
+                    ["range"] = new Dictionary<string, object?> { ["min"] = 0.5f, ["max"] = 21.25f },
+                }),
+            }, def, host);
+        }
+        channel.Tick(1f / 60f);
+        int committed = set.CommittedPositions.Count;
+        set.Dispose();
+        return committed;
     }
 }

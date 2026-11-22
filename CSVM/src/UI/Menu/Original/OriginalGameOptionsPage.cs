@@ -67,6 +67,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The page's Flag Markers checkbox, a remake-only row.</summary>
     public const string FlagMarksKey = "FLAGMARKS";
 
+    /// <summary>The page's Reduce Flashing checkbox, a remake-only row.</summary>
+    public const string ReduceFlashingKey = "REDUCEFLASHING";
+
     /// <summary>The page's Subtitles dropdown, a remake-only row shown only while a subtitle table is
     /// loaded.</summary>
     public const string SubtitlesKey = "SUBTITLES";
@@ -230,6 +233,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Radio, _ => SwitchWords,
             c => c.At(CSVM.Utils.FlagMarksSetting.Lookup),
             (c, i) => c.Pick(CSVM.Utils.FlagMarksSetting.Lookup, c.Offered(CSVM.Utils.FlagMarksSetting.Lookup)[i])),
+        new(ReduceFlashingKey, "Reduce Flashing",
+            _ => CSVM.Utils.ReduceFlashingSetting.Lookup.Detail(false),
+            OriginalRowKind.Radio, _ => SwitchWords,
+            c => c.At(CSVM.Utils.ReduceFlashingSetting.Lookup),
+            (c, i) => c.Pick(CSVM.Utils.ReduceFlashingSetting.Lookup, c.Offered(CSVM.Utils.ReduceFlashingSetting.Lookup)[i])),
         new(SubtitlesKey, "Subtitles",
             _ => "Show the words of the radio and the briefings. High puts them at the top of the screen in flight.",
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SubtitlesSetting.Labels(),

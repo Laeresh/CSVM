@@ -759,6 +759,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/GroundCoverSetting.cs`, how the Rich vegetation draws grass and crops near the camera (off, shells, cards): the flag/saved/config `WordSetting` lookup over cards (off on an integrated GPU), applied live.
 - `src/Utils/CloudGlowSetting.cs`, whether Enhanced's volumetric clouds glow round the frame's most significant point lights (off, on): the flag/saved/config `WordSetting` lookup over on (off on an integrated GPU), read every frame.
 - `src/Utils/SpeedWispsSetting.cs`, whether Enhanced draws the authored speed cue wisps (off, on): the flag/saved/config `WordSetting` lookup over off, read every step; Original always draws them.
+- `src/Utils/ReduceFlashingSetting.cs`, the Reduce Flashing accessibility option (off, on): the flag/saved/config `WordSetting` lookup that keeps the muzzle, round and gun-hit lights dark, read as each light is lit.
 - `src/Utils/WordSetting.cs`, one word setting's descriptor: words, key, flag, options-file field, row, fallback, store and live-apply hook, and the flag/saved/config/fallback lookup they share.
 - `src/Utils/WordSettings.cs`, the registry of word settings every settings site walks, and `WordValues`, one word per registered setting.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.
