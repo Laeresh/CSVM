@@ -55,8 +55,10 @@ public static class HangarDescriptions
     /// <summary>The AIRFRAME box over one airframe's stat row and the two star words it is rated
     /// by. The original rates them from a record carrying the airframe and nothing else. A mod
     /// airframe passes its own <paramref name="row"/> (<see cref="HangarEconomy.StatsFor(int, ModPlane)"/>)
-    /// beside its parent's id, whose prose it shows.</summary>
-    public static HangarInfo Airframe(UiStrings strings, int airframe, string agility, string armour, AirframeStats? row = null)
+    /// beside its parent's id, and its <see cref="ModPlane.Description"/> as <paramref name="prose"/>;
+    /// without one it shows the parent's prose.</summary>
+    public static HangarInfo Airframe(
+        UiStrings strings, int airframe, string agility, string armour, AirframeStats? row = null, string? prose = null)
     {
         ArgumentNullException.ThrowIfNull(strings);
         var stats = row ?? HangarEconomy.Airframes[airframe];
@@ -65,7 +67,7 @@ public static class HangarDescriptions
             : stats.Turrets.ToString(CultureInfo.InvariantCulture);
         return Split(
             strings.Format(AirframeInfoString, stats.Cost, stats.Weight, stats.Capacity, agility, armour, turrets)
-            + strings.Text(AirframeProseString + airframe),
+            + (prose ?? strings.Text(AirframeProseString + airframe)),
             new[]
             {
                 Dollars("COST", stats.Cost),

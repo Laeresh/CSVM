@@ -59,6 +59,17 @@ public class ModPlaneHangarTests
         Assert.Null(plain.DefaultGuns);
         Assert.Null(plain.DefaultHardpointsPerWing);
         Assert.Null(plain.HangarCapacity);
+        Assert.Null(plain.Description);
+    }
+
+    [Fact]
+    public void TheDescriptionFieldParsesAndAnEmptyOneSkipsTheMod()
+    {
+        var mods = Mods(("told", """{ "kind_of": "player_brigand", "description": "A carrier fighter." }"""),
+            ("blank", """{ "kind_of": "player_brigand", "description": "" }"""));
+
+        Assert.Equal("A carrier fighter.", Assert.Single(mods.Planes).Description);
+        Assert.Contains("description is not a non-empty string", Assert.Single(mods.Skipped).Reason);
     }
 
     [Theory]
