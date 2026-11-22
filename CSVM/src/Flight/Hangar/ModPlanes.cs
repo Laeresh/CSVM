@@ -93,6 +93,18 @@ public sealed class ModPlane
     /// same files hash alike.</summary>
     public string Hash { get; }
 
+    /// <summary><c>loadout.guns</c>: the four gun slots' default picks, W1 first, in place of the
+    /// parent's stock guns; null keeps the parent's.</summary>
+    public IReadOnlyList<GunChoice>? DefaultGuns { get; internal init; }
+
+    /// <summary><c>loadout.hardpoints_per_wing</c>: the pylons hung on each wing by default, 0-4;
+    /// null keeps the parent's.</summary>
+    public int? DefaultHardpointsPerWing { get; internal init; }
+
+    /// <summary><c>hangar_capacity</c>: the hangar's weight capacity in lb, in place of the parent's
+    /// stat-table row; null keeps the parent's.</summary>
+    public int? HangarCapacity { get; internal init; }
+
     /// <summary>The plane's stats: the parent's, as <see cref="PlaneStats.Load"/> or, for a bot,
     /// <see cref="PlaneStats.LoadForAi"/> with the parent's AI def loads them, then the overrides and
     /// <see cref="ClearsTurrets"/>. An override name no field takes is logged and ignored.
@@ -118,8 +130,49 @@ public sealed class ModPlane
 
     /// <summary>The plane's stock fit: the parent's, or null when it has none. With
     /// <see cref="ClearsTurrets"/> each turret slot is a forward gun slot on the firepoints it names,
-    /// so a turret plane's W4 fires ahead from firepoint1 and firepoint2.</summary>
+    /// so a turret plane's W4 fires ahead from firepoint1 and firepoint2. The plane.json loadout
+    /// then replaces the guns and the pylons, as a hangar build's picks do.</summary>
     public LoadoutDef? StockLoadout(StockLoadouts stock)
+    {
+        var fit = ParentFit(stock);
+        if (fit == null || (DefaultGuns == null && DefaultHardpointsPerWing == null))
+        {
+            return fit;
+        }
+
+        var picks = new CustomPlaneDef { LeftHardpoints = DefaultHardpointsPerWing ?? 0, RightHardpoints = DefaultHardpointsPerWing ?? 0 };
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots && DefaultGuns != null; slot++)
+        {
+            picks.Guns[slot] = DefaultGuns[slot];
+        }
+
+        var built = CustomPlaneBuild.LoadoutFor(picks, fit);
+        built.Guns = DefaultGuns == null ? fit.Guns : built.Guns;
+        built.Hardpoints = DefaultHardpointsPerWing == null ? fit.Hardpoints : built.Hardpoints;
+        return built;
+    }
+
+    /// <summary>The bytes of the file at <paramref name="path"/> inside the mod (<see cref="ModPlanes.ModelFile"/>,
+    /// the portrait), matched without case, or null when absent or unreadable.</summary>
+    public byte[]? Read(string path)
+    {
+        if (!_files.TryGetValue(ModPlanes.PathKey(path), out string? at))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ModPlanes.ReadAt(Source, _zip, at);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            Log.Warn("flight", $"mod plane {Id}: {path} unreadable ({e.Message})");
+            return null;
+        }
+    }
+
+    private LoadoutDef? ParentFit(StockLoadouts stock)
     {
         if (stock.ForModel(KindOf) is not { } fit || !ClearsTurrets)
         {
@@ -145,26 +198,6 @@ public sealed class ModPlane
             }).ToList(),
         };
     }
-
-    /// <summary>The bytes of the file at <paramref name="path"/> inside the mod (<see cref="ModPlanes.ModelFile"/>,
-    /// the portrait), matched without case, or null when absent or unreadable.</summary>
-    public byte[]? Read(string path)
-    {
-        if (!_files.TryGetValue(ModPlanes.PathKey(path), out string? at))
-        {
-            return null;
-        }
-
-        try
-        {
-            return ModPlanes.ReadAt(Source, _zip, at);
-        }
-        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            Log.Warn("flight", $"mod plane {Id}: {path} unreadable ({e.Message})");
-            return null;
-        }
-    }
 }
 
 /// <summary>
@@ -185,6 +218,10 @@ public sealed class ModPlanes
     public const string DefaultFolder = "Mods";
 
     private const string TurretsKey = "turrets";
+
+    // About six times the stat table's heaviest row, the Balmoral's 15,760 lb. A typo of an extra
+    // digit or two still fails.
+    private const int MaxHangarCapacity = 100_000;
 
     private ModPlanes(IReadOnlyList<ModPlane> planes, IReadOnlyList<SkippedMod> skipped)
     {
@@ -248,6 +285,11 @@ public sealed class ModPlanes
     /// <summary>The mod whose id is <paramref name="id"/>, matched without case, or null.</summary>
     public ModPlane? Find(string id) =>
         Planes.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The stock fit <paramref name="node"/> flies: a loaded mod's <see cref="ModPlane.StockLoadout"/>,
+    /// else the stock table's fit for the node.</summary>
+    public LoadoutDef? StockFitFor(StockLoadouts stock, string node) =>
+        Find(node) is { } mod ? mod.StockLoadout(stock) : stock.ForModel(node);
 
     /// <summary>These mods with <paramref name="plane"/> left out and listed in <see cref="Skipped"/>, for
     /// a mod that loaded but failed later (its model, its registration). Logs it as a load skip does.</summary>
@@ -314,10 +356,20 @@ public sealed class ModPlanes
         var overrides = new Dictionary<string, double>(StringComparer.Ordinal);
         bool clearsTurrets = false;
         ModPlaneTint? tint = null;
+        GunChoice[]? guns = null;
+        int? hardpoints = null;
+        int? capacity = null;
         foreach (var field in doc.RootElement.EnumerateObject())
         {
             switch (field.Name)
             {
+                case "loadout":
+                    (guns, hardpoints) = DefaultLoadout(field.Value);
+                    break;
+                case "hangar_capacity":
+                    capacity = WholeNumber(field.Value, 1, MaxHangarCapacity) ?? throw new InvalidDataException(
+                        $"hangar_capacity is not a whole number of pounds from 1 to {MaxHangarCapacity}");
+                    break;
                 case "name":
                     name = Text(field);
                     break;
@@ -365,7 +417,7 @@ public sealed class ModPlanes
 
         return new ModPlane(id, name ?? id, kindOf, overrides, clearsTurrets, unlock, cockpit, sound, portrait,
             source, zip, files, Hash(source, zip, files))
-        { Tint = tint };
+        { Tint = tint, DefaultGuns = guns, DefaultHardpointsPerWing = hardpoints, HangarCapacity = capacity };
     }
 
     // The tint block: a mask and a detail PNG inside the mod, and the non-empty list of materials they tint.
@@ -427,6 +479,86 @@ public sealed class ModPlanes
 
         return files.ContainsKey(path) ? path : throw new InvalidDataException($"tint.{field.Name} {path} is not in the mod");
     }
+
+    // The loadout block: four gun slots and a per-wing pylon count, each optional. A slot is null
+    // (empty) or a calibre 30-70, twin unless it says not. A value outside the hangar's ranges fails.
+    private static (GunChoice[]? Guns, int? HardpointsPerWing) DefaultLoadout(JsonElement block)
+    {
+        if (block.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("loadout is not an object");
+        }
+
+        GunChoice[]? guns = null;
+        int? hardpoints = null;
+        foreach (var field in block.EnumerateObject())
+        {
+            switch (field.Name)
+            {
+                case "guns":
+                    if (field.Value.ValueKind != JsonValueKind.Array || field.Value.GetArrayLength() != CustomPlaneDef.GunSlots)
+                    {
+                        throw new InvalidDataException($"loadout.guns is not an array of {CustomPlaneDef.GunSlots} slots");
+                    }
+
+                    guns = field.Value.EnumerateArray().Select((gun, i) => DefaultGun(gun, i + 1)).ToArray();
+                    break;
+                case "hardpoints_per_wing":
+                    hardpoints = WholeNumber(field.Value, 0, CustomPlaneDef.MaxHardpointsPerWing) ?? throw new InvalidDataException(
+                        $"loadout.hardpoints_per_wing is not a whole number from 0 to {CustomPlaneDef.MaxHardpointsPerWing}");
+                    break;
+                default:
+                    if (!field.Name.StartsWith('_'))
+                    {
+                        throw new InvalidDataException($"unknown key loadout.{field.Name}");
+                    }
+
+                    break;
+            }
+        }
+
+        return (guns, hardpoints);
+    }
+
+    private static GunChoice DefaultGun(JsonElement gun, int slot)
+    {
+        if (gun.ValueKind == JsonValueKind.Null)
+        {
+            return default;
+        }
+
+        string at = $"loadout.guns slot {slot}";
+        if (gun.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"{at} is neither null nor an object");
+        }
+
+        int? row = null;
+        bool twin = true;
+        foreach (var field in gun.EnumerateObject())
+        {
+            switch (field.Name)
+            {
+                case "calibre":
+                    // The calibre in hundredths of an inch, 30 (.30 Zephyr) to 70 (.70 Goliath), is dropdown row 0-4.
+                    row = WholeNumber(field.Value, 30, 30 + (10 * CustomPlaneDef.MaxCalibre)) is { } c && c % 10 == 0 ? (c - 30) / 10
+                        : throw new InvalidDataException($"{at}: calibre is not one of 30, 40, 50, 60, 70");
+                    break;
+                case "twin":
+                    twin = field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False
+                        ? field.Value.GetBoolean()
+                        : throw new InvalidDataException($"{at}: twin is not true or false");
+                    break;
+                default:
+                    throw new InvalidDataException($"{at}: unknown key {field.Name}");
+            }
+        }
+
+        return row is { } calibre ? new GunChoice(calibre, twin) : throw new InvalidDataException($"{at}: calibre is missing");
+    }
+
+    private static int? WholeNumber(JsonElement value, int min, int max) =>
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int n) && n >= min && n <= max ? n : null;
 
     // Fills the def overrides and answers whether "turrets": [] clears the parent's mounts.
     private static bool Overrides(JsonElement block, Dictionary<string, double> into)

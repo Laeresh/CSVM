@@ -9,9 +9,10 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
 
 - [Conceptual model](#conceptual-model)
 - [Reference](#reference): [folder and id](#folder-and-id), [`plane.json`](#planejson),
-  [overrides](#overrides), [`plane.glb`](#planeglb), [paint](#paint), [content hash](#content-hash)
+  [overrides](#overrides), [default loadout](#default-loadout), [`plane.glb`](#planeglb),
+  [paint](#paint), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
-  [flying a mod](#flying-a-mod)
+  [flying a mod](#flying-a-mod), [the hangar](#the-hangar)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -46,7 +47,12 @@ machine in a network match needs the same mods, which the content hash compares.
   "sound": "player_fury",
   "portrait": "portrait.png",
   "overrides": { "fd_speed": 120.0, "turrets": [] },
-  "tint": { "mask": "avenger_mask.png", "detail": "avenger_detail.png", "materials": ["avenger"] }
+  "tint": { "mask": "avenger_mask.png", "detail": "avenger_detail.png", "materials": ["avenger"] },
+  "hangar_capacity": 12500,
+  "loadout": {
+    "guns": [ { "calibre": 60 }, { "calibre": 30 }, { "calibre": 30 }, { "calibre": 30, "twin": true } ],
+    "hardpoints_per_wing": 2
+  }
 }
 ```
 
@@ -60,6 +66,8 @@ machine in a network match needs the same mods, which the content hash compares.
 | `sound` | A stock node whose engine sound the plane uses. Absent, the parent's. |
 | `portrait` | The path of an image inside the mod that menus show for the plane. |
 | `tint` | How a livery colours the plane's own surfaces: `mask` and `detail`, each the path of a `.png` inside the mod, and `materials`, a non-empty list of `plane.glb` material names. All three are required; a `_` key inside is prose. Absent, the plane's own surfaces keep their paint under every livery. The rules are in [Paint](#paint). |
+| `hangar_capacity` | The hangar's weight capacity in lb, a whole number from 1 to 100000, replacing the parent's stat-table capacity in the overweight check ([The hangar](#the-hangar)). Absent, the parent's. |
+| `loadout` | The plane's default fit, replacing the parent's stock fit: see [Default loadout](#default-loadout). Absent, the parent's. |
 
 Every value is a literal. A key starting with `_` is prose and ignored; any other unknown key, a
 wrong type, an empty string or a name outside the stock list skips the mod.
@@ -90,6 +98,24 @@ carries no zones. The plane keeps the parent's def name, which is what its stock
 the parent's turret gun slots a forward gun slot firing from the firepoints the slot names, with
 its calibre, ammunition and barrel count unchanged. A Brigand-based mod's W4 Rear Turret becomes a
 forward 30 calibre gun on `firepoint1` and `firepoint2`. The stock planes' fits are unchanged.
+
+### Default loadout
+
+`loadout` replaces the guns, the pylons or both of the parent's stock fit (after `"turrets": []`
+has turned its turret slots forward). The result is the fit a flown mod plane carries with no
+`--loadout=` and the fit the hangar's default configuration loads.
+
+| Key | Rule |
+|---|---|
+| `guns` | Exactly four entries, gun slots W1 to W4 in order. `null` leaves the slot empty. An object holds `calibre`, one of 30, 40, 50, 60, 70 (.30 Zephyr, .40 Carver, .50 Barret, .60 Cheyenne, .70 Goliath, [hangar.md](../org/hangar.md)), and optionally `twin`, `true` (the default) for a gun on both of the slot's firepoints and `false` for one gun on the lower-numbered one. Slot n's firepoints are `firepoint(9-2n)` and `firepoint(10-2n)`, so W1 is `firepoint7`/`firepoint8` and W4 `firepoint1`/`firepoint2`. Absent, the parent's guns. |
+| `hardpoints_per_wing` | Pylons hung on each wing, 0 to 4, outboard first, each carrying the high explosive a hangar build hangs. Absent, the parent's pylons. |
+
+A slot keeps the parent's mount name and turret flag, fires slug and leaves its ammunition to Ammo
+Selection, as a hangar build does (`CustomPlaneBuild.LoadoutFor`). The Avenger's default, 2 x .60
+and 6 x .30, is `[{"calibre": 60}, {"calibre": 30}, {"calibre": 30}, {"calibre": 30}]` over the
+Brigand with `"turrets": []`: W3, empty on the Brigand, gets a .30 pair on `firepoint3`/`firepoint4`.
+A key starting with `_` is prose; any other key, a slot count other than four, a calibre outside the
+five, a non-boolean `twin` or a pylon count outside 0 to 4 skips the mod.
 
 ### `plane.glb`
 
@@ -158,8 +184,26 @@ each build logs `HD models: N mesh instance(s) of <id> drawn from its mod's plan
 no data of the mod's own takes its parent's: the camera block, the destroy def, the AI def and, with
 no `--loadout=`, the stock fit (with `"turrets": []` applied). The mod has no wreck pieces or damage
 panels unless its model holds the stock `destroyed` and `pdpN` nodes, a crash then playing the parent's
-destroy def without pieces, and its engine sounds as its parent's (the def's `engine_sound`). The hangar, the campaign, bot seats, saves and the network wire still list the
-stock eleven alone.
+destroy def without pieces, and its engine sounds as its parent's (the def's `engine_sound`). The
+campaign, bot seats and the network wire still list the stock eleven alone.
+
+### The hangar
+
+The plane builder's airframe list offers each loaded mod after the eleven stock airframes, under
+its `name`. A build on it is priced on the parent's stat-table row (cost, weight, agility, armour,
+availability, slot titles, engine rows), with `hangar_capacity` in place of the capacity and, for a
+mod with `"turrets": []`, no turret slots, so the converted slot costs and weighs as a wing gun
+([hangar.md](../org/hangar.md)). Its default configuration is the [default loadout](#default-loadout),
+engine tier 2, and the armour of the parent's zones after the mod's `<zone>_armor` overrides. The
+blueprint, the description prose and the engine names are the parent's.
+
+A saved build keeps the mod's id as `modAirframe` beside its parent's stock id in `airframe` in
+CSVM's custom plane file; a stock build's file carries no `modAirframe`. The plane pickers fly such a
+build as the mod's own node. With the mod not installed the record is kept untouched, the build
+flies and prices as the stored parent, and the log says so once per id (`custom plane <name>: mod
+airframe <id> is not installed, it flies as <parent>`). The campaign profile, the network wire and
+the lobbies carry the build as its parent's stock id.
+
 
 ## Evidence & limits
 
@@ -178,6 +222,9 @@ stock eleven alone.
   hand-made mod's half-masked body takes each of two schemes' colour 1 on the masked half and keeps its
   base texture on the other, in a flown build, an AI build's shared painter and a livery lab repaint, no
   livery leaves the base texture, and its `suite_noselogo` surface wears each scheme's nose decal.
+- The two hangar fields, the economy over a mod's row, the custom plane file's `modAirframe` and
+  the missing-mod fallback are covered by `CSVM.Tests/ModPlaneHangarTests.cs`, and the builder with
+  a mod loaded by the `menu-original-hangar-mod` suite.
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is not
   checked against the campaign.

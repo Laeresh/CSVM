@@ -544,7 +544,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     // not a second fact.
     private static string PlaneLine(HangarFeature hangar, CustomPlaneDef plane)
     {
-        string airframe = hangar.AirframeName(plane.Airframe);
+        string airframe = hangar.AirframeName(hangar.AirframeRowOf(plane));
         return plane.Name == airframe ? airframe : plane.Name + "   " + airframe;
     }
 
@@ -1354,13 +1354,13 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         switch (key)
         {
             case AirframeDropKey:
-                var names = new string[HangarEconomy.Airframes.Length];
+                var names = new string[hangar.AirframeRows];
                 for (int i = 0; i < names.Length; i++)
                 {
                     names[i] = hangar.AirframeName(i);
                 }
 
-                return PricedList(names, hangar.AirframeChosen ? scratch.Airframe : -1,
+                return PricedList(names, hangar.AirframeChosen ? hangar.AirframeRowOf(scratch) : -1,
                     i => hangar.PickAirframe(i), hangar.BillWithAirframe);
             case EngineDropKey:
                 var engines = new string[CustomPlaneDef.EngineNone + 1];
@@ -1477,11 +1477,11 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
         var plane = _hangar.Saved[_inventoryIndex];
         string question = _hangar.Wallet == null
-            ? $"This {_hangar.AirframeShortName(plane.Airframe)} will be removed from your hangar.  {DeleteQuestion}"
-            : _hangar.Strings.Format(700, _hangar.AirframeShortName(plane.Airframe), HangarEconomy.Price(plane).Total.Cost);
+            ? $"This {_hangar.AirframeShortName(_hangar.AirframeRowOf(plane))} will be removed from your hangar.  {DeleteQuestion}"
+            : _hangar.Strings.Format(700, _hangar.AirframeShortName(_hangar.AirframeRowOf(plane)), _hangar.Price(plane).Total.Cost);
         if (question.Length == 0)
         {
-            question = $"Your {_hangar.AirframeShortName(plane.Airframe)} is worth ${HangarEconomy.Price(plane).Total.Cost}. Are you sure you want to sell it?";
+            question = $"Your {_hangar.AirframeShortName(_hangar.AirframeRowOf(plane))} is worth ${_hangar.Price(plane).Total.Cost}. Are you sure you want to sell it?";
         }
 
         _host.RaiseDialog(
@@ -1513,7 +1513,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
             return;
         }
 
-        string name = _hangar.AirframeShortName(_hangar.Saved[_inventoryIndex].Airframe);
+        string name = _hangar.AirframeShortName(_hangar.AirframeRowOf(_hangar.Saved[_inventoryIndex]));
         string message = _hangar.Strings.Format(702, name);
         if (message.Length == 0)
         {
@@ -1784,10 +1784,12 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private void ComposePlanePicture(List<BoardPicture> pictures)
     {
         var hangar = _hangar!;
-        int airframe = hangar.AirframeChosen ? hangar.Scratch.Airframe : FocusedAirframe();
+        // Art is the stock airframe's, a mod row drawing its parent's.
+        int focused = hangar.StockIdOfRow(FocusedAirframe());
+        int airframe = hangar.AirframeChosen ? hangar.Scratch.Airframe : focused;
         if (_host.Screen == OriginalScreen.HangarAirframe || !hangar.AirframeChosen)
         {
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, $"PX_{FocusedAirframe()}_BLUEPRINT.TGA"), PlaneX, PlaneY));
+            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, $"PX_{focused}_BLUEPRINT.TGA"), PlaneX, PlaneY));
             return;
         }
 
@@ -1821,13 +1823,13 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         if (_host.Screen == OriginalScreen.HangarAirframe && _hangarOpen == AirframeDropKey)
         {
             int focus = _host.FocusedRow;
-            if (focus >= 0 && focus < HangarEconomy.Airframes.Length)
+            if (focus >= 0 && focus < hangar.AirframeRows)
             {
                 return focus;
             }
         }
 
-        return hangar.AirframeChosen ? hangar.Scratch.Airframe : null;
+        return hangar.AirframeChosen ? hangar.AirframeRowOf(hangar.Scratch) : null;
     }
 
     // Whether the figures stand on an airframe row the cursor is only previewing. The set-airframe
@@ -1879,17 +1881,19 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         }
 
         var scratch = hangar.Scratch;
-        var stats = HangarEconomy.Airframes[scratch.Airframe];
+        var stats = hangar.ScratchStats;
         string name;
         HangarInfo info;
         switch (_host.Screen)
         {
             case OriginalScreen.HangarAirframe:
                 int airframe = FocusedAirframe();
-                var bare = HangarEconomy.Price(new CustomPlaneDef { Airframe = airframe });
+                var mod = hangar.ModOfRow(airframe);
+                int stockId = hangar.StockIdOfRow(airframe);
+                var bare = HangarEconomy.Price(new CustomPlaneDef { Airframe = stockId, ModAirframe = mod?.Id }, mod);
                 name = hangar.AirframeName(airframe);
                 info = HangarDescriptions.Airframe(
-                    hangar.Strings, airframe, Rating(bare.AgilityStars), Rating(bare.ArmourStars));
+                    hangar.Strings, stockId, Rating(bare.AgilityStars), Rating(bare.ArmourStars), HangarEconomy.StatsFor(stockId, mod));
                 break;
             case OriginalScreen.HangarEngine:
                 int engine = FocusedItem(rows, focus, EngineDropKey) ?? scratch.Engine;
@@ -1968,8 +1972,8 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
         var scratch = hangar.Scratch;
         var bill = hangar.Bill;
-        var stats = HangarEconomy.Airframes[scratch.Airframe];
-        PurchaseLine(page, lines, "PUR_T_AIRFRAME", hangar.AirframeName(scratch.Airframe), bill.Airframe);
+        var stats = hangar.ScratchStats;
+        PurchaseLine(page, lines, "PUR_T_AIRFRAME", hangar.AirframeName(hangar.AirframeRowOf(scratch)), bill.Airframe);
         if (scratch.Engine != CustomPlaneDef.EngineNone)
         {
             PurchaseLine(page, lines, "PUR_T_ENGINE", hangar.EngineName(scratch.Airframe, scratch.Engine), bill.Engine);
@@ -2041,7 +2045,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         if (_inventoryIndex >= 0 && _inventoryIndex < hangar.Saved.Count)
         {
             var plane = hangar.Saved[_inventoryIndex];
-            var bill = HangarEconomy.Price(plane);
+            var bill = hangar.Price(plane);
             if (screen.Widget("HA_P_PILOTPLANE") is { Art.Count: > 0 } icon)
             {
                 layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, icon.Art[0], Math.Max(1, icon.Frames)),

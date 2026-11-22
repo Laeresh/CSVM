@@ -129,6 +129,11 @@ Guns, 3062 Outer Wing Guns, 3073 Rear Turret, …). The turret bitmask lines up 
 titles are turrets: the Hellhound/Brigand/Firebrand/Kestrel slot 3 is the Rear Turret (bit 3),
 the Balmoral's slots 2 and 3 are Nose plus Rear Turret (0x0c).
 
+A plane mod's airframe (CSVM's own, [mod-planes.md](../formats/mod-planes.md), "The hangar") is
+listed after these eleven rows and priced on its parent's row, with two changes: `hangar_capacity`
+replaces the capacity, and a mod that clears its turrets has turret mask 0, so its converted slot
+takes the wing column. Engine rows, slot titles, prose and art stay the parent's.
+
 ## There is no per-airframe slot count
 
 The premise that airframes differ in slot **counts** is disproven at three levels:

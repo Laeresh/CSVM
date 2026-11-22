@@ -1666,7 +1666,7 @@ fields the original derives at commit, which are recomputed rather than stored. 
 screens edit it, `HangarEconomy` prices it and `CustomPlaneStore` persists it without a session.
 `Ammo` and `Ordnance` carry the campaign loadout export in `OwnedPlane`'s own encoding, written
 only by `SetLoadout` and left alone by `Clamp`; `AwaitingExport` is the export gate the plane
-pickers read. Record layout: [../formats/paint.md](../formats/paint.md).
+pickers read. `ModAirframe` is a mod build's string id beside its parent's stock id in `Airframe`; `ModIn` resolves it against a `ModPlanes` (null, with one warning per id, when the mod is not installed) and `FlownNode` is the node the build flies as. Record layout: [../formats/paint.md](../formats/paint.md).
 
 ## src/Flight/Hangar/StockAirframes.cs
 The airframe id 0-10 to `planes.zbd` node table and its inverse, read off `Mech3/AirframeRegistry.cs`'s
@@ -1681,8 +1681,8 @@ its id the folder or zip name, read in name order. `Open` checks `plane.json` (a
 literal overrides, `unlock`, stock `cockpit` and `sound`, a portrait inside the mod, a `tint` whose mask and detail PNGs are in it) and the
 `plane.glb` beside it, and hashes every file by path for multiplayer matching. A mod that fails a
 check, or whose id is a stock node or an earlier mod's, is left out with a warning and listed in
-`Skipped`; `ModPlane.Read` reads a mod's file on demand. `Open` takes the mods folder `--mods=` names in place of `Mods`, and `Skip` leaves out a mod that loaded but failed later (its model, its registration) as a load skip does. `Launch/Launcher.cs` opens `Current` (no `--det` or `--run-tests` run reads the default folder) and grafts each mod's model (`Mech3/ModAirframes.cs`); a session takes a mod's stats from `ModPlane.Stats` and, with no `--loadout=`, its fit from `ModPlane.StockLoadout`. `ModPlane.Stats` is the parent's `PlaneStats` (a bot's on the parent's AI def) with each override set through `PlaneStats.OverrideDefField`, an unknown name warned and ignored, and the turret mounts cleared under `"turrets": []`; `ModPlane.StockLoadout` is the parent's fit with each turret slot a forward gun on its own firepoints.
-Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`.
+`Skipped`; `ModPlane.Read` reads a mod's file on demand. `Open` takes the mods folder `--mods=` names in place of `Mods`, and `Skip` leaves out a mod that loaded but failed later (its model, its registration) as a load skip does. `Launch/Launcher.cs` opens `Current` (no `--det` or `--run-tests` run reads the default folder) and grafts each mod's model (`Mech3/ModAirframes.cs`); a session takes a mod's stats from `ModPlane.Stats` and, with no `--loadout=`, its fit from `ModPlane.StockLoadout`. `ModPlane.Stats` is the parent's `PlaneStats` (a bot's on the parent's AI def) with each override set through `PlaneStats.OverrideDefField`, an unknown name warned and ignored, and the turret mounts cleared under `"turrets": []`; `ModPlane.StockLoadout` is the parent's fit with each turret slot a forward gun on its own firepoints, then `plane.json`'s `loadout` guns and pylons over it through `CustomPlaneBuild.LoadoutFor`; `ModPlanes.StockFitFor` picks that or the stock table's fit by node. `HangarCapacity` is the hangar weight capacity `HangarEconomy.StatsFor` uses.
+Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`, `CSVM.Tests/ModPlaneHangarTests.cs`.
 
 ## src/Flight/Hangar/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
@@ -1700,7 +1700,7 @@ original, so saving over an existing name replaces its file. A missing or malfor
 nothing rather than throwing, since a corrupt save must never break a plane picker. The current
 schema stores paint as the original's index pairs, the first schema still loads and upgrades on
 its next save, and the two optional fields (the exported loadout, the export gate) deliberately did
-not raise the version, both being absent from a file that predates them.
+not raise the version, both being absent from a file that predates them. A mod build's `modAirframe` beside `airframe` follows the same rule, so a stock build's file is unchanged.
 
 ## src/Flight/Hangar/CustomPlaneBuild.cs
 The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and engine-free
@@ -1718,6 +1718,8 @@ tables as data, the per-line cost and weight of everything a build carries, the 
 purchase verdict and the display-only star ratings. Pure, so a build's price resolves session-free.
 The
 verdict covers capacity and engine presence only, because pricing a build never checks funds.
+`StatsFor` is the row a mod build prices on: the parent's, with the mod's `hangar_capacity` and a
+zero turret mask for a mod that clears its turrets.
 Provenance: [../org/hangar.md](../org/hangar.md), "The economy".
 
 ## src/Flight/Hangar/HangarPaintTables.cs

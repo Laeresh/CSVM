@@ -184,6 +184,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// is the only way the question is raised.</summary>
     public const string PlaneConstructionDefaultsAid = "defaults";
 
+    /// <summary>The Plane Construction aid's argument that picks the first plane mod's airframe row
+    /// (<c>--mods=</c>) and stands the airframe list open on it. Without a mod it is the plain hub.</summary>
+    public const string PlaneConstructionModAid = "mod";
+
     /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
     public const string PlanePaintAid = "plane-paint";
 
@@ -783,6 +787,16 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Step(new MenuCommands { Accept = true });
                     _shell.Step(new MenuCommands { MoveY = 1 });
                     _shell.Step(new MenuCommands { Accept = true });
+                    break;
+                case PlaneConstructionAid + ":" + PlaneConstructionModAid:
+                    _shell.OpenHangarTab(OriginalScreen.HangarAirframe, AidPlaneName);
+                    if (host.Features.TryGet<HangarFeature>(out var modded) && modded.IsOpen
+                        && modded.AirframeRows > HangarEconomy.Airframes.Length)
+                    {
+                        modded.PickAirframe(HangarEconomy.Airframes.Length);
+                        _shell.Step(new MenuCommands { Accept = true });
+                    }
+
                     break;
                 case PlaneConstructionAid + ":" + PlaneConstructionOverweightAid:
                     // A build past its airframe's capacity: the lightest airframe carrying every

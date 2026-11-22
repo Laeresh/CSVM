@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Weapons;
+using CSVM.Utils;
 
 namespace CSVM.Flight.Hangar;
 
@@ -78,12 +79,20 @@ public sealed class CustomPlaneDef
     // table loaded and the row's own length is unknown.
     private const int MaxShadeWithoutTable = 9;
 
+    // Mod ids already warned about, so a picker or a price redrawn every frame warns once.
+    private static readonly HashSet<string> MissingMods = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The plane's name. Also its identity in the store: the original saves
     /// <c>Planes\%s</c> and overwrites by name, and our store keeps that contract.</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Airframe id, 0-10 (record +0x2c).</summary>
+    /// <summary>Airframe id, 0-10 (record +0x2c). A plane built on a mod airframe holds the mod's
+    /// parent here, which every int-indexed reader (the stat table, campaign, wire) flies.</summary>
     public int Airframe { get; set; }
+
+    /// <summary>The mod airframe's id (a <see cref="ModPlane.Id"/>), or null for a stock plane. Kept
+    /// as stored whether or not the mod is installed; see <see cref="ModIn"/>.</summary>
+    public string? ModAirframe { get; set; }
 
     /// <summary>Engine id, 0-6 with 6 = none (defaults to none, as an unstarted build has no
     /// engine to fly on).</summary>
@@ -192,6 +201,36 @@ public sealed class CustomPlaneDef
         slot >= 0 && slot < PaintColours.Length
             ? HangarPaintTables.Default.Resolve(PaintColours[slot], PaintShades[slot])
             : default;
+
+    /// <summary>The mod this plane is built on, out of <paramref name="mods"/>, or null for a stock
+    /// plane. A mod that is not installed is null too, so the plane builds as its stored parent
+    /// (<see cref="Airframe"/>). The first such read per id logs a warning.</summary>
+    public ModPlane? ModIn(ModPlanes mods)
+    {
+        if (ModAirframe is not { } id)
+        {
+            return null;
+        }
+
+        if (mods.Find(id) is { } mod)
+        {
+            return mod;
+        }
+
+        lock (MissingMods)
+        {
+            if (MissingMods.Add(id))
+            {
+                Log.Warn("flight", $"custom plane {Name}: mod airframe {id} is not installed, it flies as {StockAirframes.Node(Airframe)}");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The planes.zbd node this plane flies as: its mod's id when <paramref name="mods"/>
+    /// holds it, else its stock airframe's node.</summary>
+    public string FlownNode(ModPlanes mods) => ModIn(mods)?.Id ?? StockAirframes.Node(Airframe);
 
     /// <summary>Picks a slot's colour, resetting its shade to that swatch row's own default. The
     /// reset is the original's (callback 2237 at <c>0x0040d402</c>) and is why picking a colour in

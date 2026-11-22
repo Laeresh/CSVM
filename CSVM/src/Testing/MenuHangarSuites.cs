@@ -31,6 +31,13 @@ internal static class MenuHangarSuites
     private const float FlowedLine = 14f;
     private const float FlowedGlyph = 6f;
 
+    // The hangar-over-a-mod suite's fixture: a Brigand-based mod read from the suite's scratch directory.
+    private const string ModSuite = "menu-original-hangar-mod";
+    private const string HangarModId = "suite_hangar_mod";
+    private const string HangarModName = "Suite Hangar Mod";
+    private const int HangarModParent = 4;
+    private const int HangarModCapacity = 12500;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -123,6 +130,106 @@ internal static class MenuHangarSuites
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-hangar");
+        }
+    }
+
+    [Suite(ModSuite,
+        "Original's Plane Construction hub with a Brigand-based plane mod loaded: the airframe list "
+        + "offers the mod after the eleven stock rows under its plane.json name, picking it builds on "
+        + "the Brigand's id with the mod's id beside it and loads the mod's plane.json loadout, the bill "
+        + "judges weight against the mod's hangar_capacity, the hub writes the mod's name, the commit "
+        + "stores the mod id, and the shared picker roster flies that build as the mod's own node")]
+    internal static void MenuOriginalHangarMod(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, ModSuite);
+        string folder = Path.Combine(ModPlanes.FolderIn(root), HangarModId);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile), $$"""
+            { "name": "{{HangarModName}}", "kind_of": "player_brigand", "hangar_capacity": {{HangarModCapacity}},
+              "loadout": { "guns": [ { "calibre": 60 }, { "calibre": 30 }, { "calibre": 30 }, { "calibre": 30 } ] },
+              "overrides": { "turrets": [] } }
+            """);
+        File.WriteAllText(Path.Combine(folder, ModPlanes.ModelFile), "glb");
+
+        var previous = ModPlanes.Current;
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, ModSuite);
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = store,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        host.AddSeat(seat);
+        try
+        {
+            ModPlanes.Current = ModPlanes.Open(root);
+            ctx.Check(ModPlanes.Current.Find(HangarModId) != null, $"the mod {HangarModId} loads from {folder}");
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var shell = (host.Active as OriginalPresentation)?.Shell;
+            ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");
+            if (shell == null)
+            {
+                return;
+            }
+
+            var hangar = host.Features.Get<HangarFeature>();
+            shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Suite Mod Build");
+            ctx.Check(shell.Screen == OriginalScreen.HangarAirframe && hangar.IsOpen,
+                $"the hub opens on its airframe tab ({shell.Screen})");
+
+            // The list opens on the standing pick; the keyboard walks down to the last row.
+            shell.Step(new MenuCommands { Accept = true });
+            var rows = shell.Rows.Where(r => r.Kind == OriginalRowKind.ListRow).ToList();
+            int modRow = HangarEconomy.Airframes.Length;
+            ctx.Check(rows.Count == modRow + 1 && rows[^1].Label == HangarModName && rows[HangarModParent].Label == hangar.AirframeName(HangarModParent),
+                $"the airframe list offers the mod after the eleven stock rows ({rows.Count} rows, last '{rows.LastOrDefault()?.Label}')");
+            for (int i = hangar.AirframeRowOf(hangar.Scratch); i < modRow; i++)
+            {
+                shell.Step(new MenuCommands { MoveY = 1 });
+            }
+
+            shell.Step(new MenuCommands { Accept = true });
+            var scratch = hangar.Scratch;
+            ctx.Check(scratch.Airframe == HangarModParent && scratch.ModAirframe == HangarModId && hangar.AirframeRowOf(scratch) == modRow,
+                $"picking the row builds on the Brigand's id with the mod's beside it ({scratch.Airframe}, {scratch.ModAirframe})");
+            ctx.Check(scratch.Guns[0] == new GunChoice(3, true) && scratch.Guns.Skip(1).All(g => g == new GunChoice(0, true)),
+                $"and loads the plane.json loadout, a .60 pair and three .30 pairs ({string.Join(", ", scratch.Guns)})");
+            var bill = hangar.Bill;
+            var thirty = HangarEconomy.GunTable[0];
+            ctx.Check(bill.Capacity == HangarModCapacity && bill.Guns[3] == new CostWeight(thirty.WingCost * 2, thirty.WingWeight * 2),
+                $"the bill judges weight against the mod's capacity and prices W4 as a wing gun ({bill.Total.Weight} / {bill.Capacity}, W4 {bill.Guns[3]})");
+            ctx.Check(shell.Compose().Lines.Any(l => l.Text.Contains(HangarModName)),
+                $"the hub writes the mod's name");
+
+            scratch.Name = "Suite Mod Build";
+            ctx.Check(hangar.Commit(), $"the build commits ({hangar.Message})");
+            var saved = store.Load("Suite Mod Build");
+            ctx.Check(saved is { Airframe: HangarModParent, ModAirframe: HangarModId },
+                $"the store holds the mod id beside the parent ({saved?.Airframe}, {saved?.ModAirframe})");
+            var roster = OriginalRosters.Roster(store.List());
+            ctx.Check(roster.Count == OriginalRosters.Airframes.Count + 1 && roster[^1].Node == HangarModId && roster[^1].Custom != null,
+                $"the picker roster flies the build as the mod's node ({roster.LastOrDefault()?.Node})");
+        }
+        finally
+        {
+            ModPlanes.Current = previous;
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, ModSuite);
         }
     }
 

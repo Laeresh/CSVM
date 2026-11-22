@@ -162,11 +162,31 @@ public static class HangarEconomy
     /// nitrous, exactly x1.33. Display-only, like the rating itself.</summary>
     public static readonly double[] EnginePowerFactors = { 0.9, 1.0, 1.1, 1.197, 1.33, 1.463 };
 
-    /// <summary>Prices one build. The def is read as-is; call <see cref="CustomPlaneDef.Clamp"/>
-    /// first if it came from outside the screens.</summary>
-    public static HangarBill Price(CustomPlaneDef def)
+    /// <summary>The stat row a build is priced on: its airframe's, and for a build on a mod airframe
+    /// the parent's row with the mod's <see cref="ModPlane.HangarCapacity"/>. A mod that clears its
+    /// turrets has a zero turret mask, so its converted slot prices and weighs as a wing gun.</summary>
+    public static AirframeStats StatsFor(int airframe, ModPlane? mod)
     {
-        var stats = Airframes[def.Airframe];
+        var stats = Airframes[airframe];
+        return mod == null ? stats : stats with
+        {
+            Capacity = mod.HangarCapacity ?? stats.Capacity,
+            TurretMask = mod.ClearsTurrets ? 0 : stats.TurretMask,
+        };
+    }
+
+    /// <summary><see cref="StatsFor(int, ModPlane)"/> for a build, its mod read from <see cref="ModPlanes.Current"/>.</summary>
+    public static AirframeStats StatsFor(CustomPlaneDef def) => StatsFor(def.Airframe, def.ModIn(ModPlanes.Current));
+
+    /// <summary>Prices one build, its mod (if any) read from <see cref="ModPlanes.Current"/>.</summary>
+    public static HangarBill Price(CustomPlaneDef def) => Price(def, def.ModIn(ModPlanes.Current));
+
+    /// <summary>Prices one build on <paramref name="mod"/>'s stat row (<see cref="StatsFor(int, ModPlane)"/>),
+    /// null for a stock build or a missing mod. The def is read as-is; call <see cref="CustomPlaneDef.Clamp"/>
+    /// first if it came from outside the screens.</summary>
+    public static HangarBill Price(CustomPlaneDef def, ModPlane? mod)
+    {
+        var stats = StatsFor(def.Airframe, mod);
         var engine = EngineLine(def.Airframe, def.Engine);
         var guns = new CostWeight[CustomPlaneDef.GunSlots];
         for (int slot = 0; slot < guns.Length; slot++)

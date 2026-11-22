@@ -251,7 +251,7 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
         else if (Seat0Row() is { } plane)
         {
             // A saved build reads its own loadout over its airframe's stock, as the lobby's does.
-            var stock = _stock()?.ForModel(plane.Node);
+            var stock = _stock() is { } fits ? ModPlanes.Current.StockFitFor(fits, plane.Node) : null;
             var def = stock != null && plane.Custom is { } custom ? CustomPlaneBuild.LoadoutFor(custom, stock) : stock;
             _lobby.ComposePlane(plane.Custom?.Airframe ?? StockAirframes.IdOf(plane.Node) ?? 0, def, layers);
         }

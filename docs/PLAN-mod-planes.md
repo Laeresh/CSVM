@@ -756,7 +756,67 @@ original's banks. <TODO: where the sound is keyed to the airframe>
 
 **⚠ Traps.** <TODO>
 
-## C25 ☐ Hangar builder for mod airframes
+## C25 ☑ Hangar builder for mod airframes
+
+**Landed.** A build on a mod airframe is a `CustomPlaneDef` whose `Airframe` is the parent's stock
+id and whose new `ModAirframe` is the mod's id, so every int-indexed reader (stat table, engine
+rows, art, prose, campaign, wire) reads the parent with no change, and the readers that know mods
+read the id.
+
+- **plane.json.** Two keys, parsed in `ModPlanes.Load` and documented in
+  `docs/formats/mod-planes.md`: `hangar_capacity` (whole lb, 1 to 100000, `ModPlane.HangarCapacity`)
+  and `loadout` with `guns` (exactly four slots W1-W4, each `null` or `{ "calibre": 30|40|50|60|70,
+  "twin": true|false }`, twin by default, `ModPlane.DefaultGuns` as `GunChoice`s) and
+  `hardpoints_per_wing` (0-4, `DefaultHardpointsPerWing`). Any other key, a wrong count or an
+  out-of-range value skips the mod with the reason. The Avenger's default is
+  `[{"calibre": 60}, {"calibre": 30}, {"calibre": 30}, {"calibre": 30}]`.
+- **Default loadout.** `ModPlane.StockLoadout` is the parent's fit with the turret conversion, then
+  the loadout's guns and pylons through `CustomPlaneBuild.LoadoutFor` (the hangar's own join), each
+  part kept from the parent when absent. Flight with no `--loadout=` and the hangar defaults both
+  read it; `ModPlanes.StockFitFor(stock, node)` picks it or the stock table by node (Instant
+  Action's loadout screen, the local lobby's plane panel).
+- **Economy.** `HangarEconomy.StatsFor(airframe, mod)` is the parent's row with `hangar_capacity`
+  and, for `"turrets": []`, turret mask 0, so the converted slot is priced and weighed as a wing
+  gun. `Price(def, mod)` prices on it; `Price(def)` and `StatsFor(def)` read the mod from
+  `ModPlanes.Current`. `HangarDescriptions.Airframe` takes the row for the TURRETS and capacity
+  lines.
+- **Builder.** `HangarFeature` airframe ints are rows: 0-10 stock, 11 + i the i-th mod of `Mods`
+  (else `ModPlanes.Current`). `AirframeRows`, `AirframeRowOf(def)`, `ModOfRow`, `StockIdOfRow`,
+  `Price(def)` and `ScratchStats` are new; `PickAirframe`, the defaults ask, `LoadAirframeDefaults`
+  (mod fit, engine 1, armour off `mod.Stats` so `<zone>_armor` overrides count), the names and every
+  bill take rows. `OriginalHangarScreen` lists `AirframeRows` and draws a mod row with its parent's
+  blueprint and prose under the mod's name. New aid `--menu=plane-construction:mod`.
+- **Store.** `CustomPlaneStore` writes `"modAirframe"` after `"airframe"` only for a mod build, so a
+  stock file is byte for byte as before; no version bump (the loadout block's rule).
+- **Missing mod (D31's rule for custom planes).** `CustomPlaneDef.ModIn(mods)` is null for a mod
+  that is not installed, with one `flight` warning per id; the record keeps its id, and the build
+  flies, prices and lists as the stored parent. `FlownNode(mods)` is the mod id or the parent node.
+- **Pickers.** `PlayerSetupFeature.BuildRoster` (every Original picker through
+  `OriginalRosters.Roster`) and `PlanePickerRoster.Build` fly a mod build as the mod's id. Instant
+  Action's Pilot Plane list matches a build to the feature's stock airframe by its parent
+  (`StockNodeOf`), so the build is pickable and launches on the mod node with its def.
+- **Int-only sites, parent's id.** `CampaignWallet.Purchase` (the profile's `OwnedPlane.Airframe`,
+  so the campaign flies the parent), `IHangarWallet.IsAirframeAvailable` (the parent's availability,
+  D32's `with_parent` default), `CustomPlaneWire.Of` (the wire, lobbies and `SeatFields` see a stock
+  build of the parent), `CustomPlaneBuild.EnginePowerFor` (the parent's engines.json rows, which is
+  the inheritance), the inventory icon and the campaign pages. `CustomPlaneRecord` imports stay
+  stock. The seat picker's silhouette and ratings (`OriginalSeatPlane`) skip a mod node, as before.
+
+Coverage: `CSVM.Tests/ModPlaneHangarTests.cs` (both fields and 16 invalid forms, the Avenger's
+6 x .30 + 2 x .60 forward fit, the capacity and turret-mask pricing, the store round trip, the
+missing-mod fallback, the builder offering, defaulting, committing and reopening a mod build) and
+the `menu-original-hangar-mod` suite (Original's hub with a scratch mod: the list's twelfth row,
+the pick, the loadout, the capacity, the commit and the picker roster). Screenshot:
+`.scratchKeep/mod-planes/c25/builder-avenger.png`, the airframe list open on the E-1C Avenger with
+capacity 12,500 lb and no turret.
+
+The Avenger's weight at 12,500 lb: its default guns, engine tier 2 and the parent's two pylons a
+wing weigh 10,645 lb before armour; all eight pylons weigh 12,565 lb before armour (each armour
+press 20 lb). E41 sets the capacity Decision 33 asks for against those figures.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A mod airframe can be built and customised in the plane builder with its parent's engine
 rows, weapon limits and armor caps, its own slot count and its parent's default loadout. Two

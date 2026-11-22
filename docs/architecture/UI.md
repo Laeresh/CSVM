@@ -19,7 +19,8 @@ offsets, the sentinel substitution for an unused wave slot and each preset's con
 The picker roster rule behind every human plane pick, engine-free so it tests without a menu
 instance: `Build(stock, customs)` lists the stock rows in their given order, then one row per saved
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
-stock node off `Flight/Hangar/StockAirframes.cs`, skipping a campaign plane nobody has exported.
+stock node off `Flight/Hangar/StockAirframes.cs` (a build on a loaded mod airframe the mod's id,
+`CustomPlaneDef.FlownNode`), skipping a campaign plane nobody has exported.
 `IndexOf` is the after-build auto-select's case-blind lookup. Deliberately not `Session.Roster.HumanFieldPlanes`, which answers "which plane does player N
 fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
 `CSVM.Tests/PlanePickerRosterTests.cs`.
@@ -1167,7 +1168,7 @@ availability, the owned builds, purchase and sale); the three starts pick how th
 begins, the per-tab operations clamp and report change, and `Refusal`, `CanCommit`, `Bill` and
 `Commit` are the purchase gate and the write. `LoadStockWeapons` seeds an airframe at rest from its stock fit, whose per-wing pylon counts come off the rig through `Loadout.WingCounts`, so a stock plane's cells are the ones it hangs. It also owns every label the screens write, the wallet
 line, the would-be cost behind the mark on an over-priced row, the name rules, and `Discard`, which
-drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
+drops the build and touches nothing saved. Every airframe it takes is a row of `AirframeRows`: the stock ids 0-10, then each plane mod (`Mods`, else `ModPlanes.Current`), which a pick stores as the mod's id beside its parent's id and whose defaults are `ModPlane.StockLoadout`; `Price` and `ScratchStats` price a build on its mod's row. Economy and strings: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/HangarDescriptions.cs
 What one Plane Construction tab's description box holds, engine-free and presentation-neutral: a
@@ -1673,8 +1674,8 @@ Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats`
 in join order, each bound to the `IMenuInputSource` that claimed it: a claim is one source and one
 seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAircraft` list every
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
-order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
-exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
+order, then one row per saved custom flying its airframe's stock node or its loaded mod's id, a
+campaign plane nobody has exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
 the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit, or a Stunt Flying one with its race toggle on through `InstantActionFeature.BuildExit`, and survive a return from flight. `SeatLimit` is one while a headset or the `--xr-sim` stand-in draws (the launcher sets it), so a second claim is refused and a local Dogfight with no bot row is refused with `VrOneSeat`. It also holds a local Dogfight's map (`MatchChapter`) and mission rules, `MatchOptions` in the network lobby's own shape, opening on its values (`DogfightLobby.OpeningOptions`) and riding a Versus exit as `DogfightLobby.RulesOf` reads them. `Choices`
 and `BuildExit` are the typed result; a networked launch skips the minimum in `Refusal` and `BuildExit` alike, given the one answer the caller gated on. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
