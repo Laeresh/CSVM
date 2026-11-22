@@ -201,6 +201,7 @@ rows).
 - `src/Flight/Airframe/NitroSystem.cs`, the nitro boost lifecycle: the decoded tank, one-shot engage, cutoff, gates and animation edges, engine-free.
 - `src/Flight/Airframe/Headlight.cs`, the Enhanced-only headlight: the pilot's switch, its tap/hold split with the view cycle, and the lazily built `SpotLight3D` at the nose.
 - `src/Flight/Airframe/PlaneCollider.cs`, derives up to 8 plane-frame convex collision hulls from the built model's triangles, with no per-plane data.
+- `src/Flight/Airframe/AutoWreck.cs`, a plane mod's wreck pieces and fire anchors cut from its own mesh by damage zone, when its model ships none.
 - `src/Flight/Airframe/ConvexHull.cs`, an engine-free convex hull over a point cloud: vertices, faces, thickness padding and the point-distance query.
 - `src/Flight/Airframe/CollisionLayers.cs`, the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/Airframe/CollisionDamage.cs`, the original's collision arithmetic: the severity cosine, the damage pair's terms, the camera kick, and the grace windows.

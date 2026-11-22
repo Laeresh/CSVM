@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Cockpit: own, named stock, or parent's
 22. ☑ Paint: base texture, tint mask and decals
-23. ☐ Damage: optional nodes and the auto-wreck
+23. ☑ Damage: optional nodes and the auto-wreck
 24. ☑ Engine sound: parent's or a named stock plane's
 25. ☑ Hangar builder for mod airframes
 26. ☐ Menu art: mod image or cached auto-render
@@ -758,7 +758,49 @@ A network seat sends its livery as pattern, swatch and decal indices (`model-pac
 
 **⚠ Traps.** <TODO: which swatch colour feeds which mask channel>
 
-## C23 ☐ Damage: optional nodes and the auto-wreck
+## C23 ☑ Damage: optional nodes and the auto-wreck
+
+**Landed.** A mod that ships `destroyed` (pieces under the stock names) or `pdpN`/`pdpN_h` nodes uses
+them unchanged: B14's graft already built both, so this item adds nothing on that path. For the rest,
+`Flight/Airframe/AutoWreck.cs` runs in `WorldEffectsFactory.CrashRigBuild.BuildWreck`, for a mod only
+(`ModAirframes.MeshesFor`), before the bind indexes the rig's names. Stock planes never reach it.
+
+- **Pieces.** `AutoWreck.Cut(planeModel, controller.Collider.Parts)` walks the drawn meshes under
+  `healthy` (hidden subtrees and blur discs skipped, as `PlaneCollider.Collect` does) and gives every
+  triangle the zone of the first collider hull holding its centroid, else the nearest hull, mapped
+  through `PlaneDamage.MapStruckPart`, so a piece is exactly the zone a hit there is charged to. The
+  collider's own regions are fuselage, tail and wing, not the four zones; the mapping splits the
+  fuselage at z 0 and the wings by side, as the damage ledger does. `Build()` returns `destroyed >
+  piece1..piece4` = nose, tail, left wing, right wing, each piece's origin on its zone's bounds centre
+  and each mesh a copy of its source's vertex arrays with only that zone's indices and the source's
+  active material (so the livery and repaint reach it). The stock crash and destroy defs bind pieces by
+  name, so the parent's `player_crash_*` and destroy def fling them with no new choreography. The nose
+  is `piece1` because the stock destroy def flies `piece1` on the aircraft's momentum alone while
+  pieces 2 to 4 add their own 1 to 3 m/s (`docs/org/objectMotion.md`).
+- **Fire and smoke.** The parent's defs site them at named nodes, found by a `--debug-anim` probe of
+  the Avenger: `player_crash_default` hangs `large_firetrail` on `piece1`, `piece3`, `piece4` and
+  `call_crash_trails` on `destroyed`; `pdpanel1`..`8` call `gimmeflakes`, `short_firetrail`,
+  `small_fireball(_follow)` and `yellow_sparks_follow` onto `pdp1`..`pdp8`; `player_fuelleak` puts
+  `fuel_trail` and `3040slug_gunhit` on `pdp1`/`pdp3`. Before C23 all of these resolved nothing on the
+  Avenger and landed on the airframe root. The crash fires now ride the pieces, so they start at the
+  zone centres. `AddAnchors(damage.Zones)` adds an empty node under `healthy` at the zone centre for
+  each missing `pdpN` whose `pdpanelN` sits on that zone's ladder (Brigand parent: 1, 2, 6 right wing,
+  3 to 5 left, 7 nose, 8 tail), and for each missing AI-stage anchor (`prop1` nose, `lailer1`,
+  `railer1` wings, `lft_elev`, `rt_elev` tail) and zone name (`nose`, `tail`, `leftwing`,
+  `rightwing`). The Avenger carries the zone and AI names, so it gets the eight `pdpN`.
+- **No torn skin** on a mod without `pdpN`: the stage plays its effects at the anchor and flips nothing.
+- Format: `docs/formats/mod-planes.md`, "Damage". Coverage: the `mod-plane-wreck` suite over a
+  hand-made fuselage, two wings and a fin in the scratch directory (four pieces, each piece's
+  triangles in its own zone and on its own side, all 48 drawn triangles in exactly one piece, every
+  missing anchor at its zone centre, the model's own `nose` kept), plus a second mod whose own
+  `destroyed > piece1` builds from its file. The Avenger probe logs `zones cut from the mesh nose
+  12492, tail 5803, leftwing 2758, rightwing 2758 triangle(s), 8 effect anchor(s) added` and no
+  unresolved retarget left in the crash or damage runs; captures in
+  `Z:\CSVM\.scratchKeep\mod-planes\c23\`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A mod with `pdpanelN` / `destroyed` nodes uses them; one without breaks into its four
 collider regions as wreck pieces, with smoke and fire at the region centres.

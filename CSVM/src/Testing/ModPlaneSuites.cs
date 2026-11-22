@@ -30,6 +30,8 @@ internal static class ModPlaneSuites
     private const string OwnMod = "suite_mod_own_cockpit";
     private const string NamedMod = "suite_mod_named_cockpit";
     private const string ParentMod = "suite_mod_parent_cockpit";
+    private const string WreckId = "suite_mod_wreck";
+    private const string OwnWreckId = "suite_mod_own_wreck";
 
     // Metres: the file keeps float32 positions, so only the glTF round trip separates the two builds.
     private const float Tolerance = 1e-3f;
@@ -275,6 +277,187 @@ internal static class ModPlaneSuites
             modelB.Free();
             modelAi.Free();
         }
+    }
+
+    [Suite("mod-plane-wreck",
+        "a plane mod without the stock destroyed or pdpN nodes breaks into its four damage zones: a hand-made " +
+        "plane.glb of a fuselage, two wings and a fin cuts into piece1..piece4 under destroyed, nose, tail, " +
+        "leftwing and rightwing, each piece's triangles in its own zone and on its own side, every drawn " +
+        "triangle in exactly one piece. Each pdpN the parent's ladders name is added at its zone's centre, and " +
+        "a stock name the model carries is not. A mod that ships a destroyed subtree builds that subtree as is")]
+    internal static void ModPlaneWreck(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        if (planes.FindByName(Parent) == null)
+        {
+            throw new SuiteSkippedException($"{Parent} is not in the aircraft archive");
+        }
+
+        using var textures = new TextureArchive(texturesPath);
+        string root = Path.Combine(ctx.ScratchDir, "mod-plane-wreck");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        foreach (var (id, ownWreck) in new[] { (WreckId, false), (OwnWreckId, true) })
+        {
+            string folder = Path.Combine(ModPlanes.FolderIn(root), id);
+            Directory.CreateDirectory(folder);
+            ctx.Same((long)Error.Ok, (long)WriteWreckFixture(folder, id, ownWreck), $"the {id} fixture's write result");
+        }
+
+        var mods = ModPlanes.Open(root);
+        foreach (string id in new[] { WreckId, OwnWreckId })
+        {
+            var mod = mods.Find(id);
+            ctx.Check(mod != null, $"the mod {id} loads from {root}");
+            if (mod == null)
+            {
+                return;
+            }
+
+            ModAirframes.Add(planes, mod.Id, mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+        }
+
+        var model = Build(planes, textures, WreckId, out var builder);
+        try
+        {
+            ctx.Check(builder.BuildDestroyed(WreckId) == null, $"{WreckId} ships no destroyed subtree");
+            CheckAutoWreck(ctx, model, PlaneStats.Load(ctx.Zrdr, Parent));
+        }
+        finally
+        {
+            model.Free();
+        }
+
+        var own = new PlaneBuilder(planes, textures).BuildDestroyed(OwnWreckId);
+        var piece = own != null ? CockpitTransplant.FindNamed(own, "piece1") : null;
+        ctx.Check(piece != null && Meshes(piece, null).Any(m => m.HasMeta(SceneBuilder.GamezMeshMeta)),
+            $"{OwnWreckId}'s own destroyed subtree builds with its piece1 drawn from the file destroyed={own != null} piece1={piece != null}");
+        own?.Free();
+    }
+
+    private static void CheckAutoWreck(TestContext ctx, Node3D model, PlaneStats stats)
+    {
+        var parts = PlaneCollider.Build(model)?.Parts ?? Array.Empty<PlaneCollider.Part>();
+        ctx.Check(parts.Count > 0, $"the fixture has {parts.Count} collider hulls");
+        var cut = AutoWreck.Cut(model, parts);
+        var destroyed = cut.Build();
+        try
+        {
+            var healthyTris = new List<PlaneCollider.Triangle>();
+            var healthy = CockpitTransplant.FindNamed(model, "healthy")!;
+            PlaneCollider.Collect(healthy, NodeFrame.Under(healthy, model), healthyTris);
+            int total = 0;
+            var centres = new Vector3[AutoWreck.Zones.Length];
+            var means = new float[AutoWreck.Zones.Length];
+            for (int z = 0; z < AutoWreck.Zones.Length; z++)
+            {
+                string zone = AutoWreck.Zones[z];
+                var piece = destroyed.GetNodeOrNull<Node3D>($"piece{z + 1}");
+                var tris = new List<Vector3>();
+                foreach (var mi in piece?.GetChildren().OfType<MeshInstance3D>() ?? Enumerable.Empty<MeshInstance3D>())
+                {
+                    var faces = mi.Mesh.GetFaces();
+                    var xf = piece!.Transform * mi.Transform;
+                    for (int i = 0; i + 2 < faces.Length; i += 3)
+                    {
+                        tris.Add(xf * ((faces[i] + faces[i + 1] + faces[i + 2]) / 3f));
+                    }
+                }
+
+                total += tris.Count;
+                centres[z] = piece?.Position ?? Vector3.Zero;
+                means[z] = tris.Count > 0 ? tris.Average(c => c.Z) : 0f;
+                int stray = tris.Count(c => AutoWreck.ZoneOf(model.Transform * c, parts) != z);
+                bool side = zone switch
+                {
+                    "leftwing" => tris.All(c => c.X < 0f),
+                    "rightwing" => tris.All(c => c.X > 0f),
+                    _ => true,
+                };
+                ctx.Check(tris.Count > 0 && stray == 0 && side,
+                    $"piece{z + 1} is the {zone}: {tris.Count} triangle(s), {stray} outside the zone, on its side={side}");
+            }
+
+            ctx.Same(healthyTris.Count, total, $"triangles in the pieces against the drawn airframe under healthy");
+            ctx.Check(means[0] < means[1], $"the nose piece's triangles lie ahead of the tail's, mean z {means[0]} against {means[1]}");
+
+            var ladder = stats.DestroyableParts.SelectMany(p => p.InjureAnims.Where(e => e.Anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
+                .Select(e => (Node: "pdp" + e.Anim["pdpanel".Length..], Zone: Array.IndexOf(AutoWreck.Zones, p.Name)))).Distinct().ToList();
+            var missing = ladder.Concat(AutoWreck.NamedAnchors.Select(a => (a.Node, Zone: Array.IndexOf(AutoWreck.Zones, a.Zone))))
+                .Where(a => CockpitTransplant.FindNamed(model, a.Node) == null).Distinct().ToList();
+            int added = cut.AddAnchors(stats.DestroyableParts);
+            ctx.Check(ladder.Count > 0 && added == missing.Count && CockpitTransplant.FindNamed(model, "nose")?.GetChildCount() > 0,
+                $"one anchor per missing name, {ladder.Count} pdpN on the parent's ladders among them, and the model's own nose kept added={added} missing={missing.Count}");
+            foreach (var (node, zone) in missing)
+            {
+                var at = CockpitTransplant.FindNamed(model, node);
+                var where = at != null ? NodeFrame.Under(at, model).Origin : Vector3.Inf;
+                ctx.Check(zone >= 0 && Near(where, centres[zone]), $"{node} stands at the {AutoWreck.Zones[Math.Max(zone, 0)]} centre {centres[Math.Max(zone, 0)]}, at {where}");
+            }
+        }
+        finally
+        {
+            destroyed.Free();
+        }
+    }
+
+    // The wreck fixture: a fuselage, two wings outboard of the wing band and a fin, under the stock
+    // zone groups. With ownWreck it also carries destroyed > piece1.
+    private static Error WriteWreckFixture(string folder, string id, bool ownWreck)
+    {
+        File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile), $$"""{ "kind_of": "{{Parent}}" }""");
+        var material = new StandardMaterial3D { ResourceName = "suite_skin" };
+        var top = new Node3D { Name = id };
+        var geometry = Child(top, top, new Node3D { Name = "geometry" });
+        var nearest = Child(top, Child(top, geometry, new Node3D { Name = "healthy" }), new Node3D { Name = "nearest" });
+        foreach (var (zone, size, centre) in new[]
+        {
+            ("nose", new Vector3(1f, 1f, 6f), Vector3.Zero),
+            ("tail", new Vector3(0.1f, 1f, 1f), new Vector3(0f, 1f, 2.5f)),
+            ("leftwing", new Vector3(3f, 0.2f, 1.5f), new Vector3(-3.5f, 0f, 0f)),
+            ("rightwing", new Vector3(3f, 0.2f, 1.5f), new Vector3(3.5f, 0f, 0f)),
+        })
+        {
+            Box(top, Child(top, nearest, new Node3D { Name = zone }), zone + "_mesh", size, centre, material);
+        }
+
+        if (ownWreck)
+        {
+            Box(top, Child(top, geometry, new Node3D { Name = "destroyed" }), "piece1", Vector3.One, Vector3.Zero, material);
+        }
+
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        var err = doc.AppendFromScene(top, state);
+        if (err == Error.Ok)
+        {
+            err = doc.WriteToFilesystem(state, Path.Combine(folder, ModPlanes.ModelFile));
+        }
+
+        top.Free();
+        return err;
+    }
+
+    private static Node3D Child(Node3D owner, Node3D parent, Node3D child)
+    {
+        parent.AddChild(child);
+        child.Owner = owner;
+        return child;
+    }
+
+    private static void Box(Node3D owner, Node3D parent, string name, Vector3 size, Vector3 centre, Material material)
+    {
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, new BoxMesh { Size = size }.GetMeshArrays());
+        mesh.SurfaceSetMaterial(0, material);
+        Child(owner, parent, new MeshInstance3D { Name = name, Mesh = mesh, Position = centre });
     }
 
     // A human rig's build: spinning props, damage panels and the cockpit interior.

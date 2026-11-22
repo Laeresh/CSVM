@@ -10,7 +10,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
 - [Conceptual model](#conceptual-model)
 - [Reference](#reference): [folder and id](#folder-and-id), [`plane.json`](#planejson),
   [overrides](#overrides), [default loadout](#default-loadout), [`plane.glb`](#planeglb),
-  [paint](#paint), [content hash](#content-hash)
+  [paint](#paint), [damage](#damage), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
   [flying a mod](#flying-a-mod), [the hangar](#the-hangar)
 - [Evidence & limits](#evidence--limits)
@@ -159,6 +159,22 @@ its region mask itself and any pattern's colours reach it.
 | Pattern list | The patterns the paint pickers offer and `--paint=random` draws from are those of the airframe whose interior the mod carries (`cockpit`, else `kind_of`); a pattern outside that list still tints the mod with its colours. |
 | Where it applies | Everywhere the airframe is built: the flown aircraft, AI aircraft, a network seat (which sends the livery as pattern, colour and decal indices, so each machine tints from its own copy of the mod), the viewer's livery lab, the damage panels and the wreck. |
 
+### Damage
+
+A stock airframe shows damage through nodes of its model: torn-skin panels `pdpN` with their healthy
+twins `pdpN_h`, which a zone's `injure_anims` ladder flips through `pdpanelN`, and a `destroyed`
+group of wreck pieces `piece1`..`piece4`, which the crash and destroy defs show and fling. Those defs
+are the parent's, and they also site the zone fires and smoke at named nodes: each `pdpanelN` entry
+burns at its `pdpN`, the fuel leak at `pdp1` and `pdp3`, the crash fires at the pieces, and an AI
+plane's damage stages at `prop1`, `lailer1`, `railer1`, `lft_elev` and `rt_elev`.
+
+| Item | Rule |
+|---|---|
+| Own nodes | A model that holds `destroyed` (its pieces named as the stock ones) or `pdpN` / `pdpN_h` nodes, under the stock names, uses them as a stock airframe does. |
+| Auto-wreck | A model with no `destroyed` group breaks into four pieces cut from its own mesh: every drawn triangle under `healthy` goes to the damage zone of the collision hull that holds its centroid (the zone a hit there is charged to), `piece1` the nose, `piece2` the tail, `piece3` the left wing and `piece4` the right wing. Each piece turns about its zone's centre, the centre of its triangles' bounds, and wears the airframe's materials and livery. A zone with no triangles gives an empty piece. |
+| Fire anchors | For each stock anchor the model has no node for, an empty node stands at its zone's centre: `pdpN` at the zone whose ladder names `pdpanelN` (on a Brigand-based mod, `pdp1`, `pdp2` and `pdp6` on the right wing, `pdp3` to `pdp5` on the left, `pdp7` on the nose, `pdp8` on the tail), `prop1` at the nose, `lailer1` and `railer1` at the wings, `lft_elev` and `rt_elev` at the tail, and `nose`, `tail`, `leftwing`, `rightwing` at their own zones. They hang under `healthy`, so they leave with the airframe when the wreck appears. |
+| No panels | Without `pdpN` nodes the damage stages show no torn skin; their fire and smoke still play at the anchors. |
+
 ### Content hash
 
 SHA-256 over every file of the mod, in the ordinal order of their paths, each as its path (lower
@@ -182,11 +198,12 @@ logs `mod planes: N loaded, M skipped from <folder>`.
 `--plane=<id>` flies a loaded mod as `--plane=` flies a stock node, alone or in a `--plane=` list;
 each build logs `HD models: N mesh instance(s) of <id> drawn from its mod's plane.glb`. A reader with
 no data of the mod's own takes its parent's: the camera block, the destroy def, the AI def and, with
-no `--loadout=`, the stock fit (with `"turrets": []` applied). The mod has no wreck pieces or damage
-panels unless its model holds the stock `destroyed` and `pdpN` nodes, a crash then playing the parent's
-destroy def without pieces. Its engine sounds as its parent's, or as `sound`'s plane, flown or as a
-bot; the build logs the loop it chose (`audio: engine=snd_brigandengine ...`). The campaign, bot
-seats and the network wire still list the stock eleven alone.
+no `--loadout=`, the stock fit (with `"turrets": []` applied). A crash plays the parent's defs on the
+mod's own wreck or the auto-wreck ([Damage](#damage)), logging `crash rig '<id>': zones cut from the
+mesh nose N, tail N, leftwing N, rightwing N triangle(s), M effect anchor(s) added`. Its engine sounds
+as its parent's, or as `sound`'s plane, flown or as a bot; the build logs the loop it chose
+(`audio: engine=snd_brigandengine ...`). The campaign, bot seats and the network wire still list the
+stock eleven alone.
 
 ### The hangar
 
@@ -235,6 +252,12 @@ the lobbies carry the build as its parent's stock id.
 - The two hangar fields, the economy over a mod's row, the custom plane file's `modAirframe` and
   the missing-mod fallback are covered by `CSVM.Tests/ModPlaneHangarTests.cs`, and the builder with
   a mod loaded by the `menu-original-hangar-mod` suite.
+- The damage rules are `Flight/Airframe/AutoWreck.cs`, which `Session/World/WorldEffectsFactory.cs`
+  runs for a mod before the crash rig binds. Covered by the `mod-plane-wreck` suite: a hand-made
+  fuselage, two wings and a fin cut into four pieces, each in its own zone and on its own side, with
+  every drawn triangle in exactly one piece; each missing anchor at its zone's centre and the model's
+  own `nose` kept; and a mod's own `destroyed > piece1` built from its file. The anchor names are
+  those the parent's defs logged as unresolved on a mod without them (`--debug-anim`).
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is not
   checked against the campaign.

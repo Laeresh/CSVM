@@ -1478,6 +1478,16 @@ boxes so a hull never moves a cut or a name. Single-sourced: the terrain sweep c
 and `AircraftBody` mounts the same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
 `airframe-hull-coverage` suite measures; `docs/org/weaponRay.md` holds what they present over the mesh.
 
+## src/Flight/Airframe/AutoWreck.cs
+A plane mod's wreck and fire anchors when its model ships no stock `destroyed` subtree or `pdpN`
+panels. `Cut` gives every drawn triangle under `healthy` the zone of the `PlaneCollider` hull holding
+its centroid (`PlaneDamage.MapStruckPart`), so a piece is the zone a hit is charged to. `Build`
+returns `destroyed > piece1..piece4` (nose, tail, left wing, right wing), each piece's origin on its
+zone's centre and drawing that zone's triangles with the source materials, which the stock crash and
+destroy defs fling by name. `AddAnchors` puts an empty node at a zone centre for each stock fire
+anchor the model lacks (`pdpN` from the ladders, the AI-stage names). `WorldEffectsFactory`'s wreck
+step calls both for a mod only. Format: [../formats/mod-planes.md](../formats/mod-planes.md).
+
 ## src/Flight/Airframe/ConvexHull.cs
 A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds
 and volume, plus `Contains` and the point-to-surface `Distance` the fuse and blast passes ask for.
