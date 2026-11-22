@@ -72,7 +72,7 @@ distributed, because the plan's deliverable is the mechanism, not that plane.
 | 29 | Avenger size | **Canon size from the aircraft review the user supplied (`tmp/avenger/1932 Grumman E1-C Avenger - Google Docs.pdf`): span 38'5" (11.71 m), length 24'10" (7.57 m)**, a uniform 0.867 scale of the model; the pilot keeps human size |
 | 30 | Avenger guns | **6 × .30 and 2 × .60 by default**, so the Brigand's empty W3 (upper nose, fp3/4) carries a .30 pair; this needs a default-loadout field in plane.json, built in C25 |
 | 31 | Avenger speed | **250 mph (about 112 m/s) as `fd_speed`**, the review's figure |
-| 32 | Avenger armour | **The Brigand's zone armour redistributed by the review's ratios** (nose 50, each wing 60 as lead + tail, tail 30), so the nose is the toughest zone; the literal `<zone>_armor` values are set in E41. Range (+50 % fuel) is not adopted |
+| 32 | Avenger armour | **The Brigand's zone armour total (105) redistributed by the review's ratios, one facing per wing**: nose 50, each wing 30, tail 30 of 140, giving nose 37.5, each wing 22.5, tail 22.5, so the nose is the toughest zone. Summing a wing's lead and tail facings (60) would have made the wings outrank the nose. Range (+50 % fuel) is not adopted |
 | 33 | Hangar weight capacity | **plane.json may override the hangar's weight capacity (lb), built in C25**; the Avenger's value, set in E41, lets its default 6 × .30 + 2 × .60 guns, its armour and all eight hardpoints fit (the Brigand's 11,015 lb overflows by about 130 lb before armour with eight rockets) |
 
 ## Ground rules
@@ -1303,6 +1303,23 @@ gameplay and must not.
 # Wave E, the Avenger as the first mod
 
 ## E41 ☐ Package the Avenger as a local mod and fly it through every surface
+
+**Landed.** The Avenger is the local mod `<dataRoot>/Mods/Planes/avenger_e1c/` (gitignored by
+`/Mods/`): `plane.glb` exported from Blender with the root named after the id, the tint mask and
+detail map, and a `plane.json` of `kind_of` `player_brigand`, `cockpit` `player_warhawk`,
+overrides `fd_speed` 111.76 (250 mph, Decision 31), `nose_armor` 37.5, `tail_armor` 22.5,
+`leftwing_armor` and `rightwing_armor` 22.5 (Decision 32), `"turrets": []`, `hangar_capacity`
+13500 (the default guns and all eight pylons weigh 12,565 lb, the 105 armour 420 lb more), the
+loadout `[60, 30, 30, 30]` (2 × .60 and 6 × .30, Decision 30) and the `tint` block. It loads with
+no skip and no override warning. Headless evidence per surface: free flight, cockpit and viewer
+(`.scratchKeep/mod-planes/e41`), liveries (`c22`), the hangar builder and menu art (`c25`, `c26`),
+damage and crash (`c23`), the campaign (`d31`), a bot seat (`d33`), a two-process network session
+(`d34`). The A7 preview pack is no longer needed.
+
+**Verified.** <pending: the user at the controls (surfaces deflecting, both props, handling, the
+Warhawk cockpit, liveries, the hangar, a crash)>
+
+**Original approach (kept for reference).**
 
 **Goal.** The Avenger loads from `<dataRoot>/Mods/Planes/<id>/` with Brigand physics, the Fury's
 `fd_speed`, the Warhawk's cockpit, `"turrets": []`, its tint mask live, and flies in free flight,

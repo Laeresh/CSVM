@@ -253,4 +253,4 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\scripts\RunTests.ps1`**;
 
-Active plan: [`docs/PLAN-mod-planes.md`](docs/PLAN-mod-planes.md), next item A1.
+Active plan: [`docs/PLAN-mod-planes.md`](docs/PLAN-mod-planes.md), owed: the user's at-the-controls checks for A7 and E41.
