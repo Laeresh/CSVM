@@ -427,15 +427,21 @@ find a valid ICU package installed on the system". `sandbox\LinuxRelease.ps1` ch
 this writes (see "The Linux release check in WSL" below), and `PublishRelease.ps1` publishes
 it beside the zip ("Publishing a release").
 
-**`-MacOS`** is opt-in the same way and experimental: no Mac has run the build. It exports the
-`macOS` preset headless into `.scratch\export-macos\CSVM.zip`, a universal `CSVM.app` (arm64 and
-x86_64, with one self-contained .NET runtime per architecture in
-`Contents/Resources/data_CSVM_macos_*/`) that Godot's built-in signer ad-hoc signs, which is the
-least Apple Silicon runs. It is not notarized, so the README tells the player to clear the
-quarantine flag with `xattr`. The script appends the payload (`packaging/MANIFEST.md`'s macOS
-table) to Godot's zip, because Godot's zip writer is the one here that records Unix modes; .NET's
-append marks every entry as made on Windows, so the script sets each central directory record's
-host byte back to Unix, without which a Mac unpacks the executable without its execute bit. ⚠ Godot
+**`-MacOS`** is opt-in the same way and experimental. It exports the `macOS` preset headless into
+`.scratch\export-macos\CSVM.zip`, a universal `CSVM.app` (arm64 and x86_64, with one
+self-contained .NET runtime per architecture in `Contents/Resources/data_CSVM_macos_*/`). Apple
+Silicon runs nothing without at least an ad-hoc signature. ⚠ Godot's built-in signer writes the
+DER entitlements blob in a form the kernel cannot parse, so the app passes `codesign --verify` and
+is still killed at exec (exit 137). The script therefore unpacks Godot's zip into
+`.scratch\export-macos-stage\` and re-signs `CSVM.app` ad-hoc with `rcodesign` (pinned by
+SHA-256, installed by hand into `tools\rcodesign\`), with the hardened runtime and the .NET
+entitlements in `packaging/macos-entitlements.plist`. Ad-hoc signing needs no Apple account. The
+app is not notarized, so the README tells the player to clear the quarantine flag with `xattr`.
+The script zips the signed app with the payload (`packaging/MANIFEST.md`'s macOS table), copying
+each file's Unix mode from Godot's zip, because Godot's zip writer is the one here that records
+them. .NET's writer marks every entry as made on Windows, so the script sets each central
+directory record's host byte back to Unix, without which a Mac unpacks the executable without its
+execute bit. ⚠ Godot
 builds the bundle in `<temp>\CSVM` and zips that whole folder, where test suites leave files, so the
 export runs with `TEMP` pointed at a fresh folder and the script refuses a zip holding anything
 outside `CSVM.app/`. The preset has no Shader Baker, since baking Metal pipelines needs a Metal

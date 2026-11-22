@@ -41,16 +41,17 @@
     which is why the Linux download is a tarball.
 
     -MacOS is opt-in the same way: it exports the "macOS" preset, which Godot writes as a zip
-    holding an ad-hoc signed universal CSVM.app, adds the macOS payload to that zip's root and
-    moves it to CSVM-v<version>-macos.zip. Godot's zip is the archive because it is the one
-    writer here that records the executable bits a Mac needs.
+    holding a universal CSVM.app, re-signs the app ad-hoc with rcodesign and zips it with the
+    macOS payload as CSVM-v<version>-macos.zip. Godot's zip is the record of the Unix modes the
+    new zip copies, because it is the one writer here that records the executable bits a Mac needs.
 
 .PARAMETER Linux
     Also export the Linux build and package the .tar.gz. Needs the Linux export templates
     and a WSL Debian distro with tar (docs/tooling.md, "-Linux").
 
 .PARAMETER MacOS
-    Also export the macOS build and package its zip. Needs the macos.zip export template.
+    Also export the macOS build and package its zip. Needs the macos.zip export template and the
+    pinned rcodesign.exe in tools\rcodesign\.
 
 .EXAMPLE
     .\scripts\ExportRelease.ps1
@@ -147,6 +148,14 @@ $MacReleaseFiles = @(
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE";         Dest = "LICENSE"; Lf = $true },
     @{ Source = $MacThirdPartyNotices;                           Dest = "LICENSE-thirdparty.txt"; Lf = $true }
 ) + $WebRtcLicences
+$MacStageDir = Join-Path $RepoRoot ".scratch\export-macos-stage"
+# Godot's built-in signer writes DER entitlements a Mac's kernel cannot parse, so it kills the app at
+# exec (exit 137) while codesign --verify passes. rcodesign writes Apple's encoding. The pin is the
+# exe's SHA-256 inside the release's x86_64-pc-windows-msvc zip.
+$Rcodesign       = Join-Path $ToolsRoot "tools\rcodesign\rcodesign.exe"
+$RcodesignSha256 = "4763D9E8A66A01A5CFF91AD77071EC8A7032F2EBD103BA78FCCDDAB397BB5DEA"
+$RcodesignUrl    = "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-pc-windows-msvc.zip"
+$MacEntitlements = Join-Path $RepoRoot "packaging\macos-entitlements.plist"
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -232,6 +241,10 @@ if ($MacOS) {
     if (-not (Test-Path (Join-Path $TemplateDir "macos.zip"))) {
         throw "macOS export template not found at $TemplateDir\macos.zip -- the one-time template " +
             "install above must include the macos.zip file of the .tpz."
+    }
+    if (-not (Test-Path $Rcodesign) -or (Get-FileHash $Rcodesign -Algorithm SHA256).Hash -ne $RcodesignSha256) {
+        throw "rcodesign 0.29.0 not found at $Rcodesign (or its SHA-256 differs from the pin) -- " +
+            "one-time setup: extract rcodesign.exe from $RcodesignUrl into that folder."
     }
     foreach ($file in $MacReleaseFiles) {
         if (-not (Test-Path $file.Source)) {
@@ -360,6 +373,7 @@ if ($Linux) {
 }
 if ($MacOS) {
     Clear-StagingDir $MacExportDir
+    Clear-StagingDir $MacStageDir
 }
 
 Write-Host "Building CSVM..." -ForegroundColor Cyan
@@ -572,7 +586,7 @@ try {
 Write-Host "Exported to $ExportExe" -ForegroundColor Green
 Write-Host "Packaged  $ZipPath ($($entries.Count) files)" -ForegroundColor Green
 
-# .NET's Update mode rewrites every entry's "version made by" host as Windows, and a Mac's unzip then
+# .NET's zip writer records every entry's "version made by" host as Windows, and a Mac's unzip then
 # ignores the Unix modes, so CSVM.app's executable would unpack without its execute bit. Each central
 # directory record's host byte is set back to 3 (Unix); every entry carries a Unix mode. No ZIP64:
 # the signature check throws on an archive this walk cannot read.
@@ -595,9 +609,8 @@ function Set-ZipMadeByUnix([string] $Path) {
     [System.IO.File]::WriteAllBytes($Path, $bytes)
 }
 
-# The macOS half. Godot's zip is kept and the payload appended in Update mode, which copies the
-# existing entries' compressed bytes and Unix modes, so CSVM.app keeps its signature; the host byte
-# is restored after. The checks read the two files they need out of the zip.
+# The macOS half. The checks read the two files they need out of Godot's zip; the app is then
+# re-signed in an unpacked copy, since rcodesign signs folders, and zipped again with Godot's modes.
 if ($MacOS) {
     # Godot builds the bundle in <temp>\CSVM and zips that whole folder, so anything else there (test
     # suites write into %TEMP%\CSVM) would ship. The export gets a temp folder of its own.
@@ -642,27 +655,40 @@ if ($MacOS) {
     $macWebRtc = Get-WebRtcInfo $checkDir $macLibrary "/"
     Remove-Item $checkDir -Recurse -Force
 
-    Copy-ReleaseFiles $MacReleaseFiles $MacExportDir
-    Write-BuildInfo (Join-Path $MacExportDir "BUILD-INFO.txt") `
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($MacExportZip, $MacStageDir)
+    & $Rcodesign sign --code-signature-flags runtime --entitlements-xml-path $MacEntitlements (Join-Path $MacStageDir "CSVM.app")
+    if ($LASTEXITCODE -ne 0) {
+        throw "rcodesign could not sign $MacStageDir\CSVM.app (exit $LASTEXITCODE)."
+    }
+    Copy-ReleaseFiles $MacReleaseFiles $MacStageDir
+    Write-BuildInfo (Join-Path $MacStageDir "BUILD-INFO.txt") `
         "CSVM.app, with the .NET runtimes in Contents/Resources/data_CSVM_macos_*/" "`n" `
         $macWebRtc.Info $macWebRtc.Licence
 
-    $macPrefix = (Get-Item $MacExportDir).FullName.TrimEnd("\") + "\"
-    $macPayload = @(Get-ChildItem $MacExportDir -Recurse -File | Where-Object { $_.FullName -ne $MacExportZip })
-    $macZip = [System.IO.Compression.ZipFile]::Open($MacExportZip, "Update")
+    $macModes = @{}
+    $macZip = [System.IO.Compression.ZipFile]::OpenRead($MacExportZip)
     try {
-        foreach ($file in $macPayload) {
+        foreach ($entry in $macZip.Entries) { $macModes[$entry.FullName] = $entry.ExternalAttributes }
+    } finally {
+        $macZip.Dispose()
+    }
+    if (Test-Path $MacZipPath) { Remove-Item $MacZipPath -Force }
+    $macPrefix = (Get-Item $MacStageDir).FullName.TrimEnd("\") + "\"
+    $macFiles = @(Get-ChildItem $MacStageDir -Recurse -File)
+    $macZip = [System.IO.Compression.ZipFile]::Open($MacZipPath, "Create")
+    try {
+        foreach ($file in $macFiles) {
             $relative = $file.FullName.Substring($macPrefix.Length).Replace("\", "/")
             $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($macZip, $file.FullName, $relative, "Optimal")
-            $entry.ExternalAttributes = 0x81A4 -shl 16  # Unix mode 0100644, a plain readable file
+            # A file Godot did not write is payload: Unix mode 0100644, a plain readable file.
+            $entry.ExternalAttributes = if ($macModes.ContainsKey($relative)) { $macModes[$relative] } else { 0x81A4 -shl 16 }
         }
     } finally {
         $macZip.Dispose()
     }
-    Set-ZipMadeByUnix $MacExportZip
-    Move-Item $MacExportZip $MacZipPath -Force
+    Set-ZipMadeByUnix $MacZipPath
 
-    Write-Host "Packaged  $MacZipPath (CSVM.app and $($macPayload.Count) files)" -ForegroundColor Green
+    Write-Host "Packaged  $MacZipPath ($($macFiles.Count) files, CSVM.app signed by rcodesign)" -ForegroundColor Green
     Write-Host "SHA-256   $((Get-FileHash $MacZipPath -Algorithm SHA256).Hash.ToLower())" -ForegroundColor Green
 }
 

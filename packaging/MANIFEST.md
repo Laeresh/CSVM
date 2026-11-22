@@ -56,10 +56,11 @@ the archive before it reports success.
 
 ## macOS zip (experimental)
 
-`ExportRelease.ps1 -MacOS` exports the `macOS` preset into `.scratch\export-macos\`, appends the
-rows below to the zip Godot wrote, and moves it to `.scratch\CSVM-v<version>-macos.zip`. It is
-the tarball's payload with the macOS README and notices, text files staged LF. Every entry is
-marked Unix-made: `0755` for the executables Godot marked, `0644` for the appended rows. No SDL2:
+`ExportRelease.ps1 -MacOS` exports the `macOS` preset into `.scratch\export-macos\`, re-signs
+`CSVM.app` with `rcodesign` and `packaging/macos-entitlements.plist`, and zips it with the rows
+below as `.scratch\CSVM-v<version>-macos.zip`. It is the tarball's payload with the macOS README
+and notices, text files staged LF. Every entry is marked Unix-made: `0755` for the executables
+Godot marked, `0644` for the rows below. No SDL2:
 the build reads flight sticks through Homebrew's `libSDL2-2.0.0.dylib` when the player installed
 it (`docs/tooling.md`, "SDL2 for flight sticks").
 
