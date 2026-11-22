@@ -574,7 +574,57 @@ Turret mounts are `stats.TurretMounts` (`TurretController.cs:279`).
 so the Avenger's upgraded top speed is not the Fury's upgraded one. That follows from Decision 3
 and is expected.
 
-## B14 ☐ Build a mod plane from its GLB
+## B14 ☑ Build a mod plane from its GLB
+
+**Landed.** The mod's model is grafted into planes.zbd rather than given a build path of its own, so
+every reader that takes a plane node (markers, `PlaneCollider`, the hit body, gauges, the crash rig,
+the livery lookups, the viewer) reads a mod as a stock airframe with no change of its own.
+`Mech3/ModAirframes.cs` `Add(planes, id, cockpitFrom, glb)` parses `plane.glb` through
+`HdModelMeshes` (under the held key `planes/<id>/<id>`, `HdModels.Holding`) and appends one gamez
+node per glTF node at its own transform under a root named the id, a meshed node carrying its
+triangles (original winding, `HdModelMeshes.ReversedSurfaces`) under one untextured material. A lone
+scene root named the id or a stock node (an export's `player_brigand`) stands for the root. A file
+with no `cockpit1` under its root gets a copy of `plane.json`'s `cockpit`, else the parent's interior,
+meshes shared, which `PlaneBuilder` mounts at the mod's `cockpit_camera`; that settles most of C21,
+which keeps the own-`cockpit1` check. `GameZ.TablesGrew` drops the lazy maps the append outgrows.
+Drawing goes through the model pack path: `SceneBuilder.OwnMeshes` (set by `PlaneBuilder` from
+`ModAirframes.MeshesFor` on the airframe, interior and stereo body builders) replaces the pack, so
+each node draws the file's mesh by the root-file rule and the pack's material rules, with the gamez
+twin under `GamezMeshMeta` for the gameplay readers. A user's HD pack never reaches a mod's meshes;
+its `planes/<id>/rig.json` does.
+
+- **Launch.** `Launcher` opens `ModPlanes.Current = ModPlanes.Open(dataRoot, folder)` beside the
+  model packs, the folder being `--mods=<folder>` (new, `docs/cli.md`) or `Mods`, and none under
+  `--det` or `--run-tests` unless the flag names one. `BindGameData` (each game data bind, the source
+  picker's included) calls `BindModPlanes`: `ModAirframes.Add` per mod, then
+  `AirframeRegistry.Shared.Register` once; an `InvalidDataException` (the model does not import, the
+  id is taken) or `ArgumentException` goes through the new `ModPlanes.Skip(mod, reason)`, which logs
+  it and lists it in `Skipped`. The `--vs-bot` check still runs at parse, before registration, so a
+  mod there flies as Random (D33).
+- **Stats and fit.** `GameSession.StatsFor` takes `mod.Stats(zrdr)` and `AiStatsFor`
+  `mod.Stats(zrdr, forAi: true, aiDef)` for a mod id; `InspectionLabs` (the viewer's damage lab) takes
+  `mod.Stats` too. `HumanFlightAdapter` binds `mod.StockLoadout(stock)` with no `--loadout=`.
+- **Fallbacks for later items.** Camera block and destroy def through `StockNodeOf` (B12); AI stats
+  through the parent's AI def; no wreck pieces or damage panels without `destroyed`/`pdpN` nodes
+  (`BuildDestroyed` returns null and the crash plays without pieces, C23); the parent's engine sound
+  through the def (C24); the painter reads its skin prefix off the copied interior's decal textures
+  (the Brigand's `bri`), so the file's surfaces named after that airframe's skins wear the livery and
+  every other material is fixed paint (C22); the hangar, menus, saves, campaign, bots and the wire still
+  list the stock eleven (C25, C26, D31 to D34). `AiFlightAssembler` builds a mod by node unchanged.
+- **Gitignore.** `/Mods/` beside `/HDModels/`.
+- Format: `docs/formats/mod-planes.md`, "`plane.glb`" and "Flying a mod". Coverage:
+  `CSVM.Tests/ModAirframesTests.cs` (the graft), `HdModelsTests.AHeldModelAnswersOnlyItsOwnKey`,
+  `SessionSpecParserTests.TheModsFolderFlagParses`, and the `mod-plane-build` suite: the Brigand's
+  flight build exported into the scratch directory and wrapped as a mod with `fd_speed` 123.5 and
+  `"turrets": []`, grafted into `ctx.PlanesCopy()`; every drawn mesh outside the interior comes from
+  the file, 1315 visible triangles, 15 hulls, 8 surfaces, 2 props, 17 weapon markers, the reference
+  markers and the cockpit camera match the Brigand, and the fit binds 4 hardpoints with every gun group
+  firing forward. Probes over the same files (`--mods=<scratch>\Mods --plane=suite_mod_plane`) flew C1
+  in chase and cockpit view with guns firing, crashed with `--crash=30`, and opened `--viewer`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** `PlaneBuilder` builds a mod airframe from its GLB with control surfaces, props, markers
 and colliders working as on a stock plane.

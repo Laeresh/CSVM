@@ -302,13 +302,15 @@ public sealed class PlaneBuilder
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
         EnsurePainter(root);
-        // Every node under the root resolves its model pack replacement under this airframe.
+        // Every node under the root resolves its model pack replacement under this airframe, a plane
+        // mod's from its own file.
         _scene.HdAirframe = rootName;
+        _scene.OwnMeshes = ModAirframes.MeshesFor(rootName);
         int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(root, Skip)!;
         if (_scene.ReplacedMeshCount > replacedBefore)
         {
-            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {rootName} drawn from the model pack");
+            Log.Info("world", $"HD models: {_scene.ReplacedMeshCount - replacedBefore} mesh instance(s) of {rootName} drawn from {(_scene.OwnMeshes != null ? "its mod's plane.glb" : "the model pack")}");
         }
 
         FlareChoice? flares = null;
@@ -383,6 +385,7 @@ public sealed class PlaneBuilder
         if (found == null)
             return null;
         _scene.HdAirframe = rootName;
+        _scene.OwnMeshes = ModAirframes.MeshesFor(rootName);
         int replacedBefore = _scene.ReplacedMeshCount;
         var built = _scene.BuildSubtree(found.Value.Node, _ => false);
         if (built != null)
@@ -563,6 +566,7 @@ public sealed class PlaneBuilder
             // interior and a bare file does not. Its replacements are this builder's own, which bakes the interior's bias.
             _interiorScene.HdAirframe = _scene.HdAirframe;
             _interiorScene.HdAirframeKeysOnly = true;
+            _interiorScene.OwnMeshes = _scene.OwnMeshes;
             // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.
             _interiorScene.NoShadowReceive = body;
             if (body)
@@ -676,6 +680,7 @@ public sealed class PlaneBuilder
 
         _stereoBodyScene = AirframeScene(raceGhost: false, stereo: true);
         _stereoBodyScene.HdAirframe = _scene.HdAirframe;
+        _stereoBodyScene.OwnMeshes = _scene.OwnMeshes;
         if (_stereoBodyScene.BuildSubtree(root, Skip) is not { } copy)
         {
             return;

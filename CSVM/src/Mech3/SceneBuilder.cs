@@ -446,6 +446,10 @@ public sealed class SceneBuilder
     /// key. The cockpit interior sets it, so a world pack's generic <c>g366.glb</c> leaves every cockpit alone.</summary>
     internal bool HdAirframeKeysOnly;
 
+    /// <summary>The meshes this builder replaces from in place of the model pack's: a plane mod's own
+    /// file (<see cref="ModAirframes.MeshesFor"/>). Null reads the pack. Set before building.</summary>
+    internal HdModelMeshes? OwnMeshes;
+
     /// <summary>Nodes that draw their gamez model whatever the model pack offers, the world's
     /// terrain and backdrop (<see cref="WorldBuilder"/>). Asked only for a node the pack has a key
     /// for. Null keeps none.</summary>
@@ -1824,9 +1828,9 @@ void light() {{
     private ArrayMesh? Replacement(GameZNode node, int meshIndex, bool forceDoubleSided, bool forceLit,
         bool clutterFade = false)
     {
-        if (HdModels.Current.Count == 0 || (HdChapter == null && HdAirframe == null))
+        if ((OwnMeshes == null && HdModels.Current.Count == 0) || (HdChapter == null && HdAirframe == null))
             return null;
-        var shared = HdModelMeshes.Current;
+        var shared = OwnMeshes ?? HdModelMeshes.Current;
         // A failed import is null and draws the gamez model; an empty one draws nothing.
         if (Imported(node, shared) is not { } imported || shared.SurfacesOf(imported) is not { } surfaces)
             return null;
@@ -1851,19 +1855,19 @@ void light() {{
         int steps = 0;
         for (var scope = _gamez.ParentOf(node); scope != null && steps++ < _gamez.Nodes.Count; scope = _gamez.ParentOf(scope))
         {
-            if (PackKey(scope.Name) != null
+            if (PackKey(shared.Models, scope.Name) != null
                 && shared.Scoped(scope.Name, path, node.Name, HdChapter, HdAirframe, owned ??= DescendantNames(node).ToList()) is { } scoped)
                 return scoped;
             path.Insert(0, scope.Name);
         }
-        return PackKey(node.Name) != null
+        return PackKey(shared.Models, node.Name) != null
             ? shared.For(node.Name, HdChapter, HdAirframe, owned ?? DescendantNames(node))
             : null;
     }
 
-    // The key HdModelMeshes resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
-    private string? PackKey(string name) =>
-        HdModels.Current.KeyFor(name, HdChapter, HdAirframe) is { } key
+    // The key `models` resolves for a name under this builder's scope, or null where HdAirframeKeysOnly refuses it.
+    private string? PackKey(HdModels models, string name) =>
+        models.KeyFor(name, HdChapter, HdAirframe) is { } key
         && (!HdAirframeKeysOnly || key.StartsWith($"planes/{HdAirframe?.ToLowerInvariant()}/", StringComparison.Ordinal))
             ? key : null;
 

@@ -6,6 +6,8 @@
 /HD/
 # HD model packs dropped in for HdModels (models.hd's default folder): third-party or game-derived meshes.
 /HDModels/
+# Plane mods dropped in for ModPlanes (Mods/Planes): third-party airframes, never committed.
+/Mods/
 # Sound packs dropped in for HdSounds (sounds.hd's default folder): third-party or game-derived recordings.
 /HDSounds/
 # Subtitle tables (Subtitles.cs's default folder): transcripts of the game's voice lines.

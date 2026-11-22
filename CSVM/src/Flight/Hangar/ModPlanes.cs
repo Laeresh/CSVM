@@ -174,6 +174,9 @@ public sealed class ModPlanes
     /// <summary>The mod's model, at its top. A mod without it is skipped.</summary>
     public const string ModelFile = "plane.glb";
 
+    /// <summary>The mods folder under the data root, the one <c>--mods=</c> replaces.</summary>
+    public const string DefaultFolder = "Mods";
+
     private const string TurretsKey = "turrets";
 
     private ModPlanes(IReadOnlyList<ModPlane> planes, IReadOnlyList<SkippedMod> skipped)
@@ -191,15 +194,17 @@ public sealed class ModPlanes
     /// <summary>The mods left out, in name order, each with its reason.</summary>
     public IReadOnlyList<SkippedMod> Skipped { get; }
 
-    /// <summary>The folder under the data root that mods are read from.</summary>
-    public static string FolderIn(string dataRoot) => Path.Combine(dataRoot, "Mods", "Planes");
+    /// <summary>The folder under the data root, or under the mods folder <paramref name="mods"/>
+    /// (relative to the data root unless rooted), that plane mods are read from.</summary>
+    public static string FolderIn(string dataRoot, string mods = DefaultFolder) => Path.Combine(dataRoot, mods, "Planes");
 
-    /// <summary>The mods under <paramref name="dataRoot"/>; empty when the folder is absent.</summary>
-    public static ModPlanes Open(string dataRoot)
+    /// <summary>The mods under <paramref name="dataRoot"/>, or under the mods folder <paramref name="mods"/>
+    /// (<c>--mods=</c>); empty when the folder is absent.</summary>
+    public static ModPlanes Open(string dataRoot, string mods = DefaultFolder)
     {
         var planes = new List<ModPlane>();
         var skipped = new List<SkippedMod>();
-        string dir = FolderIn(dataRoot);
+        string dir = FolderIn(dataRoot, mods);
         if (!Directory.Exists(dir))
         {
             return new(planes, skipped);
@@ -236,6 +241,15 @@ public sealed class ModPlanes
     /// <summary>The mod whose id is <paramref name="id"/>, matched without case, or null.</summary>
     public ModPlane? Find(string id) =>
         Planes.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>These mods with <paramref name="plane"/> left out and listed in <see cref="Skipped"/>, for
+    /// a mod that loaded but failed later (its model, its registration). Logs it as a load skip does.</summary>
+    public ModPlanes Skip(ModPlane plane, string reason)
+    {
+        Log.Warn("flight", $"mod plane {plane.Id} skipped: {reason} ({plane.Source})");
+        return new(Planes.Where(p => !ReferenceEquals(p, plane)).ToList(),
+            Skipped.Append(new SkippedMod(plane.Id, plane.Source, reason)).ToList());
+    }
 
     // A path inside a mod as its files are keyed: slashes, lower case.
     internal static string PathKey(string path) => path.Replace('\\', '/').ToLowerInvariant();

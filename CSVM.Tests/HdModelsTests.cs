@@ -46,6 +46,21 @@ public class HdModelsTests
         Assert.Null(model.GltfPath);
     }
 
+    /// <summary>A held model (a plane mod's file) answers its own airframe key alone, from memory.</summary>
+    [Fact]
+    public void AHeldModelAnswersOnlyItsOwnKey()
+    {
+        var bytes = Encoding.UTF8.GetBytes("glb");
+        var held = HdModels.Holding("planes/mymod/mymod", new HdModel(bytes, true, null));
+
+        Assert.Equal(1, held.Count);
+        Assert.Equal("planes/mymod/mymod", held.KeyFor("MyMod", airframe: "MyMod"));
+        Assert.Null(held.KeyFor("nose", airframe: "mymod"));
+        Assert.Null(held.KeyFor("mymod"));
+        Assert.Same(bytes, held.For("mymod", airframe: "mymod")!.Value.Bytes);
+        Assert.Null(held.RigFor("mymod"));
+    }
+
     /// <summary>A clump tile's files are read under their whole path and count as no replacement. No node
     /// resolves to one, not even a node named like the file, and any other <c>.png</c> is ignored.</summary>
     [Fact]

@@ -1270,6 +1270,10 @@ public sealed record SessionSpec
     /// config.json names.</summary>
     public bool NoHdModels { get; private set; }
 
+    /// <summary><c>--mods=</c>: the mods folder in place of <c>Mods</c>, under the data root unless rooted;
+    /// its <c>Planes</c> folder holds the plane mods. Empty reads none. Null when absent.</summary>
+    public string? Mods { get; private set; }
+
     /// <summary><c>--hd-sounds=</c>: the sound pack folder, under the data root unless rooted. Empty
     /// reads no pack. Null when absent, which leaves config.json's <c>sounds.hd</c>.</summary>
     public string? HdSounds { get; private set; }
@@ -1867,6 +1871,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--shader-list=")) { s.ShaderList = arg["--shader-list=".Length..]; }
             else if (arg.StartsWith("--hd-models=")) { s.HdModels = arg["--hd-models=".Length..]; }
             else if (arg == "--no-hd-models") { s.NoHdModels = true; }
+            else if (arg.StartsWith("--mods=")) { s.Mods = arg["--mods=".Length..]; }
             else if (arg.StartsWith("--hd-sounds=")) { s.HdSounds = arg["--hd-sounds=".Length..]; }
             else if (arg.StartsWith("--mod-folder=")) { s.ModFolder = arg["--mod-folder=".Length..]; }
             else if (arg.StartsWith("--city-ground=")) { s.CityGround = arg["--city-ground=".Length..]; }

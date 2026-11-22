@@ -230,7 +230,8 @@ internal sealed class InspectionLabs
         if (spec.Viewer)
         {
             mark = StartupProfile.Mark();
-            var stats = PlaneStats.Load(state.Zrdr, spec.PlaneName);
+            var stats = Flight.Hangar.ModPlanes.Current.Find(spec.PlaneName) is { } mod
+                ? mod.Stats(state.Zrdr) : PlaneStats.Load(state.Zrdr, spec.PlaneName);
             StartupProfile.Record("zrdr", mark);
             if (stats.DestroyableParts.Count == 0)
             {
