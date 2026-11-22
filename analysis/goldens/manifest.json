@@ -72,7 +72,7 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "404285e4c4c933e9a87f990a712a61ee",
+      "hash": "5a6553646e9e62b970ed1c1957e7c912",
       "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
       "release": true,
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
@@ -80,7 +80,7 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "d583cc168c94135fe4c34317d2c09ffc",
+      "hash": "69da2dd292b380eb595f10cdc4b4af77",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD, including the heading tape's uncapped ends, hem and rim fade; frame-sensitive 12.21 %, and renders with extracted/ absent.",
       "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
@@ -124,7 +124,7 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "d125f993030514e6ba88d48e6cf243fd",
+      "hash": "954fbd2c99fa2ac84d2db45dfe8e8652",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "release": true,
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
@@ -132,7 +132,7 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "8fb2f6e9531a22a252a6a1840c4f210f",
+      "hash": "439d16568537b88b5b93fe9b1e8a5920",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "release": true,
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
@@ -274,7 +274,7 @@
     {
       "name": "stage-markers-xr-sim",
       "frame": 45,
-      "hash": "7e8a0f55d390c97182c043cb66ef13c8",
+      "hash": "931d5ef183a7329675bcc7106fc6f73b",
       "exercises": "Stereo flight markers over the empty stage: the pipper, the selected Fury's box, label and debug tag on cards at world depth in both eyes, the off-view Kestrel on the head ring, the HUD panel's dials; frame-sensitive 42.40 %.",
       "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury:pos=-186/322/-167,player_kestrel:pos=200/300/-223", "--target=ai1_player_fury", "--debug-markers", "--hold=0,0,0,0.6", "--xr-sim=eye=640x720,fov=60", "--det", "--mute"]
@@ -290,7 +290,7 @@
     {
       "name": "stage-race-ghost-xr-sim",
       "frame": 60,
-      "hash": "0f29631ff50b40857efa72a363dd77ba",
+      "hash": "57caa708abd7b7b3a6a97a9fd5ba4839",
       "exercises": "The race ghost in stereo: the flown aircraft dithered as a full ghost in the rigid chase over the empty stage, each eye's pattern shifted to the surface's depth so it carries the aircraft's disparity; frame-sensitive 26.66 %.",
       "release": true,
       "args": ["--stage=empty", "--plane=player_bhawk", "--pos=0,300,0", "--direction=-0.743,0,-0.669", "--view=chase", "--hold=0,0,0,0.6", "--debug-race-ghost", "--xr-sim", "--det", "--mute"]
@@ -298,7 +298,7 @@
     {
       "name": "c1-spyglass-xr-sim",
       "frame": 60,
-      "hash": "81d429449cb172418caab3404078153e",
+      "hash": "fc9e7646344d0e6f945e1af4711220be",
       "exercises": "The spyglass on the stand-in headset, the head turned 70 degrees off a Fury ahead: one mono picture of it on a disc on the head ring, inside its arrow and label, in both eyes over C1; frame-sensitive 39.14 %.",
       "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6144,600,-6144", "--direction=-0.743,0,-0.669", "--view=nose", "--ai=player_fury", "--target=ai1_player_fury", "--hold=0,0,0,0.6", "--xr-sim=yaw=-70,eye=640x720,fov=70", "--det", "--mute"]
