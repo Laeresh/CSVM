@@ -44,6 +44,10 @@ public sealed partial class HangarPreviewStage : SubViewport
     private const float DragRate = 0.012f;
     private const float StickDeadzone = 0.2f;
 
+    // Set once every stock airframe has been built and drawn here in this process. Their shaders
+    // stay with ShaderTwins and Godot keeps each shader's pipelines, so no later pick compiles any.
+    private static bool _warmed;
+
     private readonly GameZ _planes;
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _patterns;
@@ -55,6 +59,8 @@ public sealed partial class HangarPreviewStage : SubViewport
     private readonly List<Node3D> _rockets = new();
     private PlaneBuilder? _builder;
     private Node3D? _model;
+    private Node3D? _warm;
+    private int _warmSteps;
     private float _radius = 5f;
     private float _portSide = -1f;
 
@@ -121,8 +127,15 @@ public sealed partial class HangarPreviewStage : SubViewport
     /// <summary>The rocket bodies hanging now, one per opened pylon.</summary>
     public IReadOnlyList<Node3D> Rockets => _rockets;
 
+    /// <summary>True from the warm-up's build until the step after its one drawn frame. The picture
+    /// holds every stock airframe at once meanwhile, so the board must not show it.</summary>
+    public bool Warming => _warm != null;
+
     /// <summary>How many times the paint went on without a rebuild.</summary>
     public int Repaints { get; private set; }
+
+    /// <summary>Whether a stage has warmed the stock airframes in this process.</summary>
+    internal static bool Warmed => _warmed;
 
     /// <summary>The stage over <paramref name="data"/>'s planes and its first chapter's skins and
     /// rocket, or null without planes. The first open decodes that chapter's archives, which is what
@@ -182,6 +195,15 @@ public sealed partial class HangarPreviewStage : SubViewport
     /// in authored pixels, and every pad's right stick orbits too. The camera then takes its pose.</summary>
     public void Step(float dt, float dragX, float dragY)
     {
+        // The warm-up's frame has drawn by the second step after it.
+        if (_warm != null && ++_warmSteps > 1)
+        {
+            _stand.RemoveChild(_warm);
+            _warm.QueueFree();
+            _warm = null;
+            RenderTargetUpdateMode = UpdateMode.WhenVisible;
+        }
+
         float stickX = 0f, stickY = 0f;
         foreach (int pad in Bindings.Pads.For(null))
         {
@@ -225,6 +247,7 @@ public sealed partial class HangarPreviewStage : SubViewport
         }
 
         long start = Stopwatch.GetTimestamp();
+        int made = ShaderTwins.Made;
         string node = pose.Node;
         try
         {
@@ -244,7 +267,45 @@ public sealed partial class HangarPreviewStage : SubViewport
         Hang(pose);
         Frame();
         Log.Info("ui",
-            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, radius {_radius:0.0} m");
+            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, {ShaderTwins.Made - made} shader(s) made, radius {_radius:0.0} m");
+        if (!_warmed)
+        {
+            Warm(pose);
+        }
+    }
+
+    // Builds every other stock airframe once beside the shown one, in the pose's paint. All draw in
+    // one frame the board does not show (Warming). That one pause as the hub opens makes their
+    // shaders and compiles their pipelines, so a later pick does not stall the menu (#407).
+    private void Warm(HangarPreviewPose pose)
+    {
+        long start = Stopwatch.GetTimestamp();
+        int made = ShaderTwins.Made;
+        _warmed = true;
+        _warmSteps = 0;
+        _warm = new Node3D { Name = "warm" };
+        _stand.AddChild(_warm);
+        foreach (string node in StockAirframes.Nodes)
+        {
+            if (node == pose.Node)
+            {
+                continue;
+            }
+
+            try
+            {
+                _warm.AddChild(new PlaneBuilder(_planes, _textures, scheme: pose.Paint(), patterns: _patterns).Build(node));
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.IO.InvalidDataException)
+            {
+                Log.Warn("ui", $"hangar preview: {node} does not build, so its first view compiles its shaders: {e.Message}");
+            }
+        }
+
+        // The board does not draw the picture while it warms, so WhenVisible would skip the frame.
+        RenderTargetUpdateMode = UpdateMode.Once;
+        Log.Info("ui",
+            $"hangar preview: warmed {_warm.GetChildCount()} more airframe(s) in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, {ShaderTwins.Made - made} shader(s) made");
     }
 
     // Moves the model so its bounds' middle is the stand's origin. Then reads the radius the camera

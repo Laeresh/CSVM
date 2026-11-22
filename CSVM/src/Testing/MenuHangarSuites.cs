@@ -189,8 +189,14 @@ internal static class MenuHangarSuites
             Press(host, seat, Back);
 
             Utils.GraphicsMode.Set(true);
+            bool warmedBefore = HangarPreviewStage.Warmed;
             shell.OpenHangarTab(OriginalScreen.HangarAirframe, ScratchName());
+            // Open, then build (and warm, once per process), then show.
             host.Tick(1f / 60f);
+            host.Tick(1f / 60f);
+            ctx.Check(presentation.PlanePreview?.Warming == !warmedBefore
+                && presentation.View?.LivePictures.ContainsKey(OriginalHangarScreen.LivePictureName) == false,
+                $"the first build warms every stock airframe in a frame the board does not draw ({presentation.PlanePreview?.Warming}, warmed before {warmedBefore})");
             host.Tick(1f / 60f);
             var stage = presentation.PlanePreview;
             var board = shell.Compose();
@@ -213,11 +219,14 @@ internal static class MenuHangarSuites
                 $"the stage builds the hub's airframe {node} ({stage.Model?.Name})");
 
             var built = stage.Model;
+            int made = Mech3.ShaderTwins.Made;
             Press(host, seat, Accept);
             Press(host, seat, Down);
             int focused = shell.Hangar.Preview?.Airframe ?? -1;
             ctx.Check(focused >= 0 && focused != hangar.Scratch.Airframe && stage.Shown?.Airframe == focused && stage.Model != built,
                 $"the open airframe list's focused row {focused} is what the stage rebuilds ({stage.Shown?.Airframe})");
+            ctx.Check(Mech3.ShaderTwins.Made == made,
+                $"and the warmed rebuild makes no shader ({Mech3.ShaderTwins.Made - made} made)");
             Press(host, seat, Back);
 
             shell.OpenHangarTab(OriginalScreen.HangarHardpoints, ScratchName());
