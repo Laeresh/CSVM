@@ -876,13 +876,13 @@ on the machine where the input landed, and no machine names a skipper from anoth
 ## The start barrier
 
 Every machine holds its flight on its load screen until every machine flying a seat has built its
-world, and then all of them start (`Net/NetStartGate.cs`). The original has no counterpart. The
-word is a session message: it is sent only once the sender's handlers stand, so it never waits in
-the lobby.
+world, and then all of them start (`Net/NetStartGate.cs`). The barrier's words are the remake's
+own. The word is a session message: it is sent only once the sender's handlers stand, so it never
+waits in the lobby.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start) | word at 4 (loaded 1, start 2, hold 3), round at 5, two reserved bytes (8 bytes) |
+| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start, count) | word at 4 (loaded 1, start 2, hold 3, count 4), round at 5, the count's players loaded at 6 and players in all at 7, 0 in every other word (8 bytes) |
 
 Each host flight takes a round, 1 to 255, that the flight before it on the same process did not.
 Once its own world is built, the host sends hold under that round to every machine it waits on.
@@ -898,6 +898,27 @@ under the round it kept. While a machine holds, its clock takes no step: the
 mission clock, the AI, the director and the world events wait with the aeroplanes, and only the
 link and the clock ping are stepped. The host-owned world therefore sends nothing to a guest
 before that guest's world can apply it, unless the wait gave up on that guest.
+
+**The waiting line.** A machine whose own world is built keeps its load screen up while it holds,
+and writes "Waiting for other players (n/m)" onto it a letter at a time
+(`UI/Screens/LoadBoard.cs`). `n` counts the human seats whose machines have built their worlds
+and `m` every human seat still linked; a bot seat loads with its host and is not counted. The host
+counts its own, and broadcasts count under its round whenever a held tick moves the count, so every
+guest writes the host's numbers; a guest writes the line without a count until the first one
+arrives. None goes out with the hold, since every guest it reaches is still loading and its own
+loaded word moves the count, and a two-seat flight sends none at all: the one loaded word opens it.
+A host on a build without the count word (0.8.0 and earlier) never sends one, so a newer guest
+under it writes the line without a count for the whole hold. Builds of one MAJOR.MINOR share a
+lobby, so this is the 0.8.0 host with a 0.8.1 guest. An older guest ignores the count word, which
+matches none of the start words it acts on, and holds as it always did.
+The words fill the original's own waiting row: `MSG_MP_WAITING` (id 7062), "Waiting for %1", is
+the only waiting string `messages.json` carries, and `FUN_004972c0` pushes its id at `0x004974bd`.
+There, while its start flag `DAT_00628f14` is set, it formats the row with the name at `+0x10` of
+the first entry in the player list at `DAT_0071c150` that `FUN_00499d80` reports as not ready,
+and hands the text to `FUN_004588e0`. The remake fills the name slot with "other players" and the
+count instead, since a player who finished first wants to know how many are still loading rather
+than who is first in the list. The slot's filler is English in every language; the row around it
+is the install's own.
 
 ## Stunt race
 

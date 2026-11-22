@@ -135,6 +135,7 @@ public partial class Launcher : Node3D
     // the frames since the request and the build runs on the first one that proves a frame rendered.
     // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
     private CanvasLayer? _loadLayer;
+    private UI.Screens.LoadBoard? _loadBoard;
     private int _launchFramesWaited = -1;
     // This is the load screen's second half. Once the session is built, the work it ordered for the
     // load is carried out one step a frame with the screen still up. That is what makes the screen
@@ -1253,7 +1254,7 @@ public partial class Launcher : Node3D
 
             // A network flight waiting for its other machines keeps the screen up, since its world
             // stands still until they have all loaded.
-            if (_session is { StartHeld: true })
+            if (_session is { } held && HoldLoadBoard(_loadBoard, held, _paths.Data.Messages))
             {
                 _startHeldFrames++;
                 return;
@@ -1386,6 +1387,7 @@ public partial class Launcher : Node3D
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
+        _loadBoard = board;
     }
 
     private void HideLoadScreen()
@@ -1397,15 +1399,30 @@ public partial class Launcher : Node3D
         RemoveChild(_loadLayer);
         _loadLayer.QueueFree();
         _loadLayer = null;
+        _loadBoard = null;
     }
 
-#pragma warning disable SA1202
+#pragma warning disable SA1202, SA1204
     // The two load-screen calls for the suite that pins the replace rule. A --run-tests launch
     // builds no session, so nothing else would stand a board on this node. Kept beside them.
     internal void ShowLoadScreenForTest() => ShowLoadScreen(false, null);
 
     internal void HideLoadScreenForTest() => HideLoadScreen();
-#pragma warning restore SA1202
+
+    /// <summary>One frame of the load screen held for the other machines: the waiting line with the
+    /// count in, rewritten from the session. False once the start is no longer held, the frame the
+    /// launcher takes the screen down. Internal for the suite that drives a held start.</summary>
+    internal static bool HoldLoadBoard(UI.Screens.LoadBoard? board, GameSession session, Mech3.Messages messages)
+    {
+        if (!session.StartHeld)
+        {
+            return false;
+        }
+
+        board?.Wait(UI.Screens.LoadScreens.WaitingText(messages, session.Wire.StartTally));
+        return true;
+    }
+#pragma warning restore SA1202, SA1204
 
     // Instantiates this launch's session node from the current _spec and
     // the persistent references, and runs its build. Returns the build's verdict; on false the
@@ -1709,11 +1726,16 @@ public partial class Launcher : Node3D
         string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
         // A build tears the load screen down before anything renders, so a shot needs a door that
         // leaves it standing. The arguments: a campaign mission, an Instant Action mission type,
-        // or a Dogfight's chapter and mode letter.
+        // or a Dogfight's chapter, mode letter and a held start's count.
         if (aid.StartsWith("loadboard-mp", System.StringComparison.Ordinal))
         {
             var (chapter, letter) = LaunchBoards.MultiplayerDoor(aid);
             ShowLoadScreen(false, null, briefing: UI.Screens.LoadScreens.MultiplayerKey(chapter, letter));
+            if (LaunchBoards.WaitingDoor(aid) is { } count && _loadBoard is { } board)
+            {
+                board.Wait(UI.Screens.LoadScreens.WaitingText(_paths.Data.Messages, count));
+                board.Chalk(double.MaxValue);
+            }
         }
         else if (aid.StartsWith("loadboard-campaign", System.StringComparison.Ordinal))
         {

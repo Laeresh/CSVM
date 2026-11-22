@@ -182,6 +182,7 @@ public static class SuiteCatalog
         "net-seats",
         "net-soak",
         "net-spawn-rotation",
+        "net-start-board",
         "net-start-together",
         "net-team-deathmatch",
         "net-two-session",

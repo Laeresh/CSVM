@@ -151,6 +151,11 @@ internal sealed class SessionNet
     /// start-held and only the wire is stepped.</summary>
     public Net.NetStartGate? StartGate { get; private set; }
 
+    /// <summary>The players whose machines have built their worlds, and every player still in the
+    /// flight, while its start is held. A host counts its own; a guest takes the host's count, so it
+    /// is null there until the first count arrives.</summary>
+    public (int Loaded, int Total)? StartTally { get; private set; }
+
     /// <summary>AI aircraft and world pools over the wire, null outside a network match.</summary>
     public NetWorldLink? World { get; private set; }
 
@@ -315,6 +320,8 @@ internal sealed class SessionNet
             {
                 SendHold(peer);
             }
+
+            SendCount(gate, net, send: false);
         }
         else if (!gate.Open)
         {
@@ -339,6 +346,11 @@ internal sealed class SessionNet
         gate.Step(delta);
         if (!gate.Open)
         {
+            if (Link is { IsHost: true } counting)
+            {
+                SendCount(gate, counting);
+            }
+
             return false;
         }
 
@@ -1121,6 +1133,10 @@ internal sealed class SessionNet
         {
             gate.TakeStart(word.Round);
         }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Count && gate.Current(word.Round))
+        {
+            StartTally = (word.Loaded, word.Total);
+        }
     }
 
     // Under the round this guest heard, 0 before any hold word reached it. The host takes only
@@ -1131,6 +1147,41 @@ internal sealed class SessionNet
         {
             net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded, gate.Round), Net.NetChannels.Events);
         }
+    }
+
+    // The host's count over every human seat still linked, those of machines still loading left
+    // out of the loaded. Sent only when it moves, so a repeated loaded word sends nothing.
+    // ⚠ Send none at the hold: no guest has loaded to read it, and a two-seat start must stay one word.
+    private void SendCount(Net.NetStartGate gate, Net.NetSession net, bool send = true)
+    {
+        var linked = net.Peers;
+        int loaded = 0;
+        int total = 0;
+        foreach (var seat in Seats)
+        {
+            if (seat.IsBot || (!seat.FlownHere && !linked.Contains(seat.PeerId)))
+            {
+                continue;
+            }
+
+            total++;
+            loaded += gate.Waiting.Contains(seat.PeerId) ? 0 : 1;
+        }
+
+        if (StartTally == (loaded, total))
+        {
+            return;
+        }
+
+        StartTally = (loaded, total);
+        if (!send)
+        {
+            return;
+        }
+
+        net.Broadcast(
+            new Net.StartGateMessage(Net.NetStartWord.Count, gate.Round, (byte)Math.Min(loaded, byte.MaxValue), (byte)Math.Min(total, byte.MaxValue)),
+            Net.NetChannels.Events);
     }
 
     private void SendHold(int peer)

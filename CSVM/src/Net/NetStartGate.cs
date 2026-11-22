@@ -19,6 +19,10 @@ public enum NetStartWord : byte
     /// to a loaded word under another round. A guest answers it with loaded under that round.
     /// </summary>
     Hold = 3,
+
+    /// <summary>The host's count of the players whose machines have built their worlds, out of
+    /// every player. Sent to every guest whenever it changes while the start is held.</summary>
+    Count = 4,
 }
 
 /// <summary>Why a <see cref="NetStartGate"/> opened, <see cref="Held"/> while it has not.</summary>
@@ -46,9 +50,11 @@ public enum NetStartRelease
 /// <summary>
 /// One word of the start barrier, which the lobby passes to a bound session. It names the round of
 /// its host's flight (<see cref="NetStartGate.Round"/>, 0 for none). A guest sends it
-/// only once its handlers stand, so the host's answer is never unknown.
+/// only once its handlers stand, so the host's answer is never unknown. Only a
+/// <see cref="NetStartWord.Count"/> carries <paramref name="Loaded"/> and <paramref name="Total"/>.
 /// </summary>
-public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0) : INetMessage<StartGateMessage>
+public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0, byte Loaded = 0, byte Total = 0)
+    : INetMessage<StartGateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4;
@@ -68,7 +74,9 @@ public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0
             return false;
 
         var word = (NetStartWord)reader.ReadByte();
-        message = new StartGateMessage(word, reader.ReadByte());
+        byte round = reader.ReadByte();
+        byte loaded = reader.ReadByte();
+        message = new StartGateMessage(word, round, loaded, reader.ReadByte());
         return true;
     }
 
@@ -78,7 +86,8 @@ public readonly record struct StartGateMessage(NetStartWord Word, byte Round = 0
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte((byte)Word);
         writer.WriteByte(Round);
-        writer.WriteUInt16(0);
+        writer.WriteByte(Loaded);
+        writer.WriteByte(Total);
         return writer.Close();
     }
 }

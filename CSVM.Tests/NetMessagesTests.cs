@@ -1398,6 +1398,13 @@ public class NetMessagesTests
             Assert.Equal(201, buffer[5]);
         }
 
+        var count = new StartGateMessage(NetStartWord.Count, 201, 3, 4);
+        count.Write(buffer);
+        Assert.True(StartGateMessage.TryRead(buffer, out var counted));
+        Assert.Equal(count, counted);
+        Assert.Equal(3, buffer[6]);
+        Assert.Equal(4, buffer[7]);
+
         Assert.Equal(0x5B, (int)NetMessageType.StartGate);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.StartGate));
 

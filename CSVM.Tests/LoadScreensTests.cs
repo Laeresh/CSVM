@@ -193,6 +193,37 @@ public class LoadScreensTests
         }
     }
 
+    /// <summary>A held start's line is the original's waiting row with the other players and the
+    /// count in its name slot. Before a count arrives it has none. It is written over the board
+    /// in an overlay, leaving the board's own lines as they were.</summary>
+    [Fact]
+    public void AHeldStartWritesTheWaitingRowWithTheCountOverTheBoard()
+    {
+        var messages = Messages.ParseExtracted(
+            "{\"entries\": [{\"key\": \"MSG_MP_WAITING\", \"id\": 7062, \"value\": \"Waiting for %1\"}]}");
+        Assert.Equal("Waiting for other players (2/4)", LoadScreens.WaitingText(messages, (2, 4)));
+        Assert.Equal("Waiting for other players", LoadScreens.WaitingText(messages, null));
+
+        var still = LoadScreens.For(false, "FREE FLIGHT", null, ZrdrSet.None, new Messages(), pumped: true);
+        var written = LoadScreens.Written(still, false, "Waiting");
+        Assert.Equal(still.Lines, written.Lines);
+        Assert.Equal(still.Overlays.Count + 1, written.Overlays.Count);
+        var line = Assert.Single(written.Overlays[^1].Lines);
+        Assert.Equal("Waiting", line.Text);
+        Assert.Equal("Viner Hand ITC", line.Face?.Family);
+        Assert.Equal(BoardInk.Heading, line.Ink);
+        Assert.True(line.Y > 300f, $"an empty lower board takes the line in its band ({line.Y})");
+
+        // A board whose rows fill the band takes the line on the column heads' row instead.
+        var full = new ComposedBoard(
+            still.Pictures, still.Strokes,
+            still.Lines.Append(new BoardLine("row", 360f, 373f, 400f, 13f, BoardInk.Row)).ToArray(),
+            still.Plaques);
+        var heads = LoadScreens.Written(full, false, "Waiting").Overlays[^1].Lines[0];
+        Assert.True(heads.Y < 100f && heads.Size < line.Size, $"heads row at {heads.Y}, {heads.Size} px");
+        Assert.NotEqual(line.Y, LoadScreens.Written(still, true, "Waiting").Overlays[^1].Lines[0].Y);
+    }
+
     /// <summary>The chart sheet under a build draws one propeller at every frame of its script's
     /// cycle. The cycle element is left out, and every other scripted picture stays. The still
     /// capture keeps its one first frame.</summary>

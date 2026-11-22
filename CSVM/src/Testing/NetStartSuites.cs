@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Spec;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -31,6 +33,12 @@ internal static class NetStartSuites
     // How far an aeroplane may drift and still count as standing still, in metres.
     private const float StillMetres = 0.01f;
 
+    // The waiting board's field: a host and two guests, one human seat each.
+    private const int BoardField = 3;
+
+    // Longer than any waiting line takes to chalk on, in seconds.
+    private const double ChalkSeconds = 4.0;
+
     [Suite("net-start-together",
         "a Dogfight host and guests in one process whose guests build late: the host's mission "
         + "clock and aeroplane stand still while a guest is still loading, and start together "
@@ -47,6 +55,91 @@ internal static class NetStartSuites
         }
         finally
         {
+            ambient.Restore();
+        }
+    }
+
+    [Suite("net-start-board",
+        "a Dogfight host and two guests in one process, loading one after another: each machine "
+        + "already loaded writes the waiting line onto its load board a letter at a time, with the "
+        + "count of players in out of all three, under a closed load gate; the count moves as the "
+        + "first guest loads, rewriting only the count, and reaches that guest's board too; once "
+        + "the last guest has loaded, every machine takes its board down")]
+    internal static void WaitingBoard(TestContext ctx)
+    {
+        var spec = NetCombatSuites.MatchSpec(ctx, out _);
+        var ambient = NetCombatSuites.Ambient.Save();
+        var mesh = LoopbackTransport.Mesh(BoardField, LoopbackConditions.Perfect, new Random(4305));
+        mesh[1].Disconnect(2);
+        var ends = new List<NetCombatSuites.Ends>();
+        var boards = new List<LoadBoard>();
+        var messages = ctx.Data.Messages;
+        try
+        {
+            ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(BoardField, spec)));
+            ctx.Check(ends[0].Built, $"[board] the host builds ({ends[0].Built})");
+            if (!ends[0].Built)
+            {
+                return;
+            }
+
+            Stand(ctx, boards, 1);
+            string oneIn = LoadScreens.WaitingText(messages, (1, BoardField));
+            Hold(ends, boards, messages, 1);
+            string first = boards[0].Written;
+            Hold(ends, boards, messages, StepsOf(0.3));
+            string partway = boards[0].Written;
+            ctx.Check(first.Length == 0 && partway.Length > 0 && partway.Length < oneIn.Length && oneIn.StartsWith(partway, StringComparison.Ordinal),
+                $"[board] the host's line is chalked on a letter at a time: none on the first frame, a beginning of it 0.3 s on ('{first}', '{partway}')");
+            Hold(ends, boards, messages, StepsOf(ChalkSeconds));
+            Written(ctx, boards, oneIn);
+
+            if (!Loads(ctx, spec, mesh, ends, boards))
+            {
+                return;
+            }
+
+            string twoIn = LoadScreens.WaitingText(messages, (2, BoardField));
+            int shared = 0;
+            while (shared < oneIn.Length && shared < twoIn.Length && oneIn[shared] == twoIn[shared])
+            {
+                shared++;
+            }
+
+            int shortest = Hold(ends, boards, messages, StepsOf(ChalkSeconds), watched: 1);
+            ctx.Check(shortest >= shared && shortest < twoIn.Length,
+                $"[board] the count moving rewrites only the count on the host's written line: it never falls below the {shared} letters the two lines share, and it is rewritten ({shortest} at the least)");
+            Written(ctx, boards, twoIn);
+
+            if (!Loads(ctx, spec, mesh, ends, boards))
+            {
+                return;
+            }
+
+            int released = -1;
+            var sessions = ends.Select(e => e.Session).ToArray();
+            for (int step = 0; step < ReleaseSteps && released < 0; step++)
+            {
+                Step(1, sessions);
+                released = sessions.Any(s => Launcher.HoldLoadBoard(null, s, messages)) ? -1 : step;
+            }
+
+            ctx.Check(released >= 0,
+                $"[board] once the last guest has loaded, every machine takes its board down within {ReleaseSteps} steps ({released})");
+        }
+        finally
+        {
+            foreach (var board in boards)
+            {
+                ctx.Host.RemoveChild(board);
+                board.QueueFree();
+            }
+
+            for (int i = ends.Count - 1; i >= 0; i--)
+            {
+                ends[i].Close();
+            }
+
             ambient.Restore();
         }
     }
@@ -162,6 +255,72 @@ internal static class NetStartSuites
         session.Wire.Link is { LocalSeat: >= 0 } link && link.LocalSeat < session.SeatRigs.Count
             ? session.SeatRigs[link.LocalSeat].Controller
             : null;
+
+    // The next guest builds, and every machine without a board yet stands one. False when the
+    // guest did not build.
+    private static bool Loads(
+        TestContext ctx, SessionSpec spec, IReadOnlyList<LoopbackTransport> mesh, List<NetCombatSuites.Ends> ends, List<LoadBoard> boards)
+    {
+        int guest = ends.Count;
+        ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[guest], isHost: false, HostSeed + (ulong)guest, null));
+        ctx.Check(ends[guest].Built, $"[board] guest {guest} builds ({ends[guest].Built})");
+        Stand(ctx, boards, ends.Count);
+        return ends[guest].Built;
+    }
+
+    // Boards up to that many, each the Dogfight one the launcher would stand.
+    private static void Stand(TestContext ctx, List<LoadBoard> boards, int count)
+    {
+        while (boards.Count < count)
+        {
+            var board = LoadBoard.Build(
+                ctx.DataRoot, ctx.Data.Rimage, ctx.Zrdr, ctx.Data.Messages, false, "DEATHMATCH", null,
+                briefing: LoadScreens.MultiplayerKey("C1", 'd'));
+            ctx.Host.AddChild(board);
+            boards.Add(board);
+        }
+    }
+
+    // Steps every machine and writes its board as the launcher's frame does, then chalks it on by
+    // the step. Answers the shortest line the first watched boards showed after any step.
+    private static int Hold(
+        List<NetCombatSuites.Ends> ends, List<LoadBoard> boards, Mech3.Messages messages, int steps, int watched = 0)
+    {
+        var sessions = ends.Select(e => e.Session).ToArray();
+        int shortest = int.MaxValue;
+        for (int i = 0; i < steps; i++)
+        {
+            Step(1, sessions);
+            for (int s = 0; s < sessions.Length; s++)
+            {
+                Launcher.HoldLoadBoard(boards[s], sessions[s], messages);
+                boards[s].Chalk(GameClock.FixedDt);
+            }
+
+            for (int s = 0; s < watched; s++)
+            {
+                shortest = Math.Min(shortest, boards[s].Written.Length);
+            }
+        }
+
+        return shortest;
+    }
+
+    // Every board has the whole line written, on the board it draws, with the load gate still closed.
+    private static void Written(TestContext ctx, List<LoadBoard> boards, string line)
+    {
+        for (int i = 0; i < boards.Count; i++)
+        {
+            string shown = boards[i].Shown?.Overlays.LastOrDefault()?.Lines.FirstOrDefault()?.Text ?? "-";
+            ctx.Check(boards[i].Written == line && shown == line,
+                $"[board] machine {i} writes '{line}' onto its board ('{boards[i].Written}', drawn '{shown}')");
+        }
+
+        ctx.Check(LoadGate.Closed, $"[board] the load gate stays closed under the waiting line");
+    }
+
+    // A whole number of fixed steps lasting at least that many seconds.
+    private static int StepsOf(double seconds) => (int)Math.Ceiling(seconds / GameClock.FixedDt);
 
     // Every session through the same number of fixed steps, host first.
     private static void Step(int steps, params GameSession[] sessions)

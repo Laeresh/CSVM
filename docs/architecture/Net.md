@@ -470,7 +470,8 @@ when the last one arrives, drops, or after `TimeoutSeconds` (TUNE, under the ENe
 ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own. ⚠ A `Loaded`
 under another round opens nothing and is answered with `Hold`: a restart reuses the link, and the
 old flight's word would start the new one early. A guest opens on `Start` under its round or on its
-host's link dropping. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
+host's link dropping. While held the host sends `Count`, the players loaded of all, for the guests'
+load boards. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session

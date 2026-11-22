@@ -485,6 +485,7 @@
     "net-seats": 0.195,
     "net-soak": 0.832,
     "net-spawn-rotation": 0.655,
+    "net-start-board": 1.435,
     "net-start-together": 0.801,
     "net-stunt-race-bot": 57.835,
     "net-stunt-race-end": 11.305,

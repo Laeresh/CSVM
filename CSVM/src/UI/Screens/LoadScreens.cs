@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
@@ -137,6 +139,27 @@ public static class LoadScreens
     // leads wider than this, which runs a three-line blurb through the chalk rule below it.
     private const float BodyLeading = 13f;
 
+    // The original's waiting row, "Waiting for %1", which names one loading player there
+    // (docs/org/multiplayer-messages.md's start barrier).
+    private const string WaitingKey = "MSG_MP_WAITING";
+
+    // Where a held start's line is written, all remake-only (docs/org/loading-screen.md). A
+    // blackboard with nothing written in its fourth band down takes that band at the instruction
+    // column's x. One whose rows fill it, Capture the Flag's and Zeppelin vs Zeppelin's, takes the
+    // column heads' row right of INSTRUCTIONS. The chart sheet takes the margin over the bar.
+    private const float BandX = 360f;
+    private const float BandTop = 344f;
+    private const float BandY = 362f;
+    private const float HeadsX = 485f;
+    private const float HeadsY = 78f;
+    private const float PaperWaitingX = BarX;
+    private const float PaperWaitingY = 521f;
+
+    // Viner Hand ITC, the hand-lettered face the original's font table declares (VIN12 to VIN18)
+    // and its scrapbook's notes write in. The larger size goes where a band has room for it.
+    private static readonly LanguiFace HandLarge = LanguiFace.Parse("VIN18")!.Value;
+    private static readonly LanguiFace HandSmall = LanguiFace.Parse("VIN14")!.Value;
+
     /// <summary>The board a node holds before it has one of its own, drawing nothing.</summary>
     public static ComposedBoard Empty { get; } = new(
         Array.Empty<BoardPicture>(),
@@ -236,6 +259,37 @@ public static class LoadScreens
                 Array.Empty<BoardFill>(),
                 Moving(motion, fillArtWidth, fillArtHeight, fraction, frame),
                 Array.Empty<BoardLine>()),
+        };
+        return new ComposedBoard(
+            still.Pictures, still.Strokes, still.Lines, still.Plaques,
+            still.Notes, still.Backdrop, still.Fills, overlays);
+    }
+
+    /// <summary>The line a load screen held for the other machines writes. It is the original's
+    /// waiting row, its name slot filled with the other players and the count in. Without a
+    /// <paramref name="tally"/>, a guest the host has not yet counted for, the count is left off.</summary>
+    public static string WaitingText(Messages messages, (int Loaded, int Total)? tally)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        string players = tally is { } count
+            ? string.Create(CultureInfo.InvariantCulture, $"other players ({count.Loaded}/{count.Total})")
+            : "other players";
+        return messages.Format(WaitingKey, players);
+    }
+
+    /// <summary>The still board with <paramref name="written"/>, the part of the waiting line
+    /// chalked so far, over it. It takes the original's hand-lettered face in the board's brightest ink.
+    /// An overlay, as <see cref="Painted"/> is, so the composition under it is untouched.</summary>
+    public static ComposedBoard Written(ComposedBoard still, bool campaign, string written)
+    {
+        ArgumentNullException.ThrowIfNull(still);
+        bool band = !campaign && !still.Lines.Any(l => l.Y >= BandTop && l.Y < ChalkBarY);
+        var face = band ? HandLarge : HandSmall;
+        var (x, y) = campaign ? (PaperWaitingX, PaperWaitingY) : band ? (BandX, BandY) : (HeadsX, HeadsY);
+        var line = new BoardLine(written, x, y, 0f, face.Pixels, BoardInk.Heading, Face: face);
+        var overlays = new List<BoardPanel>(still.Overlays)
+        {
+            new(Array.Empty<BoardFill>(), Array.Empty<BoardPicture>(), new[] { line }),
         };
         return new ComposedBoard(
             still.Pictures, still.Strokes, still.Lines, still.Plaques,

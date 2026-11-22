@@ -348,6 +348,25 @@ the fit's floor, and its point value stays at 13. The pause sheet cannot fit the
 whose authored point is under the strips, so it stacks the row under the one above at full size
 ([`pause-screen.md`](pause-screen.md)).
 
+**Remake-only rule: a network flight held for its other machines writes the waiting line on the
+board it stands.** The line, its words and its count are in
+[`multiplayer-messages.md`](multiplayer-messages.md)'s start barrier. It is chalked on a letter
+every 0.06 s from the board's own frames, since the build's pump has stopped by then; a count that
+moves keeps the letters the two lines share and rewrites the rest. It is written in Viner Hand
+ITC, the hand-lettered face the original's font table declares as `VIN12` to `VIN18` and its
+scrapbook's notes take ([`../formats/strings.md`](../formats/strings.md)), in the palette's heading
+ink, the blackboard's brightest chalk; no chalk face is extracted, and a machine without Viner Hand
+writes it in the board's own face. Where it stands follows what the board leaves free. The `d` and
+`t` dialogs fill two instruction rows, so their fourth band down, between the rules at y 344 and
+418, is empty: the line takes it at `360, 362` at `VIN18`'s 24 pixels, under the instruction
+column. The blackboard a mode of ours writes (a Stunt Race, free flight) is as empty there. The `c`
+and `z` dialogs fill all six bands, so no band is free on them; the line takes the column heads'
+row right of `HEAD4`'s INSTRUCTIONS at `485, 78`, at `VIN14`'s 18.7 pixels, which fits the band
+between the two rules. On a co-op mission's chart sheet it stands at `90, 521` at `VIN14`, in the
+margin between the chart's lower edge and the bar, in the sheet's dark ink.
+`--menu=loadboard-mp:<chapter>:<letter>:<n>/<m>` stands the Dogfight board with the line written
+out, for a shot.
+
 **Free flight is ours rather than the original's**, and no shipped dialog describes it. It takes
 the mode's own name at `HEAD1`'s authored place and writes nothing else, since the nearest
 dialog, the `d` family's, would state a win condition it does not have.

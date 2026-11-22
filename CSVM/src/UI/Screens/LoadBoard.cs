@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -13,13 +14,22 @@ namespace CSVM.UI.Screens;
 /// <see cref="LoadScreens"/> makes, through the campaign boards' authored-pixel surface.
 /// A build is one synchronous block that stalls the frame loop, so this board draws from inside
 /// it. The build reports each step to <see cref="LoadProgress"/>, whose pump draws the fill and
-/// the propeller. The board also holds <see cref="LoadGate"/> closed while it stands.
+/// the propeller. The board holds <see cref="LoadGate"/> closed while it stands, and chalks the
+/// waiting line on from its own frames while held for the other machines.
 /// ⚠ Install the pump nowhere but this node's own tree lifetime. A build with no screen over it
 /// (every CLI launch bar <c>--debug-load</c>) must leave <see cref="LoadProgress.Current"/> null.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {
+    // How long one letter of the waiting line takes to chalk. Chosen to read like a hand writing
+    // on the board; the original draws its waiting row whole, so nothing is decoded here.
+    private const double LetterSeconds = 0.06;
+
     private ComposedBoard _board = LoadScreens.Empty;
+    private bool _campaign;
+    private string _waiting = string.Empty;
+    private int _written;
+    private double _chalkClock;
     private LoadMotion _motion = LoadScreens.MotionFor(false, null);
     private BoardPalette _palette = BoardPalette.Paper;
     private string _dataRoot = string.Empty;
@@ -32,6 +42,13 @@ public sealed partial class LoadBoard : Control
     /// for the ordinary launch that photographs nothing. A read back of the GPU per pump, which is
     /// why it is off unless a run asks for it.</summary>
     public string CaptureDir { get; set; } = string.Empty;
+
+    /// <summary>The part of the waiting line chalked so far, empty on a board not held for the
+    /// other machines.</summary>
+    public string Written => _waiting[.._written];
+
+    /// <summary>The board the view last drew, null before the board entered the tree.</summary>
+    public ComposedBoard? Shown => _view?.Board;
 
     /// <summary>Builds the board for one launch. The campaign flag picks the paper sheet over the
     /// blackboard. The mission type names the Instant Action dialog the blackboard writes, null for a
@@ -50,6 +67,7 @@ public sealed partial class LoadBoard : Control
                 campaign, subject, missionType, zrdr, messages, sheet, pumped: true,
                 briefing: briefing, note: note),
             _motion = LoadScreens.MotionFor(campaign, sheet),
+            _campaign = campaign,
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
@@ -105,6 +123,51 @@ public sealed partial class LoadBoard : Control
         // shared board follows.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
+        if (_written < _waiting.Length)
+        {
+            Chalk(delta);
+        }
+    }
+
+    /// <summary>Writes <paramref name="text"/> as the waiting line, a letter at a time from
+    /// <see cref="Chalk"/>. The letters it shares with the line already chalked stay, so a count
+    /// that moves rewrites only the count. The frame loop runs again by now, so this redraws
+    /// as any board does.</summary>
+    public void Wait(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text == _waiting)
+        {
+            return;
+        }
+
+        int kept = 0;
+        while (kept < _written && kept < text.Length && text[kept] == _waiting[kept])
+        {
+            kept++;
+        }
+
+        _waiting = text;
+        _written = kept;
+        Redraw();
+    }
+
+    /// <summary>Chalks the waiting line on by that many seconds. Takes its step from the caller,
+    /// as <see cref="ComposedBoardView.AdvanceMovies"/> does, so a scripted run's board is a
+    /// property of its frame count.</summary>
+    public void Chalk(double seconds)
+    {
+        _chalkClock += seconds;
+        double letters = Math.Floor(_chalkClock / LetterSeconds);
+        if (letters < 1d)
+        {
+            return;
+        }
+
+        _written = (int)Math.Min(_waiting.Length, _written + letters);
+        // A written line keeps no time over, so the next count starts from its first letter.
+        _chalkClock = _written == _waiting.Length ? 0d : _chalkClock - (letters * LetterSeconds);
+        Redraw();
     }
 
     // The build's own steps against wall time, one log line: which fraction each left the bar at,
@@ -170,4 +233,7 @@ public sealed partial class LoadBoard : Control
             "ui",
             $"load screen: pump {name} fraction={progress.Fraction} draw={progress.Draws} save={err}");
     }
+
+    private void Redraw() =>
+        _view?.Show(LoadScreens.Written(_board, _campaign, Written), _palette, string.Empty, string.Empty);
 }
