@@ -134,6 +134,128 @@ internal static class MenuHangarSuites
         }
     }
 
+    [Suite("menu-original-hangar-preview",
+        "Original's hangar hub under Enhanced draws a live 3D plane in the 2D picture's own rect, at the "
+        + "panes' corner and the blueprint's size, through the board as a Live picture the view resolves to "
+        + "the stage's texture, and draws no blueprint or icon art; the stage builds the hub's airframe, "
+        + "follows the open airframe list's focused row, hangs one HE body per opened pylon (two left and "
+        + "three right on pylons 1, 3, 2, 4 and 6), swings its camera to the wing a count moved, repaints "
+        + "in place on a decal edit without a rebuild, and is freed when the hub "
+        + "is left; under Original the same hub draws its blueprint art and builds no stage")]
+    internal static void MenuOriginalHangarPreview(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        ctx.RequireData(ctx.Data.Planes, $"planes archive");
+        MenuSuiteHost.RequireLayout(ctx);
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-hangar-preview");
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }, data: ctx.Data)
+        {
+            Planes = store,
+        });
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot, ctx.Data);
+        host.AddSeat(seat);
+        bool wasEnhanced = Utils.GraphicsMode.Enhanced;
+        try
+        {
+            host.Select("original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var presentation = host.Active as OriginalPresentation;
+            var shell = presentation?.Shell;
+            ctx.Check(shell?.Hangar != null, $"Show activates Original with its hangar ({host.Active?.Id})");
+            if (presentation == null || shell?.Hangar == null)
+            {
+                return;
+            }
+
+            var hangar = host.Features.Get<HangarFeature>();
+            Utils.GraphicsMode.Set(false);
+            shell.OpenHangarTab(OriginalScreen.HangarPaint, ScratchName());
+            host.Tick(1f / 60f);
+            var flat = shell.Compose();
+            ctx.Check(presentation.PlanePreview == null && shell.Hangar.Preview == null
+                && flat.Pictures.Any(p => p.Art.Name.StartsWith("PX_", StringComparison.Ordinal) && (p.X, p.Y) == (16f, 44f))
+                && !flat.Pictures.Any(p => p.Art.Library == BoardArtLibrary.Live),
+                $"under Original the hub draws its PX_ picture art and builds no stage ({presentation.PlanePreview != null})");
+            Press(host, seat, Back);
+
+            Utils.GraphicsMode.Set(true);
+            shell.OpenHangarTab(OriginalScreen.HangarAirframe, ScratchName());
+            host.Tick(1f / 60f);
+            host.Tick(1f / 60f);
+            var stage = presentation.PlanePreview;
+            var board = shell.Compose();
+            var blueprint = Measure(shell, $"PX_{hangar.Scratch.Airframe}_BLUEPRINT.TGA");
+            var live = board.Pictures.FirstOrDefault(p => p.Art.Library == BoardArtLibrary.Live);
+            ctx.Check(live is { X: 16f, Y: 44f } && live.Art.Name == OriginalHangarScreen.LivePictureName
+                && (live.Width, live.Height) == blueprint && blueprint.Width > 0f,
+                $"the live picture stands in the 2D picture's rect, 16,44 at the blueprint's {blueprint} ({live?.X},{live?.Y} {live?.Width}x{live?.Height})");
+            ctx.Check(!board.Pictures.Any(p => p.Art.Name.StartsWith("PX_", StringComparison.Ordinal) && (p.X, p.Y) == (16f, 44f)),
+                $"and no blueprint or icon art is drawn under it");
+            ctx.Check(stage != null && presentation.View?.LivePictures.GetValueOrDefault(OriginalHangarScreen.LivePictureName) == stage.GetTexture(),
+                $"the view resolves the Live name to the stage's own texture");
+            if (stage == null)
+            {
+                return;
+            }
+
+            string node = StockAirframes.Node(hangar.Scratch.Airframe);
+            ctx.Check(stage.Model?.Name.ToString() == node && stage.Shown?.Airframe == hangar.Scratch.Airframe,
+                $"the stage builds the hub's airframe {node} ({stage.Model?.Name})");
+
+            var built = stage.Model;
+            Press(host, seat, Accept);
+            Press(host, seat, Down);
+            int focused = shell.Hangar.Preview?.Airframe ?? -1;
+            ctx.Check(focused >= 0 && focused != hangar.Scratch.Airframe && stage.Shown?.Airframe == focused && stage.Model != built,
+                $"the open airframe list's focused row {focused} is what the stage rebuilds ({stage.Shown?.Airframe})");
+            Press(host, seat, Back);
+
+            shell.OpenHangarTab(OriginalScreen.HangarHardpoints, ScratchName());
+            host.Tick(1f / 60f);
+            hangar.SetHardpoints(0, 2);
+            host.Tick(1f / 60f);
+            hangar.SetHardpoints(1, 3);
+            host.Tick(1f / 60f);
+            var pylons = stage.Rockets.Select(r => r.GetParent()?.GetMeta(Mech3.AnimRuntime.NameMeta).AsString() ?? string.Empty).ToList();
+            ctx.Check(pylons.SequenceEqual(new[] { "pylon1", "pylon3", "pylon2", "pylon4", "pylon6" }) && stage.Rockets.All(r => r.Visible),
+                $"two left and three right hang one HE body each on pylons 1, 3, 2, 4, 6 ({string.Join(",", pylons)})");
+            ctx.Check(!stage.Orbit.Turning && stage.Orbit.Pitch < HangarPreviewCamera.RestPitch,
+                $"the camera holds on the right wing from below ({stage.Orbit.Pitch:0.00})");
+
+            built = stage.Model;
+            int repaints = stage.Repaints;
+            shell.OpenHangarTab(OriginalScreen.HangarPaint, ScratchName());
+            host.Tick(1f / 60f);
+            hangar.SetDecal(0, 40);
+            host.Tick(1f / 60f);
+            ctx.Check(stage.Repaints == repaints + 1 && stage.Model == built && stage.Shown?.NoseDecal == 40,
+                $"a nose decal repaints in place without a rebuild ({stage.Repaints - repaints} repaint(s))");
+
+            Press(host, seat, Back);
+            host.Tick(1f / 60f);
+            ctx.Check(presentation.PlanePreview == null && presentation.View?.LivePictures.ContainsKey(OriginalHangarScreen.LivePictureName) == false,
+                $"leaving the hub frees the stage ({shell.Screen})");
+        }
+        finally
+        {
+            Utils.GraphicsMode.Set(wasEnhanced);
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            MenuSuiteHost.DropScratchPlanes(ctx, "menu-original-hangar-preview");
+        }
+    }
+
     [Suite(ModSuite,
         "Original's Plane Construction hub with a Brigand-based plane mod loaded: the airframe list "
         + "offers the mod after the eleven stock rows under its plane.json name, picking it builds on "

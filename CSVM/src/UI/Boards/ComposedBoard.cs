@@ -28,6 +28,11 @@ public enum BoardArtLibrary
     /// <see cref="BoardArt.Name"/> naming it for a reader: a stunt photograph's strip thumbnail,
     /// which the wrap-up page draws without reading the full-size file back.</summary>
     Held,
+
+    /// <summary>A picture something renders live, <see cref="BoardArt.Name"/> naming it in the view's
+    /// <c>LivePictures</c>: the hangar's 3D plane under Enhanced. It draws nothing while unnamed
+    /// there, and stands in the draw order like any other picture, so a list or a dialog covers it.</summary>
+    Live,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly

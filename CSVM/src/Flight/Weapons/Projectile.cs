@@ -782,6 +782,23 @@ public sealed partial class ProjectilePool : Node3D
         return Mathf.Clamp(1f - (distance - rangeMin) / (rangeMax - rangeMin), 0f, 1f);
     }
 
+    /// <summary>The builder a pylon body draws through, the airframe's settings over a chapter's
+    /// gamez. The hangar's live plane picture hangs its rockets through it too, so a store looks
+    /// the same on the wing in the menu.</summary>
+    public static SceneBuilder PylonScene(GameZ gamez, TextureArchive textures, string? hdChapter, bool stereo = false) =>
+        new(gamez, textures, cullBackfaces: true, sunVertexLit: true)
+        {
+            ShadowLookupOffset = PlaneBuilder.AirframeShadowLookupOffset,
+            XrPreciseInterior = stereo,
+            XrUnderInterior = stereo,
+            HdChapter = hdChapter,
+        };
+
+    /// <summary>One <c>FLYOUT</c> prototype instanced through <paramref name="scene"/>, exempt from
+    /// collision: a rocket raycasts its own hits, and a mounted store must not be shootable.</summary>
+    public static Node3D? InstanceBody(SceneBuilder scene, GameZNode prototype) =>
+        scene.BuildSubtree(prototype, skip: null, collisionSkip: _ => true);
+
     /// <summary>Registers a flying aircraft's body as a strikeable target: rounds from every
     /// OTHER identity can hit it, and this plane's own rounds exclude it per shot (the body's
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
@@ -1283,13 +1300,7 @@ public sealed partial class ProjectilePool : Node3D
         // shadowless. A stereo copy never takes the flat shaders either, or the lifted interior would
         // draw it at the world origin. Neither twin has a billboard or glow arm.
         ref var scene = ref stereo ? ref _stereoPylonScene : ref _pylonScene;
-        scene ??= new SceneBuilder(_flyoutGamez, _textures, cullBackfaces: true, sunVertexLit: true)
-        {
-            ShadowLookupOffset = PlaneBuilder.AirframeShadowLookupOffset,
-            XrPreciseInterior = stereo,
-            XrUnderInterior = stereo,
-            HdChapter = _flyoutScene.HdChapter,
-        };
+        scene ??= PylonScene(_flyoutGamez, _textures, _flyoutScene.HdChapter, stereo);
         return BuildFlyoutBody(weapon, scene);
     }
 
@@ -2109,10 +2120,8 @@ public sealed partial class ProjectilePool : Node3D
         if (node == null)
             return null;
 
-        // Collision-exempt: a rocket raycasts for its own hits and must not obstruct another round or
-        // the world hit-test. Mounted ordnance must not be shootable either.
         int replacedBefore = scene.ReplacedMeshCount;
-        var inst = scene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        var inst = InstanceBody(scene, node);
         if (inst != null)
             PoseAtResetState(inst, weapon);
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and

@@ -84,16 +84,40 @@ public static class CustomPlaneBuild
     public static PaintScheme PaintFor(CustomPlaneDef def, string patternName)
     {
         ArgumentNullException.ThrowIfNull(def);
-        return new PaintScheme
+        return PaintFor(patternName, def.Colour1, def.Colour2, def.Colour3, def.NoseDecal, def.TailDecal, def.WingDecal);
+    }
+
+    /// <summary>The <see cref="PaintFor(CustomPlaneDef, string)"/> livery from the record's resolved
+    /// fields, for a caller holding them without a record (the hangar's live plane picture).</summary>
+    public static PaintScheme PaintFor(
+        string patternName, PaintColour colour1, PaintColour colour2, PaintColour colour3, int noseDecal, int tailDecal, int wingDecal) => new()
         {
             Pattern = patternName,
-            Color1 = PaintScheme.FromBytes(def.Colour1.R, def.Colour1.G, def.Colour1.B),
-            Color2 = PaintScheme.FromBytes(def.Colour2.R, def.Colour2.G, def.Colour2.B),
-            Color3 = PaintScheme.FromBytes(def.Colour3.R, def.Colour3.G, def.Colour3.B),
-            NoseDecal = def.NoseDecal,
-            TailDecal = def.TailDecal,
-            WingDecal = def.WingDecal,
+            Color1 = PaintScheme.FromBytes(colour1.R, colour1.G, colour1.B),
+            Color2 = PaintScheme.FromBytes(colour2.R, colour2.G, colour2.B),
+            Color3 = PaintScheme.FromBytes(colour3.R, colour3.G, colour3.B),
+            NoseDecal = noseDecal,
+            TailDecal = tailDecal,
+            WingDecal = wingDecal,
         };
+
+    /// <summary>The pylons two hardpoint counts open: the left wing's first <paramref name="left"/>
+    /// of <see cref="Loadout.LeftWingPylons"/>, then the right wing's first <paramref name="right"/>
+    /// of <see cref="Loadout.RightWingPylons"/>. Each carries <see cref="Loadout.StockOrdnance"/>.</summary>
+    public static List<int> OpenPylons(int left, int right)
+    {
+        var open = new List<int>();
+        Take(Loadout.LeftWingPylons, left);
+        Take(Loadout.RightWingPylons, right);
+        return open;
+
+        void Take(int[] wing, int count)
+        {
+            for (int i = 0; i < wing.Length && i < count; i++)
+            {
+                open.Add(wing[i]);
+            }
+        }
     }
 
     /// <summary>The damage ledger for a custom plane: the airframe's own zones with the bought
@@ -251,9 +275,7 @@ public static class CustomPlaneBuild
     // fit, while the original reads the record's two counts alone.
     private static HardpointSpec? HardpointsFor(CustomPlaneDef def)
     {
-        var chosen = new HashSet<int>();
-        Take(Loadout.LeftWingPylons, def.LeftHardpoints);
-        Take(Loadout.RightWingPylons, def.RightHardpoints);
+        var chosen = new HashSet<int>(OpenPylons(def.LeftHardpoints, def.RightHardpoints));
         if (chosen.Count == 0)
         {
             return null;
@@ -275,14 +297,6 @@ public static class CustomPlaneBuild
 
         Array.Resize(ref built, last + 1);
         return new HardpointSpec { Count = built.Length, Stock = built };
-
-        void Take(int[] wing, int count)
-        {
-            for (int i = 0; i < wing.Length && i < count; i++)
-            {
-                chosen.Add(wing[i]);
-            }
-        }
     }
 
     private static GunSpec? StockSlot(LoadoutDef stockBase, int slot)

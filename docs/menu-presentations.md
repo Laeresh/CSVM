@@ -605,6 +605,7 @@ name (spaces and case ignored), `keys:other` being the one category that outruns
 signed on and `join-board:<pads>` with that many entries posed as signed on, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,
+`plane-construction:rockets` on the hardpoints tab with two left and three right rockets hung,
 `plane-construction:defaults` with the airframe swap's three-button question standing over an
 edited build, `plane-construction:mod` on the first plane mod's airframe (`--mods=`) with the
 airframe list standing open on it, and

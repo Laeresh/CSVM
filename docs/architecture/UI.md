@@ -57,6 +57,27 @@ One picture a page asks its board to draw: a decoded TGA (blueprint, icon, paint
 caption under it. The page decodes and the board owns the one Godot texture; the campaign pages
 (Campaign/Campaign*Page.cs) return it from their Art and RowArt.
 
+## src/UI/Hangar/HangarPreviewPose.cs
+What the hangar's live 3D plane picture shows under Enhanced, engine-free: the airframe or plane mod, the two
+hardpoint counts and the paint, as a value record the hub composes off its scratch build
+(`Menu/Original/OriginalHangarScreen.cs`'s `Preview`). `FocusFor` names the part an edit swings
+the camera to, a wing for a hardpoint count and the decal's area for a decal. The stage that draws
+it is `HangarPreviewStage.cs`. Tests: `CSVM.Tests/HangarPreviewTests.cs`.
+
+## src/UI/Hangar/HangarPreviewCamera.cs
+The live picture's orbit, engine-free: the turntable, a focus swing that holds and then eases back
+into the turn, and a drag or stick orbit that does the same after an idle. `Aim` is where each
+`HangarPreviewFocus` looks from. Tests: `CSVM.Tests/HangarPreviewTests.cs`.
+
+## src/UI/Hangar/HangarPreviewStage.cs
+The Godot half of the live picture: a transparent `SubViewport` with its own world, the plane built
+through `PlaneBuilder` (so the HD model pack applies), the HE rockets hung through
+`ProjectilePool.PylonScene` on the pylons `CustomPlaneBuild.OpenPylons` opens, the paint through
+`PlaneBuilder.Repaint`, and two white lights riding the camera over the flight materials as built: a
+material copy of its own would cost a shader compile per surface on each first view.
+`Menu/Original/OriginalPresentation.cs` builds it while the hub shows under Enhanced and
+hands its texture to `Boards/ComposedBoardView.cs` as a `BoardArtLibrary.Live` picture.
+
 ## src/UI/Hangar/ModPlaneArt.cs
 Each plane mod's menu pictures, by node: the portrait (`plane.json`'s image, else a three-quarter
 render in the mod's own paint) and black plan and head-on silhouettes. `Bind` takes the portrait and
@@ -1525,7 +1546,7 @@ The Original hangar, a standalone module over the shared `HangarFeature` and the
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's or the games list's Build Custom Plane or
 the cabin, the door naming the airframe a default build opens on. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, finds this module through its own `Owns` (every screen from `PlaneName` on) and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
-the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
+the blueprint panes, under Enhanced the live 3D one it names as `Preview` (`Hangar/HangarPreviewStage.cs` draws it); the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
 caret, the inventory's plane line on the middle of the dashed box the background paints rather than on its authored row, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog`'s `OkKey`/`YesKey`/`NoKey`/`CancelKey`), and the export door's own Export, Delete and delete confirm, and its Import on the Export strip's place; `ImportOriginalPlanes`, which that row and Instant Action's own Import reach, imports into the wallet-free store and shows `HangarFeature.ImportOriginalPlanes`' result line in the messagebox; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
