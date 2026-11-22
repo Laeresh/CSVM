@@ -1,25 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using CSVM.Mech3;
 
 namespace CSVM.Flight.Hangar;
 
 /// <summary>
-/// The eleven stock airframes by id: the <c>planes.zbd</c> node each airframe id 0-10 flies as, and
-/// back. The id is <see cref="CustomPlaneDef.Airframe"/>'s, a campaign profile's and a network
-/// roster's, so every picker, the campaign and the wire read this one order.
+/// The eleven stock airframes by int id: the <c>planes.zbd</c> node each airframe id 0-10 flies as,
+/// and back, read off <see cref="AirframeRegistry.Stock"/>. The id is
+/// <see cref="CustomPlaneDef.Airframe"/>'s, a campaign profile's and a network roster's. A mod
+/// airframe has no int id: <see cref="IdOf"/> answers null for it and these readers stay stock-only.
 /// </summary>
 public static class StockAirframes
 {
-    // Airframe id 0-10 to the planes.zbd node, in the stat table's row order: Hoplite, Hellhound,
-    // Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk.
-    // The paint page's skin prefixes are keyed by the same order. The Hoplite is player_autogyro:
-    // the shipped data names that aircraft both ways.
-    private static readonly string[] NodeTable =
-    {
-        "player_autogyro", "player_avenger", "player_balmoral", "player_bhawk", "player_brigand",
-        "player_pfighter", "player_fbrand", "player_fury", "player_kestrel", "player_peacemaker",
-        "player_warhawk",
-    };
+    private static readonly string[] NodeTable = AirframeRegistry.Stock.Select(a => a.Node).ToArray();
 
     /// <summary>The eleven stock nodes in airframe-id order. A network roster carries an airframe
     /// as its index into this list, so both peers have to read the one order.</summary>
@@ -31,17 +25,10 @@ public static class StockAirframes
 
     /// <summary>The inverse of <see cref="Node"/>: the airframe id a stock player node flies as.
     /// Null when the node names none of the eleven, as a surface hull's own library-root model
-    /// does.</summary>
+    /// or a mod airframe does.</summary>
     public static int? IdOf(string node)
     {
-        for (int i = 0; i < NodeTable.Length; i++)
-        {
-            if (string.Equals(NodeTable[i], node, StringComparison.OrdinalIgnoreCase))
-            {
-                return i;
-            }
-        }
-
-        return null;
+        int id = Array.FindIndex(NodeTable, n => string.Equals(n, node, StringComparison.OrdinalIgnoreCase));
+        return id < 0 ? null : id;
     }
 }

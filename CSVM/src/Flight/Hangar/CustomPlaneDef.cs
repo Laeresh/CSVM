@@ -28,9 +28,6 @@ public readonly record struct GunChoice(int? Calibre, bool Twin)
 /// </summary>
 public sealed class CustomPlaneDef
 {
-    /// <summary>Airframe ids run 0-10, the stat table's 11 rows.</summary>
-    public const int MaxAirframe = 10;
-
     /// <summary>Engine ids run 0-6; 6 is the explicit no-engine pick the purchase gate rejects.</summary>
     public const int EngineNone = 6;
 
@@ -72,6 +69,10 @@ public sealed class CustomPlaneDef
     /// <summary>A pylon nobody has picked for, the same 0 the campaign record uses (its ordnance
     /// values are one-based for exactly this reason).</summary>
     public const int NoOrdnancePick = 0;
+
+    /// <summary>The last stock airframe id, 10: <see cref="Airframe"/> is a stock id, the stat
+    /// table's row. A mod airframe has no int id here.</summary>
+    public static readonly int MaxAirframe = StockAirframes.Nodes.Count - 1;
 
     // The longest shipped ramp is ten, so this is the ceiling a shade clamps to when no swatch
     // table loaded and the row's own length is unknown.

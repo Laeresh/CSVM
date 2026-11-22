@@ -3146,9 +3146,9 @@ public sealed record SessionSpec
             var segments = token.Split(':');
             string? plane = segments[0].Trim() is { Length: > 0 } named
                 && !named.Equals(RandomBotPlane, StringComparison.OrdinalIgnoreCase) ? named : null;
-            if (plane != null && Flight.Hangar.StockAirframes.IdOf(plane) == null)
+            if (plane != null && AirframeRegistry.Shared.Find(plane) == null)
             {
-                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies a Random one"));
+                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no airframe node, the bot flies a Random one"));
                 plane = null;
             }
 

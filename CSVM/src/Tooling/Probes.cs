@@ -50,16 +50,6 @@ public static class Probes
     private const double LevelTopSpeedMph = 300.5;
     private const double TerminalDiveMph = 356.0;
 
-    // The eleven stock player airframes, in the order every whole-envelope dump prints them. Fixed
-    // so two dumps taken at different times diff line for line; the launchscreen's own curated
-    // order is PlanePickerRoster's, a different list for a different job.
-    private static readonly string[] StockAirframeNodes =
-    {
-        "player_bhawk", "player_pfighter", "player_fury", "player_warhawk", "player_autogyro",
-        "player_avenger", "player_balmoral", "player_brigand", "player_fbrand", "player_kestrel",
-        "player_peacemaker",
-    };
-
     // The eight chapter codes an AI dump walks, every one that ships its own
     // `&lt;Cx&gt;/zrdr/` patrol-net scope and mission dirs.
     private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
@@ -68,9 +58,10 @@ public static class Probes
     // decode per row would read the same archive entry dozens of times.
     private static readonly Dictionary<string, Vector3?> MeanTexelCache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The eleven stock player airframes in whole-envelope dump order, the set the parity
-    /// ledger classifies and <c>--dump-flight=all</c> flies.</summary>
-    public static IReadOnlyList<string> StockAirframes => StockAirframeNodes;
+    /// <summary>The eleven stock player airframes in airframe-id order, the set the parity ledger
+    /// classifies and <c>--dump-flight=all</c> flies. Stock only: the ledger judges parity with the
+    /// original, which has no mod airframe.</summary>
+    public static IReadOnlyList<string> StockAirframes => Flight.Hangar.StockAirframes.Nodes;
 
     // ---- markers -----------------------------------------------------------------------------
 
@@ -1283,7 +1274,7 @@ public static class Probes
     {
         var all = new FlightEnvelopeResult();
         var sb = new StringBuilder();
-        foreach (string plane in StockAirframeNodes)
+        foreach (string plane in StockAirframes)
         {
             var one = FlightEnvelope(zrdr, plane);
             sb.AppendLine(one.Error ?? one.Text);
@@ -1299,7 +1290,7 @@ public static class Probes
         all.Text = sb.ToString();
         all.Summary = all.Error != null
             ? $"flight envelope: {all.Error}"
-            : $"flight envelope: {StockAirframeNodes.Length} airframes, {all.Rows.Count} rows, "
+            : $"flight envelope: {StockAirframes.Count} airframes, {all.Rows.Count} rows, "
               + $"{all.Asserted} asserted, {all.Failed} failed";
         return all;
     }

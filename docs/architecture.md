@@ -108,6 +108,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TgaImage.cs`, the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
 - `src/Mech3/PngImage.cs`, the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
 - `src/Mech3/ArtImage.cs`, the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
+- `src/Mech3/AirframeRegistry.cs`, every player airframe: the eleven stock ones in id order, then mods registered by string id with a stock parent.
 - `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and its `rig.json` template, body cockpit included.
 - `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers, prop, surface and flare overrides and the cockpit section, validated loudly at load.
 - `src/Mech3/PlaneRigPatch.cs`, applies a `PlaneRig` to the built plane before any marker read: moves and adds markers, stamps prop/surface overrides, picks flares.

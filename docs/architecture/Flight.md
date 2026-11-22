@@ -1669,10 +1669,11 @@ only by `SetLoadout` and left alone by `Clamp`; `AwaitingExport` is the export g
 pickers read. Record layout: [../formats/paint.md](../formats/paint.md).
 
 ## src/Flight/Hangar/StockAirframes.cs
-The airframe id 0-10 to `planes.zbd` node table and its inverse: `Node` clamps like the def's own
-fields, `IdOf` answers null for a node none of the eleven fly as, and `Nodes` is the list a network
-roster indexes. One table for the plane pickers, the campaign director's own and wingman planes,
-and the wire. Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`.
+The airframe id 0-10 to `planes.zbd` node table and its inverse, read off `Mech3/AirframeRegistry.cs`'s
+stock rows: `Node` clamps like the def's own fields, `IdOf` answers null for a node none of the
+eleven fly as (a mod airframe included), and `Nodes` is the list a network roster indexes. The int
+id for the plane pickers, the campaign director's own and wingman planes, saves and the wire.
+Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`, `CSVM.Tests/AirframeRegistryTests.cs`.
 
 ## src/Flight/Hangar/ModPlanes.cs
 The plane mods in `<dataRoot>/Mods/Planes`: each subfolder and top-level `.zip` is one `ModPlane`,

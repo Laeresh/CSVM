@@ -617,8 +617,8 @@ in `UI/Boards/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from the planes.zbd GameZ: `Extract` walks a `player_*`
 root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and reports plane-frame
-positions plus co-located groups. `Format` prints one dump block per plane, and `PlayerAirframes` is
-the model to display list: the source [../formats/markers.md](../formats/markers.md), `--dump-markers`
+positions plus co-located groups. `Format` prints one dump block per plane, and `PlayerAirframes`,
+`AirframeRegistry.Stock` as model to display pairs, is the list the source [../formats/markers.md](../formats/markers.md), `--dump-markers`
 and `UI/Overlays/MarkerOverlay.cs` share. `FormatRigTemplate` writes the starting `rig.json`: every marker,
 and a body `cockpit` section from `CockpitPoses`, each `cockpit1` gauge assembly and the glass carried
 through `PlaneBuilder.InteriorToPlane` (the flat mount, never the stereo one) to where cockpit view drew it.
@@ -1090,3 +1090,12 @@ A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m ou
 team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
 stands `ArenaNodes`, two bases' `ctf_n`, `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`, which
 `ArenaNode` finds by name; `ArenaTargets` lists the flag markers. All of it is built in code.
+
+## src/Mech3/AirframeRegistry.cs
+The one list of player airframes: the eleven stock ones in airframe-id order (`Stock`, with the
+display names that key `camparam.json`), then the mod airframes registered at run time (`All`),
+each a string id with a stock parent. `Register(id, displayName, parentNode)` rejects an id that is
+a stock node or already registered and a parent that is not stock; `StockNodeOf` is how a reader
+that needs data a mod does not supply (camera block, destroy def) falls back to the parent.
+`Flight/Hangar/StockAirframes.cs` is the int-id view of `Stock` that saves and the wire index;
+`MarkerRig.PlayerAirframes` and `InstantAction` read `Stock` too. `Shared` is the game's instance.

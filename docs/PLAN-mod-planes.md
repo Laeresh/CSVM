@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, mod loading and airframe identity
 
 11. ☑ Mod discovery and the `plane.json` format
-12. ☐ One airframe registry in place of the fixed eleven-plane lists
+12. ☑ One airframe registry in place of the fixed eleven-plane lists
 13. ☐ Mod stats: synthetic def from `kind_of` plus literal overrides
 14. ☐ Build a mod plane from its GLB
 
@@ -402,7 +402,37 @@ the format in a new `docs/formats/` page. Model recommendation: <TODO: tier not 
 **⚠ Traps.** The id must not collide with a stock node name (`player_avenger` is the Hellhound's,
 `StockAirframes.cs:19`).
 
-## B12 ☐ One airframe registry in place of the fixed eleven-plane lists
+## B12 ☑ One airframe registry in place of the fixed eleven-plane lists
+
+**Landed.** `CSVM/src/Mech3/AirframeRegistry.cs` is the one list of player airframes. It sits in
+`Mech3` because `MarkerRig` and `InstantAction` read it and the family order forbids `Mech3`
+naming `Flight`. `AirframeRegistry.Stock` is the eleven stock `AirframeEntry(Node, DisplayName,
+StockNode)` rows in airframe-id order (the display names are `camparam.json`'s block keys);
+`Shared.All` is the stock rows then the mods in registration order; `Find(node)`,
+`StockNodeOf(node)` (a mod's parent, a stock or unknown node unchanged) and
+`Register(id, displayName, parentNode)`, which throws `ArgumentException` for a blank argument, an
+id that is a stock node or already registered (case-insensitive), or a parent that is not a stock
+node. Registration swaps a copied array under a lock, so readers need none.
+
+- `StockAirframes` (Flight.Hangar) keeps its int-id API (`Nodes`, `Node(int)`, `IdOf`), now built
+  from `AirframeRegistry.Stock`; `IdOf` answers null for a mod. Every caller of it is a site that
+  needs a string id in D31/D34/D33/D32/C25.
+- `MarkerRig.PlayerAirframes` is `Stock` projected to (node, display), in id order (it was the
+  Bloodhawk-first dump order). `Probes.StockAirframes` returns `StockAirframes.Nodes`, so
+  `--dump-markers`, `--dump-flight=all` and the parity ledger list airframes in id order.
+- `InstantAction` keeps only the ia.json names in the langui 3700 order and takes each row's node
+  from `Stock[i]` (the two orders are the same).
+- `EffectCatalogue.DestroyAnimFor` and `CamParams.Load` resolve the plane node through
+  `StockNodeOf`, so a mod plays its parent's destroy def and reads its parent's camera block.
+- `CustomPlaneDef.MaxAirframe` is `StockAirframes.Nodes.Count - 1` (a static readonly, no longer a
+  const); `SuiteConstants.PlayerAirframes` is gone, `CombatSuites` counts `MarkerRig.PlayerAirframes`.
+- `SessionSpec`'s `--vs-bot` check asks `AirframeRegistry.Shared.Find`, so a registered mod id is
+  kept, provided mods are registered before the spec is parsed.
+- Coverage: `CSVM.Tests/AirframeRegistryTests.cs`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Every place that enumerates airframes reads one registry: stock ids 0-10 plus mod ids.
 
