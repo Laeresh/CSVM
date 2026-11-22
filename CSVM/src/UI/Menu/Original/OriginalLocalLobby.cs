@@ -440,7 +440,8 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
             if (slot >= seats.Count)
             {
                 var bot = bots[slot - seats.Count];
-                _lobby.ComposePlayerRow(layers, slot, bot.Callsign, PlaneText(string.Empty, bot.Airframe, true), false, 0f, true, false);
+                string mod = bot.ModAirframe is { } id ? Mech3.AirframeRegistry.Shared.Find(id)?.DisplayName ?? id : string.Empty;
+                _lobby.ComposePlayerRow(layers, slot, bot.Callsign, PlaneText(mod, bot.Airframe, true), false, 0f, true, false);
                 continue;
             }
 

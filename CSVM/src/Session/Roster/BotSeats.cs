@@ -6,6 +6,7 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.InstantAction;
 using CSVM.Spec;
+using CSVM.Utils;
 
 namespace CSVM.Session.Roster;
 
@@ -120,13 +121,14 @@ public static class BotSeats
 
     /// <summary>The bots as the host seats them, each on a militia/airframe pair (<see cref="DrawPair"/>).
     /// A bot with no callsign draws one from <paramref name="pool"/>, shuffled once, never a name drawn
-    /// before, named by another bot or in <paramref name="taken"/>. A spent pool falls back to
-    /// <see cref="SessionSpec.BotCallsign"/>. Zeppelin vs Zeppelin caps torpedoes
-    /// (<paramref name="oneTorpedoPerTeam"/>). A plane <paramref name="rules"/> refuse is drawn as a
-    /// Random one. A bot they leave no airframe for is left out, as a full field leaves one out.</summary>
+    /// before or held, else <see cref="SessionSpec.BotCallsign"/>. Zeppelin vs Zeppelin caps torpedoes
+    /// (<paramref name="oneTorpedoPerTeam"/>). A plane <paramref name="rules"/> refuse, or an unknown
+    /// node, is drawn as Random, and a bot left no airframe is left out. Only under <paramref name="mods"/>
+    /// may a bot fly a plane mod of <paramref name="airframes"/>, by default the shared registry.</summary>
     public static IReadOnlyList<SeatedBot> Resolve(
         IReadOnlyList<VsBotEntry> bots, IEnumerable<string> taken, IReadOnlyList<string> pool, Random rng,
-        bool oneTorpedoPerTeam = false, NetPlaneRules? rules = null, Func<byte, string, bool>? armsAdmitted = null)
+        bool oneTorpedoPerTeam = false, NetPlaneRules? rules = null, Func<byte, string, bool>? armsAdmitted = null,
+        bool mods = false, AirframeRegistry? airframes = null)
     {
         ArgumentNullException.ThrowIfNull(bots);
         ArgumentNullException.ThrowIfNull(taken);
@@ -153,14 +155,16 @@ public static class BotSeats
             (order[i], order[j]) = (order[j], order[i]);
         }
 
+        var registry = airframes ?? AirframeRegistry.Shared;
         var seated = new List<SeatedBot>(bots.Count);
         var torpedoTeams = new HashSet<int>();
         int next = 0;
         for (int i = 0; i < bots.Count; i++)
         {
             var bot = bots[i];
-            string? asked = bot.Plane != null && rules is { } outlaws && !AirframeAdmitted(outlaws, bot.Plane) ? null : bot.Plane;
-            var pair = DrawPair(asked, oneTorpedoPerTeam && torpedoTeams.Contains(bot.Team), rng, rules, armsAdmitted);
+            string? named = Named(bot.Plane, registry, mods);
+            string? asked = named != null && rules is { } outlaws && !AirframeAdmitted(outlaws, named, registry) ? null : named;
+            var pair = DrawPair(asked, oneTorpedoPerTeam && torpedoTeams.Contains(bot.Team), rng, rules, armsAdmitted, mods ? registry : null);
             if (pair == null && asked == null)
             {
                 continue;
@@ -171,7 +175,7 @@ public static class BotSeats
                 torpedoTeams.Add(bot.Team);
             }
 
-            string plane = pair?.Plane ?? bot.Plane!;
+            string plane = pair?.Plane ?? asked!;
             byte militia = pair?.Militia ?? NetSeat.Unset;
             byte accent = pair is { } p
                 ? (byte)InstantActionRuntime.ResolveWaveAccentId(Mech3.InstantAction.Militias[p.Militia].AccentId, (uint)rng.Next())
@@ -197,17 +201,18 @@ public static class BotSeats
     /// else one whose militia flies the plane. A torpedo cap leaves the torpedo pair out, the same
     /// odds as re-rolling it. Null for a plane no militia flies. <paramref name="rules"/> leave out
     /// each airframe they refuse, and <paramref name="armsAdmitted"/> each pair whose def they strip.
-    /// Null for a Random plane when the rules refuse all eleven airframes.</summary>
+    /// Null for a Random plane when the rules refuse all eleven airframes. Each plane mod in
+    /// <paramref name="mods"/> adds a copy of its parent's pairs, so Random draws it as often.</summary>
     public static (byte Militia, string Plane)? DrawPair(string? plane, bool noTorpedo, Random rng,
-        NetPlaneRules? rules = null, Func<byte, string, bool>? armsAdmitted = null)
+        NetPlaneRules? rules = null, Func<byte, string, bool>? armsAdmitted = null, AirframeRegistry? mods = null)
     {
         ArgumentNullException.ThrowIfNull(rng);
         var candidates = new List<(byte Militia, string Plane)>();
-        foreach (var pair in PairRows)
+        foreach (var pair in PairsWith(mods))
         {
             if ((plane == null || string.Equals(pair.Plane, plane, StringComparison.OrdinalIgnoreCase))
                 && !(noTorpedo && IsTorpedoPair(pair.Militia, pair.Plane))
-                && (rules is not { } outlaws || AirframeAdmitted(outlaws, pair.Plane))
+                && (rules is not { } outlaws || AirframeAdmitted(outlaws, pair.Plane, mods))
                 && armsAdmitted?.Invoke(pair.Militia, pair.Plane) != false)
             {
                 candidates.Add(pair);
@@ -217,12 +222,38 @@ public static class BotSeats
         return candidates.Count == 0 ? null : candidates[rng.Next(candidates.Count)];
     }
 
+    /// <summary>The plane a bot named flies, null for Random. A node <paramref name="airframes"/> does not
+    /// know is Random. Without <paramref name="mods"/>, a networked field whose wire carries stock
+    /// airframes alone, a named mod flies its parent. Each change is logged.</summary>
+    public static string? Named(string? plane, AirframeRegistry airframes, bool mods)
+    {
+        ArgumentNullException.ThrowIfNull(airframes);
+        if (plane == null)
+        {
+            return null;
+        }
+
+        if (airframes.Find(plane) is not { } known)
+        {
+            Log.Warn("core", $"bot: '{plane}' is no airframe node, the bot flies a Random one");
+            return null;
+        }
+
+        if (!mods && !known.IsStock)
+        {
+            Log.Warn("core", $"bot: plane mod '{known.Node}' flies as its parent {known.StockNode} in a networked field");
+            return known.StockNode;
+        }
+
+        return known.Node;
+    }
+
     /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
-    /// Whether <paramref name="rules"/> admit a bot on stock node <paramref name="plane"/>. They are
-    /// asked as for a person's stock pick (<see cref="NetPlaneRules.Refuses"/>): the airframe, the
-    /// stock engine and the stock guns' calibres. A node outside the eleven passes.</summary>
-    public static bool AirframeAdmitted(NetPlaneRules rules, string plane) =>
-        StockAirframes.IdOf(plane) is not { } airframe || rules.AdmitsStock(airframe);
+    /// Whether <paramref name="rules"/> admit a bot on <paramref name="plane"/>, a plane mod by its
+    /// parent. They are asked as for a person's stock pick (<see cref="NetPlaneRules.Refuses"/>): the
+    /// airframe, the stock engine and the stock guns' calibres. Any other node passes.</summary>
+    public static bool AirframeAdmitted(NetPlaneRules rules, string plane, AirframeRegistry? mods = null) =>
+        StockAirframes.IdOf((mods ?? AirframeRegistry.Shared).StockNodeOf(plane)) is not { } airframe || rules.AdmitsStock(airframe);
 
     /// <summary>Remake-only rule (docs/org/multiplayer-messages.md, the bot outlaw paragraph).
     /// The fit a bot on its airframe's stock arms flies under <paramref name="rules"/>. It is
@@ -320,6 +351,26 @@ public static class BotSeats
         }
 
         return pairs.ToArray();
+    }
+
+    // The table's pairs, then each plane mod on its parent's militias.
+    private static IEnumerable<(byte Militia, string Plane)> PairsWith(AirframeRegistry? mods)
+    {
+        foreach (var pair in PairRows)
+        {
+            yield return pair;
+        }
+
+        foreach (var mod in mods?.All ?? Array.Empty<AirframeEntry>())
+        {
+            foreach (var pair in PairRows)
+            {
+                if (!mod.IsStock && string.Equals(pair.Plane, mod.StockNode, StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return (pair.Militia, mod.Node);
+                }
+            }
+        }
     }
 
     // The lowest index below none that the list allows, else none.

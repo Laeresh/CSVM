@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Saves keep the mod id; a missing mod flies as its parent
 32. ☑ Campaign unlock field
-33. ☐ Bot seats may fly mod planes
+33. ☑ Bot seats may fly mod planes
 34. ☐ Multiplayer: string airframe id and a matching mod set
 
 ### Wave E, the Avenger as the first mod
@@ -1111,7 +1111,63 @@ named mission.
 
 **⚠ Traps.** <TODO>
 
-## D33 ☐ Bot seats may fly mod planes
+## D33 ☑ Bot seats may fly mod planes
+
+**Landed.** A bot seat of a field flown on one machine may fly a mod; a networked field keeps its
+bots on stock airframes until D34 carries a mod id on the wire.
+
+- **`--vs-bot` ordering.** `SessionSpec.ParseBots` no longer asks the registry, so the spec stays
+  pure and keeps the plane as written. `BotSeats.Named(plane, airframes, mods)` checks it at
+  seating, after `Launcher.BindModPlanes` registered the mods: an unknown node is Random (`bot:
+  '<node>' is no airframe node, the bot flies a Random one`, the warning the parse used to give), a
+  mod with `mods` false flies its parent (`bot: plane mod '<id>' flies as its parent <parent> in a
+  networked field`). `--vs --vs-bot=avenger_e1c --mods=Z:\CSVM\Mods` now seats the Avenger.
+- **The draw.** `BotSeats.Resolve(..., bool mods = false, AirframeRegistry? airframes = null)` and
+  `DrawPair(..., AirframeRegistry? mods)`: with mods, each registered mod adds a copy of its parent's
+  militia/airframe pairs with the mod's node. A named mod therefore draws a militia that flies its
+  parent, which paints it (Medusa's swatches on the Avenger's tint mask in the probe) and gives it an
+  accent. `AirframeAdmitted` judges a mod by its parent's stock id (`StockNodeOf`).
+- **Random rule.** Random draws over stock and mod pairs alike when mods are loaded, at equal odds
+  per pair, so a mod is drawn as often as its parent. Off the wire only.
+- **Where mods are seated.** `SeatFields.LocalVersusField` (a local `--vs`/`--stunt` with bots, the
+  join board's Dogfight and Instant Action race) passes `mods: true`. `CliHostField` (`--net-host`)
+  and `VersusLaunchField` (the network lobby) pass none, so a named mod flies its parent and Random
+  draws stock. A `--net-host` probe that no guest joined flew alone on the local field, mods
+  included, which is the existing no-wire fallback.
+- **Join board.** `DogfightBot.ModAirframe` holds a mod's id beside its parent's stock id in
+  `Airframe` (C25's pair). `DogfightBots.SetAirframe(id, airframe, mod)`, Random and
+  `ResetRefused` clear it, `LaunchEntries` emits the mod id. `OriginalBotPanel`'s plane list is
+  Random, the eleven stock airframes, then each registered mod as `Stock <name>`; a mod row is
+  admitted by its parent, and the editor shows the mod's name over the parent's icon and ratings.
+  `OriginalLocalLobby`'s player list names a mod bot's plane by the mod's name. The network lobby's
+  bot list (`OriginalLobbyScreen`, `DogfightLobby.SetBotAirframe`) stays stock.
+- **How a mod bot flies.** Unchanged code: `HumanFlightAdapter` builds the seat by node (the mod's
+  graft), takes `StatsFor` = `mod.Stats(zrdr)` (a bot seat's hull is a person's, as for a stock
+  bot), and `MilitiaFits.DefFor(militia, modId)` is null, so `ArmsFor` picks the stock branch, which
+  binds `mod.StockLoadout`. The parent's AI def (`mod.Stats(forAi: true)`) is what `AiStatsFor`
+  returns for the mod, used by `--ai=<id>` and by a militia def a mod never has.
+- **Unchanged by decision.** Scripted campaign enemies and Instant Action's waves stay as authored.
+- Docs: `docs/formats/mod-planes.md` "Bot seats", `docs/cli.md` (`--vs-bots`, `--vs-bot`), the
+  `BotSeats`, `SeatFields`, `SessionSpec`, `DogfightBots`, `OriginalBotPanel` and
+  `OriginalLocalLobby` entries.
+- Coverage: `BotSeatsTests.ALocalFieldSeatsAPlaneModOnItsParentsMilitias` (named on the parent's
+  militias, Random within 0.8-1.25 of the parent's count over 7000 draws, none on the wire, the
+  wire's named mod as the parent), `BotSeatsTests.ANamedPlaneIsCheckedAtSeating`,
+  `VsBotFlagTests.APlaneIsKeptAsWrittenForTheSeating`,
+  `JoinBoardBotTests.ARowOnAPlaneModLaunchesOnItsIdAndIsJudgedByItsParent`, and the `mod-plane-bot`
+  suite (a Brigand export as a scratch mod with `fd_speed` 123.5 and `"turrets": []`: the seats
+  above through a private `AirframeRegistry`, the build from the file, the AI flavour on the
+  Brigand's AI def with the override and no turret mount, no militia def naming the mod, the fit's 4
+  hardpoints and forward guns). Probe screenshots: `.scratchKeep/mod-planes/d33/bot-avenger.png`,
+  `bot-avenger-1440p.png` and `bot-avenger-crop.png` (`--vs --chapter=C1 --plane=player_fury
+  --vs-bot=avenger_e1c:skill=ace --mods=Z:\CSVM\Mods --view=cockpit --look=1,0 --frames=20`, the
+  pane placed by `--pos`/`--lookat` so the bot spawns 60 m abreast): the Avenger in Medusa's colours
+  beside the Fury, log `local: bot seat 1 'Black Swan' flies avenger_e1c for Medusa (accent 8) at ace`
+  and `flight stats [pbrigand]: fd_speed=111.76`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Seats that pick or randomise a plane (vs-bot, races, multiplayer bot fill) may use mod
 planes with the parent's AI def; scripted mission enemies are unchanged.

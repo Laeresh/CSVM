@@ -188,18 +188,18 @@ flags and 221 bullet lines**.
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
 - `--vs-bots=N` (with `--vs` or `--stunt`, whose bots race the course: seat N bots after this
-  machine's panes, or with `--net-host` after the guests: a Random stock plane, veteran, no team,
-  and a callsign drawn from the pilot names. This machine flies them and a host's roster carries
-  them, so a guest passes no flag; one passed there, or beside a local `--ctf` or `--zvz`,
+  machine's panes, or with `--net-host` after the guests: a Random plane (a local field's may be a
+  plane mod), veteran, no team, and a drawn callsign. This machine flies them and a host's roster
+  carries them, so a guest passes no flag; one passed there, or beside a local `--ctf` or `--zvz`,
   is ignored with a warning. Past 16 seats the field is cut, warned, and guests
   that fill it leave the last bots out. `--vs-bot=` entries take the first places. A menu launch
   seats its join board's bots)
 - `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs` or `--stunt`, local or
   `--net-host`, one bot per entry, ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
-  `player_fury`, or `random` or empty for Random; `skill=` takes `--difficulty=`'s words or 0-2,
-  default veteran; `team=` a lobby team 0-16, the command line's pilots flying on 0; `name=` the
-  callsign, cut to 12 characters. A part it cannot read keeps its default with a warning, and the
-  last flag wins)
+  `player_fury` or a plane mod's id (its parent on the wire), or `random` or empty for Random, as
+  is an unknown node; `skill=` takes `--difficulty=`'s words or 0-2, default veteran; `team=` a
+  lobby team 0-16, the command line's pilots flying on 0; `name=` the callsign, cut to 12
+  characters. A part it cannot read keeps its default with a warning, and the last flag wins)
 - `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
   team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's

@@ -108,7 +108,8 @@ public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
 
 /// <summary>One bot seat a scripted network host adds (<c>--vs-bot=</c>, <c>--vs-bots=</c>).
-/// <c>Plane</c> is a stock airframe node, or null for Random, which the host resolves at launch.
+/// <c>Plane</c> is an airframe node as written, stock or a plane mod's id, checked at seating. Null
+/// is Random, which the host resolves at launch.
 /// <c>Team</c> is a lobby team number, 0 for none. An empty <c>Callsign</c> is drawn by the host
 /// from the pilot names.</summary>
 public readonly record struct VsBotEntry(string? Plane, Net.NetBotSkill Skill, int Team, string Callsign);
@@ -3143,6 +3144,7 @@ public sealed record SessionSpec
     // --vs-bot='s comma list, each entry <plane>[:skill=<tier>][:team=<n>][:name=<callsign>]. A part
     // this cannot read keeps its default and is named, the rule --difficulty= follows: a typo must
     // not quietly change who the bot is. An empty plane or `random` is Random, the host's to draw.
+    // The plane is checked at seating (BotSeats.Resolve), since plane mods register after the parse.
     private static List<VsBotEntry> ParseBots(string value, List<Note> notes)
     {
         var bots = new List<VsBotEntry>();
@@ -3151,12 +3153,6 @@ public sealed record SessionSpec
             var segments = token.Split(':');
             string? plane = segments[0].Trim() is { Length: > 0 } named
                 && !named.Equals(RandomBotPlane, StringComparison.OrdinalIgnoreCase) ? named : null;
-            if (plane != null && AirframeRegistry.Shared.Find(plane) == null)
-            {
-                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no airframe node, the bot flies a Random one"));
-                plane = null;
-            }
-
             var skill = Net.NetBotSkill.Veteran;
             int team = 0;
             string callsign = "";

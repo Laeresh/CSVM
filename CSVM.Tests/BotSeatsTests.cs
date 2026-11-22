@@ -345,6 +345,45 @@ public sealed class BotSeatsTests
         Assert.Empty(SessionSpec.Parse(new[] { "--vs", "--net-join=127.0.0.1:47600", "--vs-bot=random" }).VsBots);
     }
 
+    // A local field seats a plane mod on its parent's militias, and Random draws it as often as the
+    // parent. A networked field (no mods) flies a named mod as its parent and never draws one.
+    [Fact]
+    public void ALocalFieldSeatsAPlaneModOnItsParentsMilitias()
+    {
+        const string mod = "bot_seats_mod";
+        var airframes = new AirframeRegistry();
+        airframes.Register(mod, "Bot Seats Mod", "player_brigand");
+        var flying = BotSeats.Pairs.Where(p => p.Plane == "player_brigand").Select(p => p.Militia).ToHashSet();
+
+        var named = BotSeats.Resolve(Enumerable.Repeat(new VsBotEntry(mod, NetBotSkill.Veteran, 0, "x"), 100).ToArray(),
+            Array.Empty<string>(), Array.Empty<string>(), new Random(3), mods: true, airframes: airframes);
+        Assert.All(named, bot => Assert.Equal(mod, bot.Plane));
+        Assert.Equal(flying, named.Select(bot => bot.Militia).ToHashSet());
+
+        var randoms = Enumerable.Repeat(new VsBotEntry(null, NetBotSkill.Veteran, 0, "x"), 7000).ToArray();
+        var drawn = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), mods: true, airframes: airframes);
+        int mods = drawn.Count(bot => bot.Plane == mod);
+        int parents = drawn.Count(bot => bot.Plane == "player_brigand");
+        Assert.InRange(mods, parents * 0.8, parents * 1.25);
+
+        // ABLE-TO-FAIL CONTROL: the same field on the wire draws no mod and flies the named one as its parent.
+        var stock = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), airframes: airframes);
+        Assert.DoesNotContain(stock, bot => bot.Plane == mod);
+        var networked = BotSeats.Resolve(new[] { new VsBotEntry(mod, NetBotSkill.Veteran, 0, "x") },
+            Array.Empty<string>(), Array.Empty<string>(), new Random(3), airframes: airframes);
+        Assert.Equal("player_brigand", networked[0].Plane);
+    }
+
+    // The spec keeps a plane as written, since mods register after the parse; the seating checks it.
+    [Fact]
+    public void ANamedPlaneIsCheckedAtSeating()
+    {
+        var bots = new[] { new VsBotEntry("player_zeppelin", NetBotSkill.Veteran, 0, "a"), new VsBotEntry("player_fury", NetBotSkill.Veteran, 0, "b") };
+        var seated = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(9), mods: true);
+        Assert.Contains(seated[0].Plane, StockAirframes.Nodes);
+        Assert.Equal("player_fury", seated[1].Plane);
+    }
+
     private static int[] Slots(AiSkillVector v) => new[]
     {
         v.DareDevil!.Value, v.NaturalTouch!.Value, v.SixthSense!.Value, v.DeadEye!.Value, v.QuickDraw!.Value,

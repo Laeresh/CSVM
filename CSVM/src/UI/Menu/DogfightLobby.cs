@@ -21,8 +21,10 @@ public readonly record struct DogfightScore(string Name, int Points, int Kills, 
 /// come and go. It carries a callsign, a stock airframe or
 /// <see cref="DogfightLobbySeat.RandomAirframe"/>, a skill tier and a lobby team (0 for none).
 /// <paramref name="Placed"/> marks a team the host picked. The lobby balances any other.
+/// <paramref name="ModAirframe"/> is a plane mod's id on a local field, whose parent is the airframe.
 /// </summary>
-public readonly record struct DogfightBot(int Id, string Callsign, byte Airframe, NetBotSkill Skill, byte Team, bool Placed = false)
+public readonly record struct DogfightBot(int Id, string Callsign, byte Airframe, NetBotSkill Skill, byte Team, bool Placed = false,
+    string? ModAirframe = null)
 {
     /// <summary>Whether the host resolves this bot's plane at launch.</summary>
     public bool RandomPlane => Airframe == DogfightLobbySeat.RandomAirframe;

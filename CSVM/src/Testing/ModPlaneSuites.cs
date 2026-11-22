@@ -9,6 +9,7 @@ using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.UI.Boards;
@@ -107,6 +108,84 @@ internal static class ModPlaneSuites
         finally
         {
             stock.Free();
+        }
+    }
+
+    [Suite("mod-plane-bot",
+        "a bot seat on a plane mod: a local field seats the mod's id, named or drawn as Random, on a militia that flies " +
+        "its parent, and a networked field flies a named mod as its parent; the seat builds from the mod's plane.glb, " +
+        "its hull is the parent's def with fd_speed overridden, its AI flavour is the parent's AI def with the same " +
+        "override and no turret, no militia def names the mod so it flies the stock arms, and the mod's fit binds " +
+        "its turret slot as a forward gun on the model's firepoints")]
+    internal static void ModPlaneBot(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        ctx.RequireData(ctx.Zrdr, $"zrdr archive");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        if (planes.FindByName(Parent) == null)
+        {
+            throw new SuiteSkippedException($"{Parent} is not in the aircraft archive");
+        }
+
+        using var textures = new TextureArchive(texturesPath);
+        string root = Path.Combine(ctx.ScratchDir, "mod-plane-bot");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        string folder = Path.Combine(ModPlanes.FolderIn(root), ModId);
+        Directory.CreateDirectory(folder);
+        var stock = Build(planes, textures, Parent, out _);
+        try
+        {
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(stock, Path.Combine(folder, ModPlanes.ModelFile)), $"the {Parent} export write result");
+        }
+        finally
+        {
+            stock.Free();
+        }
+
+        File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile),
+            $$"""{ "kind_of": "{{Parent}}", "overrides": { "fd_speed": 123.5, "turrets": [] } }""");
+        var mod = ModPlanes.Open(root).Find(ModId);
+        ctx.Check(mod != null, $"the mod {ModId} loads from {folder}");
+        if (mod == null)
+        {
+            return;
+        }
+
+        ModAirframes.Add(planes, mod.Id, mod.Cockpit ?? mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+        var airframes = new AirframeRegistry();
+        airframes.Register(mod.Id, mod.Name, mod.KindOf);
+        CheckBotSeats(ctx, airframes);
+
+        var model = Build(planes, textures, ModId, out var builder);
+        try
+        {
+            var drawn = Meshes(model, builder.CockpitInterior).ToList();
+            ctx.Check(drawn.Count > 0 && drawn.All(m => m.HasMeta(SceneBuilder.GamezMeshMeta)),
+                $"the bot seat builds from the mod's plane.glb ({drawn.Count(m => m.HasMeta(SceneBuilder.GamezMeshMeta))} of {drawn.Count} meshes)");
+
+            var ai = mod.Stats(ctx.Zrdr, forAi: true);
+            var parentAi = PlaneStats.LoadForAi(ctx.Zrdr, Parent, null);
+            ctx.Check(ai.AiDefName == parentAi.AiDefName && Mathf.IsEqualApprox(ai.FdSpeed, FdSpeed) && ai.TurretMounts.Count == 0,
+                $"AI stats: def {ai.AiDefName} (parent {parentAi.AiDefName}), fd_speed {ai.FdSpeed} (parent {parentAi.FdSpeed}), turret mounts {ai.TurretMounts.Count} (parent {parentAi.TurretMounts.Count})");
+
+            // HumanFlightAdapter arms a bot by its militia's def for the node, and none names a mod.
+            var militias = MilitiaFits.Load(ctx.Zrdr, ctx.Data.Messages);
+            var flying = BotSeats.Pairs.Where(p => p.Plane == Parent).Select(p => InstantAction.Militias[p.Militia].Name).ToList();
+            var parentDefs = flying.Where(m => militias.DefFor(m, Parent) != null).ToList();
+            ctx.Check(flying.All(m => militias.DefFor(m, ModId) == null) && BotSeats.ArmsFor(false, false, false) == SeatArms.Stock,
+                $"no militia def names the mod, so it flies the stock arms (militias {string.Join(", ", flying)}; with a def for the parent: {string.Join(", ", parentDefs)})");
+            CheckStatsAndFit(ctx, mod, model);
+        }
+        finally
+        {
+            model.Free();
+            Directory.Delete(root, recursive: true);
         }
     }
 
@@ -838,6 +917,25 @@ internal static class ModPlaneSuites
                 : 0)
             + node.GetChildren().Where(c => c is not Node3D { Visible: false }).Sum(Count);
         return interior == null ? 0 : Count(interior);
+    }
+
+    // The seats BotSeats makes of the mod: named or Random in a local field, and as the parent on the wire.
+    private static void CheckBotSeats(TestContext ctx, AirframeRegistry airframes)
+    {
+        var flying = BotSeats.Pairs.Where(p => p.Plane == Parent).Select(p => p.Militia).ToHashSet();
+        var none = Array.Empty<string>();
+        var named = BotSeats.Resolve(Enumerable.Repeat(new VsBotEntry(ModId, Net.NetBotSkill.Ace, 0, "x"), 50).ToArray(), none, none,
+            new System.Random(3), mods: true, airframes: airframes);
+        ctx.Check(named.All(b => b.Plane == ModId && flying.Contains(b.Militia)),
+            $"a named bot seats the mod on a militia that flies {Parent} ({string.Join(",", named.Select(b => b.Plane).Distinct())}, militias {string.Join(",", named.Select(b => b.Militia).Distinct())})");
+
+        var randoms = Enumerable.Repeat(new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "x"), 400).ToArray();
+        int local = BotSeats.Resolve(randoms, none, none, new System.Random(5), mods: true, airframes: airframes).Count(b => b.Plane == ModId);
+        int wire = BotSeats.Resolve(randoms, none, none, new System.Random(5), airframes: airframes).Count(b => b.Plane == ModId);
+        string networked = BotSeats.Resolve(new[] { new VsBotEntry(ModId, Net.NetBotSkill.Ace, 0, "x") }, none, none,
+            new System.Random(3), airframes: airframes)[0].Plane;
+        ctx.Check(local > 0 && wire == 0 && networked == Parent,
+            $"Random draws the mod in a local field ({local} of {randoms.Length}) and never on the wire ({wire}), where a named mod flies {networked}");
     }
 
     private static void CheckStatsAndFit(TestContext ctx, ModPlane mod, Node3D model)

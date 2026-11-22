@@ -293,7 +293,7 @@ internal static class SeatFields
     /// <summary>A local Dogfight's or stunt race's seat roster, flown here with no wire. Its panes come
     /// first, then the spec's bots, the command line's or the join board's. Null without bots, so such a
     /// launch keeps its panes as its seats. Random planes and blank callsigns are drawn as a host draws
-    /// them, under <paramref name="rules"/> where given (<see cref="CourseRules"/>).</summary>
+    /// them, under <paramref name="rules"/> where given (<see cref="CourseRules"/>), plane mods included.</summary>
     internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, Messages messages, Net.NetPlaneRules? rules = null)
     {
         if (spec.VsBots.Count == 0)
@@ -302,7 +302,7 @@ internal static class SeatFields
         }
 
         var seats = Net.NetSeats.LocalPanes(spec.Players);
-        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages, rules));
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages, rules, mods: true));
         Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         Log.Info("core", $"local roster of {seats.Count} seat(s), {seats.Count - spec.Players} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
@@ -359,9 +359,11 @@ internal static class SeatFields
     /// <summary>The spec's bots resolved for a field whose people are
     /// <paramref name="people"/>. The pilot names are read once from the message table, which
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
-    /// a stream of their own, a function of the master seed alone.</summary>
+    /// a stream of their own, a function of the master seed alone. A field on the wire passes no
+    /// <paramref name="mods"/> and seats no plane mod (<see cref="Session.Roster.BotSeats.Named"/>).</summary>
     internal static IReadOnlyList<Net.SeatedBot> ResolveBots(
-        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages, Net.NetPlaneRules? rules = null)
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages, Net.NetPlaneRules? rules = null,
+        bool mods = false)
     {
         if (spec.VsBots.Count == 0)
         {
@@ -372,7 +374,7 @@ internal static class SeatFields
         return Session.Roster.BotSeats.Resolve(spec.VsBots,
             System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
             new System.Random(Rng.IntSeedFor(Rng.BotField)),
-            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin, rules);
+            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin, rules, mods: mods);
     }
 
     /// <summary>The rules a local race's bots draw under: the airframes the spec's course leaves

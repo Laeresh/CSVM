@@ -600,9 +600,9 @@ title, stamps the block's objective marker and the session's race flag, and owns
 What a network bot seat is once its host seats it, engine-free. `Resolve` turns the command line's
 bot field into seats: each bot a militia/airframe pair off the Instant Action militia table
 (`DrawPair`: any pair at equal odds for a Random plane, a militia flying it for a picked one, the
-torpedo pair capped at one a team in Zeppelin vs Zeppelin), that militia's accent, and for an
+torpedo pair capped at one a team in Zeppelin vs Zeppelin; under `mods`, a local field's, each plane mod on a copy of its parent's pairs), that militia's accent, and for an
 unnamed bot a callsign drawn once from `CallsignPool`, cut to the Callsign box's 12 characters.
-`Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
+`Named` checks a named plane at seating, since mods register after the command line is parsed: an unknown node is Random, and without `mods` (on the wire, whose roster carries stock airframes alone) a plane mod flies its parent. `Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
 of a tier's effect. Under a lobby's outlaw list, or a race course's plane list, the draw passes over each airframe it refuses, asked as `AirframeAdmitted`, and each pair whose def it would strip, asked as `ArmsAdmitted`; a bot it leaves no airframe for is left out. `LegalFit` is the stock fit a bot flies under the list, each outlawed ammunition or rocket replaced by the first allowed one, never the torpedo. Only the host calls it; a guest reads the roster. Decodes:
 [../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md). Read `HumanFlightAdapter.cs` next, which arms and paints a bot by its militia.
 

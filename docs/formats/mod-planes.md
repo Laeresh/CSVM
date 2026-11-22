@@ -12,7 +12,8 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
   [overrides](#overrides), [default loadout](#default-loadout), [`plane.glb`](#planeglb),
   [paint](#paint), [damage](#damage), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
-  [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign), [menu art](#menu-art)
+  [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign), [menu art](#menu-art),
+  [bot seats](#bot-seats)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -89,7 +90,7 @@ an engines.json row) is logged as `mod plane <id>: override <name> is no def fie
 ignored` and changes nothing; the mod still loads. The stock engine row stays the parent's, so an
 `fd_speed` copied from another plane still scales by the parent's engine power.
 
-A bot flying the mod plane takes the parent's AI def: its damage model, armament, skills and
+An AI aircraft flying the mod plane (`--ai=<id>`) takes the parent's AI def: its damage model, armament, skills and
 turrets come from that def's chain as for the parent, and the `dynamics` and def-level overrides
 apply as on a flown plane. The zone overrides have nothing to act on there, since an AI load
 carries no zones. The plane keeps the parent's def name, which is what its stock fit is found by.
@@ -202,8 +203,8 @@ no `--loadout=`, the stock fit (with `"turrets": []` applied). A crash plays the
 mod's own wreck or the auto-wreck ([Damage](#damage)), logging `crash rig '<id>': zones cut from the
 mesh nose N, tail N, leftwing N, rightwing N triangle(s), M effect anchor(s) added`. Its engine sounds
 as its parent's, or as `sound`'s plane, flown or as a bot; the build logs the loop it chose
-(`audio: engine=snd_brigandengine ...`). Bot seats and the network wire still list the stock eleven
-alone.
+(`audio: engine=snd_brigandengine ...`). The network wire still lists the stock eleven alone;
+[bot seats](#bot-seats) fly mods off the wire.
 
 ### The hangar
 
@@ -271,6 +272,29 @@ other plane picture stays the parent's: the campaign pages, the network lobby an
 the parent's stock id ([The hangar](#the-hangar)), and the local lobby's Select Plane column names
 the build as a stock airframe of its parent.
 
+### Bot seats
+
+A bot seat of a field flown on one machine may fly a mod: a local Dogfight or stunt race from the
+command line (`--vs-bot=<id>`) or from the join board, whose Edit Bot plane list offers each loaded
+mod after the eleven stock airframes under its `name`.
+
+| Seat | Plane |
+|---|---|
+| Named mod, local field | the mod's id, on a militia that flies its parent, which paints it (the tint mask takes that militia's colours) |
+| Random, local field | any militia/airframe pair at equal odds, each mod adding a copy of its parent's pairs, so a mod is drawn as often as its parent |
+| Named mod, networked field (`--net-host`, the network lobby) | its parent, with the warning `bot: plane mod <id> flies as its parent <parent> in a networked field`; Random draws stock airframes alone |
+| A node no airframe has | Random, with the warning `bot: '<node>' is no airframe node, the bot flies a Random one` |
+
+The plane is checked when the field is seated, after the mods are registered, so `--vs-bot=` keeps
+the id it was given. A bot seat's airframe is a person's: it flies the mod's def (the parent's with
+the overrides). No militia def names a mod, so the bot carries the mod's stock fit
+([default loadout](#default-loadout)) rather than a militia's weapons block. A mod bot is judged by
+its parent's stock id: on the join board its icon and ratings are the parent's, and on a course that
+refuses the parent a named mod bot flies Random and the Random draw passes the mod over.
+
+Scripted campaign enemies and Instant Action's waves stay as the mission authors them.
+
+
 ## Evidence & limits
 
 - The folder, id, `plane.json` and hash rules are `Flight/Hangar/ModPlanes.cs`, covered by
@@ -311,6 +335,14 @@ the build as a stock airframe of its parent.
   coloured portrait and black silhouettes once into the cache, a second bind reads the files, a changed
   mod renders under its new hash, a mod's portrait image is shown and only its silhouettes render) and
   the `menu-original-hangar-mod` suite (the hub draws a mod's portrait in the blueprint's place).
+- The bot seat rules are `Session/Roster/BotSeats.cs` (`Named`, the mod pairs of `DrawPair`), which
+  `Launch/SeatFields.cs` calls with mods for a local field and without them on the wire, and the join
+  board's `DogfightBot.ModAirframe`. Covered by `CSVM.Tests/BotSeatsTests.cs`,
+  `CSVM.Tests/VsBotFlagTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs` and the `mod-plane-bot` suite: a
+  Brigand mod is seated named and drawn as Random on a Brigand militia in a local field and as the
+  Brigand on the wire, builds from its file, takes the Brigand's AI def with its `fd_speed` override,
+  is named by no militia def and binds its fit with the turret slot forward. Probe: `--vs
+  --vs-bot=avenger_e1c --mods=<folder>` seats the local Avenger for Medusa, painted in Medusa's colours.
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is
   checked against `cm_sequence` when the game data binds, not when the mod loads, so an unknown id

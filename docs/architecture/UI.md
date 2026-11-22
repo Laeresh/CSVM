@@ -1449,7 +1449,7 @@ keyboard is never listed, since it holds seat 1 whatever the manifest says and t
 `Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md). Under the articles stand a Dogfight's bot rows and, in the articles' place while one is picked, the Edit Bot panel (`OriginalBotPanel.cs`); `PoseBots` stands them for a screenshot.
 
 ## src/UI/Menu/Original/OriginalBotPanel.cs
-The join board's bot rows, the keyboard's and the mouse's to edit: the Bots block under the articles (ADD BOT, FILL TO and its 2-to-16 count, then a row per bot in two columns with its tier) and the Edit Bot panel (Callsign, Plane with Random and the eleven stock airframes, Skill from langui 3695 to 3697, REMOVE, ACCEPT, the stock plane's icon and ratings).
+The join board's bot rows, the keyboard's and the mouse's to edit: the Bots block under the articles (ADD BOT, FILL TO and its 2-to-16 count, then a row per bot in two columns with its tier) and the Edit Bot panel (Callsign, Plane with Random, the eleven stock airframes and each registered plane mod, Skill from langui 3695 to 3697, REMOVE, ACCEPT, the stock plane's icon and ratings, a mod's being its parent's under its own name).
 The rows are `PlayerSetupFeature.Bots`, so the local Dogfight lobby lists and counts them and its launch carries them; the pilot names load from the message table on the first add. A local Dogfight has no teams, so the panel offers none. The plane list greys and steps over an airframe the rule its door passes refuses (`OriginalJoinBoard.Open`); Instant Action's door passes `InstantActionFeature.AdmitsBot`, and the top level's, which a local Dogfight shares, passes none.
 Words, boxes and lists take the Multiplayer Lobby's bot faces through `MultiplayerBoardText`, the plaques the board's own paper strip. The lobby's twin: `OriginalLobbyScreen.cs`.
 
@@ -1467,7 +1467,7 @@ layout with no network behind it, its rows and drawing built by `OriginalLobbySc
 Mission Options holds the map box over the shell's chapters (each mode's pick its own) and the
 lobby's victory and lives rules, which a Dogfight edits into `PlayerSetupFeature.MatchOptions` and
 Free Flight greys. Select Plane holds seat 0's aircraft, and the player list names each seat and a
-Dogfight's join board bots. FLY walks every
+Dogfight's join board bots, a plane mod bot's plane by the mod's name. FLY walks every
 further seat through `OriginalSeatPlane.cs` and launches on the walk's last confirm. Remake-only:
 [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -1743,7 +1743,7 @@ Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage
 
 ## src/UI/Menu/DogfightBots.cs
 The bot rows a Dogfight host keeps and the rules every such list follows, engine-free, shared by the network lobby (`DogfightLobby.cs`) and the local join board (`PlayerSetupFeature.Bots`).
-`Add` makes a row on a Random plane at veteran under a callsign drawn from `CallsignPool` that neither a row nor a person holds, else `Bot n`; `Rename` (cut to 12, refusing a blank or held name), `SetAirframe`, `SetSkill`, `SetTeam`, `Remove`, `DropNewest` (the row a joining person takes the place of) and `ClearTeam` (a disband) edit them in place by id. `ResetRefused` puts a row on a refused airframe back on Random. `Room` and `FillTo` are the 16-pilot rules, and `LaunchEntries` is what a launch resolves through `Session/Roster/BotSeats.cs`.
+`Add` makes a row on a Random plane at veteran under a callsign drawn from `CallsignPool` that neither a row nor a person holds, else `Bot n`; `Rename` (cut to 12, refusing a blank or held name), `SetAirframe` (a plane mod as its id in `DogfightBot.ModAirframe` beside its parent's stock id, offered by the local join board alone), `SetSkill`, `SetTeam`, `Remove`, `DropNewest` (the row a joining person takes the place of) and `ClearTeam` (a disband) edit them in place by id. `ResetRefused` puts a row on a refused airframe back on Random, a mod judged by its parent. `Room` and `FillTo` are the 16-pilot rules, and `LaunchEntries` is what a launch resolves through `Session/Roster/BotSeats.cs`.
 The owner holds the gates: who may edit, how many pilots its field holds and which team a new row joins. Coverage: `CSVM.Tests/DogfightLobbyTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs

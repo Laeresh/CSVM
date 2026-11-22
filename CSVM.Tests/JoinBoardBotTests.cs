@@ -161,6 +161,30 @@ public class JoinBoardBotTests
         Assert.Equal(new[] { false, true, true }, panes.Select(s => s.IsBot));
     }
 
+    // A row on a plane mod keeps its parent's stock id for the int readers and launches on the mod's
+    // id. Random and a refused parent clear it.
+    [Fact]
+    public void ARowOnAPlaneModLaunchesOnItsIdAndIsJudgedByItsParent()
+    {
+        var setup = Confirmed(seats: 1);
+        setup.AddBot();
+        int id = setup.Bots.Rows[0].Id;
+        int brigand = StockAirframes.IdOf("player_brigand")!.Value;
+        Assert.True(setup.Bots.SetAirframe(id, brigand, "suite_mod"));
+        Assert.Equal((brigand, "suite_mod"), (setup.Bots.Rows[0].Airframe, setup.Bots.Rows[0].ModAirframe));
+        Assert.Equal("suite_mod", setup.Bots.LaunchEntries()[0].Plane);
+        Assert.False(setup.Bots.SetAirframe(id, DogfightLobbySeat.RandomAirframe, "suite_mod"));
+
+        setup.Bots.ResetRefused(airframe => airframe != brigand);
+        Assert.True(setup.Bots.Rows[0] is { RandomPlane: true, ModAirframe: null });
+        Assert.Null(setup.Bots.LaunchEntries()[0].Plane);
+
+        // ABLE-TO-FAIL CONTROL: a stock pick after the mod clears the mod id.
+        Assert.True(setup.Bots.SetAirframe(id, brigand, "suite_mod"));
+        Assert.True(setup.Bots.SetAirframe(id, brigand));
+        Assert.Equal("player_brigand", setup.Bots.LaunchEntries()[0].Plane);
+    }
+
     [Fact]
     public void TheJoinBoardAddsFillsAndEditsBotRowsAndTheDogfightCountsThem()
     {
