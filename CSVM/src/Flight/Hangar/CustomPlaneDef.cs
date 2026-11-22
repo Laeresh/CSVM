@@ -61,8 +61,8 @@ public sealed class CustomPlaneDef
     public const int MaxDecal = 49;
 
     /// <summary>A decal slot keeping the aircraft's shipped placeholder texture. Not a value the
-    /// original can store: a fresh build has no authored decal (the pattern defaults carry none),
-    /// and this says so rather than claiming decal 0.</summary>
+    /// original can store. A record with no pattern loaded has no authored decal, and this says
+    /// so rather than claiming decal 0.</summary>
     public const int KeepDecal = -1;
 
     /// <summary>An ammunition slot nobody has picked for. Not a value the campaign record has: its
@@ -227,8 +227,9 @@ public sealed class CustomPlaneDef
         PaintShades[slot] = HangarPaintTables.Default.DefaultShadeFor(PaintColours[slot]);
     }
 
-    /// <summary>Loads a pattern's six colour/shade defaults over this plane's own, which is all
-    /// selecting a pattern does in the original (callback 2238's SET at <c>0x0040d4ba</c>).</summary>
+    /// <summary>Loads a pattern's six colour/shade defaults over this plane's own (the original's
+    /// callback 2238 SET at <c>0x0040d4ba</c>). It also loads the pattern's three decals, which
+    /// the original leaves alone.</summary>
     public void LoadPatternDefaults(int pattern)
     {
         PaintPattern = Math.Clamp(pattern, 0, MaxPaintPattern);
@@ -244,6 +245,13 @@ public sealed class CustomPlaneDef
                 PaintColours[slot] = entry.Colours[slot];
                 PaintShades[slot] = entry.Shades[slot];
             }
+        }
+
+        if (entry.Decals.Count == 3)
+        {
+            NoseDecal = entry.Decals[0];
+            TailDecal = entry.Decals[1];
+            WingDecal = entry.Decals[2];
         }
 
         Clamp();

@@ -300,6 +300,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     // authored waits and cue points and one large step would stand at the first of them.
     private const double AidSlice = 1.0 / 60.0;
 
+    // TUNE: the hangar cover's propeller, its top left in the 800x600 dialog space, at the lower right.
+    private const float CoverPropellerX = 744f;
+    private const float CoverPropellerY = 544f;
+
     // The campaign-hangar aid's tab argument, each the hub screen it opens on over the wallet.
     private static readonly IReadOnlyDictionary<string, OriginalScreen> CampaignHangarTabs =
         new Dictionary<string, OriginalScreen>(StringComparer.OrdinalIgnoreCase)
@@ -332,6 +336,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     // orbits it is where the pointer stood last frame while the drag holds.
     private HangarPreviewStage? _planePreview;
     private (float X, float Y)? _planeDrag;
+    // A blank board with the load screen's turning propeller covers the hub while a stage warms the
+    // stock airframes not yet warmed (#407). No seat steps meanwhile.
+    private bool _hangarCover;
+    private ulong _coverStartMs;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -410,6 +418,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The hangar's live plane picture while it stands, for a suite reading it back.</summary>
     internal HangarPreviewStage? PlanePreview => _planePreview;
+
+    /// <summary>Whether the blank board with the turning propeller covers the hub, for a suite.</summary>
+    internal bool HangarCovered => _hangarCover;
 
     /// <summary>The view the board draws through, for a suite reading its live pictures.</summary>
     internal ComposedBoardView? View => _view;
@@ -898,6 +909,13 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
+        if (_hangarCover)
+        {
+            SyncPlanePreview(dt, null);
+            Redraw();
+            return;
+        }
+
         bool changed = _devices.Sync(dt);
         bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
@@ -1202,14 +1220,20 @@ public sealed class OriginalPresentation : IMenuPresentation
     private bool SyncPlanePreview(float dt, MenuPointer? pointer)
     {
         var hangar = _shell?.Hangar;
-        if (hangar?.Preview is not { } pose || hangar.PreviewArea is not { } area || _view == null || _layer == null)
+        var pose = hangar?.Preview;
+        var area = hangar?.PreviewArea;
+        // Every hangar door opens on the name screen, which raises the stage under Enhanced too. The
+        // warm-up runs there, and the hub opens on a warm stage with its skins decoded.
+        bool naming = _shell?.Screen == OriginalScreen.PlaneName && GraphicsMode.Enhanced;
+        if ((pose == null || area == null) && !naming || _view == null || _layer == null)
         {
             ClosePlanePreview();
             return false;
         }
 
-        bool opened = false;
-        if (_planePreview == null)
+        // The opening frame builds nothing, so the hub draws before the first build's pause.
+        bool opening = _planePreview == null;
+        if (opening)
         {
             if (HangarPreviewStage.Open(Data, _dataRoot) is not { } stage)
             {
@@ -1218,13 +1242,25 @@ public sealed class OriginalPresentation : IMenuPresentation
 
             _planePreview = stage;
             _layer.AddChild(stage);
-            _view.LivePictures[OriginalHangarScreen.LivePictureName] = stage.GetTexture();
-            opened = true;
+            if (naming && stage.Warming && hangar?.DoorPose is { } door)
+            {
+                stage.WarmPainted(door);
+            }
+
+            _hangarCover = stage.Warming;
+            _coverStartMs = Time.GetTicksMsec();
+            return _hangarCover;
+        }
+
+        if (pose == null || area is not { } rect)
+        {
+            _planePreview!.Step(dt, 0f, 0f);
+            return Uncover();
         }
 
         // Rendered at the picture's drawn size, so it stays sharp at any window size.
         var fit = BoardFit.For(_view.GetViewportRect().Size.X, _view.GetViewportRect().Size.Y);
-        _planePreview.Size = new Vector2I(Math.Max(1, (int)(area.Width * fit.Scale)), Math.Max(1, (int)(area.Height * fit.Scale)));
+        _planePreview!.Size = new Vector2I(Math.Max(1, (int)(rect.Width * fit.Scale)), Math.Max(1, (int)(rect.Height * fit.Scale)));
         _planePreview.Show(pose);
         float dragX = 0f, dragY = 0f;
         if (pointer is { Pressed: true } held && _planeDrag is { } last)
@@ -1232,8 +1268,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             (dragX, dragY) = (held.X - last.X, held.Y - last.Y);
             _planeDrag = (held.X, held.Y);
         }
-        else if (pointer is { Clicked: true } press && hangar.OpenHangarDropdown == null && _shell!.Dialog == null
-            && press.X >= area.X && press.X < area.X + area.Width && press.Y >= area.Y && press.Y < area.Y + area.Height)
+        else if (pointer is { Clicked: true } press && hangar!.OpenHangarDropdown == null && _shell!.Dialog == null
+            && press.X >= rect.X && press.X < rect.X + rect.Width && press.Y >= rect.Y && press.Y < rect.Y + rect.Height)
         {
             _planeDrag = (press.X, press.Y);
         }
@@ -1243,7 +1279,29 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _planePreview.Step(dt, dragX, dragY);
-        return opened;
+        bool uncovered = Uncover();
+        if (_view.LivePictures.ContainsKey(OriginalHangarScreen.LivePictureName))
+        {
+            return uncovered;
+        }
+
+        _view.LivePictures[OriginalHangarScreen.LivePictureName] = _planePreview.GetTexture();
+        return true;
+    }
+
+    // Lifts the cover once the stage has warmed and shows what it was raised for: the name screen,
+    // or the hub's plane. True when it lifted, so the board under it is composed again.
+    private bool Uncover()
+    {
+        if (!_hangarCover || _planePreview is not { Warming: false } stage
+            || (stage.Shown == null && _shell?.Screen != OriginalScreen.PlaneName))
+        {
+            return false;
+        }
+
+        _hangarCover = false;
+        _view?.HoldMoving(Array.Empty<BoardPicture>());
+        return true;
     }
 
     private void ClosePlanePreview()
@@ -1255,6 +1313,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _view?.LivePictures.Remove(OriginalHangarScreen.LivePictureName);
+        if (_hangarCover)
+        {
+            _hangarCover = false;
+            _view?.HoldMoving(Array.Empty<BoardPicture>());
+        }
+
         _planePreview.GetParent()?.RemoveChild(_planePreview);
         _planePreview.QueueFree();
         _planePreview = null;
@@ -1705,7 +1769,18 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private void Redraw()
     {
-        if (_shell != null && _view != null)
+        if (_hangarCover && _view != null)
+        {
+            // The propeller turns at its authored rate by the wall clock, so a stalled frame moves it
+            // on by the beats that passed.
+            int frame = LoadProgress.FrameAt((Time.GetTicksMsec() - _coverStartMs) / 1000.0);
+            _view.Show(LoadScreens.Empty, _palette, string.Empty, string.Empty);
+            _view.HoldMoving(new[]
+            {
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, LoadScreens.Propeller[frame]), CoverPropellerX, CoverPropellerY),
+            });
+        }
+        else if (_shell != null && _view != null)
         {
             // Each family writes in its own palette. Paper pages take authored black, the loadout
             // the ammo form's and the join board the scrapbook's. The options pages take the

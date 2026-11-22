@@ -44,6 +44,14 @@ public sealed partial class HangarPreviewStage : SubViewport
     private const float DragRate = 0.012f;
     private const float StickDeadzone = 0.2f;
 
+    // TUNE: a warmed airframe's scale. Drawn this small inside the shown plane it covers no pixel.
+    // It is still in view and in the shadow map, so Godot compiles its pipelines.
+    private const float WarmScale = 1e-5f;
+
+    // The stock airframes built and drawn here in this process. Their shaders stay with ShaderTwins
+    // and Godot keeps each shader's pipelines, so a later pick of one compiles none.
+    private static readonly HashSet<string> Warmed = new(StringComparer.Ordinal);
+
     private readonly GameZ _planes;
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _patterns;
@@ -53,8 +61,14 @@ public sealed partial class HangarPreviewStage : SubViewport
     private readonly Camera3D _camera = new() { Name = "camera", Fov = FieldOfView };
     private readonly DirectionalLight3D _key;
     private readonly List<Node3D> _rockets = new();
+    private readonly Queue<string> _toWarm = new();
     private PlaneBuilder? _builder;
     private Node3D? _model;
+    private Node3D? _warm;
+    private HangarPreviewPose? _warmPose;
+    private bool _built;
+    private double _warmMs;
+    private int _warmMade;
     private float _radius = 5f;
     private float _portSide = -1f;
 
@@ -68,6 +82,14 @@ public sealed partial class HangarPreviewStage : SubViewport
         {
             _rocket = rocket;
             _rocketScene = ProjectilePool.PylonScene(chapterGamez, textures, Chapter);
+        }
+
+        foreach (string stock in StockAirframes.Nodes)
+        {
+            if (!Warmed.Contains(stock))
+            {
+                _toWarm.Enqueue(stock);
+            }
         }
 
         OwnWorld3D = true;
@@ -121,8 +143,14 @@ public sealed partial class HangarPreviewStage : SubViewport
     /// <summary>The rocket bodies hanging now, one per opened pylon.</summary>
     public IReadOnlyList<Node3D> Rockets => _rockets;
 
+    /// <summary>True while stock airframes are still being warmed, one per step.</summary>
+    public bool Warming => _warm != null || _warmPose != null || _toWarm.Count > 0;
+
     /// <summary>How many times the paint went on without a rebuild.</summary>
     public int Repaints { get; private set; }
+
+    /// <summary>How many stock airframes a stage has warmed in this process.</summary>
+    internal static int WarmedCount => Warmed.Count;
 
     /// <summary>The stage over <paramref name="data"/>'s planes and its first chapter's skins and
     /// rocket, or null without planes. The first open decodes that chapter's archives, which is what
@@ -182,6 +210,28 @@ public sealed partial class HangarPreviewStage : SubViewport
     /// in authored pixels, and every pad's right stick orbits too. The camera then takes its pose.</summary>
     public void Step(float dt, float dragX, float dragY)
     {
+        // Last step's warmed airframe has drawn once by now.
+        if (_warm != null)
+        {
+            _stand.RemoveChild(_warm);
+            _warm.QueueFree();
+            _warm = null;
+        }
+
+        // A step whose frame already built the shown plane warms nothing, so the two never add up.
+        if (_built)
+        {
+            _built = false;
+        }
+        else
+        {
+            WarmNext();
+        }
+
+        // A board covering the hub draws no live picture, which would hold a WhenVisible stage's
+        // frames and with them the warm-up's draws.
+        RenderTargetUpdateMode = Warming ? UpdateMode.Always : UpdateMode.WhenVisible;
+
         float stickX = 0f, stickY = 0f;
         foreach (int pad in Bindings.Pads.For(null))
         {
@@ -193,6 +243,10 @@ public sealed partial class HangarPreviewStage : SubViewport
         Orbit.Advance(dt);
         Frame();
     }
+
+    /// <summary>Warms <paramref name="pose"/>'s airframe in its paint, with an HE rocket, before the
+    /// unpainted rest. It is the first picture's own build, made under the cover.</summary>
+    public void WarmPainted(HangarPreviewPose pose) => _warmPose = pose;
 
     public override void _ExitTree() => _textures.Dispose();
 
@@ -225,6 +279,7 @@ public sealed partial class HangarPreviewStage : SubViewport
         }
 
         long start = Stopwatch.GetTimestamp();
+        int made = ShaderTwins.Made;
         string node = pose.Node;
         try
         {
@@ -244,7 +299,60 @@ public sealed partial class HangarPreviewStage : SubViewport
         Hang(pose);
         Frame();
         Log.Info("ui",
-            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, radius {_radius:0.0} m");
+            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, {ShaderTwins.Made - made} shader(s) made, radius {_radius:0.0} m");
+        _built = true;
+        Warmed.Add(node);
+    }
+
+    // Builds the painted pose asked for, else the next unwarmed stock airframe unpainted, inside the
+    // shown plane at WarmScale. Step frees it once it has drawn. One per step keeps each stall to
+    // one airframe's build, so the menu keeps moving (#407).
+    private void WarmNext()
+    {
+        var painted = _warmPose;
+        _warmPose = null;
+        string? node = painted?.Node;
+        while (node == null && _toWarm.TryDequeue(out var next))
+        {
+            node = Warmed.Contains(next) ? null : next;
+        }
+
+        if (node == null)
+        {
+            return;
+        }
+
+        Warmed.Add(node);
+        long start = Stopwatch.GetTimestamp();
+        int made = ShaderTwins.Made;
+        try
+        {
+            var builder = painted != null
+                ? new PlaneBuilder(_planes, _textures, scheme: painted.Paint(), patterns: _patterns)
+                : new PlaneBuilder(_planes, _textures);
+            _warm = builder.Build(node);
+            _warm.Scale = Vector3.One * WarmScale;
+            // The first picture hangs HE rockets too, whose shaders no airframe build makes.
+            if (painted != null && _rocketScene != null && _rocket != null
+                && ProjectilePool.InstanceBody(_rocketScene, _rocket) is { } rocket)
+            {
+                rocket.Visible = true;
+                _warm.AddChild(rocket);
+            }
+
+            _stand.AddChild(_warm);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.IO.InvalidDataException)
+        {
+            Log.Warn("ui", $"hangar preview: {node} does not build, so its first view compiles its shaders: {e.Message}");
+        }
+
+        _warmMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        _warmMade += ShaderTwins.Made - made;
+        if (_toWarm.Count == 0)
+        {
+            Log.Info("ui", $"hangar preview: warmed the stock airframes, {_warmMs:0} ms over the steps, {_warmMade} shader(s) made");
+        }
     }
 
     // Moves the model so its bounds' middle is the stand's origin. Then reads the radius the camera

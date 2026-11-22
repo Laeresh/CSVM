@@ -1514,6 +1514,7 @@ public partial class Launcher : Node3D
         // Undoes the menu's black before anything reads the environment: the world's reflections
         // and the cockpit pass's copy of it both take the sky from here (Utils/WorldBackdrop.cs).
         WorldBackdrop.Sky(_env);
+        DrawMenuWorld(true);
         // The saved gameplay options, read at every launch so an Options apply reaches the next
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
@@ -1632,6 +1633,8 @@ public partial class Launcher : Node3D
     private void EnterMenu()
     {
         _menuDriven = true;
+        // Before the boot sequence, whose frames would draw the empty world too.
+        DrawMenuWorld(false);
         // A player's flight survives a bad rig.json, flying without it; every other launch keeps the throw.
         Mech3.PlaneRigPatch.PlayerNotice = message => _menu.Host?.Features.Get<MenuNoticeFeature>().Post(message);
         if (_spec.PlaysBootSequence)
@@ -1792,6 +1795,18 @@ public partial class Launcher : Node3D
         }
     }
 
+    // Whether the window's viewport draws the 3D world. The flat menu's world is empty under the
+    // black backdrop, yet drawing it ran TAA and the Enhanced passes each frame. Their first frame
+    // has Godot build every later shader's advanced variants at about three times the plain cost,
+    // which the hangar preview's builds paid (#407). A VR menu is a 3D theater and keeps it.
+    private void DrawMenuWorld(bool draw)
+    {
+        if (_xr == null)
+        {
+            GetViewport().Disable3D = !draw;
+        }
+    }
+
     // Shows the menu at a semantic destination, building the host on first use. Re-shown by
     // ReturnToMenu after the boards' Exit and a failed build, and by OpenDebrief after a campaign
     // mission. The --menu= aid is the cold start's alone: the presentation created inside the
@@ -1802,6 +1817,7 @@ public partial class Launcher : Node3D
         // stands over the environment in between, so the menu owns a black background from its
         // first show until a launch takes it back (Utils/WorldBackdrop.cs).
         WorldBackdrop.Black(_env);
+        DrawMenuWorld(false);
         string aid = _menu.Show(_cli, _spec, _buildStamp, destination);
         // A build tears the load screen down before anything renders, so a shot needs a door that
         // leaves it standing. The arguments: a campaign mission, an Instant Action mission type,

@@ -710,7 +710,8 @@ in `CSVM/data/stock_loadouts.json`, where they agree with these rows slot for sl
 1. It reads the build record's own airframe field at `0x0064cba4` (record `+0x2c`) and copies the
    204-byte stock template at `0x00619f58 + airframe*204` over the whole record (`0x0040aaff` to
    `0x0040ab2c`), preserving the typed name across the copy through the string helper at
-   `0x00a1fc84`.
+   `0x00a1fc84`. All eleven templates carry the same paint: pattern 4 (`fortune`) with its own
+   colour and shade defaults, and decals 40/8/7 (nose, tail, wing) at `+0x5c`.
 2. The paint block (thirteen dwords from `0x0064cbb8`) is saved and put back when `0x00647b94` is
    set; otherwise the pattern's own colour and shade defaults are reloaded from `0x0061daf4` and
    `0x0061db00`.

@@ -191,10 +191,30 @@ internal static class MenuHangarSuites
             Press(host, seat, Back);
 
             Utils.GraphicsMode.Set(true);
+            // A hangar door opens on the name screen. It raises the stage, which warms the stock
+            // airframes one a step under the cover and lifts it there.
+            shell.OpenHangar();
+            host.Tick(1f / 60f);
+            var naming = presentation.PlanePreview;
+            bool nameCovered = naming != null && presentation.HangarCovered == naming.Warming;
+            for (int i = 0; naming is { Warming: true } && i < 2 * StockAirframes.Nodes.Count; i++)
+            {
+                host.Tick(1f / 60f);
+                nameCovered &= presentation.HangarCovered == naming.Warming;
+            }
+
+            ctx.Check(shell.Screen == OriginalScreen.PlaneName && naming is { Warming: false } && nameCovered
+                && !presentation.HangarCovered && HangarPreviewStage.WarmedCount == StockAirframes.Nodes.Count,
+                $"the name screen warms every stock airframe under the cover and lifts it there ({shell.Screen}, {HangarPreviewStage.WarmedCount} warmed)");
+
+            int madeAtName = Mech3.ShaderTwins.Made;
             shell.OpenHangarTab(OriginalScreen.HangarAirframe, ScratchName());
+            // Open, then build and show.
             host.Tick(1f / 60f);
             host.Tick(1f / 60f);
             var stage = presentation.PlanePreview;
+            ctx.Check(stage != null && stage == naming && stage.Model != null && Mech3.ShaderTwins.Made == madeAtName,
+                $"and the hub opens on the stage the name screen warmed, its painted, armed plane making no shader ({Mech3.ShaderTwins.Made - madeAtName} made)");
             var board = shell.Compose();
             var blueprint = Measure(shell, $"PX_{hangar.Scratch.Airframe}_BLUEPRINT.TGA");
             var live = board.Pictures.FirstOrDefault(p => p.Art.Library == BoardArtLibrary.Live);
@@ -214,12 +234,29 @@ internal static class MenuHangarSuites
             ctx.Check(stage.Model?.Name.ToString() == node && stage.Shown?.Airframe == hangar.Scratch.Airframe,
                 $"the stage builds the hub's airframe {node} ({stage.Model?.Name})");
 
+            // One stock airframe a step, never in the step that built the shown plane, under a cover.
+            bool covered = presentation.HangarCovered == stage.Warming;
+            int steps = 0;
+            for (; stage.Warming && steps < 2 * StockAirframes.Nodes.Count; steps++)
+            {
+                host.Tick(1f / 60f);
+                covered &= presentation.HangarCovered == stage.Warming;
+            }
+
+            ctx.Check(!stage.Warming && HangarPreviewStage.WarmedCount == StockAirframes.Nodes.Count,
+                $"the stage warms every stock airframe, one a step ({HangarPreviewStage.WarmedCount} of {StockAirframes.Nodes.Count} in {steps} step(s))");
+            ctx.Check(covered && !presentation.HangarCovered,
+                $"and the blank board covers the hub exactly while it warms ({presentation.HangarCovered})");
+
             var built = stage.Model;
+            int made = Mech3.ShaderTwins.Made;
             Press(host, seat, Accept);
             Press(host, seat, Down);
             int focused = shell.Hangar.Preview?.Airframe ?? -1;
             ctx.Check(focused >= 0 && focused != hangar.Scratch.Airframe && stage.Shown?.Airframe == focused && stage.Model != built,
                 $"the open airframe list's focused row {focused} is what the stage rebuilds ({stage.Shown?.Airframe})");
+            ctx.Check(Mech3.ShaderTwins.Made == made,
+                $"and the warmed rebuild makes no shader ({Mech3.ShaderTwins.Made - made} made)");
             Press(host, seat, Back);
 
             shell.OpenHangarTab(OriginalScreen.HangarHardpoints, ScratchName());
@@ -238,9 +275,9 @@ internal static class MenuHangarSuites
             int repaints = stage.Repaints;
             shell.OpenHangarTab(OriginalScreen.HangarPaint, ScratchName());
             host.Tick(1f / 60f);
-            hangar.SetDecal(0, 40);
+            hangar.SetDecal(0, 41);
             host.Tick(1f / 60f);
-            ctx.Check(stage.Repaints == repaints + 1 && stage.Model == built && stage.Shown?.NoseDecal == 40,
+            ctx.Check(stage.Repaints == repaints + 1 && stage.Model == built && stage.Shown?.NoseDecal == 41,
                 $"a nose decal repaints in place without a rebuild ({stage.Repaints - repaints} repaint(s))");
 
             Press(host, seat, Back);
