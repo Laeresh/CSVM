@@ -194,11 +194,22 @@ no entry anywhere carries both flags, so the two cycles never contend for one re
 `ap_transmitter` (the radio tower, in six `IA1` files). The rest are per-mission: C3/M02 flags
 eleven of the work
 camp's own buildings (`g_tower1`-`3`, `unit01`-`07`, `dock2`), C1B/M03 flags a tanker, a second
-airship and a decoy lighthouse, C1/M02 a cargo train, C2/M05 a cargo zeppelin and C3/M04 a
-shipwreck. ⚠ The count is what a mission AUTHORS, not what it shows: a record whose node the world
+airship and a decoy lighthouse, C1/M02 a cargo train, C2/M05 a cargo zeppelin, C3/M04 a
+shipwreck and C5/MP1 its Deathmatch rearm base (`rearm_node_1`). ⚠ The count is what a mission AUTHORS, not what it shows: a record whose node the world
 does not build offers nothing. Of the six `IA1` tables that flag `ap_transmitter`, only C1's world
 carries a node of that name, so the radio tower is a live site in C1's Instant Action and in no
 other chapter's; both `MP3` rearm bases resolve in all eight.
+
+**A match's rearm base rides the Enemy/Objective cycle in every chapter but C5's Deathmatch.**
+C1, C1B, C2, C3 and C4 flag the base building `racmplx` `objective` in `MP1` and in `MP2`, so
+the base sorts ahead of every aircraft and Nearest Enemy/Objective lands on it. C5 builds no
+`rabaset1`, so its tables flag the nodes themselves: `MP2` flags `rearm_node_1` and `_2`
+`objective`, one per team, and `MP1` flags `rearm_node_1` `other_target`, the one Deathmatch base
+reached only by the Non-Aircraft keys. C1C and C2B carry no rearm node. The match setup
+`FUN_00495980` stamps no flag onto a base outside Zeppelin vs Zeppelin, and C5's `objectives.zrd`
+holds no target directive, so the original's C5 Deathmatch offers the base on the Non-Aircraft
+cycle alone. CSVM reads the same table, at the spot `mp1.gw` moves `rearm_node_2` to; the
+`mode-target-table` suite pins both C5 tables.
 
 **Every mode reads its own file, and only the campaign edits it.** Which table a session gets is the
 chapter and mission folder it launches with (`C1/IA1`, `C4/MP3`), so the same mode differs per map.
