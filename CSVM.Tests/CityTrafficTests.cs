@@ -100,29 +100,19 @@ public sealed class CityTrafficTests
         }
     }
 
-    private static CityTraffic.Run Line(Vector2 start, Vector2 dir, float length) =>
-        new(start, dir, new Vector2(dir.Y, -dir.X), length, 16.5f, new float[(int)(length / 4f) + 1]);
-
     // Each piece starts where the one before it ended, the last piece ending at the first's start and heading.
-    private static void AssertClosed(CityTraffic.Path path)
+    internal static void AssertClosed(CityTraffic.Path path)
     {
         Assert.Equal(path.Segs.Sum(s => s.Length), path.Length, 2);
         for (int i = 0; i < path.Segs.Count; i++)
         {
-            var (end, dir) = End(path.Segs[i]);
+            var (end, dir) = path.Segs[i].Along(path.Segs[i].Length);
             var next = path.Segs[(i + 1) % path.Segs.Count];
             Assert.True((end - next.Start).Length() < 0.01f, $"piece {i} ends {end}, the next starts {next.Start}");
             Assert.True((dir - next.Dir).Length() < 0.001f, $"piece {i} ends heading {dir}, the next {next.Dir}");
         }
     }
 
-    private static (Vector2 End, Vector2 Dir) End(CityTraffic.Seg seg)
-    {
-        if (seg.Radius == 0f)
-            return (seg.Start + (seg.Dir * seg.Length), seg.Dir);
-        float a = seg.Length / seg.Radius;
-        var right = new Vector2(-seg.Dir.Y, seg.Dir.X);
-        return (seg.Start + (seg.Dir * (seg.Radius * MathF.Sin(a))) + (right * (seg.Radius * (1f - MathF.Cos(a)))),
-            (seg.Dir * MathF.Cos(a)) + (right * MathF.Sin(a)));
-    }
+    private static CityTraffic.Run Line(Vector2 start, Vector2 dir, float length) =>
+        new(start, dir, new Vector2(dir.Y, -dir.X), length, 16.5f, new float[(int)(length / 4f) + 1]);
 }

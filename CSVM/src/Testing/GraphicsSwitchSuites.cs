@@ -1662,6 +1662,7 @@ internal static class GraphicsSwitchSuites
         + "stands, each instance in a block of the variant that pick gives its cell, the cblock2 tiles over cblock4's set "
         + "among them, in nodes with no collider and no shadow "
         + "on the models' layer; the traffic's nodes drive, ranged, and every city shader takes its driving rewrite; "
+        + "the highway's cars stay on its deck; "
         + "the dressing hides on a live move to Off, to Original and to Faithful and shows again")]
     internal static void CityDressingStands(TestContext ctx)
     {
@@ -1752,6 +1753,50 @@ internal static class GraphicsSwitchSuites
                 bool drives = new[] { true, false }.All(near => new[] { false, true }.All(toned => new[] { false, true }.All(paint =>
                     Mech3.CityTraffic.DrivingCode(CityModels.ShaderCode(near, toned: toned), paint) != null)));
                 ctx.Check(drives, $"every city shader a car may draw with holds each text the traffic's driving rewrite edits");
+                // Every highway polygon chains, every lane loop closes on itself, and every highway car stays on the deck.
+                var polygons = Mech3.CityHighway.Polygons(ctx.ChapterGamez("C5")!);
+                var chained = Mech3.CityHighway.Chain(polygons);
+                var loops = Mech3.CityHighway.Loops(chained.Decks, out int unclosed);
+                ctx.Check(polygons.Count > 0 && chained.Polygons == polygons.Count && chained.Orphans == 0,
+                    $"the highway's {polygons.Count} polygons all chain into {chained.Decks.Count} decks ({chained.Polygons} chained, {chained.Orphans} orphans)");
+                float Gap(Mech3.CityTraffic.Path loop) => Enumerable.Range(0, loop.Segs.Count).Max(i =>
+                {
+                    var (end, dir) = loop.Segs[i].Along(loop.Segs[i].Length);
+                    var next = loop.Segs[(i + 1) % loop.Segs.Count];
+                    return Mathf.Max((end - next.Start).Length(), (dir - next.Dir).Length());
+                });
+                ctx.Check(loops.Count > 0 && unclosed == 0 && loops.All(l => Gap(l) < 0.05f),
+                    $"{loops.Count} highway lane loops close on themselves ({unclosed} unclosed, widest gap {loops.Select(Gap).DefaultIfEmpty(0f).Max():0.000})");
+                var deck = new List<Vector3>();
+                foreach (var (corners, _) in polygons)
+                {
+                    for (int i = 1; i + 1 < corners.Length; i++)
+                        deck.AddRange(new[] { corners[0], corners[i], corners[i + 1] });
+                }
+                // C5's streets lie at 5 m and its deck no lower than 36.9 m, so a piece's height alone names a highway car.
+                float above = deck.DefaultIfEmpty().Min(v => v.Y) - 5f;
+                int highway = 0, offDeck = 0;
+                foreach (var body in cars.Where(c => c.Name.ToString().StartsWith("car_near_", StringComparison.Ordinal)))
+                {
+                    for (int i = 0; i < body.Multimesh.InstanceCount; i++)
+                    {
+                        var xf = body.GlobalTransform * body.Multimesh.GetInstanceTransform(i);
+                        var piece = body.Multimesh.GetInstanceCustomData(i);
+                        if (xf.Origin.Y < above)
+                            continue;
+                        highway++;
+                        for (int j = 0; j < 8; j++)
+                        {
+                            float s = piece.R * (j + 0.5f) / 8f, r = piece.A;
+                            var at = xf * (r == 0f ? new Vector3(s, 0f, 0f) : new Vector3(r * Mathf.Sin(s / r), 0f, r * (1f - Mathf.Cos(s / r))));
+                            if (Mech3.CityDressing.Height(deck, new Vector2(at.X, at.Z)) is not { } y || Mathf.Abs(at.Y - y - 0.05f) > 0.25f)
+                                offDeck++;
+                        }
+                    }
+                }
+                int pieces = loops.Sum(l => l.Segs.Count);
+                ctx.Check(highway == pieces && pieces > 0 && offDeck == 0,
+                    $"{highway} pieces of cars above {above:0} m, one per piece of the {pieces} in the lane loops, stay on the deck's surface ({offDeck} of {highway * 8} samples off it)");
                 ctx.Note($"C5 dressing: {placed.Count} instances in {nearCells.Count} near and {farCells.Count} far nodes; {ground.Floored} floored polygons");
 
                 bool Shown() => dressing.Root.IsVisibleInTree();
