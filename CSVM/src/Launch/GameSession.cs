@@ -2456,13 +2456,14 @@ public partial class GameSession : Node3D
             // network board rises on the end itself.
             bool held = _wire.Link == null;
 
-            // The match's shared board, its R the director's rematch. A guest's board says why it
-            // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
-            // takes it to the lobby.
+            // The match's shared board, its R the director's rematch, its winner the end line's. A
+            // guest's board says why it offers no Restart, except in Zeppelin vs Zeppelin, where each
+            // machine's own Restart takes it to the lobby.
             var board = toScores == null
                 ? boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                     dogfight.Restart,
                     dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null,
+                    () => dogfight.DecidedWinner,
                     held)
                 : null;
             dogfight.Wire(new VersusDirector.WireInputs

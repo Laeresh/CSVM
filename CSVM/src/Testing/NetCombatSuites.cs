@@ -1079,6 +1079,13 @@ internal static class NetCombatSuites
         ctx.Check(skewed.Winner() == 3,
             $"ABLE-TO-FAIL CONTROL: the first guest's own copy of the scores ranks seat 2 alone first ({Scoreboard(peers[1])})");
         EndLines(ctx, peers, null);
+
+        // The board a guest ranking its own copy would title, which is what it read before it took
+        // the host's winner.
+        string ownRanking = VersusBoard.Title(skewed, peers[1].NetSeats);
+        var headlines = peers.Select(p => (p.Boards?.DogfightBoard as VersusBoard)?.Headline ?? "no board").ToArray();
+        ctx.Check(ownRanking != "DRAW" && headlines.All(h => h == "DRAW"),
+            $"and every machine's board headline reads the host's draw, the skewed guest's too, whose own ranking would title it '{ownRanking}' ({string.Join(" | ", headlines)})");
     }
 
     // One ending, read on all three machines. The match over, the board holding the world, the

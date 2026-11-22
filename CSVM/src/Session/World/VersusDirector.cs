@@ -106,6 +106,11 @@ public sealed class VersusDirector
     /// it applies one. A local match writes it in its own step.</summary>
     internal Net.NetMatchEnd End { get; private set; }
 
+    /// <summary>Who the end names, which the end line names too. A guest reads the host's named
+    /// winner. Everywhere else it is <see cref="VersusMatch.Winner"/>, the host's own decision,
+    /// and a guest's whose older host named none.</summary>
+    internal int DecidedWinner => Guest && _winner is { } named ? named : Match.Winner();
+
     /// <summary>How many host grants this machine has placed an aircraft from, the host's own
     /// included. A suite reads it to tell a placement that came off the wire from one the shared
     /// seed walked to. That is the line between the opening spawn and every respawn.</summary>

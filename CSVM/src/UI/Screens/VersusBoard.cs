@@ -33,8 +33,12 @@ public sealed partial class VersusBoard : ResultsBoard
     private static readonly float RowFont = ChromeType.InReference(ChromeSize.Body, ReferenceHeight);
 
     private VersusMatch _match = null!;
+    private System.Func<int> _winner = null!;
     private string _context = "";
     private System.Collections.Generic.IReadOnlyList<Net.NetSeat>? _seats;
+
+    /// <summary>The headline the board last drew, empty before the match first ended.</summary>
+    public string Headline { get; private set; } = "";
 
     // A rematch clears Completed, which the shell's _Process turns into the hide and the release.
     protected override bool StillEnded => _match.Completed;
@@ -43,12 +47,13 @@ public sealed partial class VersusBoard : ResultsBoard
     /// CanvasLayer above the splitscreen panes. It wakes itself on
     /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch. <paramref name="seats"/>
     /// is the match's roster by <c>PlayerIndex</c>, which names each seat. A <paramref name="held"/>
-    /// board waits for <see cref="Raise"/> instead.</summary>
+    /// board waits for <see cref="Raise"/> instead. <paramref name="winner"/> is who the end names,
+    /// <see cref="VersusMatch.Winner"/> where none is given.</summary>
     public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu,
         PauseState state, System.Func<int, MenuInput> inputFor, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null,
-        bool held = false)
+        bool held = false, System.Func<int>? winner = null)
     {
-        var board = new VersusBoard { _match = match, _context = context, _seats = seats };
+        var board = new VersusBoard { _match = match, _winner = winner ?? match.Winner, _context = context, _seats = seats };
         board.InitShell(state, exitsToMenu, inputFor);
         if (!held)
             match.MatchCompleted += board.OnMatchCompleted;
@@ -66,9 +71,10 @@ public sealed partial class VersusBoard : ResultsBoard
     /// <summary>The board's headline for a finished match: the one leader's name and WINS, or DRAW
     /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
     /// objective names the team that won it, whatever the totals. The leader is named by its
-    /// callsign from <paramref name="seats"/>, else by player tag.</summary>
-    public static string Title(VersusMatch match, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null) =>
-        match.NameOf(match.Winner(), seat => Net.NetSeats.SeatName(seats, seat)) is { } name
+    /// callsign from <paramref name="seats"/>, else by player tag. <paramref name="winner"/> is who
+    /// the end named, <see cref="VersusMatch.Winner"/> where none is given.</summary>
+    public static string Title(VersusMatch match, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null, int? winner = null) =>
+        match.NameOf(winner ?? match.Winner(), seat => Net.NetSeats.SeatName(seats, seat)) is { } name
             ? $"{name.ToUpperInvariant()} WINS"
             : "DRAW";
 
@@ -85,7 +91,7 @@ public sealed partial class VersusBoard : ResultsBoard
     private void OnMatchCompleted()
     {
         // Log the final standings too, so a match is reviewable from a headless run's log.
-        Log.Info("flight", $"dogfight results: {Title(_match, _seats)}");
+        Log.Info("flight", $"dogfight results: {Title(_match, _seats, _winner())}");
         foreach (var team in _match.TeamStandings())
             Log.Info("flight", $"  #{team.Rank}  {team.Name}  {team.Score} pts  {team.Kills}K/{team.Deaths}D");
         foreach (var st in _match.Standings())
@@ -104,11 +110,11 @@ public sealed partial class VersusBoard : ResultsBoard
         // already-drawn labels.
         var standings = _match.Standings().ToList();
         var teams = _match.TeamStandings().ToList();
-        int winner = _match.Winner();
-        string title = Title(_match, _seats);
+        int winner = _winner();
+        Headline = Title(_match, _seats, winner);
         var titleColor = !_match.Teamed && winner > 0 ? SplitScreen.PlayerColor(winner - 1) : TitleColor;
 
-        body.AddChild(Centered(Label(title, (int)(TitleFont * s), titleColor)));
+        body.AddChild(Centered(Label(Headline, (int)(TitleFont * s), titleColor)));
         body.AddChild(Centered(Label(_context, (int)(ContextFont * s), ContextColor)));
         body.AddChild(Separator(s));
         if (teams.Count > 0)

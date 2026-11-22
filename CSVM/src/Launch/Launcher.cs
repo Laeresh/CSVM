@@ -1447,6 +1447,20 @@ public partial class Launcher : Node3D
             return StartHoldFrame.Cancelled;
         }
 
+        // ⚠ Read the answer before the release. A Yes the board took in the frame the start released
+        // is still the player's word, and a release read first would fly them anyway.
+        bool host = session.Wire.Link is { IsHost: true };
+        if (board is { LeaveConfirmed: true })
+        {
+            if (host)
+            {
+                session.Wire.CancelStart();
+                return StartHoldFrame.Cancelled;
+            }
+
+            return StartHoldFrame.Left;
+        }
+
         if (!session.StartHeld)
         {
             return StartHoldFrame.Released;
@@ -1457,26 +1471,13 @@ public partial class Launcher : Node3D
             board?.Wait(UI.Screens.LoadScreens.WaitingText(messages, session.Wire.StartTally));
         }
 
-        if (board == null)
+        if (board != null)
         {
-            return StartHoldFrame.Held;
+            board.LeaveQuestion = !offerLeave ? string.Empty
+                : host ? UI.Screens.LoadScreens.HostLeaveQuestion : UI.Screens.LoadScreens.GuestLeaveQuestion;
         }
 
-        bool host = session.Wire.Link is { IsHost: true };
-        board.LeaveQuestion = !offerLeave ? string.Empty
-            : host ? UI.Screens.LoadScreens.HostLeaveQuestion : UI.Screens.LoadScreens.GuestLeaveQuestion;
-        if (!board.LeaveConfirmed)
-        {
-            return StartHoldFrame.Held;
-        }
-
-        if (host)
-        {
-            session.Wire.CancelStart();
-            return StartHoldFrame.Cancelled;
-        }
-
-        return StartHoldFrame.Left;
+        return StartHoldFrame.Held;
     }
 #pragma warning restore SA1202, SA1204
 

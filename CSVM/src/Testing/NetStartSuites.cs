@@ -66,7 +66,8 @@ internal static class NetStartSuites
         + "first guest loads, rewriting only the count, and reaches that guest's board too; Esc "
         + "stands the leave question over the board and a No keeps the hold; a guest's Yes leaves "
         + "the start and the others start without it; the last guest, whose load completes the set, "
-        + "writes nothing before its board comes down, and a host whose guest loaded during its build "
+        + "writes nothing before its board comes down, and its Yes answered in the frame its start releases "
+        + "still leaves; a host whose guest loaded during its build "
         + "writes nothing either; a pointer click on an answer answers it; and a host's Yes calls the "
         + "start off on every machine, one still loading included")]
     internal static void WaitingBoard(TestContext ctx)
@@ -164,7 +165,11 @@ internal static class NetStartSuites
                 return;
             }
 
+            // The last guest asks to leave while it holds, and answers Yes in the frame its start
+            // releases. The launcher reads that answer after the releasing step.
             var last = ends[2].Session;
+            bool lastAsked = Ask(boards[2], last, messages) == LoadScreens.GuestLeaveQuestion;
+            StartHoldFrame? onRelease = null;
             int released = -1;
             for (int step = 0; step < ReleaseSteps && released < 0; step++)
             {
@@ -172,7 +177,15 @@ internal static class NetStartSuites
                 bool held = false;
                 foreach (int m in new[] { 0, 2 })
                 {
-                    held |= Launcher.HoldLoadBoard(boards[m], ends[m].Session, messages, offerLeave: true) == StartHoldFrame.Held;
+                    bool answers = m == 2 && !last.StartHeld && onRelease == null;
+                    if (answers)
+                    {
+                        boards[2].Press(LoadKey.Accept);
+                    }
+
+                    var frame = Launcher.HoldLoadBoard(boards[m], ends[m].Session, messages, offerLeave: true);
+                    onRelease = answers ? frame : onRelease;
+                    held |= frame == StartHoldFrame.Held;
                     boards[m].Chalk(GameClock.FixedDt);
                 }
 
@@ -181,6 +194,8 @@ internal static class NetStartSuites
 
             ctx.Check(released >= 0 && host.Wire.StartGate?.Release == NetStartRelease.Everyone,
                 $"[leave] once the last guest has loaded, the host and it start without the one that left within {ReleaseSteps} steps ({released}, {host.Wire.StartGate?.Release})");
+            ctx.Check(lastAsked && onRelease == StartHoldFrame.Left,
+                $"[release frame] a Yes the last guest answers in the frame its start releases leaves the start rather than flying it; the release read ahead of the answer would give Released ({lastAsked}, {onRelease})");
             ctx.Check(!last.Wire.StartWaitsOnOthers && boards[2].Written.Length == 0,
                 $"[last] the last guest, whose own load completed the set, never begins the waiting line ('{boards[2].Written}')");
         }
