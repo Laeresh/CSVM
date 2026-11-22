@@ -245,9 +245,9 @@ internal static class MenuHangarSuites
             int repaints = stage.Repaints;
             shell.OpenHangarTab(OriginalScreen.HangarPaint, ScratchName());
             host.Tick(1f / 60f);
-            hangar.SetDecal(0, 40);
+            hangar.SetDecal(0, 41);
             host.Tick(1f / 60f);
-            ctx.Check(stage.Repaints == repaints + 1 && stage.Model == built && stage.Shown?.NoseDecal == 40,
+            ctx.Check(stage.Repaints == repaints + 1 && stage.Model == built && stage.Shown?.NoseDecal == 41,
                 $"a nose decal repaints in place without a rebuild ({stage.Repaints - repaints} repaint(s))");
 
             Press(host, seat, Back);

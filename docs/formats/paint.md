@@ -441,6 +441,10 @@ colour, and all of them are gone:
   **livery lab** keeps its RGB sliders,
   which span the same space and more. The pattern table's six per-pattern defaults and the
   50 decal names are transcribed to `CSVM/data/hangar_patterns.json` beside the swatches.
+  Each pattern there also carries a `decals` triple (nose, tail, wing), which the original's
+  table lacks: the remake loads it on a pattern pick. The values are the company's
+  `vehicle.json` scheme, `fortune`'s the stock template's 40/8/7, `itstaxi` the ITS logo and
+  `broadway` the otherwise unused `BBomber` pair.
   Two shade-level divergences between a pattern's hangar defaults and its `vehicle.json` AI
   scheme are authored, not errors: `hollywd` slot 2 defaults to (70,40,132) where the AI
   scheme carries (67,36,121), and `cccp` slot 3 to (243,194,0) against (245,211,0).
