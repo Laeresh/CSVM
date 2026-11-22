@@ -2451,6 +2451,20 @@ public partial class GameSession : Node3D
             // The host's lobby decides the ending for every machine, so a guest follows its host's
             // word (NetFlight.LandsOnScores), which already decided whether this landing is set.
             var toScores = LandsInMenu ? _versusLobbyLanding : null;
+
+            // A local match's board waits out the end's hold, so its end lines are read first. A
+            // network board rises on the end itself.
+            bool held = _wire.Link == null;
+
+            // The match's shared board, its R the director's rematch. A guest's board says why it
+            // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
+            // takes it to the lobby.
+            var board = toScores == null
+                ? boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                    dogfight.Restart,
+                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null,
+                    held)
+                : null;
             dogfight.Wire(new VersusDirector.WireInputs
             {
                 Spawns = _spawnPicker,
@@ -2460,17 +2474,8 @@ public partial class GameSession : Node3D
                 ReportDeath = _wire.ReportDeath,
                 ToLobby = _menuDriven ? _exitSession : null,
                 LandOnScores = toScores,
+                RaiseBoard = held && board != null ? board.Raise : null,
             });
-
-            // The match's shared board, its R the director's rematch. A guest's board says why it
-            // offers no Restart, except in Zeppelin vs Zeppelin, where each machine's own Restart
-            // takes it to the lobby.
-            if (toScores == null)
-            {
-                boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                    dogfight.Restart,
-                    dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
-            }
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report

@@ -31,8 +31,8 @@ public sealed class VersusDirector
     internal const float RespawnDelay = 3f;
 
     /// <summary>Seconds the ended world flies on, its end lines up, before a lobby match lands on
-    /// Game Scores. It is the original's wait at <c>0071c19c</c> (docs/org/multiplayer-scoring.md).
-    /// </summary>
+    /// Game Scores or a local match's results board rises. It is the original's wait at
+    /// <c>0071c19c</c> (docs/org/multiplayer-scoring.md).</summary>
     internal const float EndHoldS = 5f;
 
     private readonly SessionSpec _spec;
@@ -66,6 +66,8 @@ public sealed class VersusDirector
     private Action? _toLobby;
     // The landing on Game Scores, null where a results board takes the ending. Spent once taken.
     private Action? _landOnScores;
+    // Raises a local match's results board once the end has held, null where none waits on it.
+    private Action? _raiseBoard;
     // Sim seconds since the match ended, counted here because no board halts this world.
     private float _endHeld;
     // The winner the host's ending named (VersusMatch.Winner, 0 a draw), null where it named none.
@@ -101,7 +103,7 @@ public sealed class VersusDirector
 
     /// <summary>Why the match stopped, as the host named it, <c>Running</c> until one does. The
     /// same value on every machine: the host writes it where it sends the state and a guest where
-    /// it applies one.</summary>
+    /// it applies one. A local match writes it in its own step.</summary>
     internal Net.NetMatchEnd End { get; private set; }
 
     /// <summary>How many host grants this machine has placed an aircraft from, the host's own
@@ -179,6 +181,7 @@ public sealed class VersusDirector
         _spawnListName = inputs.SpawnListName;
         _toLobby = inputs.ToLobby;
         _landOnScores = inputs.LandOnScores;
+        _raiseBoard = inputs.RaiseBoard;
         // Spawn rotation: a downed seat comes back on a point picked against the living field,
         // since a fixed spawn can be camped at. Its Rng comes off the master alone, so no pick
         // here shifts Rng.Spawn. A team match rotates each seat inside its own team's block.
@@ -209,7 +212,7 @@ public sealed class VersusDirector
                 pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                 // ⚠ No rematch key on the way to Game Scores. The next round is a lobby launch, and
                 // Zeppelin vs Zeppelin's Restart would land twice.
-                pilot.RestartMatch = _landOnScores == null ? Restart : null;
+                pilot.RestartMatch = _landOnScores == null ? RestartFromKey : null;
                 pilot.Downed += (victim, killer) =>
                 {
                     if (victim >= 0 && victim < lastKiller.Length)
@@ -404,10 +407,16 @@ public sealed class VersusDirector
     /// <summary>The match's own simulation step. A host advances the clock and ticks the state
     /// out. A guest's Advance is a no-op and its cadence is null, so it applies what arrived and no
     /// more. The ending is sent from here too, which covers the time-out. No match then ends
-    /// without saying so, at worst one step late.</summary>
+    /// without saying so, at worst one step late. A local match, with no state to send, decides
+    /// and posts its ending here.</summary>
     internal void StepMatch(float dt)
     {
         Match.Advance(dt);
+        if (_field.Net == null && Match.Completed != (End != Net.NetMatchEnd.Running))
+        {
+            DecideEnd();
+        }
+
         HoldSpentPilots();
         HoldTheEnd(dt);
         ZvzPlay?.StepBots(GameClock.Current?.Time ?? 0.0);
@@ -629,6 +638,16 @@ public sealed class VersusDirector
         return built;
     }
 
+    // R and pad Y on an ended match. ⚠ Nothing while a held board waits out the end's hold: the
+    // key answers the board, which is not up yet. The pause sheet's Restart calls Restart itself.
+    private void RestartFromKey()
+    {
+        if (_raiseBoard == null || !Match.Completed || _endHeld >= EndHoldS)
+        {
+            Restart();
+        }
+    }
+
     private bool IsLocal(int seat) =>
         seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].FlownHere;
 
@@ -729,9 +748,20 @@ public sealed class VersusDirector
         }
 
         var match = Match;
-        // Which of the original's end reasons this is. The remake arms both limits at once
-        // (docs/org/multiplayer-scoring.md). A completed match is therefore reason 4 when the
-        // last opponent went, a time-out when the clock ran out, and a score target otherwise.
+        DecideEnd();
+        net.Broadcast(
+            new Net.MatchStateMessage(match.TimeRemaining, match.TimeLimit, (short)match.KillTarget,
+                End, (float)_field.ClockTime(), Net.MatchStateMessage.WinnerByte(_winner)),
+            Net.NetChannels.Events);
+    }
+
+    // Which of the original's end reasons this is, and its winner, posted as the end turns. The
+    // remake arms both limits at once (docs/org/multiplayer-scoring.md). A completed match is
+    // therefore reason 4 when the last opponent went, a time-out when the clock ran out, and a
+    // score target otherwise.
+    private void DecideEnd()
+    {
+        var match = Match;
         var was = End;
         End = !match.Completed ? Net.NetMatchEnd.Running
             : match.ObjectiveWinner > 0 ? Net.NetMatchEnd.Objective
@@ -740,10 +770,6 @@ public sealed class VersusDirector
             : Net.NetMatchEnd.ScoreTarget;
         _winner = End == Net.NetMatchEnd.Running ? null : match.Winner();
         PostEnding(was);
-        net.Broadcast(
-            new Net.MatchStateMessage(match.TimeRemaining, match.TimeLimit, (short)match.KillTarget,
-                End, (float)_field.ClockTime(), Net.MatchStateMessage.WinnerByte(_winner)),
-            Net.NetChannels.Events);
     }
 
     private void TakeMatchState(in Net.MatchStateMessage state)
@@ -776,7 +802,7 @@ public sealed class VersusDirector
 
     // The ending in words, on every machine the moment its end turns to one, into each local pane's
     // stack. A lost hull posts and speaks its own. Reason 4 posts "Game Over:" and "No Enemies
-    // Left". A time or score end names the winner the host's state named.
+    // Left". A time or score end names the winner the host's state named, a local match its own.
     private void PostEnding(Net.NetMatchEnd was)
     {
         if (End == Net.NetMatchEnd.Objective && was != Net.NetMatchEnd.Objective)
@@ -813,9 +839,10 @@ public sealed class VersusDirector
         }
     }
 
-    // A lobby match's end on Game Scores: the world flies on under its end lines, and then this
-    // machine lands once. A guest's match completes on the host's end message alone, and a match
-    // running again starts the next hold from zero.
+    // A lobby match's end on Game Scores, or a local match's results board. The world flies on
+    // under its end lines, then this machine lands or raises the board once. A guest's match
+    // completes on the host's end message alone, and a match running again starts the next hold
+    // from zero.
     private void HoldTheEnd(float dt)
     {
         if (!Match.Completed)
@@ -824,20 +851,24 @@ public sealed class VersusDirector
             return;
         }
 
-        if (_landOnScores is not { } land)
-        {
-            return;
-        }
-
+        float before = _endHeld;
         _endHeld += dt;
-        if (_endHeld < EndHoldS)
+        if (before >= EndHoldS || _endHeld < EndHoldS)
         {
             return;
         }
 
-        _landOnScores = null;
-        Log.Info("flight", $"dogfight: the end held {EndHoldS:0.#} s, landing on the lobby's Game Scores");
-        land();
+        if (_landOnScores is { } land)
+        {
+            _landOnScores = null;
+            Log.Info("flight", $"dogfight: the end held {EndHoldS:0.#} s, landing on the lobby's Game Scores");
+            land();
+        }
+        else if (_raiseBoard is { } raise)
+        {
+            Log.Info("flight", $"dogfight: the end held {EndHoldS:0.#} s, raising the results board");
+            raise();
+        }
     }
 
     // The lobby's Limited Lives. A pilot whose deaths reach the limit watches the next aircraft
@@ -1140,6 +1171,9 @@ public sealed class VersusDirector
         // Land on the lobby's Game Scores once the end has held, null where a results board takes
         // the ending instead.
         public Action? LandOnScores;
+        // Raise the results board once the end has held, null where the board rises on the end
+        // itself or none stands.
+        public Action? RaiseBoard;
     }
 
     /// <summary>What Capture the Flag lays its flags out with.</summary>

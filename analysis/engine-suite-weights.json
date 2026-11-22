@@ -658,6 +658,7 @@
     "vegetation-models": 15.195,
     "versus-local-bot": 14.701,
     "versus-local-bot-graze": 0.271,
+    "versus-local-end": 4.31,
     "versus-local-crash-respawn": 10.862,
     "versus-spawn-empty-stage": 0.045,
     "versus-spawn-net-table": 0.019,

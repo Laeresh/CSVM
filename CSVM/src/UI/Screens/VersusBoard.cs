@@ -42,13 +42,16 @@ public sealed partial class VersusBoard : ResultsBoard
     /// <summary>Builds the (hidden) board and subscribes to the match's completion. Add it to a
     /// CanvasLayer above the splitscreen panes. It wakes itself on
     /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch. <paramref name="seats"/>
-    /// is the match's roster by <c>PlayerIndex</c>, which names each seat.</summary>
+    /// is the match's roster by <c>PlayerIndex</c>, which names each seat. A <paramref name="held"/>
+    /// board waits for <see cref="Raise"/> instead.</summary>
     public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu,
-        PauseState state, System.Func<int, MenuInput> inputFor, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null)
+        PauseState state, System.Func<int, MenuInput> inputFor, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null,
+        bool held = false)
     {
         var board = new VersusBoard { _match = match, _context = context, _seats = seats };
         board.InitShell(state, exitsToMenu, inputFor);
-        match.MatchCompleted += board.OnMatchCompleted;
+        if (!held)
+            match.MatchCompleted += board.OnMatchCompleted;
         return board;
     }
 
@@ -70,6 +73,14 @@ public sealed partial class VersusBoard : ResultsBoard
             : "DRAW";
 
     public override void _ExitTree() => _match.MatchCompleted -= OnMatchCompleted;
+
+    /// <summary>Raises a held board over its ended match, once the end's lines have been up.
+    /// </summary>
+    public void Raise()
+    {
+        if (_match.Completed)
+            OnMatchCompleted();
+    }
 
     private void OnMatchCompleted()
     {

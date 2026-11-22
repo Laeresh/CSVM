@@ -88,6 +88,13 @@ prints its line and runs the five-second wait at `0071c19c`; nothing computes a 
 pilots tied at the top are simply tied on the board. The one thing that follows a time-out is the
 end screen.
 
+[Evidence: decoded] **The world flies on through the wait.** The ended state `0071c190` is read only
+by the score broadcast `FUN_00499270` (`0x49930b`, `0x499377`), the end line `FUN_00499730`
+(`0x499761`), the net tick `FUN_00496d60` (`0x496e1d`, `0x496e89`, `0x496e9c`), `FUN_004996c0`
+(`0x4996c0`) and `FUN_0049adf0` (`0x49afa4`). No flight or world step reads it, and the net tick's
+wait compares the running clock `009ad748` against `0071c19c`, so the aircraft keep flying until
+the lobby opens.
+
 ## The two limits are exclusive
 
 `FUN_004136e0` reads the lobby's limit kind from `00642f94` and arms exactly one of them: kind 0
@@ -273,7 +280,11 @@ board's headline and the status line's leader read too. The host ranks it and se
 state's winner byte, and a guest words its line from that byte, never from its own copy of the
 scores. A draw has its own byte (`MatchStateMessage.DrawWinner`), since 0 is what a host of the
 same MAJOR.MINOR built before the winner line sends; a guest that reads 0 on a time or score end
-posts "Game Over:" alone.
+posts "Game Over:" alone. A local split screen match has no host to send the state, so it ranks and
+posts the same lines itself, and its results board waits out the original's five seconds
+(`VersusDirector.EndHoldS`) before it covers them. Through that hold, and a lobby match's before it
+lands on Game Scores, every aircraft flies on, as the original's do; a results board, once up, holds
+the world still.
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99
 (`DogfightLobby.ClampLives`), so the empty-box defect cannot launch. Ticking Limited Lives puts 3
