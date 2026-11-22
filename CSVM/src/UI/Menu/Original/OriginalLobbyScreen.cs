@@ -1777,13 +1777,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     // The original's own refusal at Ready: langui 10517, then 10514, 10515 and 10516 for each
-    // reason, on its OK dialog. A refused host's course adds the remake's own line, its reason.
+    // reason, on its OK dialog. A refused host's course adds the remake's own line, its reason, and a
+    // teamless pilot in a team match adds the Ready box's hint.
     private void Refused(DogfightLobby lobby)
     {
         string text = _text.Word(10517, "You cannot select Ready yet.");
         if (lobby.RefusesCourse)
         {
             text += $" The host's course cannot be flown here: {lobby.CourseRefusal}.";
+        }
+
+        if (lobby.NeedsTeam)
+        {
+            text += $" {DogfightLobby.TeamFirstHint}.";
         }
 
         foreach (var refusal in lobby.ReadyRefusals)
@@ -1916,7 +1922,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, PickedPeer >= 0, 0, 74f, 37f));
         rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, lobby is { Ready: false } && !_outlaw.IsOpen, 0, 131f, 37f));
         rows.Add(new OriginalRow(ReadyKey, string.Empty, OriginalRowKind.Radio, 250f, 325f, 58f, 37f,
-            lobby is { HasOptions: true }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
+            lobby is { HasOptions: true, NeedsTeam: false }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
         if (CopyRow() is { } copy)
         {
             rows.Add(copy);
@@ -2540,7 +2546,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (row.Key == ReadyKey)
         {
             bool host = lobby?.IsHost == true;
-            layers.Lines.Add(_text.Line(host ? 10063 : 10059, "Ready?", row.X - 100f, row.Y - 20f, 160f, ReadyLabel, BoardJustify.Right));
+            string? hint = lobby?.NeedsTeam == true ? DogfightLobby.TeamFirstHint : null;
+            layers.Lines.Add(_text.Line(host ? 10063 : 10059, "Ready?", row.X - 100f, row.Y - 20f, 160f, ReadyLabel, BoardJustify.Right, hint));
         }
         else if (id != 0)
         {

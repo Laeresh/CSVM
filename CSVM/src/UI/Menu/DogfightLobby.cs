@@ -87,6 +87,10 @@ public sealed class DogfightLobby
     /// names it.</summary>
     public const string StuntRaceName = "Stunt Race";
 
+    /// <summary>What the Ready box says while a teamless pilot may not stand Ready
+    /// (<see cref="NeedsTeam"/>), remake-only words.</summary>
+    public const string TeamFirstHint = "Pick a team first";
+
     /// <summary>The Time box's value when the Type turns to Stunt Race, the race window's default.
     /// </summary>
     public const int StuntRaceDefaultMinutes = Mech3.InstantActionDef.DefaultRaceWindowMinutes;
@@ -337,8 +341,14 @@ public sealed class DogfightLobby
     public PlaneRefusal Refusal => Rules.Refuses(Airframe, Build);
 
     /// <summary>Whether this machine marked itself Ready under the current round, on a plane the
-    /// rules admit, for the seats it flies now. A seat given or taken since clears the mark.</summary>
-    public bool Ready => _ready && _readyEpoch == Options.Epoch && _readySeats == SeatsFlown && Refusal == PlaneRefusal.None;
+    /// rules admit, for the seats it flies now. It needs a team where the match does. A seat given
+    /// or taken since clears the mark.</summary>
+    public bool Ready => _ready && _readyEpoch == Options.Epoch && _readySeats == SeatsFlown && Refusal == PlaneRefusal.None && !NeedsTeam;
+
+    /// <summary>Whether this pilot must join a team before it may stand Ready: the match flies teams
+    /// (<see cref="NeedsTeams"/>) and this pilot is on none. The Ready box greys under
+    /// <see cref="TeamFirstHint"/>.</summary>
+    public bool NeedsTeam => NeedsTeams(Options, Teams.Count > 0) && OwnTeam == 0;
 
     /// <summary>Why the last <see cref="SetReady"/> was refused, in the order the original lists
     /// them. Empty after a mark that took.</summary>
@@ -396,8 +406,12 @@ public sealed class DogfightLobby
         }
     }
 
-    /// <summary>The team this pilot is on, 0 for none.</summary>
-    public byte OwnTeam => You < Players.Count ? Players[You].Team : (byte)0;
+    /// <summary>The team this pilot is on, 0 for none: the host's book on the host, its own row of
+    /// the host's list on a guest. ⚠ Not off <see cref="Players"/>: the host's own row reads
+    /// <see cref="Ready"/>, which reads <see cref="NeedsTeam"/> and this, so it would recurse.</summary>
+    public byte OwnTeam =>
+        IsHost ? _teams.TeamOf(_wire.LocalPeer)
+        : _wire.DogfightRoster is { } roster && roster.You < roster.Rows.Count ? roster.Rows[roster.You].Team : (byte)0;
 
     /// <summary>Whether any pilot on the list is on a team, which flies a Deathmatch as a team
     /// one.</summary>
@@ -616,6 +630,13 @@ public sealed class DogfightLobby
     /// <summary>Whether <paramref name="options"/>' type fixes Restrict Number of Teams at two, as
     /// Capture the Flag's and Zeppelin vs Zeppelin's type changes do.</summary>
     public static bool FixesTeams(DogfightOptionsMessage options) => IsCtf(options) || IsZvz(options);
+
+    /// <summary>Whether <paramref name="options"/> fly teams, so a pilot on none may not stand Ready.
+    /// Capture the Flag and Zeppelin vs Zeppelin always do. A Deathmatch does once
+    /// <paramref name="teamsStand"/>, or while Restrict Number of Teams asks for one or more. A Stunt
+    /// Race never does.</summary>
+    public static bool NeedsTeams(DogfightOptionsMessage options, bool teamsStand) =>
+        !IsStuntRace(options) && (teamsStand || FixesTeams(options) || (options.RestrictTeams && options.MinTeams > 0));
 
     /// <summary>The match rules a launch carries: the victory condition as a kill target, a match
     /// clock or both, and the lives rule. They say too which type it flies. A limit not chosen is
@@ -978,11 +999,11 @@ public sealed class DogfightLobby
     /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
     /// on the next step. False, and no mark, when the rules refuse this pilot's plane or a picked
     /// ammunition or rocket; <see cref="ReadyRefusals"/> then names each reason. A guest that
-    /// <see cref="RefusesCourse"/> is refused too.</summary>
+    /// <see cref="RefusesCourse"/> is refused too, and so is a pilot that <see cref="NeedsTeam"/>.</summary>
     public bool SetReady(bool ready)
     {
         _refusals.Clear();
-        if (ready && ReadyCheck())
+        if (ready && (ReadyCheck() || NeedsTeam))
         {
             _ready = false;
             return false;
@@ -1094,8 +1115,9 @@ public sealed class DogfightLobby
     /// A guest takes the host's chat and sends its own pick.</summary>
     public void Step()
     {
-        // A seat given or taken since the mark clears it for good, so the seats come back unready.
-        if (_readySeats != SeatsFlown)
+        // A seat given or taken since the mark clears it for good, so the seats come back unready. So
+        // does losing the team a team match needs, or the mark would return unasked on the next join.
+        if (_readySeats != SeatsFlown || NeedsTeam)
         {
             _ready = false;
         }
@@ -1317,11 +1339,11 @@ public sealed class DogfightLobby
 
     // A guest's seat counts as Ready only under this round and on a plane the rules admit. The
     // guest's own lobby asks the same, but the host does not take its word for it. Each seat's
-    // custom plane is the one that seat's build named.
+    // custom plane is the one that seat's build named. A teamless seat is not Ready in a team match.
     private bool Admits(int peer, CoopPickMessage pick, int local = 0) =>
         pick.Ready && pick.Epoch == _options.Epoch
-        && Rules.Refuses(Mods.StockOf(pick.Airframe), _wire.BuildAt(peer, local)) == PlaneRefusal.None;
-
+        && Rules.Refuses(Mods.StockOf(pick.Airframe), _wire.BuildAt(peer, local)) == PlaneRefusal.None
+        && (_teams.TeamOf(peer) != 0 || !NeedsTeams(_options, _teams.Count > 0));
     // The original's Ready check over every seat this machine flies, true when it refuses. An
     // outlawed ammunition or rocket also resets every gun's or pylon's to none, so the next Ready
     // takes; Outlaw All resets without refusing.

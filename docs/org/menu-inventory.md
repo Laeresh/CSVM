@@ -365,7 +365,11 @@ constants rather than reading a layout.
   the Danger Zones, then the chapter's courses by title, live on the host. A guest's box stands for
   the same races and reads its host's course by title, or Danger Zones, greyed. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
   and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
-  (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with
+  (`MP_CREATETEAMBACKGROUND.PNG`). In a team match (Capture the Flag, Zeppelin vs Zeppelin, or a
+  Deathmatch once a team stands or while Restrict Number of Teams asks for one) the Ready box is
+  greyed for a pilot on no team and its Ready? label reads "Pick a team first", the remake's own
+  words; the host does not count a teamless guest Ready either. What the original's Ready does for a
+  teamless pilot is not decoded. The player list draws each team's row in its team colour with
   its members under it, then the players on no team. Restrict Number of Teams and its two count
   boxes, with the script's arrows (`MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`), are live on the
   host. The victory radios arm Time, Score or both, and a press on the only armed one keeps it.

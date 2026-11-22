@@ -688,6 +688,74 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void TheTeamMatchesAreCaptureTheFlagZeppelinsAndATeamedOrRestrictedDeathmatch()
+    {
+        var deathmatch = DogfightLobby.OpeningOptions;
+        Assert.False(DogfightLobby.NeedsTeams(deathmatch, teamsStand: false));
+        Assert.True(DogfightLobby.NeedsTeams(deathmatch, teamsStand: true));
+        Assert.True(DogfightLobby.NeedsTeams(deathmatch with { RestrictTeams = true, MinTeams = 1 }, teamsStand: false));
+        Assert.False(DogfightLobby.NeedsTeams(deathmatch with { RestrictTeams = true, MinTeams = 0 }, teamsStand: false));
+        Assert.True(DogfightLobby.NeedsTeams(deathmatch with { MissionType = (byte)DogfightMissionType.CaptureTheFlag }, teamsStand: false));
+        Assert.True(DogfightLobby.NeedsTeams(deathmatch with { MissionType = (byte)DogfightMissionType.ZeppelinVsZeppelin }, teamsStand: false));
+        Assert.False(DogfightLobby.NeedsTeams(deathmatch with { MissionType = (byte)DogfightMissionType.StuntRace }, teamsStand: true));
+    }
+
+    [Fact]
+    public void ATeamlessPilotCannotStandReadyInATeamMatchAndTheHostRefusesAForgedMark()
+    {
+        var (host, guests, _) = Lobbies(2, "Lucy");
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Settle(host, guests);
+        var guest = guests[0];
+        Assert.True(guest.NeedsTeam);
+        Assert.True(host.NeedsTeam);
+        Assert.False(guest.SetReady(true));
+        Assert.False(host.SetReady(true));
+        Assert.False(guest.Ready);
+
+        // A guest that skips its own gate is still not Ready on the host's list.
+        Steps[host][1].Tell(0, new CoopPickMessage(guest.Options.Epoch, true, guest.Airframe, guest.Fit, "Lucy"));
+        Settle(host, guests);
+        Assert.False(host.Players[1].Ready);
+
+        // ABLE-TO-FAIL CONTROL: on a team the same forged mark stands, and each end's own Ready takes.
+        Assert.True(guest.CreateTeam("Blue"));
+        Assert.True(host.CreateTeam("Red"));
+        Settle(host, guests);
+        Assert.False(guest.NeedsTeam);
+        Assert.True(host.Players[1].Ready);
+        Assert.True(guest.SetReady(true));
+        Assert.True(host.SetReady(true));
+    }
+
+    [Fact]
+    public void ADeathmatchAsksForATeamOnlyOnceOneStandsAndTheLostMarkStaysLost()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+        var guest = guests[0];
+
+        // ABLE-TO-FAIL CONTROL: a free-for-all takes a teamless Ready.
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Players[1].Ready);
+
+        Assert.True(host.CreateTeam("Red"));
+        Settle(host, guests);
+        Assert.True(guest.NeedsTeam);
+        Assert.False(guest.Ready);
+        Assert.False(host.Players[1].Ready);
+
+        // Joining a team does not bring the old mark back; the pilot marks Ready again.
+        Assert.True(guest.JoinTeam(host.OwnTeam));
+        Settle(host, guests);
+        Assert.False(guest.Ready);
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Players[1].Ready);
+    }
+
+    [Fact]
     public void TheLaunchIsRefusedOnUnevenTeamsAndOnRestrict()
     {
         var (host, guests, _) = Lobbies(4);
