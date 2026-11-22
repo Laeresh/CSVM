@@ -73,6 +73,7 @@ distributed, because the plan's deliverable is the mechanism, not that plane.
 | 30 | Avenger guns | **6 × .30 and 2 × .60 by default**, so the Brigand's empty W3 (upper nose, fp3/4) carries a .30 pair; this needs a default-loadout field in plane.json, built in C25 |
 | 31 | Avenger speed | **250 mph (about 112 m/s) as `fd_speed`**, the review's figure |
 | 32 | Avenger armour | **The Brigand's zone armour redistributed by the review's ratios** (nose 50, each wing 60 as lead + tail, tail 30), so the nose is the toughest zone; the literal `<zone>_armor` values are set in E41. Range (+50 % fuel) is not adopted |
+| 33 | Hangar weight capacity | **plane.json may override the hangar's weight capacity (lb), built in C25**; the Avenger's value, set in E41, lets its default 6 × .30 + 2 × .60 guns, its armour and all eight hardpoints fit (the Brigand's 11,015 lb overflows by about 130 lb before armour with eight rockets) |
 
 ## Ground rules
 
@@ -667,7 +668,9 @@ original's banks. <TODO: where the sound is keyed to the airframe>
 ## C25 ☐ Hangar builder for mod airframes
 
 **Goal.** A mod airframe can be built and customised in the plane builder with its parent's engine
-rows, weapon limits and armor caps, its own slot count and its parent's default loadout.
+rows, weapon limits and armor caps, its own slot count and its parent's default loadout. Two
+plane.json fields arrive here: a default loadout (Decision 30) and a hangar weight capacity in lb
+(Decision 33), both literals that replace the parent's.
 
 **Evidence (confidence: traced for the store format).** `CustomPlaneStore` persists CSVM's own
 JSON; the 204-byte record is import-only (`CustomPlaneDef.cs:22-26`). Engine rows are keyed per
