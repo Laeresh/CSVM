@@ -125,6 +125,19 @@ public class HangarDescriptionsTests
     }
 
     [Fact]
+    public void AModsOwnProseReplacesTheParentsUnderTheSameHeading()
+    {
+        var strings = Table((1153, AirframeInfo), (1165, "None"), (3040, "The Ford Hoplite."));
+
+        var parent = HangarDescriptions.Airframe(strings, 0, "Excellent", "Poor");
+        var mod = HangarDescriptions.Airframe(strings, 0, "Excellent", "Poor", prose: "A carrier fighter.");
+
+        Assert.Equal("A carrier fighter.", mod.Prose);
+        Assert.Equal(parent.Heading, mod.Heading);
+        Assert.Equal(parent.Figures, mod.Figures);
+    }
+
+    [Fact]
     public void ArmourHardpointsAndPaintCarryTheirProseInsideTheirOwnString()
     {
         var strings = Table(
