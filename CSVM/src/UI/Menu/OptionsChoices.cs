@@ -74,14 +74,6 @@ public sealed class OptionsChoices
     /// original.</summary>
     public string? HudLayout { get; set; }
 
-    /// <summary>The <see cref="SpyglassScaleSetting.Words"/> word, null while never set, which reads
-    /// as 100.</summary>
-    public string? SpyglassScale { get; set; }
-
-    /// <summary>The <see cref="BracketScaleSetting.Words"/> word, null while never set, which reads
-    /// as 100.</summary>
-    public string? BracketScale { get; set; }
-
     /// <summary>The <see cref="SubtitlesSetting.Words"/> word, null while never set, which reads as
     /// low.</summary>
     public string? Subtitles { get; set; }
@@ -234,8 +226,6 @@ public sealed class OptionsChoices
         ThrottlePlate = saved?.ThrottlePlate;
         HudMode = saved?.HudMode;
         HudLayout = saved?.HudLayout;
-        SpyglassScale = saved?.SpyglassScale;
-        BracketScale = saved?.BracketScale;
         Subtitles = saved?.Subtitles;
         KeepCameraZoom = saved?.KeepCameraZoom;
         Graphics = saved?.GraphicsMode ?? GraphicsMode.Default;
@@ -274,8 +264,8 @@ public sealed class OptionsChoices
         new(Graphics, DifficultyTiers.Word(Difficulty), MonitorIndex, Resolution, DisplayMode, VSync,
             AudioMaster, AudioMusic, AudioEffects, AudioVoice,
             NearestAfterKill, Rumble, DefaultView, AutoHeadTurn, Words.Copy(), VrMode, VrRenderScale, VrVignette,
-            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, SpyglassScale, KeepCameraZoom, HudMode,
-            SoundMode, HitConfirm, HudLayout, Subtitles, BracketScale);
+            LeadingAimAssist, LeadMarker, ModFolder, ThrottlePlate, KeepCameraZoom, HudMode,
+            SoundMode, HitConfirm, HudLayout, Subtitles);
 
     /// <summary>The words <paramref name="setting"/> offers under the other staged choices.</summary>
     public IReadOnlyList<string> Offered(WordSetting setting) => setting.Offered?.Invoke(Words, Enhanced) ?? setting.Words;

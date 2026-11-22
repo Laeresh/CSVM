@@ -66,14 +66,12 @@ public sealed record OptionsApplyExit(
     bool? LeadMarker = null,
     string? ModFolder = null,
     bool? ThrottlePlate = null,
-    string? SpyglassScale = null,
     bool? KeepCameraZoom = null,
     string? HudMode = null,
     string? SoundMode = null,
     bool? HitConfirm = null,
     string? HudLayout = null,
-    string? Subtitles = null,
-    string? BracketScale = null) : MenuExit;
+    string? Subtitles = null) : MenuExit;
 
 /// <summary>Dogfight's match rules as a screen set them. The kill target ends a match early and the
 /// match clock runs in MINUTES, a 0 on either disabling that limit. The lives are the deaths a pilot

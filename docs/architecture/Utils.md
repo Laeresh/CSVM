@@ -573,16 +573,18 @@ The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `Vr
 apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 
 ## src/Utils/SpyglassScaleSetting.cs
-The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells.
-`Resolve` takes the saved `spyglassScale` over 100, the decoded size, and `SavedWord` holds the
-`--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
-reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor.
+The player's Spyglass Size as a word, `100`, `125`, `150` or `200`, and the factor it spells, a registered
+word setting with no flag: the saved `spyglassScale` word, the `hud.spyglassScale` key, then 100, the decoded
+size. Its `Take` stores the factor as `Current` at launch and on every options apply; `Flight/Hud/HudMetrics.cs`
+reads it each frame for `Flight/Hud/TargetHud.cs`'s flat disc. The headset ring keeps its own factor. The GAME
+OPTIONS page shows it as the Spyglass Size dropdown under HUD Layout.
 
 ## src/Utils/BracketScaleSetting.cs
-The player's Bracket Size as a word, `100`, `125`, `150` or `200`, and the factor it spells.
-`Resolve` takes the saved `bracketScale` over 100, the decoded box, and `SavedWord` holds the
-`--det` guard. The launch sets `Current` and so does every options apply; `Flight/Hud/HudMetrics.cs`
-reads it each frame for `Flight/Hud/TargetHud.cs`'s flat bracket box. The headset's cards keep the decoded box.
+The player's Bracket Size as a word, `100`, `125`, `150` or `200`, and the factor it spells. It resolves as
+`SpyglassScaleSetting` does: the saved `bracketScale` word, the `hud.bracketScale` key, then 100, the decoded box.
+Its `Take` stores the factor as `Current`; `Flight/Hud/HudMetrics.cs` reads it each frame for
+`Flight/Hud/TargetHud.cs`'s flat bracket box. The headset's cards keep the decoded box. The GAME OPTIONS page shows
+it as the Bracket Size dropdown under Spyglass Size.
 
 ## src/Utils/SubtitlesSetting.cs
 Where the voice subtitles show as a word, `off`, `low` or `high`, saved as `subtitles` (null reads

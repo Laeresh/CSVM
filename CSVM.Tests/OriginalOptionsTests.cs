@@ -146,18 +146,18 @@ public class OriginalOptionsTests
         // The remake-only spyglass size, 100% while nothing is saved, and a sideways step takes 125%.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.SpyglassScaleKey, host.FocusedKey);
-        Assert.Null(host.Module.GameOptions.SpyglassScaleChoice);
+        Assert.Null(host.Module.GameOptions.Choice(SpyglassScaleSetting.Lookup));
         Assert.Equal("100%", Row(host, OriginalGameOptionsPage.SpyglassScaleKey).Label);
         StepX(host, 1);
-        Assert.Equal("125", host.Module.GameOptions.SpyglassScaleChoice);
+        Assert.Equal("125", host.Module.GameOptions.Choice(SpyglassScaleSetting.Lookup));
 
         // The remake-only bracket size under it, 100% while nothing is saved, and a sideways step takes 125%.
         Down(host);
         Assert.Equal(OriginalGameOptionsPage.BracketScaleKey, host.FocusedKey);
-        Assert.Null(host.Module.GameOptions.BracketScaleChoice);
+        Assert.Null(host.Module.GameOptions.Choice(BracketScaleSetting.Lookup));
         Assert.Equal("100%", Row(host, OriginalGameOptionsPage.BracketScaleKey).Label);
         StepX(host, 1);
-        Assert.Equal("125", host.Module.GameOptions.BracketScaleChoice);
+        Assert.Equal("125", host.Module.GameOptions.Choice(BracketScaleSetting.Lookup));
 
         // The remake-only zoom keeper, ON while nothing is saved, so its first press turns it off.
         Down(host);
@@ -190,8 +190,8 @@ public class OriginalOptionsTests
         Assert.True(exit.ThrottlePlate);
         Assert.Equal("minimal", exit.HudMode);
         Assert.Equal("sides", exit.HudLayout);
-        Assert.Equal("125", exit.SpyglassScale);
-        Assert.Equal("125", exit.BracketScale);
+        Assert.Equal("125", exit.Words[SpyglassScaleSetting.Lookup]);
+        Assert.Equal("125", exit.Words[BracketScaleSetting.Lookup]);
         Assert.False(exit.KeepCameraZoom);
         Assert.Equal(FlagMarksSetting.Off, exit.Words[FlagMarksSetting.Lookup]);
         Assert.Equal(ReduceFlashingSetting.On, exit.Words[ReduceFlashingSetting.Lookup]);

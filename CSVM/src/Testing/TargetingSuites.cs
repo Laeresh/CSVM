@@ -1450,6 +1450,8 @@ internal static class TargetingSuites
     internal static void SpyglassScaleHud(TestContext ctx)
     {
         float before = SpyglassScaleSetting.Current;
+        var lookup = SpyglassScaleSetting.Lookup;
+        var context = new SettingContext(true, GraphicsMode.Enhanced, 1);
         TargetHud? hud = null;
         try
         {
@@ -1479,7 +1481,7 @@ internal static class TargetingSuites
             foreach (string word in new[] { "125", "150", "200" })
             {
                 float factor = SpyglassScaleSetting.FactorOf(word);
-                SpyglassScaleSetting.Apply(word);
+                lookup.ResolveFrom(null, word, context);
                 int side = Side();
                 int expected = SpyglassView.RenderSide(Mathf.RoundToInt(Spyglass.RefWindow * s * factor));
                 ctx.Check(HudMetrics.SpyglassScale == factor && side == expected,
@@ -1499,20 +1501,21 @@ internal static class TargetingSuites
                     $"so the anchor stands {bare.Anchor.X - inset.Anchor.X} further in, the shaft starts {tail.DistanceTo(inset.Anchor)} out on the rim and the label sits 3 under the bigger disc ({label.Y})");
             }
 
-            SpyglassScaleSetting.Apply(null);
+            lookup.ResolveFrom(null, null, context);
             ctx.Check(Side() == native,
                 $"CONTROL: back at a never-set size the same hud renders its 100% side again ({native}), so the factor and not a drift moved it");
             SpyglassScaleSetting.Current = 3f;
             ctx.Check(HudMetrics.SpyglassScale == HudMetrics.MaximumSpyglassScale,
                 $"a factor past the largest step is held at {HudMetrics.MaximumSpyglassScale}");
-            ctx.Check(SpyglassScaleSetting.Apply("175").Word == SpyglassScaleSetting.Default
+            ctx.Check(lookup.ResolveFrom(null, "175", context).Word == SpyglassScaleSetting.Default
                       && SpyglassScaleSetting.Current == SpyglassScaleSetting.Native,
                 $"and a word outside the four reads as 100");
-            ctx.Check(SpyglassScaleSetting.SavedWord(det: true) == null,
+            ctx.Check(WordSettings.ReadSaved(det: true)[lookup] == null,
                 $"a --det launch reads no saved size, so no golden depends on it");
         }
         finally
         {
+            lookup.ResolveFrom(null, null, context);
             SpyglassScaleSetting.Current = before;
             hud?.Free();
         }
@@ -1530,6 +1533,8 @@ internal static class TargetingSuites
     internal static void BracketScaleHud(TestContext ctx)
     {
         float before = BracketScaleSetting.Current;
+        var lookup = BracketScaleSetting.Lookup;
+        var context = new SettingContext(true, GraphicsMode.Enhanced, 1);
         TargetHud? hud = null;
         try
         {
@@ -1551,7 +1556,7 @@ internal static class TargetingSuites
             foreach (string word in new[] { "125", "150", "200" })
             {
                 float factor = BracketScaleSetting.FactorOf(word);
-                BracketScaleSetting.Apply(word);
+                lookup.ResolveFrom(null, word, context);
                 float live = HudMetrics.BracketScale;
                 float halfW = TargetHud.BracketHalfW(s, live);
                 float halfH = TargetHud.BracketHalfH(s, live);
@@ -1564,20 +1569,21 @@ internal static class TargetingSuites
                     $"at {word}% the same hud reads factor {live} with no rebuild: the box {2f * halfW} x {2f * halfH}, the label 3 under it ({label})");
             }
 
-            BracketScaleSetting.Apply(null);
+            lookup.ResolveFrom(null, null, context);
             ctx.Check(HudMetrics.BracketScale == 1f,
                 $"CONTROL: back at a never-set size the same hud reads 100% again");
             BracketScaleSetting.Current = 3f;
             ctx.Check(HudMetrics.BracketScale == HudMetrics.MaximumBracketScale,
                 $"a factor past the largest step is held at {HudMetrics.MaximumBracketScale}");
-            ctx.Check(BracketScaleSetting.Apply("175").Word == BracketScaleSetting.Default
+            ctx.Check(lookup.ResolveFrom(null, "175", context).Word == BracketScaleSetting.Default
                       && BracketScaleSetting.Current == BracketScaleSetting.Native,
                 $"and a word outside the four reads as 100");
-            ctx.Check(BracketScaleSetting.SavedWord(det: true) == null,
+            ctx.Check(WordSettings.ReadSaved(det: true)[lookup] == null,
                 $"a --det launch reads no saved size, so no golden depends on it");
         }
         finally
         {
+            lookup.ResolveFrom(null, null, context);
             BracketScaleSetting.Current = before;
             hud?.Free();
         }

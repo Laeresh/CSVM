@@ -28,18 +28,22 @@ public class BracketScaleTests
     public void TheWordsAreTheFourStepsAndANeverSetWordIsTheDecodedSize()
     {
         Assert.Equal(new[] { "100", "125", "150", "200" }, BracketScaleSetting.Words);
-        Assert.Equal(new[] { "100%", "125%", "150%", "200%" }, BracketScaleSetting.Labels());
+        Assert.Equal(new[] { "100%", "125%", "150%", "200%" }, BracketScaleSetting.Labels);
         Assert.Equal(1f, BracketScaleSetting.FactorOf("100"));
         Assert.Equal(1.25f, BracketScaleSetting.FactorOf("125"));
         Assert.Equal(1.5f, BracketScaleSetting.FactorOf("150"));
         Assert.Equal(2f, BracketScaleSetting.FactorOf("200"));
         Assert.Equal(1f, BracketScaleSetting.FactorOf(null));
         Assert.Equal(1f, BracketScaleSetting.FactorOf("175"));
-        Assert.Equal(SettingSource.Default, BracketScaleSetting.Resolve(null).Source);
-        Assert.Equal(BracketScaleSetting.Default, BracketScaleSetting.Resolve("300").Word);
-        Assert.Equal(SettingSource.Saved, BracketScaleSetting.Resolve("150").Source);
-        Assert.Null(BracketScaleSetting.SavedWord(det: true, new OptionsDef { BracketScale = "200" }));
-        Assert.Equal("200", BracketScaleSetting.SavedWord(det: false, new OptionsDef { BracketScale = "200" }));
+        var lookup = BracketScaleSetting.Lookup;
+        Assert.Equal(SettingSource.Default, lookup.Resolve(null, null, null, BracketScaleSetting.Default).Source);
+        Assert.Equal(BracketScaleSetting.Default, lookup.Resolve(null, "300", null, BracketScaleSetting.Default).Word);
+        Assert.Equal(SettingSource.Saved, lookup.Resolve(null, "150", null, BracketScaleSetting.Default).Source);
+        Assert.Equal(BracketScaleSetting.Default, lookup.Fallback(new SettingContext(false, true, 1)).Word);
+        Assert.Null(lookup.Flag);
+        Assert.Equal("hud.bracketScale", lookup.Key);
+        Assert.Equal("bracketScale", lookup.SavedField);
+        Assert.Contains(lookup, WordSettings.All);
     }
 
     [Fact]
@@ -58,8 +62,8 @@ public class BracketScaleTests
     [InlineData("200")]
     public void TheOptionsFileCarriesEachStep(string word)
     {
-        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { BracketScale = word }));
-        Assert.Equal(word, read!.BracketScale);
+        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [BracketScaleSetting.Lookup] = word } }));
+        Assert.Equal(word, read!.Words[BracketScaleSetting.Lookup]);
     }
 
     [Theory]
@@ -68,8 +72,8 @@ public class BracketScaleTests
     [InlineData("big")]
     public void AnAbsentOrHandEditedWordReadsNeverSet(string? word)
     {
-        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { BracketScale = word }));
-        Assert.Null(read!.BracketScale);
+        var read = OptionsStore.Deserialize(OptionsStore.Serialize(new OptionsDef { Words = { [BracketScaleSetting.Lookup] = word } }));
+        Assert.Null(read!.Words[BracketScaleSetting.Lookup]);
     }
 
     [Theory]

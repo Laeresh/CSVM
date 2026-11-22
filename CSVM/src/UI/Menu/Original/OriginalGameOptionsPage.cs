@@ -214,15 +214,15 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             c => DisplaySettingRows.WordIndex(CSVM.Utils.HudLayoutSetting.Words, c.HudLayout, CSVM.Utils.HudLayoutSetting.Default),
             (c, i) => c.HudLayout = CSVM.Utils.HudLayoutSetting.Words[Math.Clamp(i, 0, CSVM.Utils.HudLayoutSetting.Words.Count - 1)]),
         new(SpyglassScaleKey, "Spyglass Size",
-            _ => "Draw the round picture of an off-screen target larger.",
-            OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels(),
-            c => DisplaySettingRows.WordIndex(CSVM.Utils.SpyglassScaleSetting.Words, c.SpyglassScale, CSVM.Utils.SpyglassScaleSetting.Default),
-            (c, i) => c.SpyglassScale = CSVM.Utils.SpyglassScaleSetting.Words[Math.Clamp(i, 0, CSVM.Utils.SpyglassScaleSetting.Words.Count - 1)]),
+            _ => CSVM.Utils.SpyglassScaleSetting.Lookup.Detail(false),
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels,
+            c => c.At(CSVM.Utils.SpyglassScaleSetting.Lookup),
+            (c, i) => c.Pick(CSVM.Utils.SpyglassScaleSetting.Lookup, c.Offered(CSVM.Utils.SpyglassScaleSetting.Lookup)[i])),
         new(BracketScaleKey, "Bracket Size",
-            _ => "Draw the brackets around an on-screen target larger.",
-            OriginalRowKind.Dropdown, _ => CSVM.Utils.BracketScaleSetting.Labels(),
-            c => DisplaySettingRows.WordIndex(CSVM.Utils.BracketScaleSetting.Words, c.BracketScale, CSVM.Utils.BracketScaleSetting.Default),
-            (c, i) => c.BracketScale = CSVM.Utils.BracketScaleSetting.Words[Math.Clamp(i, 0, CSVM.Utils.BracketScaleSetting.Words.Count - 1)]),
+            _ => CSVM.Utils.BracketScaleSetting.Lookup.Detail(false),
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.BracketScaleSetting.Labels,
+            c => c.At(CSVM.Utils.BracketScaleSetting.Lookup),
+            (c, i) => c.Pick(CSVM.Utils.BracketScaleSetting.Lookup, c.Offered(CSVM.Utils.BracketScaleSetting.Lookup)[i])),
         new(KeepCameraZoomKey, "Keep Camera Zoom",
             _ => "Keep the chase view's zoom through view changes, missions and restarts.",
             OriginalRowKind.Radio, _ => SwitchWords,
@@ -315,12 +315,6 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The HUD layout word the page would apply, null while never set.</summary>
     public string? HudLayoutChoice => _choices.HudLayout;
 
-    /// <summary>The spyglass size the page would apply, null while never set.</summary>
-    public string? SpyglassScaleChoice => _choices.SpyglassScale;
-
-    /// <summary>The target bracket size the page would apply, null while never set.</summary>
-    public string? BracketScaleChoice => _choices.BracketScale;
-
     /// <summary>The Keep Camera Zoom switch the page would apply, null while never set.</summary>
     public bool? KeepCameraZoomChoice => _choices.KeepCameraZoom;
 
@@ -344,6 +338,10 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     // The options the window shows now, top to bottom.
     private IReadOnlyList<GameOption> Shown => Options.Skip(_top).Take(WindowRows).ToArray();
+
+    /// <summary>The word the page would apply for a registered <paramref name="setting"/>, null while
+    /// never set.</summary>
+    public string? Choice(CSVM.Utils.WordSetting setting) => _choices.Words[setting];
 
     /// <summary>Opens the page on the saved options with its first row focused. The hub's GAME
     /// OPTIONS door and the screenshot aid both go through it. The page is a form, not a list. It

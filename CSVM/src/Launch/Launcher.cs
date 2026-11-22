@@ -1441,8 +1441,6 @@ public partial class Launcher : Node3D
             .WithSavedLeadingAimAssist(saved.LeadingAimAssist).WithSavedLeadMarker(saved.LeadMarker)
             .WithSavedThrottlePlate(saved.ThrottlePlate)
             .WithHeadsetView(_xr != null);
-        SpyglassScaleSetting.ApplySaved(_spec.Det, saved);
-        BracketScaleSetting.ApplySaved(_spec.Det, saved);
         HudModeSetting.ApplySaved(_spec.Det, saved);
         HudLayoutSetting.ApplySaved(_spec.Det, saved);
         CameraZoomMemory.ApplySaved(_spec.Det, saved);
