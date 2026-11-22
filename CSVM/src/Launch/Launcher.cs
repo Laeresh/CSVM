@@ -1654,6 +1654,10 @@ public partial class Launcher : Node3D
         {
             mod.BindCampaign(missions);
         }
+
+        UI.Hangar.ModPlaneArt.Bind(planes, Flight.Hangar.ModPlanes.Current, Path.Combine(OS.GetUserDataDir(), UI.Hangar.ModPlaneArt.CacheFolder));
+        // The launch's own chapter's textures, which its first session then holds already.
+        Callable.From(() => UI.Hangar.ModPlaneArt.RenderPending(this, () => _paths.Data.LoadChapter(_spec.Chapter, _spec.Mission).Textures)).CallDeferred();
     }
 
     // The screen's screenshot doors, through --menu= like the menu's own: source-picker[:<folder>]

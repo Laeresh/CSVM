@@ -1025,6 +1025,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         // A photograph landing after the wrap-up page woke fills its print, which is a new picture
         // on the board rather than new pixels in one already drawn, so the page is composed again.
         changed |= _shell.Screen == OriginalScreen.InstantActionWrapup && _shell.Wrapup.TakeLanded();
+        // A plane mod's menu render landing after the screen was composed is a new picture too.
+        changed |= Hangar.ModPlaneArt.TakeLanded();
         SyncShotViewer();
         if (changed)
         {

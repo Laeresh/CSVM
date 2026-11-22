@@ -6,6 +6,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -1784,10 +1785,19 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     private void ComposePlanePicture(List<BoardPicture> pictures)
     {
         var hangar = _hangar!;
-        // Art is the stock airframe's, a mod row drawing its parent's.
+        // A mod's portrait fills the blueprint's box on every tab; a mod without one draws its parent's art.
         int focused = hangar.StockIdOfRow(FocusedAirframe());
         int airframe = hangar.AirframeChosen ? hangar.Scratch.Airframe : focused;
-        if (_host.Screen == OriginalScreen.HangarAirframe || !hangar.AirframeChosen)
+        bool listing = _host.Screen == OriginalScreen.HangarAirframe || !hangar.AirframeChosen;
+        string? mod = listing ? hangar.ModOfRow(FocusedAirframe())?.Id : hangar.Scratch.ModAirframe;
+        var (boxWidth, boxHeight) = _host.Measure($"PX_{(listing ? focused : airframe)}_BLUEPRINT.TGA") ?? (0, 0);
+        if (ModPlaneArt.Picture(mod, ModArtView.Portrait, PlaneX, PlaneY, boxWidth, boxHeight) is { } portrait)
+        {
+            pictures.Add(portrait);
+            return;
+        }
+
+        if (listing)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, $"PX_{focused}_BLUEPRINT.TGA"), PlaneX, PlaneY));
             return;

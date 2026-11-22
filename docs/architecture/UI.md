@@ -57,6 +57,15 @@ One picture a page asks its board to draw: a decoded TGA (blueprint, icon, paint
 caption under it. The page decodes and the board owns the one Godot texture; the campaign pages
 (Campaign/Campaign*Page.cs) return it from their Art and RowArt.
 
+## src/UI/Hangar/ModPlaneArt.cs
+Each plane mod's menu pictures, by node: the portrait (`plane.json`'s image, else a three-quarter
+render in the mod's own paint) and black plan and head-on silhouettes. `Bind` takes the portrait and
+the renders cached under Godot's user folder (`mod_art/<id>_<hash>_<view>.png`); `RenderPending`
+builds the grafted airframe once in a private viewport for what the cache lacks, and `TakeLanded`
+lets `OriginalPresentation` recompose. `Picture` fits one into a slot's box, null keeping the parent's
+art; the hangar, the seat picker and Instant Action's Weapon Loadout ask it. Rules:
+[../formats/mod-planes.md](../formats/mod-planes.md), "Menu art".
+
 ## src/UI/Campaign/CampaignFlow.cs
 The campaign screen graph as one engine-free flow over the shared `CampaignFeature`
 (`Menu/CampaignFeature.cs`): the feature owns the profile, the seated player and every write into

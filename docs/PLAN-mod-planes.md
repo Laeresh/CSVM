@@ -123,7 +123,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ Damage: optional nodes and the auto-wreck
 24. ☑ Engine sound: parent's or a named stock plane's
 25. ☑ Hangar builder for mod airframes
-26. ☐ Menu art: mod image or cached auto-render
+26. ☑ Menu art: mod image or cached auto-render
 
 ### Wave D, saves, campaign, bots, multiplayer
 
@@ -939,7 +939,46 @@ airframe (`CustomPlaneBuild.cs:30`).
 
 **⚠ Traps.** The import path from the original's 204-byte files stays limited to ids 0-10.
 
-## C26 ☐ Menu art: mod image or cached auto-render
+## C26 ☑ Menu art: mod image or cached auto-render
+
+**Landed.** `CSVM/src/UI/Hangar/ModPlaneArt.cs` holds three pictures per mod, by node: the portrait
+(`plane.json`'s `portrait` image, decoded by extension, else a three-quarter render from ahead, left
+and above in the mod's own paint with no livery) and black plan and head-on silhouettes, rendered
+whether or not the mod has a portrait. `Launcher.BindModPlanes` calls `ModPlaneArt.Bind`, which
+decodes the portrait and loads the cached renders from `mod_art/` under Godot's user folder, named
+`<id>_<hash[..16]>_<view>.png`; a deferred `RenderPending` builds what the cache lacks on the first
+frame. The render reuses the suites' synchronous viewport read (`ForceDraw` twice, then `GetImage`):
+`PlaneBuilder` over the launch chapter's textures, an orthographic camera fitted to the visible meshes'
+box in a 512 px transparent `SubViewport` with its own world, one sun and white ambient, the read
+cropped to its used rect. A render in `_Ready` reads back blank, hence the deferral, and
+`OriginalPresentation`'s tick recomposes once on `TakeLanded`. A headless run renders nothing.
+`Picture(node, view, x, y, w, h)` fits one into a slot's box (aspect kept, centred) as `Held` art, or
+answers null to keep the parent's art.
+
+- **Slots covered.** Plane Construction's picture on every tab (`OriginalHangarScreen.ComposePlanePicture`:
+  the focused mod row while listing, else the build's `ModAirframe`), in the parent blueprint's
+  358 x 335 box, so the paint tabs show the portrait in place of the parent's tinted icon set; the
+  per-seat aircraft screen (`OriginalSeatPlane`) shows a mod build's plan silhouette in the 80 px
+  `FC_PlaneIcons` frame, and its ratings, which skipped a mod node, now rate it on the parent's stat
+  row and `ModPlanes.StockFitFor`; Instant Action's Weapon Loadout draws a mod build's plan and head-on
+  silhouettes in the `OL_PLANEDIAGRAMS*` frames.
+- **Left on the parent's art.** The campaign pages (flight check, plane selection, cabin photo, ammo
+  diagrams, previous missions), because the campaign profile flies the parent's stock id (C25, D32);
+  the network lobby's plane and ammo icons and the bot panel, because the wire and bots carry stock ids
+  (D33, D34); the local lobby's Select Plane column, which already names a mod build as "Stock <parent>"
+  with the parent's ratings, so a mod icon there would contradict its caption.
+- Format: `docs/formats/mod-planes.md`, "Menu art". Coverage: `CSVM.Tests/ModPlaneArtTests.cs` (cache
+  name, portrait choice, fit), the `mod-plane-art` suite (windowed, `analysis/headless-limits.json`:
+  a Brigand export renders a coloured portrait and black silhouettes into a scratch cache under its
+  hash, a second bind renders nothing and keeps the files, a changed `plane.json` renders under its new
+  hash, a mod with a 6 x 4 portrait shows it and renders only its silhouettes, a stock node has no
+  art), and `menu-original-hangar-mod`, whose mod now carries a portrait the hub draws in the
+  blueprint's place. Screenshot of the local Avenger (no portrait, so the render branch):
+  `Z:\CSVM\.scratchKeep\mod-planes\c26\builder-avenger.png`, with its three renders beside it.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Every menu that shows a plane's portrait or icon shows the mod's image, else a headless
 side-view render made once and cached.

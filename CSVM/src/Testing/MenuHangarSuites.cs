@@ -137,7 +137,8 @@ internal static class MenuHangarSuites
         "Original's Plane Construction hub with a Brigand-based plane mod loaded: the airframe list "
         + "offers the mod after the eleven stock rows under its plane.json name, picking it builds on "
         + "the Brigand's id with the mod's id beside it and loads the mod's plane.json loadout, the bill "
-        + "judges weight against the mod's hangar_capacity, the hub writes the mod's name, the commit "
+        + "judges weight against the mod's hangar_capacity, the hub writes the mod's name and draws its "
+        + "plane.json portrait in the blueprint's place, the commit "
         + "stores the mod id, and the shared picker roster flies that build as the mod's own node")]
     internal static void MenuOriginalHangarMod(TestContext ctx)
     {
@@ -156,9 +157,12 @@ internal static class MenuHangarSuites
         File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile), $$"""
             { "name": "{{HangarModName}}", "kind_of": "player_brigand", "hangar_capacity": {{HangarModCapacity}},
               "loadout": { "guns": [ { "calibre": 60 }, { "calibre": 30 }, { "calibre": 30 }, { "calibre": 30 } ] },
-              "overrides": { "turrets": [] } }
+              "overrides": { "turrets": [] }, "portrait": "portrait.png" }
             """);
         File.WriteAllText(Path.Combine(folder, ModPlanes.ModelFile), "glb");
+        var portrait = Godot.Image.CreateEmpty(4, 2, false, Godot.Image.Format.Rgba8);
+        portrait.Fill(Godot.Colors.Red);
+        portrait.SavePng(Path.Combine(folder, "portrait.png"));
 
         var previous = ModPlanes.Current;
         var exits = new List<MenuExit>();
@@ -177,6 +181,7 @@ internal static class MenuHangarSuites
         {
             ModPlanes.Current = ModPlanes.Open(root);
             ctx.Check(ModPlanes.Current.Find(HangarModId) != null, $"the mod {HangarModId} loads from {folder}");
+            ModPlaneArt.Bind(null, ModPlanes.Current, Path.Combine(root, "art"));
             host.Select("original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
@@ -212,8 +217,12 @@ internal static class MenuHangarSuites
             var thirty = HangarEconomy.GunTable[0];
             ctx.Check(bill.Capacity == HangarModCapacity && bill.Guns[3] == new CostWeight(thirty.WingCost * 2, thirty.WingWeight * 2),
                 $"the bill judges weight against the mod's capacity and prices W4 as a wing gun ({bill.Total.Weight} / {bill.Capacity}, W4 {bill.Guns[3]})");
-            ctx.Check(shell.Compose().Lines.Any(l => l.Text.Contains(HangarModName)),
+            var hub = shell.Compose();
+            ctx.Check(hub.Lines.Any(l => l.Text.Contains(HangarModName)),
                 $"the hub writes the mod's name");
+            ctx.Check(hub.Pictures.Any(p => p.Art.Name == $"{HangarModId}:{ModArtView.Portrait}")
+                && !hub.Pictures.Any(p => p.Art.Name.EndsWith("_BLUEPRINT.TGA", StringComparison.Ordinal)),
+                $"and draws the mod's portrait in the blueprint's place");
 
             scratch.Name = "Suite Mod Build";
             ctx.Check(hangar.Commit(), $"the build commits ({hangar.Message})");
@@ -227,6 +236,7 @@ internal static class MenuHangarSuites
         finally
         {
             ModPlanes.Current = previous;
+            ModPlaneArt.Bind(null, previous, Path.Combine(root, "art"));
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             MenuSuiteHost.DropScratchPlanes(ctx, ModSuite);

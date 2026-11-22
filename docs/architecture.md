@@ -548,6 +548,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Hangar/PlaneNameTables.cs`, the two authored word lists the PLANENAME screen rolls a plane name from.
 - `src/UI/Hangar/PlaneFit.cs`, what one campaign aircraft carries, resolved from its hangar build or its airframe's stock fit; engine-free.
 - `src/UI/Hangar/HangarArt.cs`, one decoded picture a page asks its board to draw, with the caption under it.
+- `src/UI/Hangar/ModPlaneArt.cs`, each plane mod's menu pictures: its portrait, else a cached three-quarter render, and plan and head-on silhouettes.
 - `src/UI/Hangar/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
 
 **`UI.Overlays`**, the debug overlays and keys, the HUD readouts drawn over a pane, and the mission chart.

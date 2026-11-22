@@ -6,6 +6,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -1996,7 +1997,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         {
             if (screen.Widget(key) is { Art.Count: > 0 } diagram)
             {
-                layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], Math.Max(1, diagram.Frames)),
+                // A mod's own silhouette in one diagram frame's box, else the parent's frame.
+                int frames = Math.Max(1, diagram.Frames);
+                var (width, height) = _host.Measure(diagram.Art[0]) ?? (0, 0);
+                var view = key == "OL_P_PLANETOPICON" ? ModArtView.Plan : ModArtView.HeadOn;
+                if (ModPlaneArt.Picture(_loadoutNode, view, diagram.Int("X"), diagram.Int("Y"), width, height / frames) is { } own)
+                {
+                    layers.Pictures.Add(own);
+                    continue;
+                }
+
+                layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], frames),
                     diagram.Int("X"), diagram.Int("Y"), airframe));
             }
         }

@@ -11,6 +11,8 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Spec;
 using CSVM.Tooling;
+using CSVM.UI.Boards;
+using CSVM.UI.Hangar;
 using CSVM.Utils;
 using Godot;
 
@@ -40,6 +42,8 @@ internal static class ModPlaneSuites
 
     // The story position the campaign mod's unlock names, a mid-campaign mission.
     private const int CampaignUnlockSeq = 6;
+    private const string ArtMod = "suite_mod_art";
+    private const string PortraitMod = "suite_mod_portrait";
 
     // Metres: the file keeps float32 positions, so only the glTF round trip separates the two builds.
     private const float Tolerance = 1e-3f;
@@ -454,6 +458,65 @@ internal static class ModPlaneSuites
         }
     }
 
+    [Suite("mod-plane-art",
+        "a plane mod's menu art: a Brigand export without a portrait renders a coloured three-quarter portrait " +
+        "and black plan and head-on silhouettes once into the cache, named by its content hash, and binds them " +
+        "from the cache after without rendering; a changed mod renders under a new name. A mod with a portrait " +
+        "shows that image and renders only the silhouettes, a picture fits its slot with the aspect kept, and a " +
+        "stock node has no art")]
+    internal static void ModPlaneArtSuite(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        if (planes.FindByName(Parent) == null)
+        {
+            throw new SuiteSkippedException($"{Parent} is not in the aircraft archive");
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, "mod-plane-art");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        string cache = Path.Combine(root, "cache");
+        string rendered = Path.Combine(ModPlanes.FolderIn(root), ArtMod);
+        string pictured = Path.Combine(ModPlanes.FolderIn(root), PortraitMod);
+        Directory.CreateDirectory(rendered);
+        Directory.CreateDirectory(pictured);
+        using (var textures = new TextureArchive(texturesPath))
+        {
+            var stock = Build(planes, textures, Parent, out _);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(stock, Path.Combine(rendered, ModPlanes.ModelFile)), $"the {Parent} export write result");
+            stock.Free();
+        }
+
+        File.Copy(Path.Combine(rendered, ModPlanes.ModelFile), Path.Combine(pictured, ModPlanes.ModelFile));
+        File.WriteAllText(Path.Combine(rendered, ModPlanes.DefinitionFile), $$"""{ "kind_of": "{{Parent}}" }""");
+        File.WriteAllText(Path.Combine(pictured, ModPlanes.DefinitionFile), $$"""{ "kind_of": "{{Parent}}", "portrait": "art/portrait.png" }""");
+        Directory.CreateDirectory(Path.Combine(pictured, "art"));
+        var portrait = Image.CreateEmpty(6, 4, false, Image.Format.Rgba8);
+        portrait.Fill(Colors.Red);
+        portrait.SavePng(Path.Combine(pictured, "art", "portrait.png"));
+
+        var mods = ModPlanes.Open(root);
+        foreach (var mod in mods.Planes)
+        {
+            ModAirframes.Add(planes, mod.Id, mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+        }
+
+        try
+        {
+            CheckArt(ctx, planes, texturesPath, mods, root, cache);
+        }
+        finally
+        {
+            ModPlaneArt.Bind(null, ModPlanes.Current, cache);
+        }
+    }
+
     private static void CheckAutoWreck(TestContext ctx, Node3D model, PlaneStats stats)
     {
         var parts = PlaneCollider.Build(model)?.Parts ?? Array.Empty<PlaneCollider.Part>();
@@ -570,6 +633,83 @@ internal static class ModPlaneSuites
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, new BoxMesh { Size = size }.GetMeshArrays());
         mesh.SurfaceSetMaterial(0, material);
         Child(owner, parent, new MeshInstance3D { Name = name, Mesh = mesh, Position = centre });
+    }
+
+    private static void CheckArt(TestContext ctx, GameZ planes, TextureSet textures, ModPlanes mods, string root, string cache)
+    {
+        var art = mods.Find(ArtMod)!;
+        var own = mods.Find(PortraitMod)!;
+        var views = new[] { ModArtView.Portrait, ModArtView.Plan, ModArtView.HeadOn };
+        ModPlaneArt.Bind(planes, mods, cache);
+        ctx.Check(ModPlaneArt.For(ArtMod, ModArtView.Portrait) == null && ModPlaneArt.For(PortraitMod, ModArtView.Portrait) is { } early && early.GetWidth() == 6,
+            $"before any render the bare mod has no art and the pictured mod already shows its portrait");
+        ModPlaneArt.RenderPending(ctx.Host, () => textures);
+        ctx.Check(ModPlaneArt.TakeLanded() && !ModPlaneArt.TakeLanded(), $"the renders landing are reported once");
+        var files = views.Select(v => ModPlaneArt.CacheFile(cache, ArtMod, art.Hash, v)).ToList();
+        ctx.Check(files.All(File.Exists), $"the three renders are cached under the mod's hash ({string.Join(", ", files.Select(Path.GetFileName))})");
+        var face = ModPlaneArt.For(ArtMod, ModArtView.Portrait);
+        var plan = ModPlaneArt.For(ArtMod, ModArtView.Plan);
+        var head = ModPlaneArt.For(ArtMod, ModArtView.HeadOn);
+        var (faceCovered, faceColoured) = Coverage(face);
+        var (planCovered, planColoured) = Coverage(plan);
+        var (headCovered, headColoured) = Coverage(head);
+        ctx.Check(faceCovered > 0.1f && faceCovered < 0.95f && faceColoured > 0,
+            $"the portrait is the plane in colour on a transparent ground covered={faceCovered:0.00} coloured={faceColoured}");
+        ctx.Check(planCovered > 0.1f && headCovered > 0.05f && planColoured == 0 && headColoured == 0,
+            $"the plan and head-on views are black silhouettes plan={planCovered:0.00} head={headCovered:0.00}");
+
+        var written = files.Select(File.GetLastWriteTimeUtc).ToList();
+        ModPlaneArt.Bind(planes, mods, cache);
+        ModPlaneArt.RenderPending(ctx.Host, () => textures);
+        ctx.Check(!ModPlaneArt.TakeLanded() && files.Select(File.GetLastWriteTimeUtc).SequenceEqual(written)
+            && ModPlaneArt.For(ArtMod, ModArtView.Plan) is { } again && again.GetSize() == plan?.GetSize(),
+            $"a second bind takes the cached files and renders nothing");
+
+        ctx.Check(!File.Exists(ModPlaneArt.CacheFile(cache, PortraitMod, own.Hash, ModArtView.Portrait))
+            && File.Exists(ModPlaneArt.CacheFile(cache, PortraitMod, own.Hash, ModArtView.Plan))
+            && ModPlaneArt.For(PortraitMod, ModArtView.Portrait) is { } image && image.GetPixel(0, 0) == Colors.Red,
+            $"the pictured mod shows its own image and renders only its silhouettes");
+        ctx.Check(ModPlaneArt.For(Parent, ModArtView.Portrait) == null && ModPlaneArt.Picture(Parent, ModArtView.Plan, 0f, 0f, 80f, 80f) == null,
+            $"a stock node has no mod art, so its screens keep the original's");
+        var slot = ModPlaneArt.Picture(ArtMod, ModArtView.Plan, 10f, 20f, 80f, 80f);
+        ctx.Check(slot is { Art.Library: BoardArtLibrary.Held } && plan != null && slot.Width <= 80.01f && slot.Height <= 80.01f
+            && Math.Abs((slot.Width / slot.Height) - (plan.GetWidth() / (float)plan.GetHeight())) < 0.01f
+            && Math.Abs(slot.X + (slot.Width / 2f) - 50f) < 0.01f && Math.Abs(slot.Y + (slot.Height / 2f) - 60f) < 0.01f,
+            $"the plan fits an 80 px slot centred with its aspect kept {slot?.X:0.0},{slot?.Y:0.0} {slot?.Width:0.0}x{slot?.Height:0.0}");
+
+        File.WriteAllText(Path.Combine(ModPlanes.FolderIn(root), ArtMod, ModPlanes.DefinitionFile), $$"""{ "kind_of": "{{Parent}}", "_note": "changed" }""");
+        var reopened = ModPlanes.Open(root);
+        var changed = reopened.Find(ArtMod)!;
+        ModPlaneArt.Bind(planes, reopened, cache);
+        ModPlaneArt.RenderPending(ctx.Host, () => textures);
+        ctx.Check(changed.Hash != art.Hash && File.Exists(ModPlaneArt.CacheFile(cache, ArtMod, changed.Hash, ModArtView.Portrait)),
+            $"a changed mod renders again under its new hash {changed.Hash[..16]} (was {art.Hash[..16]})");
+    }
+
+    // The share of the image's pixels the plane covers, and how many of those carry colour.
+    private static (float Covered, int Coloured) Coverage(Image? image)
+    {
+        if (image == null)
+        {
+            return (0f, 0);
+        }
+
+        int covered = 0;
+        int coloured = 0;
+        for (int y = 0; y < image.GetHeight(); y++)
+        {
+            for (int x = 0; x < image.GetWidth(); x++)
+            {
+                var c = image.GetPixel(x, y);
+                if (c.A > 0.5f)
+                {
+                    covered++;
+                    coloured += c.R + c.G + c.B > 0.05f ? 1 : 0;
+                }
+            }
+        }
+
+        return (covered / (float)(image.GetWidth() * image.GetHeight()), coloured);
     }
 
     // A human rig's build: spinning props, damage panels and the cockpit interior.

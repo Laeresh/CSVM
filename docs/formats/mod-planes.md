@@ -12,7 +12,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
   [overrides](#overrides), [default loadout](#default-loadout), [`plane.glb`](#planeglb),
   [paint](#paint), [damage](#damage), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
-  [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign)
+  [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign), [menu art](#menu-art)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -64,7 +64,7 @@ machine in a network match needs the same mods, which the content hash compares.
 | `unlock` | When the plane enters the campaign hangar: `start`, `with_parent` (the default), or a mission or chapter id, `c1b/m02` or `c1b` (the world folders of `cm_sequence`, [campaign-sequence.md](campaign-sequence.md)), matched without case. The rules are in [The campaign](#the-campaign). |
 | `cockpit` | A stock node whose cockpit interior the plane uses when its model has no `cockpit1` ([`plane.glb`](#planeglb), Cockpit). Absent, the parent's. |
 | `sound` | A stock node whose engine sounds the plane uses: the engine loop, the cockpit-view loop, the damaged loop with its pitch range and the dive whine its def names, in the original and the Enhanced sound mode alike. Absent, the parent's. |
-| `portrait` | The path of an image inside the mod that menus show for the plane. |
+| `portrait` | The path of an image inside the mod (`.png`, `.jpg`, `.webp`, `.tga` or `.bmp`) that menus show as the plane's portrait ([Menu art](#menu-art)). Absent, a render of the model. |
 | `tint` | How a livery colours the plane's own surfaces: `mask` and `detail`, each the path of a `.png` inside the mod, and `materials`, a non-empty list of `plane.glb` material names. All three are required; a `_` key inside is prose. Absent, the plane's own surfaces keep their paint under every livery. The rules are in [Paint](#paint). |
 | `hangar_capacity` | The hangar's weight capacity in lb, a whole number from 1 to 100000, replacing the parent's stat-table capacity in the overweight check ([The hangar](#the-hangar)). Absent, the parent's. |
 | `loadout` | The plane's default fit, replacing the parent's stock fit: see [Default loadout](#default-loadout). Absent, the parent's. |
@@ -213,7 +213,7 @@ availability, slot titles, engine rows), with `hangar_capacity` in place of the 
 mod with `"turrets": []`, no turret slots, so the converted slot costs and weighs as a wing gun
 ([hangar.md](../org/hangar.md)). Its default configuration is the [default loadout](#default-loadout),
 engine tier 2, and the armour of the parent's zones after the mod's `<zone>_armor` overrides. The
-blueprint, the description prose and the engine names are the parent's.
+description prose and the engine names are the parent's; the picture is the mod's ([Menu art](#menu-art)).
 
 A saved build keeps the mod's id as `modAirframe` beside its parent's stock id in `airframe` in
 CSVM's custom plane file; a stock build's file carries no `modAirframe`. The plane pickers fly such a
@@ -247,6 +247,29 @@ stock airframe by the stat table's availability:
 The id is checked each time the game data binds, after the mods' models are grafted. The menu
 cheat that unlocks every airframe unlocks the mods too.
 
+### Menu art
+
+A mod has three menu pictures. The portrait is `portrait`'s image, else a three-quarter view of
+the model from ahead, left and above in its own paint (no livery, the base textures as `plane.glb`
+carries them) on a transparent ground. The plan and head-on views are black silhouettes from above
+(nose up) and from ahead, the view of the original's plane-icon sheets, rendered whether or not the
+mod has a portrait. Each is drawn into the slot's own box with its aspect kept and centred.
+
+| Slot | Picture | Box |
+|---|---|---|
+| Plane Construction, every tab (the airframe list's focused mod row, else the build's mod) | portrait | the parent's `PX_<n>_BLUEPRINT.TGA`, 358 by 335 |
+| The per-seat aircraft screen, a mod build's row | plan | one `FC_PlaneIcons.png` frame, 80 by 80 |
+| Instant Action's Weapon Loadout, a mod build | plan and head-on | one frame of each `OL_PLANEDIAGRAMS*.PNG` sheet |
+
+A `portrait` that does not decode is logged and its slot draws the parent's art. The renders are
+made once, on the first frame after the game data binds, by building the grafted airframe in a viewport
+of its own, and kept as PNGs in `mod_art/` under Godot's user folder, named
+`<id>_<first 16 hex digits of the content hash>_<view>.png`. A later launch reads the files; a
+changed mod has a new hash and renders again. A run with no renderer (`--headless`) renders nothing,
+and the slots then draw the parent's art. A screen the render lands after is composed again. Every
+other plane picture stays the parent's: the campaign pages, the network lobby and the bot panel carry
+the parent's stock id ([The hangar](#the-hangar)), and the local lobby's Select Plane column names
+the build as a stock airframe of its parent.
 
 ## Evidence & limits
 
@@ -283,6 +306,11 @@ cheat that unlocks every airframe unlocks the mods too.
   every drawn triangle in exactly one piece; each missing anchor at its zone's centre and the model's
   own `nose` kept; and a mod's own `destroyed > piece1` built from its file. The anchor names are
   those the parent's defs logged as unresolved on a mod without them (`--debug-anim`).
+- The menu art is `UI/Hangar/ModPlaneArt.cs`, covered by `CSVM.Tests/ModPlaneArtTests.cs` (the
+  cache name, the portrait choice, the fit), the `mod-plane-art` suite (a Brigand export renders a
+  coloured portrait and black silhouettes once into the cache, a second bind reads the files, a changed
+  mod renders under its new hash, a mod's portrait image is shown and only its silhouettes render) and
+  the `menu-original-hangar-mod` suite (the hub draws a mod's portrait in the blueprint's place).
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is
   checked against `cm_sequence` when the game data binds, not when the mod loads, so an unknown id
