@@ -43,6 +43,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
     private Action<Image?>? _pending;
     private bool _drawing;
     private int _drawnBefore;
+    private bool _warm;
 
     /// <summary>Whether this run draws frames at all. A headless run never issues a draw, so a
     /// request would never land; its callers read the pane instead.</summary>
@@ -146,9 +147,19 @@ public sealed partial class DangerZonePhotograph : SubViewport
         return true;
     }
 
+    /// <summary>Takes one photograph nobody keeps on the first frame the pane is ready. The first
+    /// real photograph then finds its full-size render buffers made instead of building them
+    /// mid-flight. For a session that photographs at all; the buffers stay for its life.</summary>
+    public void Warm() => _warm = true;
+
     /// <inheritdoc/>
     public override void _Process(double delta)
     {
+        if (_warm && _pending == null && Drawable && Request(_ => { }))
+        {
+            _warm = false;
+        }
+
         if (_pending == null)
         {
             return;

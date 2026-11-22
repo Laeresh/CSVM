@@ -770,6 +770,8 @@ internal sealed class HumanFlightAdapter
             controller.Photograph = DangerZonePhotograph.Build(rig.Camera,
                 () => controller.GlobalTransform, camParams.Dist, scatter.Randf, airframe: controller);
             controller.AddChild(controller.Photograph);
+            if (controller.StuntShots != null)
+                controller.Photograph.Warm();
         }
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
