@@ -156,7 +156,7 @@
     {
       "name": "c1-lake-enhanced",
       "frame": 120,
-      "hash": "9ef64cdaf3df2063b5be5c2995d78555",
+      "hash": "ce0b94af5f464373bcd9ce7203a97610",
       "exercises": "Enhanced graphics over C1's waterfall lake: the wave ocean with surf and swash to the painted cliff foot and spray puffs there, blurred SSR, Rich swaying conifers handing over to canopy clumps past 1 km, SSAO, settled TAA; frame-sensitive 48.93 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7620,140,-3240", "--lookat=-7868,40,-3449", "--det", "--mute", "--graphics=enhanced"]
     },
@@ -186,7 +186,7 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "86907103d617b60caf7e86209d6955a5",
+      "hash": "32861d31c2a912ff4546e6c0147c00a0",
       "exercises": "Enhanced chase flight as HE rockets hit the dirt by C1's airfield: a rocket's red light in flight, the burst omni, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools, wind streaks, the wave ocean, TAA; frame-sensitive 89.72 %.",
       "release": true,
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
@@ -306,7 +306,7 @@
     {
       "name": "c1b-ocean-enhanced",
       "frame": 120,
-      "hash": "a113035b5f35817daee4c83023110381",
+      "hash": "4dce74da70a361e45167a9955bec9c8b",
       "exercises": "Enhanced wave ocean (water quality waves) over C1B's night islands from 120 m: bent swell, noise detail, foam, the waves calming to the land edge, the surf's churning lace and breaking lines over the hidden ring, SSR, TAA, in the shipped C1B sea.",
       "release": true,
       "args": ["--freecam", "--chapter=C1B", "--pos=-5900,120,-8350", "--direction=0,-0.3,1", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
@@ -314,7 +314,7 @@
     {
       "name": "c1-coast-enhanced",
       "frame": 120,
-      "hash": "4d8193c9406f68251d7a656fbadeac6a",
+      "hash": "3f35c3ac17d32e4534c150e12213d85f",
       "exercises": "Enhanced wave ocean in C1's waterfall cove: the sea tiles stepping aside, breakers and swash on the rock overlay at the cliff foot, the splasher spray puffs on the breaker phase; frame-sensitive 22.45 %.",
       "release": true,
       "args": ["--freecam", "--chapter=C1", "--pos=-7926,150,-3173", "--lookat=-7846,0,-3323", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
@@ -322,7 +322,7 @@
     {
       "name": "c2-beach-enhanced",
       "frame": 120,
-      "hash": "9fad2f6e5e964284461c7001180d6a38",
+      "hash": "db51f47d019b64057beffef5ee66d4c8",
       "exercises": "Enhanced wave ocean at C2's beach1 strip: the shore train's waves running to the painted waterline, the strip's alpha fading over them, the surf lace and the swash film on the wet sand; frame-sensitive 19.51 %.",
       "release": true,
       "args": ["--freecam", "--chapter=C2", "--pos=-3591,150,-2455", "--lookat=-3662,0,-2587", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]
@@ -330,7 +330,7 @@
     {
       "name": "c3-coast-enhanced",
       "frame": 120,
-      "hash": "02836c3683cc84a3749b4d165d57d655",
+      "hash": "58eeefd3dc5a88b112dcd61cf776959c",
       "exercises": "Enhanced wave ocean at a C3 shore strip and cliff tile from 52 m: the shore train, the cliff tile's 25 m alpha blend by distance from the waterline, the procedural surf and the swash fading past the line; frame-sensitive 24.26 %.",
       "release": true,
       "args": ["--freecam", "--chapter=C3", "--pos=-4652,52,-3426", "--direction=0.38,-0.7,-0.93", "--det", "--mute", "--graphics=enhanced", "--water-quality=waves"]

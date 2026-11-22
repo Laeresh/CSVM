@@ -5626,6 +5626,8 @@ internal static class GraphicsSwitchSuites
         {
             Session.Free();
             Pane.Free();
+            // Open's Enhanced apply set the process-wide SSR trace size; later suites must not inherit it.
+            RenderingServer.EnvironmentSetSsrHalfSize(EnhancedLook.SsrHalfSizeDefault);
         }
     }
 }

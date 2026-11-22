@@ -485,7 +485,7 @@ void fragment() {
     float surf_keep = (1.0 - smoothstep(0.0, " + Literal(FogSheetAt) + @", fog_amt)) * dot(tint, vec3(" + Literal(1f / 3f) + @"));
     // The lace's cell follows the pixel's mean side, so a grazing view keeps it fine; the long side
     // widens the holes' edges. Taken here, where every fragment of the quad runs.
-    float surf_fp = sqrt(length(dFdx(p)) * length(dFdy(p)));
+    float surf_fp = sqrt(length(dFdx(flat_p)) * length(dFdy(flat_p)));
     if (surf > 0.0 && surf_keep > 0.0) {
         // The lines' phase in cycles where they reach the land, shared with the coasts' swash. It rises
         // with time, so along the shore distance each line runs toward the land.
@@ -694,6 +694,14 @@ vec2 shore_share(vec2 p, out vec2 shoreward, out float d) {{
         sb.AppendLine(@"
 vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
+}
+
+// Where the eye's ray through world meets the calm water at height level: sea level, or a harbour
+// ramp's lift. A drawn fragment lies at or below the eye, so the ray never points up; the floors keep
+// a grazing ray finite.
+vec2 flat_sea_point(vec3 world, vec3 eye, float level) {
+    vec3 ray = world - eye;
+    return eye.xz + ray.xz * (max(eye.y - level, 0.1) / max(-ray.y, 1e-4 * length(ray)));
 }
 
 // The swell height and the look left at the mask's shore distance g.
@@ -1048,8 +1056,11 @@ void fragment() {
     // ramp below calms them. A calm patch would read as an artefact.
     float look = shore_look(m.g);
     float amp = wave_scale;
-    vec2 fw = fwidth(p);
-    float footprint = max(max(fw.x, fw.y), 0.001);
+    // The pixel's footprint on the flat sea, read off its view ray alone. A derivative of p steps at
+    // every displaced grid triangle's edge, and each fade reading it would print that triangle.
+    float calm_y = textureLod(lift_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * " + Literal(OceanMask.RampTop) + @";
+    vec2 flat_p = flat_sea_point(world, CAMERA_POSITION_WORLD, calm_y);
+    float footprint = max(max(length(dFdx(flat_p)), length(dFdy(flat_p))), 0.001);
     vec3 n = vec3(0.0, 1.0, 0.0);
     // The horizontal displacement's slope (columns: along x, along z), for the foam's Jacobian.
     // Summed from the fragment's own waves, not the grid's, so the foam reads the same at every

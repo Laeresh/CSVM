@@ -164,6 +164,12 @@ covers it.
 - **SHOT-49**, **Before calling a line an Enhanced defect, threshold its pixels and read the same
   pixels in the Original frame.** Of the 5,093 px a C5 shore band drew darker than its surroundings
   under Enhanced, 99.6 % were dark in Original too (mean 2.0 against Enhanced's 13.8).
+- **SHOT-50**, **Paint a fade's input, `EMISSION = vec3(fract(log2(x) * 2.0))`, before judging a faceted
+  look from the shaded frame.** The wave ocean's footprint from `fwidth` of its grid parameter painted
+  the displaced triangles, while the shaded C3 frame at 60 m showed only a faint grain.
+- **SHOT-51**, **Reproduce a player's Enhanced report with the options their log names, since
+  `--det` keeps only flags.** A C2 freecam probe drew a grey sea until it was given
+  `--global-illumination=on --post-processing=on`, the player's run log's values.
 
 ## GOLD, golden images
 
