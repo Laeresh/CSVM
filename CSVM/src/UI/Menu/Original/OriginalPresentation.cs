@@ -12,6 +12,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -184,6 +185,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// is the only way the question is raised.</summary>
     public const string PlaneConstructionDefaultsAid = "defaults";
 
+    /// <summary>The Plane Construction aid's argument that opens the hardpoints tab with two rockets
+    /// on the left wing and three on the right. The live picture's stores are judged on it.</summary>
+    public const string PlaneConstructionRocketsAid = "rockets";
+
     /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
     public const string PlanePaintAid = "plane-paint";
 
@@ -319,6 +324,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     // closes on, the seats' commands are dropped: its own B or Y would otherwise reach the page.
     private InstallPicker? _folderPicker;
     private bool _picking;
+    // The hangar's live plane picture, built while the hub shows under Enhanced. The drag that
+    // orbits it is where the pointer stood last frame while the drag holds.
+    private HangarPreviewStage? _planePreview;
+    private (float X, float Y)? _planeDrag;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -394,6 +403,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The board the view last composed, for a suite telling a repaint from a quiet frame:
     /// each recompose hands the view a new one.</summary>
     internal ComposedBoard? ShownBoard => _view?.Board;
+
+    /// <summary>The hangar's live plane picture while it stands, for a suite reading it back.</summary>
+    internal HangarPreviewStage? PlanePreview => _planePreview;
+
+    /// <summary>The view the board draws through, for a suite reading its live pictures.</summary>
+    internal ComposedBoardView? View => _view;
 
     private CustomPlaneStore PlaneStore => Planes ?? CustomPlaneStore.UserPlanes();
 
@@ -802,6 +817,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                     }
 
                     break;
+                case PlaneConstructionAid + ":" + PlaneConstructionRocketsAid:
+                    _shell.OpenHangarTab(OriginalScreen.HangarHardpoints, AidPlaneName);
+                    if (host.Features.TryGet<HangarFeature>(out var stores) && stores.IsOpen)
+                    {
+                        stores.SetHardpoints(0, 2);
+                        stores.SetHardpoints(1, 3);
+                    }
+
+                    break;
                 case PlanePaintAid:
                 case PlanePaintAid + ":" + PlanePaintDecalsAid:
                     // A Fury in Fortune Hunters colours with a nose decal chosen.
@@ -909,6 +933,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         // Text capture is set before the poll: the name screen's letters must be text, not
         // cursor aliases, for the frame that reads them.
         _host.Seats[0].CapturingText = _shell.CapturingText;
+        MenuPointer? seatPointer = null;
         // The seat list is live and a Back can shorten it mid-loop, so the count is re-read.
         for (int i = 0; i < _host.Seats.Count; i++)
         {
@@ -946,6 +971,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                 bool edge = aid.Down && !_debugPointerDown;
                 _debugPointerDown = aid.Down;
                 commands = commands with { Pointer = new MenuPointer(aid.X, aid.Y, aid.Down, edge, 0, aid.Right) };
+            }
+
+            if (i == 0)
+            {
+                seatPointer = commands.Pointer;
             }
 
             var step = _shell.StepSeat(i, commands);
@@ -1000,6 +1030,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             SyncControlsSeats();
         }
 
+        changed |= SyncPlanePreview(dt, seatPointer);
+
         // The board's own movies run on the step the host was given. A new picture repaints without
         // recomposing: nothing about the screen changed, only the pixels behind it.
         bool picture = _view.AdvanceMovies(dt);
@@ -1046,6 +1078,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _shotViewer?.Close();
         _folderPicker?.Hide();
+        ClosePlanePreview();
 
         // Off screen nothing types, so a seat left capturing on the name screen is released, and
         // nothing narrates: a launch from the briefing's flight check ends the voice with it.
@@ -1145,6 +1178,70 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         return image;
+    }
+
+    // The hangar's live plane picture follows the pose the hub composes. It is built on the first,
+    // shown each frame, and freed once the hub or Enhanced is gone. A press inside its rect with no
+    // list or dialog over it starts a drag. True when the board must recompose to draw a new stage.
+    private bool SyncPlanePreview(float dt, MenuPointer? pointer)
+    {
+        var hangar = _shell?.Hangar;
+        if (hangar?.Preview is not { } pose || hangar.PreviewArea is not { } area || _view == null || _layer == null)
+        {
+            ClosePlanePreview();
+            return false;
+        }
+
+        bool opened = false;
+        if (_planePreview == null)
+        {
+            if (HangarPreviewStage.Open(Data, _dataRoot) is not { } stage)
+            {
+                return false;
+            }
+
+            _planePreview = stage;
+            _layer.AddChild(stage);
+            _view.LivePictures[OriginalHangarScreen.LivePictureName] = stage.GetTexture();
+            opened = true;
+        }
+
+        // Rendered at the picture's drawn size, so it stays sharp at any window size.
+        var fit = BoardFit.For(_view.GetViewportRect().Size.X, _view.GetViewportRect().Size.Y);
+        _planePreview.Size = new Vector2I(Math.Max(1, (int)(area.Width * fit.Scale)), Math.Max(1, (int)(area.Height * fit.Scale)));
+        _planePreview.Show(pose);
+        float dragX = 0f, dragY = 0f;
+        if (pointer is { Pressed: true } held && _planeDrag is { } last)
+        {
+            (dragX, dragY) = (held.X - last.X, held.Y - last.Y);
+            _planeDrag = (held.X, held.Y);
+        }
+        else if (pointer is { Clicked: true } press && hangar.OpenHangarDropdown == null && _shell!.Dialog == null
+            && press.X >= area.X && press.X < area.X + area.Width && press.Y >= area.Y && press.Y < area.Y + area.Height)
+        {
+            _planeDrag = (press.X, press.Y);
+        }
+        else
+        {
+            _planeDrag = null;
+        }
+
+        _planePreview.Step(dt, dragX, dragY);
+        return opened;
+    }
+
+    private void ClosePlanePreview()
+    {
+        _planeDrag = null;
+        if (_planePreview == null)
+        {
+            return;
+        }
+
+        _view?.LivePictures.Remove(OriginalHangarScreen.LivePictureName);
+        _planePreview.GetParent()?.RemoveChild(_planePreview);
+        _planePreview.QueueFree();
+        _planePreview = null;
     }
 
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
