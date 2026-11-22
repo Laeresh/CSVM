@@ -73,8 +73,9 @@ into the turn, and a drag or stick orbit that does the same after an idle. `Aim`
 The Godot half of the live picture: a transparent `SubViewport` with its own world, the plane built
 through `PlaneBuilder` (so the HD model pack applies), the HE rockets hung through
 `ProjectilePool.PylonScene` on the pylons `CustomPlaneBuild.OpenPylons` opens, the paint through
-`PlaneBuilder.Repaint`, two white lights riding the camera and a lacquer material copy that only this
-stage wears. `Menu/Original/OriginalPresentation.cs` builds it while the hub shows under Enhanced and
+`PlaneBuilder.Repaint`, and two white lights riding the camera over the flight materials as built: a
+material copy of its own would cost a shader compile per surface on each first view.
+`Menu/Original/OriginalPresentation.cs` builds it while the hub shows under Enhanced and
 hands its texture to `Boards/ComposedBoardView.cs` as a `BoardArtLibrary.Live` picture.
 
 ## src/UI/Hangar/ModPlaneArt.cs

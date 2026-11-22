@@ -139,7 +139,7 @@ internal static class MenuHangarSuites
         + "the stage's texture, and draws no blueprint or icon art; the stage builds the hub's airframe, "
         + "follows the open airframe list's focused row, hangs one HE body per opened pylon (two left and "
         + "three right on pylons 1, 3, 2, 4 and 6), swings its camera to the wing a count moved, repaints "
-        + "in place on a decal edit without a rebuild, wears its lacquer copy, and is freed when the hub "
+        + "in place on a decal edit without a rebuild, and is freed when the hub "
         + "is left; under Original the same hub draws its blueprint art and builds no stage")]
     internal static void MenuOriginalHangarPreview(TestContext ctx)
     {
@@ -211,7 +211,6 @@ internal static class MenuHangarSuites
             string node = StockAirframes.Node(hangar.Scratch.Airframe);
             ctx.Check(stage.Model?.Name.ToString() == node && stage.Shown?.Airframe == hangar.Scratch.Airframe,
                 $"the stage builds the hub's airframe {node} ({stage.Model?.Name})");
-            ctx.Check(stage.Lacquered > 0, $"its surfaces wear the stage's lacquer copy ({stage.Lacquered})");
 
             var built = stage.Model;
             Press(host, seat, Accept);

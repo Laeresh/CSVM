@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.Text.RegularExpressions;
 using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
@@ -19,8 +17,8 @@ namespace CSVM.UI.Hangar;
 /// <see cref="HangarPreviewPose"/>. The HE rockets hang on its opened pylons, built as flight builds
 /// them, and the pose's paint goes on through <see cref="PlaneBuilder.Repaint"/>. Two white lights
 /// ride the camera, so the plane reads as a lit toy turning in front of the board's own blueprint
-/// grid. A lacquer copy of each material is this stage's alone, never a flight material. Its
-/// <see cref="HangarPreviewCamera"/> turns it, swings to an edit and follows a drag.
+/// grid. It wears the flight materials as built. Its <see cref="HangarPreviewCamera"/> turns it,
+/// swings to an edit and follows a drag.
 /// </summary>
 public sealed partial class HangarPreviewStage : SubViewport
 {
@@ -34,11 +32,6 @@ public sealed partial class HangarPreviewStage : SubViewport
     private const float FieldOfView = 30f;
     private const float Snug = 0.8f;
 
-    // TUNE: the lacquer. Smoother than the flown skin's 0.85, with a clear coat's 0.04 reflectance.
-    private const string LacquerRoughness = "0.4";
-    private const string LacquerF0 = "0.04";
-    private const string LacquerSpecular = "0.5";
-
     // TUNE: the toy-model lights, white so the swatches keep their hue.
     private const float KeyEnergy = 1.1f;
     private const float FillEnergy = 0.7f;
@@ -51,9 +44,6 @@ public sealed partial class HangarPreviewStage : SubViewport
     private const float DragRate = 0.012f;
     private const float StickDeadzone = 0.2f;
 
-    private static readonly Regex Specular = new(@"SPECULAR = [0-9.]+;", RegexOptions.Compiled);
-    private static readonly Regex LightF0 = new(@"ROUGHNESS,\s*[0-9.]+, SPECULAR_AMOUNT", RegexOptions.Compiled);
-
     private readonly GameZ _planes;
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _patterns;
@@ -62,7 +52,6 @@ public sealed partial class HangarPreviewStage : SubViewport
     private readonly Node3D _stand = new() { Name = "stand" };
     private readonly Camera3D _camera = new() { Name = "camera", Fov = FieldOfView };
     private readonly DirectionalLight3D _key;
-    private readonly Dictionary<ShaderMaterial, ShaderMaterial?> _lacquer = new();
     private readonly List<Node3D> _rockets = new();
     private PlaneBuilder? _builder;
     private Node3D? _model;
@@ -135,9 +124,6 @@ public sealed partial class HangarPreviewStage : SubViewport
     /// <summary>How many times the paint went on without a rebuild.</summary>
     public int Repaints { get; private set; }
 
-    /// <summary>How many surfaces wear the stage's lacquer copy.</summary>
-    public int Lacquered { get; private set; }
-
     /// <summary>The stage over <paramref name="data"/>'s planes and its first chapter's skins and
     /// rocket, or null without planes. The first open decodes that chapter's archives, which is what
     /// the logged time measures.</summary>
@@ -181,11 +167,6 @@ public sealed partial class HangarPreviewStage : SubViewport
         if (!before.SamePaint(pose))
         {
             _builder.Repaint(pose.Paint());
-            foreach (var (source, copy) in _lacquer)
-            {
-                copy?.SetShaderParameter("albedo_tex", source.GetShaderParameter("albedo_tex"));
-            }
-
             Repaints++;
         }
 
@@ -215,37 +196,7 @@ public sealed partial class HangarPreviewStage : SubViewport
 
     public override void _ExitTree() => _textures.Dispose();
 
-    // The material a lacquered surface wears, the source's text and parameters with a smoother,
-    // glossier finish and no world sun share or fog. Null for a text without the airframe arm's
-    // roughness line, which keeps its own material.
-    internal static string? LacquerCode(string code)
-    {
-        const string matte = "    ROUGHNESS = 0.85;";
-        if (!code.Contains(matte, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        code = code.Replace(matte, "    ROUGHNESS = " + LacquerRoughness + ";", StringComparison.Ordinal)
-            .Replace("LIGHT_IS_DIRECTIONAL ? v_plane_sun : 1.0", "1.0", StringComparison.Ordinal)
-            .Replace("csky_fog_on * fog_amt", "0.0", StringComparison.Ordinal);
-        code = Specular.Replace(code, "SPECULAR = " + LacquerSpecular + ";");
-        return LightF0.Replace(code, "ROUGHNESS, " + LacquerF0 + ", SPECULAR_AMOUNT");
-    }
-
     private static float Deadzoned(float axis) => MathF.Abs(axis) < StickDeadzone ? 0f : axis;
-
-    private static ShaderMaterial CopyOnto(ShaderMaterial source, Shader shader)
-    {
-        var copy = new ShaderMaterial { Shader = shader };
-        foreach (var uniform in source.Shader.GetShaderUniformList())
-        {
-            var name = uniform.AsGodotDictionary()["name"].AsStringName();
-            copy.SetShaderParameter(name, source.GetShaderParameter(name));
-        }
-
-        return copy;
-    }
 
     private static IEnumerable<MeshInstance3D> Meshes(Node root)
     {
@@ -266,8 +217,6 @@ public sealed partial class HangarPreviewStage : SubViewport
     private void Build(HangarPreviewPose pose)
     {
         _rockets.Clear();
-        _lacquer.Clear();
-        Lacquered = 0;
         if (_model != null)
         {
             _stand.RemoveChild(_model);
@@ -291,12 +240,11 @@ public sealed partial class HangarPreviewStage : SubViewport
         }
 
         _stand.AddChild(_model);
-        Lacquer(_model);
         Center(_model);
         Hang(pose);
         Frame();
         Log.Info("ui",
-            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, radius {_radius:0.0} m, {Lacquered} lacquered surface(s)");
+            $"hangar preview: built {node} in {Stopwatch.GetElapsedTime(start).TotalMilliseconds:0} ms, radius {_radius:0.0} m");
     }
 
     // Moves the model so its bounds' middle is the stand's origin. Then reads the radius the camera
@@ -354,35 +302,7 @@ public sealed partial class HangarPreviewStage : SubViewport
             marker.AddChild(body);
             body.Transform = Transform3D.Identity;
             body.Visible = true;
-            Lacquer(body);
             _rockets.Add(body);
-        }
-    }
-
-    // Each shaded surface onto its lacquer copy, made once per source material.
-    private void Lacquer(Node root)
-    {
-        foreach (var mesh in Meshes(root))
-        {
-            for (int surface = 0; surface < mesh.GetSurfaceOverrideMaterialCount(); surface++)
-            {
-                if (mesh.GetActiveMaterial(surface) is not ShaderMaterial { Shader: { } shader } source)
-                {
-                    continue;
-                }
-
-                if (!_lacquer.TryGetValue(source, out var copy))
-                {
-                    copy = LacquerCode(shader.Code) is { } code ? CopyOnto(source, ShaderTwins.Pooled(code, "hangar-lacquer")) : null;
-                    _lacquer[source] = copy;
-                }
-
-                if (copy != null)
-                {
-                    mesh.SetSurfaceOverrideMaterial(surface, copy);
-                    Lacquered++;
-                }
-            }
         }
     }
 

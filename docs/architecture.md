@@ -550,7 +550,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Hangar/HangarArt.cs`, one decoded picture a page asks its board to draw, with the caption under it.
 - `src/UI/Hangar/HangarPreviewPose.cs`, what the hangar's live 3D plane shows under Enhanced and where an edit swings its camera; engine-free.
 - `src/UI/Hangar/HangarPreviewCamera.cs`, the live plane picture's turntable, focus swing and drag orbit; engine-free.
-- `src/UI/Hangar/HangarPreviewStage.cs`, the live plane picture's own-world SubViewport: model, rockets, paint, lights and lacquer.
+- `src/UI/Hangar/HangarPreviewStage.cs`, the live plane picture's own-world SubViewport: model, rockets, paint and lights.
 - `src/UI/Hangar/ModPlaneArt.cs`, each plane mod's menu pictures: its portrait, else a cached three-quarter render, and plan and head-on silhouettes.
 - `src/UI/Hangar/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
 
