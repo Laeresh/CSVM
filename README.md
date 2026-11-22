@@ -82,7 +82,7 @@ themselves (the build CSVM v0.4.0 bundled writes the layout CSVM reads), edit it
 choose its folder on the Modding Folder row of Options' GAME OPTIONS page (Choose folder...),
 which keeps it for later launches and also offers an old `extracted` folder, or name it for one
 launch with `--mod-folder=<folder>`. CSVM loads each
-archive the folder holds from there and everything else from the game files; [`docs/modding.md`](docs/modding.md) lists the files it reads.
+archive the folder holds from there and everything else from the game files; [`docs/mods/modding.md`](docs/mods/modding.md) lists the files it reads.
 A new plane is a plane mod in `Mods/Planes/`: [`docs/mods/plane-mods.md`](docs/mods/plane-mods.md) walks through
 preparing a model for it.
 
