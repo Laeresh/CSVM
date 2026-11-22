@@ -60,6 +60,7 @@ public static class SuiteCatalog
         "bindings-prompt-device",
         "blast-curve-cover-cap",
         "blast-neighbor-shape",
+        "bracket-scale-hud",
         "build-stamp-icons",
         "burst-light-envelope",
         "camera-zoom-keep",

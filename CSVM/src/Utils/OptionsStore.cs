@@ -198,6 +198,10 @@ public sealed class OptionsDef
     /// "never set" and reads as 100.</summary>
     public string? SpyglassScale { get; set; }
 
+    /// <summary>The on-screen target brackets' size, one of <see cref="BracketScaleSetting.Words"/>.
+    /// Null is "never set" and reads as 100.</summary>
+    public string? BracketScale { get; set; }
+
     /// <summary>Where the subtitles show, one of <see cref="SubtitlesSetting.Words"/>. Null is
     /// "never set" and reads as low.</summary>
     public string? Subtitles { get; set; }
@@ -423,6 +427,7 @@ public sealed class OptionsStore
             Write(w, "hudLayout", def.HudLayout);
             Write(w, "hudLayoutCustom", def.HudLayoutCustom);
             Write(w, "spyglassScale", def.SpyglassScale);
+            Write(w, "bracketScale", def.BracketScale);
             Write(w, "subtitles", def.Subtitles);
             WriteFlag(w, "keepCameraZoom", def.KeepCameraZoom);
             WriteNumber(w, "cameraZoom", def.CameraZoom);
@@ -509,6 +514,7 @@ public sealed class OptionsStore
                 HudLayout = ReadShaped(root, "hudLayout", HudLayoutSetting.Lookup.IsWord),
                 HudLayoutCustom = ReadShaped(root, "hudLayoutCustom", Utils.HudLayout.IsValid),
                 SpyglassScale = ReadShaped(root, "spyglassScale", SpyglassScaleSetting.Lookup.IsWord),
+                BracketScale = ReadShaped(root, "bracketScale", BracketScaleSetting.Lookup.IsWord),
                 Subtitles = ReadShaped(root, "subtitles", SubtitlesSetting.Lookup.IsWord),
                 KeepCameraZoom = ReadFlag(root, "keepCameraZoom"),
                 CameraZoom = ReadZoom(root, "cameraZoom"),

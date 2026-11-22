@@ -1518,6 +1518,71 @@ internal static class TargetingSuites
         }
     }
 
+    // The player's bracket size against a real TargetHud's HUD scale, with no game data. The factor
+    // changes between two reads of one hud, which is the live apply the pause sheet makes.
+    [Suite("bracket-scale-hud",
+        "the target bracket size (Game Options Bracket Size, BracketScaleSetting): at 100% the box "
+        + "is the decoded 20 x 16 with 4-pixel arms at the pane's HUD scale, bit for bit, and its label "
+        + "sits 3 under it; at 125, 150 and 200% the SAME hud, unrebuilt, reads the new factor, so an "
+        + "apply over the pause sheet resizes every pane's box at once, the HUD scale still "
+        + "multiplying it, and the label keeps its 3-pixel gap under the bigger box; the factor is "
+        + "clamped to 1..2 and a word outside the four reads as 100; and a --det launch reads no saved size")]
+    internal static void BracketScaleHud(TestContext ctx)
+    {
+        float before = BracketScaleSetting.Current;
+        TargetHud? hud = null;
+        try
+        {
+            BracketScaleSetting.Current = BracketScaleSetting.Native;
+            hud = TargetHud.Build(0, ctx.Camera, null!);
+            ctx.Host.AddChild(hud);
+            hud.Size = new Vector2(2560f, 1440f);
+            float s = HudMetrics.Scale(hud);
+            ctx.Check(s > 0f, $"the hud measures a HUD scale on this window ({s})");
+            var at = new Vector2(400f, 300f);
+
+            ctx.Check(HudMetrics.BracketScale == 1f
+                      && TargetHud.BracketHalfW(s, HudMetrics.BracketScale) == 10f * s
+                      && TargetHud.BracketHalfH(s, HudMetrics.BracketScale) == 8f * s
+                      && TargetHud.BracketArm(s, HudMetrics.BracketScale) == 4f * s
+                      && TargetHud.InViewLabelAnchor(at, hud.Size.Y, s, HudMetrics.BracketScale).Y == at.Y + (11f * s),
+                $"at 100% the box is the decoded 20 x 16 with 4-pixel arms at the pane's scale {s}, bit for bit, the label 3 under it");
+
+            foreach (string word in new[] { "125", "150", "200" })
+            {
+                float factor = BracketScaleSetting.FactorOf(word);
+                BracketScaleSetting.Apply(word);
+                float live = HudMetrics.BracketScale;
+                float halfW = TargetHud.BracketHalfW(s, live);
+                float halfH = TargetHud.BracketHalfH(s, live);
+                float label = TargetHud.InViewLabelAnchor(at, hud.Size.Y, s, live).Y;
+                ctx.Check(live == factor
+                          && Mathf.Abs(halfW - (10f * s * factor)) < 1e-3f
+                          && Mathf.Abs(halfH - (8f * s * factor)) < 1e-3f
+                          && Mathf.Abs(TargetHud.BracketArm(s, live) - (4f * s * factor)) < 1e-3f
+                          && Mathf.Abs(label - (at.Y + halfH + (3f * s))) < 1e-3f,
+                    $"at {word}% the same hud reads factor {live} with no rebuild: the box {2f * halfW} x {2f * halfH}, the label 3 under it ({label})");
+            }
+
+            BracketScaleSetting.Apply(null);
+            ctx.Check(HudMetrics.BracketScale == 1f,
+                $"CONTROL: back at a never-set size the same hud reads 100% again");
+            BracketScaleSetting.Current = 3f;
+            ctx.Check(HudMetrics.BracketScale == HudMetrics.MaximumBracketScale,
+                $"a factor past the largest step is held at {HudMetrics.MaximumBracketScale}");
+            ctx.Check(BracketScaleSetting.Apply("175").Word == BracketScaleSetting.Default
+                      && BracketScaleSetting.Current == BracketScaleSetting.Native,
+                $"and a word outside the four reads as 100");
+            ctx.Check(BracketScaleSetting.SavedWord(det: true) == null,
+                $"a --det launch reads no saved size, so no golden depends on it");
+        }
+        finally
+        {
+            BracketScaleSetting.Current = before;
+            hud?.Free();
+        }
+    }
+
     // The target-routing switch, driven directly against hand-built sources, no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW

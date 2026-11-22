@@ -167,6 +167,7 @@ internal sealed class LiveSettings
         options.HudMode = applied.HudMode;
         options.HudLayout = applied.HudLayout;
         options.SpyglassScale = applied.SpyglassScale;
+        options.BracketScale = applied.BracketScale;
         options.Subtitles = applied.Subtitles;
         CameraZoomMemory.Stage(options, applied.KeepCameraZoom);
         options.MonitorIndex = applied.MonitorIndex;
@@ -205,8 +206,9 @@ internal sealed class LiveSettings
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !spec.Det && applied.Rumble != false;
-        // Every pane reads the factor each frame, so a pick over the pause sheet resizes the disc at once.
+        // Every pane reads the factors each frame, so a pick over the pause sheet resizes the disc and box at once.
         SpyglassScaleSetting.ApplySaved(spec.Det, options);
+        BracketScaleSetting.ApplySaved(spec.Det, options);
         // The caption reads the word each frame, so a pick over the pause sheet moves it at once.
         SubtitlesSetting.ApplySaved(spec.Det, options);
         // Every pilot pane follows the mode each frame, so a pick over the pause sheet takes them all at once.

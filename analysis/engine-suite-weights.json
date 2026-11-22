@@ -55,6 +55,7 @@
     "blast-neighbor-shape": 0.036,
     "bot-torpedo-lead": 0.369,
     "bounce-launch": 4.983,
+    "bracket-scale-hud": 0.004,
     "build-stamp-focus": 0.098,
     "build-stamp-icons": 0.21,
     "burst-light": 2.57,

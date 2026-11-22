@@ -404,8 +404,9 @@ public sealed partial class XrMarkers : Node3D
         if (Resize(card, _key.ToString(), new Vector2(halfW, halfH) * 2f) is { } size)
         {
             var scratch = _scratch;
+            // The card is sized to the decoded box above, so the flat Bracket Size never reaches it.
             Paint(card, into => TargetHud.DrawInView(into, font, mark, size * 0.5f, float.PositiveInfinity,
-                CardScale, fontSize, scratch));
+                CardScale, fontSize, scratch, bracketScale: 1f));
         }
     }
 

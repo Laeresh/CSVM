@@ -58,6 +58,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
     /// <summary>The page's spyglass size dropdown, a remake-only row.</summary>
     public const string SpyglassScaleKey = "SPYGLASSSCALE";
 
+    /// <summary>The page's target bracket size dropdown, a remake-only row.</summary>
+    public const string BracketScaleKey = "BRACKETSCALE";
+
     /// <summary>The page's Keep Camera Zoom checkbox, a remake-only row.</summary>
     public const string KeepCameraZoomKey = "KEEPCAMERAZOOM";
 
@@ -212,6 +215,11 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
             OriginalRowKind.Dropdown, _ => CSVM.Utils.SpyglassScaleSetting.Labels(),
             c => DisplaySettingRows.WordIndex(CSVM.Utils.SpyglassScaleSetting.Words, c.SpyglassScale, CSVM.Utils.SpyglassScaleSetting.Default),
             (c, i) => c.SpyglassScale = CSVM.Utils.SpyglassScaleSetting.Words[Math.Clamp(i, 0, CSVM.Utils.SpyglassScaleSetting.Words.Count - 1)]),
+        new(BracketScaleKey, "Bracket Size",
+            _ => "Draw the brackets around an on-screen target larger.",
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.BracketScaleSetting.Labels(),
+            c => DisplaySettingRows.WordIndex(CSVM.Utils.BracketScaleSetting.Words, c.BracketScale, CSVM.Utils.BracketScaleSetting.Default),
+            (c, i) => c.BracketScale = CSVM.Utils.BracketScaleSetting.Words[Math.Clamp(i, 0, CSVM.Utils.BracketScaleSetting.Words.Count - 1)]),
         new(KeepCameraZoomKey, "Keep Camera Zoom",
             _ => "Keep the chase view's zoom through view changes, missions and restarts.",
             OriginalRowKind.Radio, _ => SwitchWords,
@@ -301,6 +309,9 @@ public sealed class OriginalGameOptionsPage : IOriginalOptionsPage
 
     /// <summary>The spyglass size the page would apply, null while never set.</summary>
     public string? SpyglassScaleChoice => _choices.SpyglassScale;
+
+    /// <summary>The target bracket size the page would apply, null while never set.</summary>
+    public string? BracketScaleChoice => _choices.BracketScale;
 
     /// <summary>The Keep Camera Zoom switch the page would apply, null while never set.</summary>
     public bool? KeepCameraZoomChoice => _choices.KeepCameraZoom;

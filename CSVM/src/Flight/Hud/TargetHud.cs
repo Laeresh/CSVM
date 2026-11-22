@@ -534,6 +534,31 @@ public sealed partial class TargetHud : Control
     public static int DiscSide(float s, float discScale = 1f) =>
         s > 0f ? Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s * discScale)) : 0;
 
+    /// <summary>The on-screen label block's anchor: 3 under the box's bottom, or 30 over its top
+    /// where the block would pass <paramref name="paneHeight"/>. The box's height takes the player's
+    /// <paramref name="bracketScale"/>, the gaps do not.</summary>
+    public static Vector2 InViewLabelAnchor(Vector2 at, float paneHeight, float s, float bracketScale = 1f)
+    {
+        // ⚠ Add the growth last, as EdgeLabelAnchor does: it is exactly 0 at 100%, which keeps the
+        // decoded placement bit for bit.
+        float growth = BracketHalfH(s, bracketScale) - BracketHalfH(s);
+        float below = at.Y + ((RefBracketHalfH + RefLabelGap) * s) + growth;
+        return new Vector2(at.X, at.Y + ((RefBracketHalfH + RefLabelBlock) * s) + growth <= paneHeight
+            ? below
+            : at.Y - ((RefBracketHalfH + RefLabelAbove) * s) - growth);
+    }
+
+    /// <summary>The box's half height in pane pixels at HUD scale <paramref name="s"/> and the
+    /// player's <paramref name="bracketScale"/> (<see cref="HudMetrics.BracketScale"/>). ⚠ Keep the
+    /// factor multiplied last: at 1 the box is then bit for bit the unscaled one.</summary>
+    public static float BracketHalfH(float s, float bracketScale = 1f) => RefBracketHalfH * s * bracketScale;
+
+    /// <summary>The box's half width, the factor multiplied last as in <see cref="BracketHalfH"/>.</summary>
+    public static float BracketHalfW(float s, float bracketScale = 1f) => RefBracketHalfW * s * bracketScale;
+
+    /// <summary>The box's arm length, the factor multiplied last as in <see cref="BracketHalfH"/>.</summary>
+    public static float BracketArm(float s, float bracketScale = 1f) => RefBracketArm * s * bracketScale;
+
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame.
@@ -810,7 +835,7 @@ public sealed partial class TargetHud : Control
     /// pass <paramref name="paneHeight"/>. Any other marker takes a tag just above the point.
     /// <paramref name="lines"/> is the caller's scratch list.</summary>
     internal static void DrawInView(CanvasItem into, Font font, in WorldMark mark, Vector2 at,
-        float paneHeight, float s, int fontSize, List<string> lines)
+        float paneHeight, float s, int fontSize, List<string> lines, float bracketScale)
     {
         lines.Clear();
         if (mark.Style != WorldMarkStyle.Selected)
@@ -821,15 +846,11 @@ public sealed partial class TargetHud : Control
 
         if (mark.Boxed)
         {
-            DrawBrackets(into, at, mark.Color, s);
+            DrawBrackets(into, at, mark.Color, s, bracketScale);
         }
 
         LabelLines(mark.Target, null, lines);
-        float below = at.Y + (RefBracketHalfH + RefLabelGap) * s;
-        float anchor = at.Y + (RefBracketHalfH + RefLabelBlock) * s <= paneHeight
-            ? below
-            : at.Y - (RefBracketHalfH + RefLabelAbove) * s;
-        DrawLabelBlock(into, font, new Vector2(at.X, anchor), lines, mark.Color, s, fontSize);
+        DrawLabelBlock(into, font, InViewLabelAnchor(at, paneHeight, s, bracketScale), lines, mark.Color, s, fontSize);
     }
 
     /// <summary>The label an off-view marker carries, top to bottom. A selection's is its label block
@@ -847,13 +868,14 @@ public sealed partial class TargetHud : Control
 
     /// <summary>The bracket box: six line sprites forming a <c>[ ]</c> pair around the projected
     /// point. It is 20 x 16 reference pixels with 4-pixel arms (<c>0x00607a0c</c>/<c>0x00607a14</c>/
-    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by nothing
-    /// else, least of all by range.</summary>
-    internal static void DrawBrackets(CanvasItem into, Vector2 at, Color color, float s)
+    /// <c>0x00607a10</c>). Fixed size, scaled for resolution by <paramref name="s"/> and by the
+    /// player's <paramref name="bracketScale"/>, never by range. The line width and the shadow's
+    /// offset keep the HUD scale alone.</summary>
+    internal static void DrawBrackets(CanvasItem into, Vector2 at, Color color, float s, float bracketScale)
     {
         // The same drop shadow the arrow and the tags carry, so the box stays readable over sky.
-        Brackets(into, at + new Vector2(1.5f, 1.5f) * s, Shadow, s);
-        Brackets(into, at, color, s);
+        Brackets(into, at + new Vector2(1.5f, 1.5f) * s, Shadow, s, bracketScale);
+        Brackets(into, at, color, s, bracketScale);
     }
 
     /// <summary>The label lines stacked downward from <paramref name="anchor"/> at the original's
@@ -920,9 +942,9 @@ public sealed partial class TargetHud : Control
         return false;
     }
 
-    private static void Brackets(CanvasItem into, Vector2 at, Color color, float s)
+    private static void Brackets(CanvasItem into, Vector2 at, Color color, float s, float bracketScale)
     {
-        float hw = RefBracketHalfW * s, hh = RefBracketHalfH * s, arm = RefBracketArm * s;
+        float hw = BracketHalfW(s, bracketScale), hh = BracketHalfH(s, bracketScale), arm = BracketArm(s, bracketScale);
         float w = Mathf.Max(1f, RefBracketWidth * s);
         for (int side = 0; side < 2; side++)
         {
@@ -1039,9 +1061,9 @@ public sealed partial class TargetHud : Control
         if (placed.OnScreen)
         {
             if (!Textless)
-                DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines);
+                DrawInView(this, font, mark, sp, Size.Y, s, fontSize, _labelLines, HudMetrics.BracketScale);
             else if (mark.Boxed)
-                DrawBrackets(this, sp, color, s);
+                DrawBrackets(this, sp, color, s, HudMetrics.BracketScale);
             return;
         }
 

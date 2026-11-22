@@ -845,7 +845,7 @@ Instant Action wrap-up can carry it past the session. The boards draw the same t
 The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
-only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale; `SpyglassScale`, the player's Spyglass Size (`Utils/SpyglassScaleSetting.cs`), clamped to 1..2, multiplies the spyglass disc alone.
+only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale; `SpyglassScale`, the player's Spyglass Size (`Utils/SpyglassScaleSetting.cs`), clamped to 1..2, multiplies the spyglass disc alone, and `BracketScale`, the player's Bracket Size (`Utils/BracketScaleSetting.cs`), clamped the same, the on-screen bracket box alone.
 `ReadingBox`: a full-screen view's box is the reference 16:9 at full height, centred; a splitscreen
 pane is its own box. `ColumnOutdent` gives a narrower pane's columns all but a minimal border back.
 `WindowSize` is the window these measure against: the stereo HUD panel's surface
@@ -1140,7 +1140,7 @@ pane's seat holds Display Scores (`UI/Overlays/ScoresOverlay.cs`).
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no
 selection exists (a bot tagged by its callsign, `TrackedTag`), and the F16 / `--debug-markers` overlay. Draws the original's
-bracket box and label block and owns the colour table, the label layout, the selected gun's reach
+bracket box (`BracketHalfW`/`BracketHalfH`/`BracketArm`, times `HudMetrics.BracketScale` in the flat views) and label block (`InViewLabelAnchor`) and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
 and draws the picture at `DiscRadius`/`DiscSide`, the decoded window times `HudMetrics.SpyglassScale`: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,

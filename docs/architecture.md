@@ -724,6 +724,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
 - `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
 - `src/Utils/SpyglassScaleSetting.cs`, the player's spyglass size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat disc is drawn at.
+- `src/Utils/BracketScaleSetting.cs`, the player's bracket size (100 to 200 percent): the saved `WordSetting` lookup and the factor the flat on-screen target box is drawn at.
 - `src/Utils/HudModeSetting.cs`, the HUD mode of the outside views (Full, Minimal, None): the saved `WordSetting` lookup, the process-wide mode every pilot pane follows, and the cycle key's step and save.
 - `src/Utils/HudLayoutSetting.cs`, the HUD layout of the outside views (Original, Sides, Custom): the saved word and custom placement, the process-wide layout every pilot pane follows, and the editor's save.
 - `src/Utils/HudLayout.cs`, a stored HUD layout: one edge-anchored placement in reference pixels per element, and its options-file spelling.
