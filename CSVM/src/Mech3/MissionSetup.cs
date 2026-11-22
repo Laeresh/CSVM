@@ -117,115 +117,34 @@ public sealed class MissionSetup
         Action<Node3D, bool> setActive,
         Action<Node3D, Vector3> translate,
         Action<Node3D, Vector3> rotate,
-        Action<int, bool>? setActiveByIndex = null)
+        Action<int, bool>? setActiveByIndex = null) =>
+        Run(resolve, setActive, translate, rotate, setActiveByIndex, tally: true);
+
+    /// <summary>The switches the script leaves on gamez nodes by node index, true on and false off, absent where it
+    /// touches none. A dry run of <see cref="Apply"/> over the gamez records, for what must know a mission's switches
+    /// before the bootstrap applies them. Call <see cref="BindPartitions"/> first, or the area verb switches nothing.</summary>
+    public Dictionary<int, bool> Switches(GameZ gamez)
     {
-        for (int i = 0; i < _ops.Count; i++)
+        var state = new Dictionary<int, bool>();
+        IReadOnlyList<GameZNode> Resolve(string name, GameZNode? scope)
         {
-            var op = _ops[i];
-            switch (op.Verb)
+            if (scope == null)
+                return gamez.Nodes.Where(n => NameMatches(n.Name, name)).ToList();
+            var found = new List<GameZNode>();
+            var open = new Stack<int>(scope.Children);
+            while (open.Count > 0)
             {
-                // The payload: 1,125 of the 1,215 statements across all 53 scripts.
-                case "NodeSetActive":
-                    SetActive(op, op.Args.Length > 0 && op.Args[0] == "on");
-                    break;
-                // Removal rather than deactivation, but nothing in any script re-activates a
-                // deleted name (verified over all 53), so switching the subtree off is
-                // indistinguishable here and keeps one code path. 12 uses, all C3.
-                case "DeleteTree":
-                    SetActive(op, false);
-                    break;
-                // Places the selection (14 uses: C1/M05's boats/redcross/workersvoyagezep,
-                // C3/MP1-2's cargozep1, C5/MP1's rearm_node_2), see docs/formats/interp.md,
-                // "Vehicles load unplaced".
-                case "Object3DTranslate":
-                    if (ParseVector3(op.Args) is { } pos)
-                        foreach (var t in ResolveTargets(op))
-                        {
-                            translate(t, pos);
-                            _translated++;
-                        }
-                    break;
-                // Re-orients the selection (11 uses). The data's angle unit is ambiguous and
-                // decided per script, see RotateAsRadians and docs/formats/interp.md.
-                case "Object3DRotate":
-                    if (ParseVector3(op.Args) is { } euler)
-                    {
-                        var radians = RotateAsRadians(euler);
-                        foreach (var t in ResolveTargets(op))
-                        {
-                            rotate(t, radians);
-                            _rotated++;
-                        }
-                    }
-                    break;
-                // Acted on, but at world-build time rather than here, the rate is part of the
-                // material cache key, so it has to be known before the material exists. See
-                // ScrollByModel.
-                case "Object3DSetScroll":
-                    break;
-                // The same toggle NodeSetActive performs, reached by AREA instead of by name, and
-                // ignoring the selection entirely. All 25 uses switch C3's three story areas.
-                case "WorldPartitionSetActive":
-                    SetAreaActive(i, op, setActiveByIndex);
-                    break;
-                default:
-                    // Everything else is parsed, counted and reported rather than guessed at,
-                    // see the class docs and docs/formats/interp.md for what is left and why.
-                    _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
-                    break;
+                var node = gamez.Nodes[open.Pop()];
+                if (NameMatches(node.Name, name))
+                    found.Add(node);
+                foreach (int c in node.Children)
+                    open.Push(c);
             }
+            return found;
         }
 
-        void SetAreaActive(int index, Op op, Action<int, bool>? byIndex)
-        {
-            if (byIndex == null || !_areaTargets.TryGetValue(index, out var targets))
-            {
-                _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
-                return;
-            }
-
-            bool active = op.Args.Length > 0 && op.Args[0] == "on";
-            foreach (int idx in targets)
-                byIndex(idx, active);
-            _areaOps++;
-            if (active)
-                _areaOn += targets.Count;
-            else
-                _areaOff += targets.Count;
-        }
-
-        void SetActive(Op op, bool active)
-        {
-            var targets = ResolveTargets(op);
-            if (targets.Count == 0)
-                return;
-            foreach (var t in targets)
-                setActive(t, active);
-            if (active)
-                _activated += targets.Count;
-            else
-                _deactivated += targets.Count;
-        }
-
-        List<Node3D> ResolveTargets(Op op)
-        {
-            if (op.Target == null)
-                return new List<Node3D>();
-            var hosts = resolve(op.Target, null);
-            if (hosts.Count == 0)
-            {
-                // Expected, not a warning: the name may be absent from this chapter's gamez, or
-                // present but never built (docs/formats/interp.md).
-                _unresolved.Add(op.Sub == null ? op.Target : $"{op.Target}/{op.Sub}");
-                return new List<Node3D>();
-            }
-            var targets = op.Sub == null
-                ? hosts.ToList()
-                : hosts.SelectMany(h => resolve(op.Sub, h)).ToList();
-            if (targets.Count == 0)
-                _unresolved.Add($"{op.Target}/{op.Sub}");
-            return targets;
-        }
+        Run<GameZNode>(Resolve, (n, on) => state[n.Index] = on, (_, _) => { }, (_, _) => { }, (i, on) => state[i] = on, tally: false);
+        return state;
     }
 
     /// <summary>One-line summary of what the script did, for the build log.</summary>
@@ -255,9 +174,9 @@ public sealed class MissionSetup
         return s;
     }
 
-    // A script name matches a gamez node name case-insensitively, with the model-file suffix
-    // optional on either side, the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
-    // the node 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
+    // A script name matches a gamez node name case-insensitively, the model-file suffix optional on
+    // either side. AnimRuntime's node lookup uses the same rule ('ap_radiotwr' for the node
+    // 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
     private static bool NameMatches(string nodeName, string scriptName) =>
         nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
         || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
@@ -286,6 +205,141 @@ public sealed class MissionSetup
 
     private static string Strip(string s) =>
         s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
+
+    // Apply's one decode of the script, over built nodes or over gamez records. A dry run (tally false) counts nothing.
+    private void Run<T>(
+        Func<string, T?, IReadOnlyList<T>> resolve,
+        Action<T, bool> setActive,
+        Action<T, Vector3> translate,
+        Action<T, Vector3> rotate,
+        Action<int, bool>? setActiveByIndex,
+        bool tally)
+        where T : class
+    {
+        for (int i = 0; i < _ops.Count; i++)
+        {
+            var op = _ops[i];
+            switch (op.Verb)
+            {
+                // The payload: 1,125 of the 1,215 statements across all 53 scripts.
+                case "NodeSetActive":
+                    SetActive(op, op.Args.Length > 0 && op.Args[0] == "on");
+                    break;
+                // Removal rather than deactivation, but nothing in any script re-activates a
+                // deleted name (verified over all 53), so switching the subtree off is
+                // indistinguishable here and keeps one code path. 12 uses, all C3.
+                case "DeleteTree":
+                    SetActive(op, false);
+                    break;
+                // Places the selection (14 uses: C1/M05's boats/redcross/workersvoyagezep,
+                // C3/MP1-2's cargozep1, C5/MP1's rearm_node_2), see docs/formats/interp.md,
+                // "Vehicles load unplaced".
+                case "Object3DTranslate":
+                    if (ParseVector3(op.Args) is { } pos)
+                        foreach (var t in ResolveTargets(op))
+                        {
+                            translate(t, pos);
+                            _translated += tally ? 1 : 0;
+                        }
+                    break;
+                // Re-orients the selection (11 uses). The data's angle unit is ambiguous and
+                // decided per script, see RotateAsRadians and docs/formats/interp.md.
+                case "Object3DRotate":
+                    if (ParseVector3(op.Args) is { } euler)
+                    {
+                        var radians = RotateAsRadians(euler);
+                        foreach (var t in ResolveTargets(op))
+                        {
+                            rotate(t, radians);
+                            _rotated += tally ? 1 : 0;
+                        }
+                    }
+                    break;
+                // Acted on, but at world-build time rather than here, the rate is part of the
+                // material cache key, so it has to be known before the material exists. See
+                // ScrollByModel.
+                case "Object3DSetScroll":
+                    break;
+                // The same toggle NodeSetActive performs, reached by AREA instead of by name, and
+                // ignoring the selection entirely. All 25 uses switch C3's three story areas.
+                case "WorldPartitionSetActive":
+                    SetAreaActive(i, op, setActiveByIndex);
+                    break;
+                default:
+                    // Everything else is parsed, counted and reported rather than guessed at,
+                    // see the class docs and docs/formats/interp.md for what is left and why.
+                    Unapplied(op);
+                    break;
+            }
+        }
+
+        void SetAreaActive(int index, Op op, Action<int, bool>? byIndex)
+        {
+            if (byIndex == null || !_areaTargets.TryGetValue(index, out var targets))
+            {
+                Unapplied(op);
+                return;
+            }
+
+            bool active = op.Args.Length > 0 && op.Args[0] == "on";
+            foreach (int idx in targets)
+                byIndex(idx, active);
+            if (!tally)
+                return;
+            _areaOps++;
+            if (active)
+                _areaOn += targets.Count;
+            else
+                _areaOff += targets.Count;
+        }
+
+        void SetActive(Op op, bool active)
+        {
+            var targets = ResolveTargets(op);
+            if (targets.Count == 0)
+                return;
+            foreach (var t in targets)
+                setActive(t, active);
+            if (!tally)
+                return;
+            if (active)
+                _activated += targets.Count;
+            else
+                _deactivated += targets.Count;
+        }
+
+        List<T> ResolveTargets(Op op)
+        {
+            if (op.Target == null)
+                return new List<T>();
+            var hosts = resolve(op.Target, null);
+            if (hosts.Count == 0)
+            {
+                // Expected, not a warning: the name may be absent from this chapter's gamez, or
+                // present but never built (docs/formats/interp.md).
+                Unresolved(op.Sub == null ? op.Target : $"{op.Target}/{op.Sub}");
+                return new List<T>();
+            }
+            var targets = op.Sub == null
+                ? hosts.ToList()
+                : hosts.SelectMany(h => resolve(op.Sub, h)).ToList();
+            if (targets.Count == 0)
+                Unresolved($"{op.Target}/{op.Sub}");
+            return targets;
+        }
+
+        void Unapplied(Op op)
+        {
+            if (tally)
+                _unapplied[op.Verb] = _unapplied.GetValueOrDefault(op.Verb) + 1;
+        }
+
+        void Unresolved(string name)
+        {
+            if (tally)
+                _unresolved.Add(name);
+        }
+    }
 
     // Per-script by magnitude: any component beyond 2pi marks the whole script as degrees.
     // Docs: docs/formats/interp.md ("Object3DRotate's angle unit is ambiguous").

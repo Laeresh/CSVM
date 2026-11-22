@@ -231,9 +231,10 @@ public static class GroundCover
     }
 
     /// <summary>The cover over the ground <paramref name="entry"/>'s <c>cover</c> picks, null where it picks none. The
-    /// cells build as cameras come near (<see cref="Field.Update"/>). <paramref name="mask"/> null grows everywhere picked.</summary>
+    /// cells build as cameras come near (<see cref="Field.Update"/>). <paramref name="mask"/> null grows everywhere picked.
+    /// No card stands on <paramref name="hangars"/>.</summary>
     public static Field? Build(GameZ gamez, TextureArchive textures, VegetationMask? mask, VegetationEntry entry, string chapter,
-        Func<GameZNode, bool>? switchedOff = null)
+        Func<GameZNode, bool>? switchedOff = null, HangarFootprints? hangars = null)
     {
         if (entry.Cover.Count == 0)
             return null;
@@ -266,7 +267,7 @@ public static class GroundCover
         // Every other textured polygon, the overlays a card is kept off.
         var overlays = OverlaysFor(gamez, entry);
         Log.Info("world", $"ground cover: {chapter} {kept} picked triangles over {index.Count} cells of {CellM:0} m from {string.Join(", ", surfaces.Where(s => s.Value != null).Select(s => s.Key))}, crop band {Band(Cover.Crop).X:0}-{Band(Cover.Crop).Y:0} m, grass band {Band(Cover.Grass).X:0}-{Band(Cover.Grass).Y:0} m, indexed in {watch.ElapsedMilliseconds} ms");
-        return new Field(index, overlays, mask);
+        return new Field(index, overlays, mask, hangars ?? HangarFootprints.None);
     }
 
     /// <summary>A picked texture's <see cref="Surface"/>: the gate and the rows from the authored image, the colour from
@@ -728,6 +729,7 @@ public static class GroundCover
         private readonly Dictionary<(int X, int Z), List<Ground>> _index;
         private readonly VegetationGround.Overlays _overlays;
         private readonly VegetationMask? _mask;
+        private readonly HangarFootprints _hangars;
         private readonly ArrayMesh[] _meshes = { CardMesh(Cover.Crop), CardMesh(Cover.Grass) };
         private readonly ShaderMaterial[] _materials = { Material(Cover.Crop), Material(Cover.Grass) };
         private readonly Dictionary<((int X, int Z) Cell, Cover Cover), MultiMeshInstance3D?> _live = new();
@@ -742,12 +744,13 @@ public static class GroundCover
         private readonly Dictionary<(int X, int Z), float> _best = new();
         private bool _settled;
 
-        internal Field(Dictionary<(int X, int Z), List<Ground>> index, VegetationGround.Overlays overlays, VegetationMask? mask)
+        internal Field(Dictionary<(int X, int Z), List<Ground>> index, VegetationGround.Overlays overlays, VegetationMask? mask, HangarFootprints hangars)
         {
             _index = index;
             _span = index.ToDictionary(c => c.Key, c => (c.Value.Min(g => g.Min.Y), c.Value.Max(g => g.Max.Y)));
             _overlays = overlays;
             _mask = mask;
+            _hangars = hangars;
         }
 
         /// <summary>The node every cell's MultiMeshes stand under.</summary>
@@ -761,6 +764,12 @@ public static class GroundCover
 
         /// <summary>Lattice points on picked ground in the built cells that the brush mask grew nothing on.</summary>
         public int Bare { get; private set; }
+
+        /// <summary>The hangar floors no card stands on.</summary>
+        public HangarFootprints Hangars => _hangars;
+
+        /// <summary>Cards the built cells left off a hangar's floor.</summary>
+        public int CardsOffHangars { get; private set; }
 
         /// <summary>The cards the built cells hold, by <see cref="Cover"/>.</summary>
         public int Instances(Cover cover) => Draws.Where(m => (int)m.GetMeta("cover") == (int)cover).Sum(m => m.Multimesh.InstanceCount);
@@ -808,7 +817,7 @@ public static class GroundCover
             else if (!_settled && wanted.Count > 0)
             {
                 _settled = true;
-                Log.Info("world", $"ground cover: {Cells} cells built, {Draws.Count()} draws, crop {Instances(Cover.Crop)} and grass {Instances(Cover.Grass)} cards, {Bare} lattice points bare under the mask");
+                Log.Info("world", $"ground cover: {Cells} cells built, {Draws.Count()} draws, crop {Instances(Cover.Crop)} and grass {Instances(Cover.Grass)} cards, {Bare} lattice points bare under the mask, {CardsOffHangars} cards off hangars");
             }
         }
 
@@ -841,6 +850,13 @@ public static class GroundCover
             }
         }
 
+        private bool OnHangar(Vector3 at)
+        {
+            bool on = _hangars.Covers(at);
+            CardsOffHangars += on ? 1 : 0;
+            return on;
+        }
+
         // One cover's cards in one cell, or null where it grows none. A crop field's hedge lines grow grass, so the
         // grass build walks the crop triangles too.
         private MultiMeshInstance3D? BuildCell((int X, int Z) cell, Cover cover)
@@ -853,7 +869,7 @@ public static class GroundCover
                 if (cover == Cover.Crop && g.Pick != Cover.Crop)
                     continue;
                 Bare += Place(g, x0, z0, CellM, (x, z) => _mask?.TexelAt(x, z) ?? VegetationMask.NeutralByte, cards,
-                    _overlays.Covers, cover);
+                    at => OnHangar(at) || _overlays.Covers(at), cover);
             }
             var list = cards[(int)cover];
             if (list.Count == 0)

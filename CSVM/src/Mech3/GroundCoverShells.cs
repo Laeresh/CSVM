@@ -75,8 +75,9 @@ public static class GroundCoverShells
     /// <summary>The convex parts of a piece of triangle <paramref name="a"/>, <paramref name="b"/>, <paramref name="c"/>
     /// (its corners as barycentric weights) that no overlay lies over. Each of <paramref name="overlays"/> (three corners
     /// each) is cut out grown by <see cref="VegetationGround.OverlayReachM"/> across. It is cut only where it lies in the
-    /// cards' height window over the piece (<see cref="VegetationGround.Overlaid"/>). A rail keeps a half-metre margin.</summary>
-    public static List<Vector3[]> KeepOff(Vector3[] weights, Vector3 a, Vector3 b, Vector3 c, IReadOnlyList<Vector3> overlays)
+    /// cards' height window over the piece (<see cref="VegetationGround.Overlaid"/>), or at any height with <paramref name="anyHeight"/>.
+    /// A rail keeps a half-metre margin.</summary>
+    public static List<Vector3[]> KeepOff(Vector3[] weights, Vector3 a, Vector3 b, Vector3 c, IReadOnlyList<Vector3> overlays, bool anyHeight = false)
     {
         Vector3 At(Vector3 w) => (a * w.X) + (b * w.Y) + (c * w.Z);
         var parts = new List<List<(Vector2 P, Vector3 W)>> { weights.Select(w => (Flat(At(w)), w)).ToList() };
@@ -109,7 +110,7 @@ public static class GroundCoverShells
                 var under = part;
                 foreach (var side in inside)
                     under = under.Count >= 3 ? Cut(under, side) : under;
-                if (!Solid(under) || !Over(under))
+                if (!Solid(under) || (!anyHeight && !Over(under)))
                 {
                     next.Add(part);
                     continue;
@@ -236,9 +237,9 @@ public static class GroundCoverShells
 
     /// <summary>The shells over the ground <paramref name="entry"/>'s <c>cover</c> picks on <paramref name="gamez"/>, a
     /// cards-only pick left out, none where <paramref name="mask"/> is bare. Null when nothing is picked or left. With no mask
-    /// the cut runs on an <see cref="UnmaskedCellM"/> grid and keeps every piece.</summary>
+    /// the cut runs on an <see cref="UnmaskedCellM"/> grid and keeps every piece. <paramref name="hangars"/> are cut out at any height.</summary>
     public static Node3D? Build(GameZ gamez, VegetationMask? mask, TextureArchive textures, VegetationEntry entry, string worldName = "world1",
-        Func<GameZNode, bool>? switchedOff = null)
+        Func<GameZNode, bool>? switchedOff = null, HangarFootprints? hangars = null)
     {
         // The shells' own picks: a cards-only one neither grows shells nor counts as their ground, so it changes nothing here.
         entry = new VegetationEntry { Cover = entry.Cover.Where(c => !c.CardsOnly).ToList() };
@@ -254,6 +255,7 @@ public static class GroundCoverShells
         var origin = mask != null ? new Vector2(mask.MinX, mask.MinZ) : Vector2.Zero;
         bool Keep(int i, int j) => texels == null || i < 0 || j < 0 || i >= side || j >= side || texels[(j * side) + i] > 0;
         var overlays = GroundCover.OverlaysFor(gamez, entry, worldName);
+        var hangarTriangles = hangars?.Triangles ?? Array.Empty<Vector3>();
 
         var chunks = new Dictionary<(string Texture, bool Lit, int Ci, int Cj), Chunk>();
         var metres = new Dictionary<string, List<float>>(StringComparer.OrdinalIgnoreCase);
@@ -278,7 +280,8 @@ public static class GroundCoverShells
                 var grow = Vector2.One * VegetationGround.OverlayReachM;
                 return overlays.Near(at.Aggregate((m, v) => m.Min(v)) - grow, at.Aggregate((m, v) => m.Max(v)) + grow);
             }
-            foreach (var weights in cut.SelectMany(piece => KeepOff(piece.Weights, a, b, c, NearPiece(piece.Weights))))
+            foreach (var weights in cut.SelectMany(piece => KeepOff(piece.Weights, a, b, c, NearPiece(piece.Weights)))
+                .SelectMany(kept => hangarTriangles.Count == 0 ? new List<Vector3[]> { kept } : KeepOff(kept, a, b, c, hangarTriangles, anyHeight: true)))
             {
                 var corners = weights.Select(w => (At: (a * w.X) + (b * w.Y) + (c * w.Z), W: w)).ToList();
                 var centre = corners.Aggregate(Vector3.Zero, (s, v) => s + v.At) / corners.Count;

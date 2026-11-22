@@ -780,6 +780,9 @@ covers it.
 - **INSTR-106**, **Bound a track's turn added up both ways as well as its signed net turn: alternating
   U-turns net to nothing either way.** On a C1 field of eight Stunt Race bots a steering leg turns
   231 degrees signed and 505 both ways, while a bot circling a lead-in point reads 1095 on both.
+- **INSTR-107**, **Read a MultiMesh's instance transforms back only in a windowed process: headless
+  answers the identity, so every instance reads at its node's origin.** A headless check of C1's
+  ground cover put 3,573 of 102,922 cards inside a hangar, all on one cell's centre, and none windowed.
 
 ## SRC, sources and documents
 
