@@ -80,8 +80,14 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 
 ### Missions and AI
 
-- [spawns.md](spawns.md), [net-spawns.md](net-spawns.md), [missions.md](missions.md), [objectives.md](objectives.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+- [spawns.md](spawns.md) and [net-spawns.md](net-spawns.md).
+- [missions.md](missions.md), stunt and campaign Danger Zones and target labels.
+  - [Campaign mission bundles and Godot authoring](missions/campaign-authoring.md), the complete
+    story-mission input set, cross-file joins, and safe external-mod export boundary.
+- [objectives.md](objectives.md).
+- [mission-entities.md](mission-entities.md).
   - [Enemy generators](mission-entities/enemy-generators.md), host, launch cycle, and capacity rules.
+- [instant-action.md](instant-action.md).
   - [Instant Action wrap-up](instant-action/wrap-up.md), scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
 - [saved-games.md](saved-games.md), the `SavedGames\` container, the campaign profile, and what

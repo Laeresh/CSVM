@@ -1,20 +1,32 @@
 # Mission objectives and stunt zones
 
 Part of the [format documentation](README.md). This page describes the objective data behind
-Stunt Flying: `ia.json` supplies the zone set, `targets.json` maps nodes to display-string keys,
-and `messages.json` supplies localized text. `dzones.json` carries per-mission overrides that the
-remake does not read. The current readers are `Messages.cs`, `MissionTargets.cs`, and
-`StuntMission.cs`. The campaign missions' choreography script, `objectives.zrd`, which consumes
-these danger zones and target-display flags from its own directives, is decoded in
-[objectives.md](objectives.md).
+Stunt Flying and campaign Danger Zones: `ia.json` supplies the zone set, `targets.json` maps nodes
+to display-string keys, `messages.json` supplies localized text, and `dzones.json` carries
+per-mission overrides. The current readers are `Messages.cs`, `MissionTargets.cs`,
+`StuntMission.cs`, and `CampaignDangerZones.cs`. The campaign missions' choreography script,
+`objectives.zrd`, which consumes these danger zones and target-display flags from its own
+directives, is decoded in [objectives.md](objectives.md). The complete story-mission bundle and a
+safe Godot editing boundary are mapped in
+[Campaign mission bundles and Godot authoring](missions/campaign-authoring.md).
 
 ## Contents
 
+- [Campaign mission bundle](#campaign-mission-bundle)
 - [Stunt objective](#stunt-objective)
 - [Zone overrides](#zone-overrides)
 - [Target display keys](#target-display-keys)
 - [Message table](#message-table)
 - [Assembled marker text](#assembled-marker-text)
+
+## Campaign mission bundle
+
+A story mission combines its own reader archive with shared and chapter readers, the chapter
+world, compiled animations, and a per-mission setup script. The archive census, cross-file joins,
+whole-scope modding rule, and proposed Godot workflow are in
+[Campaign mission bundles and Godot authoring](missions/campaign-authoring.md). This page remains
+the reference for the Danger Zone and target-label readers within that bundle.
+
 ## Stunt objective
 
 An instant-action Stunt Flying run's goal is to fly through a fixed set of **Danger Zones**
