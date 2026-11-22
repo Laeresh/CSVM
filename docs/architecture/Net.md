@@ -303,7 +303,7 @@ rules, teams, wingman, film and Stunt Race `LobbyCourse`); others are held up to
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
 address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
-carrier's hang-up lands. `Mods` is a host's own plane mod set, sent on connect, or its guest's copy; ⚠ a host never takes a peer's. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
+carrier's hang-up lands. A host's `CallOffStart` drops the link of an older build whose loaded word reaches a called-off start. `Mods` is a host's own plane mod set, sent on connect, or its guest's copy; ⚠ a host never takes a peer's. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetModSet.cs
 A host's plane mods (`NetMod`: id, content hash, parent's stock id) and the session's airframe rows:
@@ -467,11 +467,11 @@ the host's `Answered` being the arrivals its relay leaves alone.
 The start barrier of a network flight, and its `0x5B` word. A host's gate takes a fresh `Round`
 and names it in `Hold`; a built guest sends `Loaded` under the first round it heard. The host opens
 when the last one arrives, drops, or after `TimeoutSeconds` (TUNE, under the ENet keepalive
-ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own. ⚠ A `Loaded`
-under another round opens nothing and is answered with `Hold`: a restart reuses the link, and the
-old flight's word would start the new one early. A guest opens on `Start` under its round or on its
-host's link dropping. While held the host sends `Count`, the players loaded of all, for the guests'
-load boards. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
+ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own; one under
+another round is answered with `Hold`. A guest opens on `Start` under its round or on its host's
+link dropping. While held the host sends `Count` for the guests' load boards and puts it in each
+`Hold`; `Cancel` calls the held start off, heard by a build whose `Loaded` is `AnswersCancel`.
+Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session

@@ -365,7 +365,16 @@ row right of `HEAD4`'s INSTRUCTIONS at `485, 78`, at `VIN14`'s 18.7 pixels, whic
 between the two rules. On a co-op mission's chart sheet it stands at `90, 521` at `VIN14`, in the
 margin between the chart's lower edge and the bar, in the sheet's dark ink.
 `--menu=loadboard-mp:<chapter>:<letter>:<n>/<m>` stands the Dogfight board with the line written
-out, for a shot.
+out, for a shot, and a fifth part `host` or `guest` stands that machine's leave question over it.
+
+The machine whose own load completes the set writes no line at all, since its board comes down as
+the start reaches it (`docs/org/multiplayer-messages.md`, the start barrier). Esc on a held board
+stands the original's query box, its question-mark icon and its Yes and No strips (`MB_B_LEFT`,
+`MB_B_RIGHT`), centred over the board as the menus' messagebox is, opening on Yes. The focused
+answer carries the menus' focus mark, the layout's `DISABLED` grey ringing the strip three pixels
+clear; the answer under the pointer takes its rollover frame instead. The pointer is shown while
+the box stands, and a click on either answer takes it; nothing else on the board hears the click.
+The words are the remake's own; what a Yes does is in the same section.
 
 **Free flight is ours rather than the original's**, and no shipped dialog describes it. It takes
 the mode's own name at `HEAD1`'s authored place and writes nothing else, since the nearest

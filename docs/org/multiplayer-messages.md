@@ -882,7 +882,7 @@ waits in the lobby.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start, count) | word at 4 (loaded 1, start 2, hold 3, count 4), round at 5, the count's players loaded at 6 and players in all at 7, 0 in every other word (8 bytes) |
+| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start, count, cancel) | word at 4 (loaded 1, start 2, hold 3, count 4, cancel 5), round at 5, the count's players loaded at 6 and players in all at 7 on a count or a hold, 1 at 7 on a loaded word from a build that takes a cancel, 0 elsewhere (8 bytes) |
 
 Each host flight takes a round, 1 to 255, that the flight before it on the same process did not.
 Once its own world is built, the host sends hold under that round to every machine it waits on.
@@ -911,6 +911,15 @@ A host on a build without the count word (0.8.0 and earlier) never sends one, so
 under it writes the line without a count for the whole hold. Builds of one MAJOR.MINOR share a
 lobby, so this is the 0.8.0 host with a 0.8.1 guest. An older guest ignores the count word, which
 matches none of the start words it acts on, and holds as it always did.
+The machine whose own load completes the set never begins the line, since it goes straight into the
+flight. Each machine first takes in what arrived on its link during its build, as the last act of
+the build and before any held frame. A host knows it when its count reaches every player; a loaded
+word under round 0 (a guest built before the host held) counts that guest in, though only its
+answer to the hold opens the gate, and a full count is never broadcast. A guest knows it from the
+host's last word: each hold
+carries the host's count, and if that count plus its own seats reaches every player, its load is the last. A count
+still in flight at that moment leaves the guest writing the line until the start reaches it, and a
+guest under an older host, whose hold carries zeros, always writes it.
 The words fill the original's own waiting row: `MSG_MP_WAITING` (id 7062), "Waiting for %1", is
 the only waiting string `messages.json` carries, and `FUN_004972c0` pushes its id at `0x004974bd`.
 There, while its start flag `DAT_00628f14` is set, it formats the row with the name at `+0x10` of
@@ -919,6 +928,23 @@ and hands the text to `FUN_004588e0`. The remake fills the name slot with "other
 count instead, since a player who finished first wants to know how many are still loading rather
 than who is first in the list. The slot's filler is English in every language; the row around it
 is the install's own.
+
+**Leaving the hold.** Esc (or a pad's B) on a menu launch's held load screen stands the original's
+query box over the board (`UI/Screens/LoadBoard.cs`); No or a second Esc takes it down and the hold
+goes on, and a click on either answer takes it. The original's barrier offers no way out, so the box and its words are the remake's. A
+guest's Yes drops its wire and lands it on the games list; the host takes that as a departure, as
+it takes any link dropping, and the others' start goes on. A host's Yes broadcasts cancel under its
+round and lands on its lobby with the wire kept; a guest that hears it, at once or once its own
+build ends, lands on the same lobby. Only the hold is cancellable: a build still running finishes
+first. An older build drops cancel unread, so every loaded word now carries a mark at byte 7, and
+on a cancel the host drops the link of each guest whose loaded word came unmarked; that guest goes
+down its lost-link path to the games list. An older guest still loading at the cancel has sent no
+loaded word yet. The host's lobby keeps the call-off until its next flight binds the wire
+(`Net/NetLobby.cs`, `CallOffStart`): a start word arriving meanwhile is held for no session, and an
+unmarked loaded word drops its sender's link, so that guest takes the same path the moment its
+build ends rather than holding to `NetStartGate.TimeoutSeconds`. The build version cannot tell
+the two apart, since it carries only MAJOR.MINOR and 0.8.0 and 0.8.1 share 0.8. A guest under an
+older host can still leave; only the host's cancel needs the newer host.
 
 ## Stunt race
 

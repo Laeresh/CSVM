@@ -96,6 +96,20 @@ public sealed record LoadSheet(
 /// </summary>
 public static class LoadScreens
 {
+    /// <summary>What Esc on a guest's held load screen asks: leaving the match for the games list.
+    /// The remake's own words, since the original's start barrier offers no way out.</summary>
+    public const string GuestLeaveQuestion = "Leave this game and go back to the games list?";
+
+    /// <summary>What Esc on a host's held load screen asks: calling the start off for everybody.
+    /// </summary>
+    public const string HostLeaveQuestion = "Call this game off and take every player back to the lobby?";
+
+    // The menus' focus mark round a messagebox answer (OriginalShell.FocusBox), in the layout's
+    // DISABLED grey at three quarters. It stands three pixels clear, so the strip's art cannot cover it.
+    private const byte FocusGrey = 188;
+    private const float FocusOpacity = 0.75f;
+    private const float FocusOutset = 3f;
+
     // The reader file all three load-screen families live in. This install ships no
     // ia_loading.zrd, so it is the file the original opens too.
     private const string DialogFile = "Loading.json";
@@ -294,6 +308,49 @@ public static class LoadScreens
         return new ComposedBoard(
             still.Pictures, still.Strokes, still.Lines, still.Plaques,
             still.Notes, still.Backdrop, still.Fills, overlays);
+    }
+
+    /// <summary>The board with <paramref name="question"/> standing over it in the original's query
+    /// box, Yes on the left and No on the right. The focused answer (0 for Yes) carries the menus'
+    /// focus mark, ringing one <paramref name="strip"/> frame. The answer under the pointer,
+    /// <paramref name="lit"/>, stands on its rollover frame. An overlay over the board.</summary>
+    public static ComposedBoard Asked(
+        ComposedBoard board, string question, int focus, int lit, (float Width, float Height) strip)
+    {
+        ArgumentNullException.ThrowIfNull(board);
+        var buttons = new[]
+        {
+            new Campaign.CampaignBoards.DialogButton(
+                Campaign.CampaignBoards.DialogLeftKey, "Yes", ComposedBoard.PlaqueFrame(4, lit == 0, false), ComposedBoard.DialogInk(false)),
+            new Campaign.CampaignBoards.DialogButton(
+                Campaign.CampaignBoards.DialogRightKey, "No", ComposedBoard.PlaqueFrame(4, lit == 1, false), ComposedBoard.DialogInk(false)),
+        };
+        var (x, y, width, height) = AnswerAt(focus, strip);
+        var mark = new BoardFill(
+            x - FocusOutset, y - FocusOutset, width + (2f * FocusOutset), height + (2f * FocusOutset),
+            FocusGrey, FocusGrey, FocusGrey, FocusOpacity, Border: true);
+        var overlays = new List<BoardPanel>(board.Overlays)
+        {
+            Campaign.CampaignBoards.Dialog(question, buttons, Campaign.DialogIcon.Query),
+        };
+        if (focus != lit)
+        {
+            // Its own panel, since the messagebox's background would paint over a fill inside it.
+            // The answer under the pointer shows by its frame instead, as in the menus' boxes.
+            overlays.Add(new(new[] { mark }, Array.Empty<BoardPicture>(), Array.Empty<BoardLine>()));
+        }
+        return new ComposedBoard(
+            board.Pictures, board.Strokes, board.Lines, board.Plaques,
+            board.Notes, board.Backdrop, board.Fills, overlays);
+    }
+
+    /// <summary>Where the leave question's answer stands on the authored board, 0 for Yes and 1 for
+    /// No: its messagebox row, one <paramref name="strip"/> frame in size.</summary>
+    public static (float X, float Y, float Width, float Height) AnswerAt(int answer, (float Width, float Height) strip)
+    {
+        var (_, x, y) = Campaign.CampaignBoards.DialogSlot(
+            answer == 0 ? Campaign.CampaignBoards.DialogLeftKey : Campaign.CampaignBoards.DialogRightKey);
+        return (x, y, strip.Width, strip.Height);
     }
 
     /// <summary>The mission-type letter that completes the dialog name, from the jump table at

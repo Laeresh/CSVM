@@ -74,6 +74,20 @@ internal sealed class LaunchBoards(SessionSpec spec, BasePaths paths)
             : null;
     }
 
+    /// <summary>The leave question a Dogfight door's fifth part stands over the board: <c>host</c>
+    /// for the host's, <c>guest</c> for a guest's. Null for a door without one.</summary>
+    public static string? LeaveDoor(string aid)
+    {
+        System.ArgumentNullException.ThrowIfNull(aid);
+        var parts = aid.Split(':');
+        return parts.Length > 4 ? parts[4] switch
+        {
+            "host" => UI.Screens.LoadScreens.HostLeaveQuestion,
+            "guest" => UI.Screens.LoadScreens.GuestLeaveQuestion,
+            _ => null,
+        } : null;
+    }
+
     /// <summary>The load screen for the launch the spec describes. A campaign launch takes the
     /// original's chart sheet for the mission at <paramref name="missionSeq"/>, the spec's own
     /// position by default. Everything else takes its blackboard (docs/org/loading-screen.md).

@@ -1405,6 +1405,20 @@ public class NetMessagesTests
         Assert.Equal(3, buffer[6]);
         Assert.Equal(4, buffer[7]);
 
+        var cancel = new StartGateMessage(NetStartWord.Cancel, 201);
+        cancel.Write(buffer);
+        Assert.Equal(5, buffer[4]);
+        Assert.True(StartGateMessage.TryRead(buffer, out var cancelled));
+        Assert.Equal(cancel, cancelled);
+
+        // A loaded word carries the cancel mark in its last byte; an older build's zeros do not.
+        StartGateMessage.LoadedWord(201).Write(buffer);
+        Assert.Equal(1, buffer[7]);
+        Assert.True(StartGateMessage.TryRead(buffer, out var marked));
+        Assert.True(marked.AnswersCancel);
+        Assert.False(new StartGateMessage(NetStartWord.Loaded, 201).AnswersCancel);
+        Assert.False(new StartGateMessage(NetStartWord.Hold, 201, 1, 2).AnswersCancel);
+
         Assert.Equal(0x5B, (int)NetMessageType.StartGate);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.StartGate));
 

@@ -110,6 +110,35 @@ public class NetLobbyTests
     }
 
     [Fact]
+    public void ACalledOffStartDropsTheLinkOfAnOlderBuildWhoseLoadedWordArrivesAfter()
+    {
+        var host = new RecordingTransport(localPeer: 1);
+        var lobby = new NetLobby(host);
+        host.Connect(3);
+        host.Connect(7);
+        var session = new RecordingListener();
+        lobby.Bind(session);
+        lobby.CallOffStart();
+        lobby.Unbind();
+
+        // Peer 3 is an older build finishing into the called-off start; peer 7 took the word.
+        host.Deliver(3, Bytes(new StartGateMessage(NetStartWord.Loaded, 9)));
+        host.Deliver(7, Bytes(StartGateMessage.LoadedWord(9)));
+        lobby.Step(0.016);
+        Assert.DoesNotContain(3, host.Peers);
+        Assert.Contains(7, host.Peers);
+        Assert.Equal(0, lobby.Held);
+
+        // ABLE-TO-FAIL CONTROL: the next bind ends the call-off, and a start word is held for it again.
+        lobby.Bind(new RecordingListener());
+        lobby.Unbind();
+        host.Deliver(7, Bytes(new StartGateMessage(NetStartWord.Loaded, 9)));
+        lobby.Step(0.016);
+        Assert.Contains(7, host.Peers);
+        Assert.Equal(1, lobby.Held);
+    }
+
+    [Fact]
     public void UnbindFreesTheCarrierForTheNextFlightAndDropsWhatWasHeld()
     {
         var host = new RecordingTransport(localPeer: 1);

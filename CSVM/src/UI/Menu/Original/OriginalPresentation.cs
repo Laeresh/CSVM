@@ -577,7 +577,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The lobby the match was launched from, on its scores, or the games list saying
             // why the link ended.
-            if (!_shell.Lobby.Land(landing.Scores, landing.Race))
+            if (!_shell.Lobby.Land(landing.Scores, landing.Race, landing.Cancelled))
             {
                 _shell.ReturnToConnection();
             }

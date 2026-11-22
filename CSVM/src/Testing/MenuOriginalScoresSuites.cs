@@ -25,7 +25,8 @@ internal static class MenuOriginalScoresSuites
         + "reach the sixteenth, and a landed sixteen-line Dogfight does the same, where a ten-line one "
         + "draws all ten with no bar, its figures centred in the script's cells. The chat pane's KG at (757, 368) scrolls thirty-odd lines by the "
         + "wheel, the pad and the thumb, following new lines at the bottom and holding once scrolled up, "
-        + "where a three-line chat draws no bar")]
+        + "where a three-line chat draws no bar. A start the host called off lands on the lobby's Mission "
+        + "tab, the last lines kept")]
     internal static void TheLobbyScores(TestContext ctx)
     {
         ctx.RequireData(ctx.Zrdr, $"zrdr archive");
@@ -96,6 +97,12 @@ internal static class MenuOriginalScoresSuites
                 $"a Dogfight row's figures stand centred in the script's cells ({string.Join(", ", figures.Select(l => $"{l.Text}@{l.X}/{l.Width}/{l.Justify}"))})");
             ctx.Check(board.Lines.Any(l => l.X == 314f + 179f && l.Y == 26f + 44f && l.Width == 60f && l.Justify == BoardJustify.Center),
                 $"the Points header stands centred in its script box");
+
+            // A start the host called off lands on the lobby itself, the last match's lines kept.
+            bool landed = shell.Lobby.Land(Array.Empty<DogfightScore>(), null, cancelled: true);
+            ctx.Check(landed && shell.Screen == OriginalScreen.Lobby && shell.Lobby.Tab == LobbyTab.Mission
+                      && door.Dogfight?.Scores.Count == 10,
+                $"a called-off start lands on the lobby's Mission tab with the last ten lines kept ({landed}, {shell.Screen}, {shell.Lobby.Tab}, {door.Dogfight?.Scores.Count})");
         }
         finally
         {
