@@ -17,6 +17,10 @@ namespace CSVM.Flight.Hangar;
 /// <summary>A mod skipped at load: the id it would have had, its folder or zip, and why.</summary>
 public readonly record struct SkippedMod(string Id, string Source, string Reason);
 
+/// <summary><c>plane.json</c>'s <c>tint</c>: the mask and detail PNGs' paths inside the mod (slashes,
+/// lower case) and the material names the livery tints through them.</summary>
+public sealed record ModPlaneTint(string Mask, string Detail, IReadOnlyList<string> Materials);
+
 /// <summary>
 /// One plane mod, read and checked. It holds its id (the folder or zip name), the stock airframe it
 /// inherits from and its literal stat overrides. It also holds the optional cockpit, sound and
@@ -78,6 +82,9 @@ public sealed class ModPlane
 
     /// <summary>The portrait image's path inside the mod (slashes, lower case), or null.</summary>
     public string? Portrait { get; }
+
+    /// <summary>The livery tint, or null for a plane whose own surfaces keep their paint under every livery.</summary>
+    public ModPlaneTint? Tint { get; init; }
 
     /// <summary>The mod's folder or zip on disk.</summary>
     public string Source { get; }
@@ -306,6 +313,7 @@ public sealed class ModPlanes
         string unlock = ModPlane.UnlockWithParent;
         var overrides = new Dictionary<string, double>(StringComparer.Ordinal);
         bool clearsTurrets = false;
+        ModPlaneTint? tint = null;
         foreach (var field in doc.RootElement.EnumerateObject())
         {
             switch (field.Name)
@@ -336,6 +344,9 @@ public sealed class ModPlanes
                 case "overrides":
                     clearsTurrets = Overrides(field.Value, overrides);
                     break;
+                case "tint":
+                    tint = Tint(field.Value, files);
+                    break;
                 default:
                     // A key starting with _ is a note to the reader.
                     if (!field.Name.StartsWith('_'))
@@ -353,7 +364,68 @@ public sealed class ModPlanes
         }
 
         return new ModPlane(id, name ?? id, kindOf, overrides, clearsTurrets, unlock, cockpit, sound, portrait,
-            source, zip, files, Hash(source, zip, files));
+            source, zip, files, Hash(source, zip, files))
+        { Tint = tint };
+    }
+
+    // The tint block: a mask and a detail PNG inside the mod, and the non-empty list of materials they tint.
+    private static ModPlaneTint Tint(JsonElement block, Dictionary<string, string> files)
+    {
+        if (block.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("tint is not an object");
+        }
+
+        string? mask = null;
+        string? detail = null;
+        List<string>? materials = null;
+        foreach (var field in block.EnumerateObject())
+        {
+            switch (field.Name)
+            {
+                case "mask":
+                    mask = Png(field, files);
+                    break;
+                case "detail":
+                    detail = Png(field, files);
+                    break;
+                case "materials":
+                    var names = field.Value.ValueKind == JsonValueKind.Array
+                        ? field.Value.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : null).ToList()
+                        : null;
+                    if (names is not { Count: > 0 } || names.Any(string.IsNullOrEmpty))
+                    {
+                        throw new InvalidDataException("tint.materials is not a non-empty list of material names");
+                    }
+
+                    materials = names.ConvertAll(n => n!);
+                    break;
+                default:
+                    if (!field.Name.StartsWith('_'))
+                    {
+                        throw new InvalidDataException($"unknown key tint.{field.Name}");
+                    }
+
+                    break;
+            }
+        }
+
+        return new ModPlaneTint(
+            mask ?? throw new InvalidDataException("tint.mask is missing"),
+            detail ?? throw new InvalidDataException("tint.detail is missing"),
+            materials ?? throw new InvalidDataException("tint.materials is missing"));
+    }
+
+    // A tint image's path: a .png that is in the mod.
+    private static string Png(JsonProperty field, Dictionary<string, string> files)
+    {
+        string path = PathKey(Text(field));
+        if (!path.EndsWith(".png", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"tint.{field.Name} {path} is not a .png");
+        }
+
+        return files.ContainsKey(path) ? path : throw new InvalidDataException($"tint.{field.Name} {path} is not in the mod");
     }
 
     // Fills the def overrides and answers whether "turrets": [] clears the parent's mounts.

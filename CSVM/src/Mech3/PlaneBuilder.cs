@@ -102,6 +102,7 @@ public sealed class PlaneBuilder
     private PatternLibrary _patterns;
     private PlanePainter? _painter;
     private string? _skinPrefix;
+    private ModTint? _tint;
     private ShaderMaterial? _flareMaterial;
 
     /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies damage panels.</param>
@@ -406,7 +407,7 @@ public sealed class PlaneBuilder
     {
         _scheme = scheme;
         _painter = scheme != null && _skinPrefix != null
-            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
+            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix, _tint)
             : null;
         _scene.Repaint();
         _interiorScene?.Repaint();
@@ -457,6 +458,7 @@ public sealed class PlaneBuilder
     private void EnsurePainter(GameZNode root)
     {
         _skinPrefix ??= PlanePainter.PrefixFor(_gamez, root);
+        _tint ??= ModAirframes.TintFor(root.Name);
         if (_scheme == null || _painter != null)
             return;
         if (_skinPrefix == null)
@@ -464,7 +466,7 @@ public sealed class PlaneBuilder
             Log.Info("world", $"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material, building unpainted");
             return;
         }
-        _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
+        _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix, _tint);
         Log.Info("world", $"[paint] {root.Name} ({_skinPrefix}): {_scheme}{(_painter.PatternMissesAircraft ? $", pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only" : "")}");
     }
 

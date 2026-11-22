@@ -637,6 +637,9 @@ void fragment() {
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
     // for every slider pixel). Only shader materials carrying an `albedo_tex` are listed.
     private readonly List<(ShaderMaterial Material, string TextureName)> _texturedMaterials = new();
+
+    // A mod's own surfaces the livery reached, with the material name and base texture Repaint paints again.
+    private readonly Dictionary<ShaderMaterial, (string Name, ImageTexture? Albedo)> _ownPainted = new();
     // A built world material against the verdict its shader was generated for. The verdict is a
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
@@ -961,6 +964,9 @@ void fragment() {
     {
         foreach (var (mat, texName) in _texturedMaterials)
             if (Resolve(texName) is { } tex)
+                mat.SetShaderParameter("albedo_tex", tex);
+        foreach (var (mat, (name, albedo)) in _ownPainted)
+            if (_textureSubstitute!(name, albedo) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
     }
 
@@ -1935,10 +1941,15 @@ void light() {{
             }
             else
             {
-                var tex = shared.AlbedoOf(source);
+                var albedo = shared.AlbedoOf(source);
+                // A mod's own surface takes its livery, the tint and the decals, by material name. A pack's never does.
+                string? own = OwnMeshes != null && _textureSubstitute != null ? source?.ResourceName : null;
+                var tex = own != null ? _textureSubstitute!(own, albedo) : albedo;
                 (clampUv, edgeClamp) = tex != null ? ClampFor(unitAxes, Vector2.Zero) : (false, UvClampAxes.None);
                 // A non-original surface is lit by default, whatever the model's flag.
                 material = PackMaterial(source, tex, rank, doubleSided, clampUv, edgeClamp, forceLit || !fileUnlit, fogged, clutterFade);
+                if (own != null && material is ShaderMaterial painted)
+                    _ownPainted[painted] = (own, albedo);
             }
             if (!CountSurface(material, clampUv, edgeClamp))
                 continue;

@@ -51,6 +51,24 @@ public class ModPlanesTests
     }
 
     [Fact]
+    public void TheTintNamesItsImagesAndMaterials()
+    {
+        string root = TestData.TempDir();
+        string mod = Folder(root, "tinted", """
+            { "kind_of": "player_brigand",
+              "tint": { "_note": "R primary", "mask": "Tex\\Mask.PNG", "detail": "tex/detail.png", "materials": ["avenger", "Nacelle"] } }
+            """);
+        Write(mod, "tex/mask.png", "png");
+        Write(mod, "tex/detail.png", "png");
+
+        var plane = Assert.Single(ModPlanes.Open(root).Planes);
+
+        Assert.Equal("tex/mask.png", plane.Tint!.Mask);
+        Assert.Equal("tex/detail.png", plane.Tint.Detail);
+        Assert.Equal(new[] { "avenger", "Nacelle" }, plane.Tint.Materials);
+    }
+
+    [Fact]
     public void DefaultsAreTheIdAndTheParentsUnlock()
     {
         string root = TestData.TempDir();
@@ -64,6 +82,7 @@ public class ModPlanesTests
         Assert.Null(plane.Cockpit);
         Assert.Null(plane.Sound);
         Assert.Null(plane.Portrait);
+        Assert.Null(plane.Tint);
         Assert.Empty(plane.Overrides);
         Assert.False(plane.ClearsTurrets);
     }
@@ -117,10 +136,21 @@ public class ModPlanesTests
     [InlineData("""{ "kind_of": "player_brigand", "overrides": { "turrets": [1] } }""", "overrides.turrets may only be []")]
     [InlineData("""{ "kind_of": "player_brigand", "overrides": [] }""", "overrides is not an object")]
     [InlineData("""{ "kind_of": "player_brigand", "portrait": "p.png" }""", "portrait p.png is not in the mod")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": [] }""", "tint is not an object")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "detail": "d.png", "materials": ["m"] } }""", "tint.mask is missing")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "materials": ["m"] } }""", "tint.detail is missing")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "detail": "d.png" } }""", "tint.materials is missing")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "detail": "d.png", "materials": [] } }""", "tint.materials is not a non-empty list")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "detail": "d.png", "materials": ["m", 3] } }""", "tint.materials is not a non-empty list")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "x.png", "detail": "d.png", "materials": ["m"] } }""", "tint.mask x.png is not in the mod")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "detail": "plane.glb", "materials": ["m"] } }""", "tint.detail plane.glb is not a .png")]
+    [InlineData("""{ "kind_of": "player_brigand", "tint": { "mask": "m.png", "detail": "d.png", "materials": ["m"], "gloss": 1 } }""", "unknown key tint.gloss")]
     public void AnInvalidPlaneJsonSkipsTheModWithItsReason(string json, string reason)
     {
         string root = TestData.TempDir();
-        Folder(root, "broken", json);
+        string broken = Folder(root, "broken", json);
+        Write(broken, "m.png", "png");
+        Write(broken, "d.png", "png");
         Folder(root, "fine", """{ "kind_of": "player_brigand" }""");
 
         var mods = ModPlanes.Open(root);

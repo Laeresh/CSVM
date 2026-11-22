@@ -225,7 +225,8 @@ session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 ## src/Mech3/PlanePainter.cs
 Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
 swaps the three decal placeholders. `SkinNameFor` decides which `.BM` a model texture is painted
-from, the original pairing the two by table rather than by name. `FollowAlphaDepth` paints every live
+from, the original pairing the two by table rather than by name. Given a plane mod's `ModTint.cs`, it
+tints the materials that names, and on a mod's own surfaces any `*_noselogo`/`_taillogo`/`_winglogo` takes the decal. `FollowAlphaDepth` paints every live
 painter's alpha-plane skins and decals again in place at a live switch's depth. The composite formula, the
 shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 [../formats/paint.md](../formats/paint.md),
@@ -1104,5 +1105,10 @@ that needs data a mod does not supply (camera block, destroy def) falls back to 
 A plane mod's `plane.glb` grafted into the aircraft archive. `Add` parses it through `HdModelMeshes.cs` (held under `planes/<id>/<id>`, `Extraction/HdModels.Holding`) and appends, under a root named the id, one gamez node per glTF node at its own transform, a meshed one carrying its triangles in the original's winding under one untextured material.
 An export's lone airframe root (`player_brigand`) stands for the mod root, and a file holding no `cockpit1` under its root gets a copy of a stock airframe's interior, meshes shared.
 Every planes.zbd reader then reads the mod as a stock airframe: markers, `PlaneCollider`, the hit body, gauges and the crash rig.
-`MeshesFor` hands `PlaneBuilder.cs` the file the build draws from, so drawn surfaces follow the model pack's material rules while gameplay readers take the gamez twins. `Graft` is the engine-free half.
+`MeshesFor` hands `PlaneBuilder.cs` the file the build draws from, so drawn surfaces follow the model pack's material rules while gameplay readers take the gamez twins. `TintFor` is the mod's `ModTint.cs` and `DonorOf` the airframe its interior came from, whose skin prefix `PlanePainter.PrefixFor` falls back to. `Graft` is the engine-free half.
 `Launch/Launcher.cs` calls `Add` for each mod as it binds the game data. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModAirframesTests.cs`, the `mod-plane-build` suite.
+
+## src/Mech3/ModTint.cs
+A plane mod's livery tint, decoded from `plane.json`'s `tint` PNGs (`Decode`): which materials wear it, the R/G/B region mask and the greyscale detail map.
+`Composite` is the engine-free per-texel rule, the base texture where no channel is set and detail times the scheme's colours where one is, grey 128 neutral.
+`PlanePainter.cs` applies it to a mod surface's base texture, which `SceneBuilder.cs` hands it by material name when it draws a mod's own file. Format: [../formats/mod-planes.md](../formats/mod-planes.md), "Paint". Coverage: `CSVM.Tests/ModTintTests.cs`, the `mod-plane-paint` suite.

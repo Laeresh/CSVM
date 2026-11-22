@@ -662,7 +662,48 @@ scaled 0.04 at `cockpit_camera`, `model-packs.md:63`); gauges come from `Cockpit
 
 **⚠ Traps.** <TODO>
 
-## C22 ☐ Paint: base texture, tint mask and decals
+## C22 ☑ Paint: base texture, tint mask and decals
+
+**Landed.** `plane.json` takes an optional `"tint": { "mask": "<png>", "detail": "<png>",
+"materials": ["<glTF material>", ...] }`, validated in `ModPlanes` (an object; both paths `.png` files
+inside the mod; a non-empty list of names; `_` keys prose, any other key skips the mod) and exposed as
+`ModPlane.Tint`. `Launcher.BindModPlanes` decodes the two PNGs into a `Mech3/ModTint.cs` and hands it
+to `ModAirframes.Add`, which keeps it per id beside the file and the interior donor (`TintFor`,
+`DonorOf`); a PNG that does not decode skips the mod through `ModPlanes.Skip`.
+
+- **Rendering.** Per texel `base * (1 - cover) + detail / 128 * (r * colour1 + g * colour2 + b *
+  colour3)`, `cover` the mask channels' sum capped at 1 (a larger sum shared out by channel), alpha
+  the base's, mask and detail sampled nearest at the base texture's size. The proposed `detail ×
+  colour` is kept with grey 128 as the neutral point instead of 255: the Avenger's detail map sits
+  at grey 105 to 145 inside the masked regions (mean 142), so a `/255` reading would show every
+  livery at about 55 % brightness, while `/128` shows the swatch colour itself on flat panels.
+  Outside the mask, with `--paint=none` and on a mod without `tint`, the base texture shows unchanged.
+- **Channel mapping.** R = `paint_color1` (body), G = `paint_color2` (dark trim), B = `paint_color3`
+  (light trim), the scheme's own slot order (`paint.md`, "Slot order, confirmed"). A pattern, a
+  militia's scheme and `--paint-color=` all arrive as those three colours, so every livery source
+  tints the same way, and any pattern's colours reach a tinted mod, even one outside the donor
+  airframe's pattern list (`PlanePainter.PatternMissesAircraft` is false under a tint).
+- **Decals.** No prefix to declare: on a mod's own surfaces any material ending in `_noselogo`,
+  `_taillogo` or `_winglogo` takes that decal, the suffix test `PlanePainter.Substitute` already
+  made. A material named after a donor placeholder (`bri_noselogo`) still goes the original's way.
+- **Reach.** `SceneBuilder.MappedReplacement`, for a mod's own file only (`OwnMeshes`), passes each
+  non-original material's name and base texture through the builder's substitute and records it for
+  `Repaint`; a model pack's surfaces are untouched. `PlanePainter` takes the tint as an optional
+  argument: `PlaneBuilder` (flown aircraft, network seats, the viewer's livery lab through `Repaint`,
+  damage panels and wreck) reads `ModAirframes.TintFor(root)`, and `AiFlightAssembler.PainterFor`
+  passes it for AI aircraft. The skin prefix (pattern list, donor skins) is the interior donor's;
+  `PrefixFor` falls back to `DonorOf` so a mod with its own `cockpit1` still paints.
+- Format: `docs/formats/mod-planes.md`, "Paint" and the `tint` key. Coverage:
+  `CSVM.Tests/ModTintTests.cs` (5 cases: channel per slot, partial blend with detail, an overfull
+  sum, nearest sampling, short images), `CSVM.Tests/ModPlanesTests.cs` (the field and nine invalid
+  forms), and the `mod-plane-paint` suite over a hand-made GLB in the scratch directory (flown builds
+  under two schemes, an AI build's shared painter, a livery lab repaint, no livery, the noselogo decal
+  per scheme). Viewer probes of the local Avenger under `player_fortune`, `blackhat`, `hughes` and
+  `none` are in `Z:\CSVM\.scratchKeep\mod-planes\c22\`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The chosen pattern's or militia's swatch colours tint the mod's mask regions, and decals
 land on the decal surfaces, everywhere the airframe is built.

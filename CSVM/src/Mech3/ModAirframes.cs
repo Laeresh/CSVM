@@ -19,14 +19,16 @@ public static class ModAirframes
 {
     private const string Interior = "cockpit1";
 
-    // Each grafted mod's own file, by id, which every build of that airframe draws from.
-    private static readonly Dictionary<string, HdModelMeshes> Files = new(StringComparer.OrdinalIgnoreCase);
+    // Each grafted mod's own file, by id, which every build of that airframe draws from. The interior
+    // donor gives its livery a skin prefix, and the tint is what that livery paints.
+    private static readonly Dictionary<string, (HdModelMeshes Meshes, string Donor, ModTint? Tint)> Files = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Grafts the airframe in <paramref name="glb"/> into <paramref name="planes"/> under the root
     /// <paramref name="id"/>. A file holding no <c>cockpit1</c> under its root gets a copy of
-    /// <paramref name="cockpitFrom"/>'s. Throws <see cref="InvalidDataException"/> for a file that does not
-    /// import or an id the archive already holds, leaving the archive as it was.</summary>
-    public static void Add(GameZ planes, string id, string cockpitFrom, byte[] glb)
+    /// <paramref name="cockpitFrom"/>'s. <paramref name="tint"/> is what its livery paints through.
+    /// Throws <see cref="InvalidDataException"/> for a file that does not import or an id the archive
+    /// already holds, leaving the archive as it was.</summary>
+    public static void Add(GameZ planes, string id, string cockpitFrom, byte[] glb, ModTint? tint = null)
     {
         string key = $"planes/{id.ToLowerInvariant()}/{id.ToLowerInvariant()}";
         var meshes = new HdModelMeshes(HdModels.Holding(key, new HdModel(glb, IsGlb: true, GltfPath: null)));
@@ -60,19 +62,19 @@ public static class ModAirframes
         Graft(planes, id, cockpitFrom, parts, state.RootNodes);
         lock (Files)
         {
-            Files[id] = meshes;
+            Files[id] = (meshes, cockpitFrom, tint);
         }
     }
 
     /// <summary>The file a build of the airframe <paramref name="node"/> draws from, or null for any
     /// airframe <see cref="Add"/> has not grafted.</summary>
-    public static HdModelMeshes? MeshesFor(string node)
-    {
-        lock (Files)
-        {
-            return Files.GetValueOrDefault(node);
-        }
-    }
+    public static HdModelMeshes? MeshesFor(string node) => Grafted(node)?.Meshes;
+
+    /// <summary>The tint the airframe <paramref name="node"/>'s livery paints through, or null.</summary>
+    public static ModTint? TintFor(string node) => Grafted(node)?.Tint;
+
+    /// <summary>The stock airframe whose interior the mod <paramref name="node"/> was given, or null.</summary>
+    public static string? DonorOf(string node) => Grafted(node)?.Donor;
 
     /// <summary>The engine-free half of <see cref="Add"/>: appends <paramref name="parts"/> under a new
     /// root <paramref name="id"/>, starting from <paramref name="roots"/>. A lone root named like a stock
@@ -141,6 +143,14 @@ public static class ModAirframes
         }
 
         planes.TablesGrew();
+    }
+
+    private static (HdModelMeshes Meshes, string Donor, ModTint? Tint)? Grafted(string node)
+    {
+        lock (Files)
+        {
+            return Files.TryGetValue(node, out var grafted) ? grafted : null;
+        }
     }
 
     private static bool IsInterior(GameZNode node) => node.Name.Equals(Interior, StringComparison.OrdinalIgnoreCase);

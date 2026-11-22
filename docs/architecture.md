@@ -59,7 +59,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
-- `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
+- `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, tints a mod's surfaces, swaps decals.
 - `src/Mech3/MilitiaFits.cs`, the militia table read once against vehicle.json: each militia's pattern and the def it flies an airframe as, which paint and arm a bot seat.
 - `src/Mech3/MilitiaPaint.cs`, each militia's paint pattern by display name, which is all a militia decides on Instant Action.
 - `src/Mech3/PropParts.cs`, classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
@@ -110,6 +110,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ArtImage.cs`, the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
 - `src/Mech3/AirframeRegistry.cs`, every player airframe: the eleven stock ones in id order, then mods registered by string id with a stock parent.
 - `src/Mech3/ModAirframes.cs`, a plane mod's `plane.glb` grafted into planes.zbd as an airframe of its own, drawn from the file.
+- `src/Mech3/ModTint.cs`, a plane mod's livery tint: mask and detail map, and the per-texel composite of the scheme's three colours over its base texture.
 - `src/Mech3/MarkerRig.cs`, a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and its `rig.json` template, body cockpit included.
 - `src/Mech3/PlaneRig.cs`, one airframe's `rig.json`: moved markers, prop, surface and flare overrides and the cockpit section, validated loudly at load.
 - `src/Mech3/PlaneRigPatch.cs`, applies a `PlaneRig` to the built plane before any marker read: moves and adds markers, stamps prop/surface overrides, picks flares.
@@ -382,7 +383,7 @@ rows).
 - `src/Flight/Hangar/Difficulty.cs`, the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.
 - `src/Flight/Hangar/CustomPlaneDef.cs`, a custom-built plane as a pure model: the saved record's chosen fields only, with the campaign loadout export alongside.
 - `src/Flight/Hangar/StockAirframes.cs`, the airframe id to stock `planes.zbd` node table and its inverse.
-- `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes, a content hash, the skipped mods with their reasons, a mod's stats and stock fit from its parent's.
+- `src/Flight/Hangar/ModPlanes.cs`, the plane mods under `<dataRoot>/Mods/Planes`, folder or zip: `plane.json` checked against the stock nodes (its livery tint's files included), a content hash, the skipped mods with their reasons, a mod's stats and stock fit from its parent's.
 - `src/Flight/Hangar/CustomPlaneStore.cs`, JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
 - `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.

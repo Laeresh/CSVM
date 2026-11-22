@@ -9,7 +9,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
 
 - [Conceptual model](#conceptual-model)
 - [Reference](#reference): [folder and id](#folder-and-id), [`plane.json`](#planejson),
-  [overrides](#overrides), [`plane.glb`](#planeglb), [content hash](#content-hash)
+  [overrides](#overrides), [`plane.glb`](#planeglb), [paint](#paint), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
   [flying a mod](#flying-a-mod)
 - [Evidence & limits](#evidence--limits)
@@ -45,7 +45,8 @@ machine in a network match needs the same mods, which the content hash compares.
   "cockpit": "player_warhawk",
   "sound": "player_fury",
   "portrait": "portrait.png",
-  "overrides": { "fd_speed": 120.0, "turrets": [] }
+  "overrides": { "fd_speed": 120.0, "turrets": [] },
+  "tint": { "mask": "avenger_mask.png", "detail": "avenger_detail.png", "materials": ["avenger"] }
 }
 ```
 
@@ -58,6 +59,7 @@ machine in a network match needs the same mods, which the content hash compares.
 | `cockpit` | A stock node whose cockpit interior the plane uses when its model has none. Absent, the parent's. |
 | `sound` | A stock node whose engine sound the plane uses. Absent, the parent's. |
 | `portrait` | The path of an image inside the mod that menus show for the plane. |
+| `tint` | How a livery colours the plane's own surfaces: `mask` and `detail`, each the path of a `.png` inside the mod, and `materials`, a non-empty list of `plane.glb` material names. All three are required; a `_` key inside is prose. Absent, the plane's own surfaces keep their paint under every livery. The rules are in [Paint](#paint). |
 
 Every value is a literal. A key starting with `_` is prose and ignored; any other unknown key, a
 wrong type, an empty string or a name outside the stock list skips the mod.
@@ -102,7 +104,7 @@ Brigand does.
 | Tree | Each glTF node is one airframe node, at its own transform, under a root named the mod's id. One scene root named the id or a stock node (an export's `player_brigand`) stands for that root and its own transform is dropped; any other scene roots hang under it. Blender's repeat suffix (`wing.001`) is dropped from a name. |
 | Names | The stock names, matched without case. `geometry > healthy > nearest > {nose, tail, leftwing, rightwing}` holds the body. A control surface is `l_aileron1`, `r_elevator1`, `l_rudder1` and the rest under its hinge group (`lailer1`, `lft_elev`, `lrudder1`), whose origin and rotation set the hinge line; the surface turns about its own X (aileron, elevator) or Y (rudder). `dontmove > {staticpropN, propN, propNb}` are the props: the still `staticpropN` shows stopped and the `propN`/`propNb` blur discs spin. `pilot_pos > pilot > body > head` is the pilot. |
 | Markers | Empty nodes: `firepointN` and `pylonN` (the parent's fit binds by these names, so the mod carries every marker that fit names), `cockpit_camera` (the first-person eye), `exhaust1`/`exhaust2`, `ground_level` and `target`. Positions are read in the plane frame below the root. |
-| Meshes | Every mesh draws as a model pack's root file draws its nodes, its materials by the pack's rules ([model-packs.md](model-packs.md), "Materials"): a material named after an original texture wears that texture, and takes the livery when it is a skin of the airframe whose interior the mod carries (the painter reads the skin prefix there); any other is fixed paint. Its triangles are also the gameplay geometry: the collision hulls, the hit body, the ground shadow and every box the game measures. |
+| Meshes | Every mesh draws as a model pack's root file draws its nodes, its materials by the pack's rules ([model-packs.md](model-packs.md), "Materials"): a material named after an original texture wears that texture, and takes the livery when it is a skin of the airframe whose interior the mod carries (the painter reads the skin prefix there). Any other material wears its own base colour and texture, which the livery reaches only as [Paint](#paint) describes. Its triangles are also the gameplay geometry: the collision hulls, the hit body, the ground shadow and every box the game measures. |
 | Cockpit | A `cockpit1` node directly under the root is the plane's own interior, in interior units as a stock `cockpit1.glb` is. Without one the plane takes a copy of the interior of `plane.json`'s `cockpit`, else its parent's, mounted at the mod's `cockpit_camera`. |
 | Not read | Animation, skins, morph targets, cameras, lights and node visibility. A model pack's replacement files never reach a mod's meshes; its `planes/<id>/rig.json` does. |
 
@@ -111,6 +113,25 @@ log and the skipped list. A missing name is not checked at load: a marker the pa
 the model lacks leaves the plane unarmed with a `loadout bind failed` warning, a missing
 `cockpit_camera` puts the eye at the plane's origin, and a node the stock systems look for and do not
 find (a surface, a prop) does not move.
+
+### Paint
+
+A livery (a pattern, a militia's scheme, or `--paint-color=`) is three colours and three decal
+indices ([paint.md](paint.md)). A stock airframe takes the colours through the pattern's own region
+masks, which follow the original skins' UVs; a mod's own UVs follow no stock skin, so the mod ships
+its region mask itself and any pattern's colours reach it.
+
+| Item | Rule |
+|---|---|
+| Mask | `tint.mask`, a PNG in the UVs of the tinted materials' base-colour texture. Red is the scheme's colour 1, green colour 2, blue colour 3, each channel the share of that colour at the texel. A texel with no channel set shows the base texture. |
+| Slots | Colour 1 is the body colour, colour 2 the dark trim and colour 3 the light trim, the order `paint_color1..3` carry ([paint.md](paint.md), "Slot order, confirmed"). Mask the main body in red, the large secondary areas (stripes, wing tips) in green and small accents (spinners, rings) in blue: Fortune Hunters then paints red, black and white, Hughes yellow, black and white, Blackhat three browns. |
+| Detail | `tint.detail`, a greyscale PNG (its first channel is read) that shades the colour, so panel lines and grime survive a repaint. Grey 128 shows the colour unchanged, darker darkens it and lighter brightens it up to white. |
+| Composite | Per texel, `base * (1 - cover) + detail / 128 * (r * colour1 + g * colour2 + b * colour3)`, with `r`, `g`, `b` the mask's channels from 0 to 1 and `cover` their sum. A sum above 1 is shared out between the channels in proportion and hides the base. Alpha stays the base texture's. Mask and detail are sampled at the base texture's size, nearest texel, so a smaller mask works at coarser edges. |
+| Materials | Only the materials `tint.materials` names, matched without case, take the tint, and only where they carry a base-colour texture. Leave glass, blur discs and parts with their own UVs out of the list. |
+| No livery | `--paint=none`, or a mod without `tint`, shows the base texture everywhere. |
+| Decals | A material whose name ends in `_noselogo`, `_taillogo` or `_winglogo` (`avenger_noselogo`) takes the scheme's nose, tail or wing decal over its whole UV square, as an original placeholder does. Give it `alphaMode` `MASK` so the decal's transparent ground cuts out, put it after the body in the file's surface order, and lift it slightly off the skin. |
+| Pattern list | The patterns the paint pickers offer and `--paint=random` draws from are those of the airframe whose interior the mod carries (`cockpit`, else `kind_of`); a pattern outside that list still tints the mod with its colours. |
+| Where it applies | Everywhere the airframe is built: the flown aircraft, AI aircraft, a network seat (which sends the livery as pattern, colour and decal indices, so each machine tints from its own copy of the mod), the viewer's livery lab, the damage panels and the wreck. |
 
 ### Content hash
 
@@ -151,6 +172,12 @@ stock eleven alone.
   triangles, 15 collider hulls, 8 control surfaces, 2 spinning props, 17 weapon markers, reference
   markers and cockpit camera, and the Brigand fit binds 4 hardpoints with its turret slot firing
   forward.
+- The `tint` field is `ModPlanes`' and the composite `Mech3/ModTint.cs`, which `Mech3/PlanePainter.cs`
+  applies to the materials `SceneBuilder` hands it from the mod's file. Covered by
+  `CSVM.Tests/ModTintTests.cs`, `CSVM.Tests/ModPlanesTests.cs` and the `mod-plane-paint` suite: a
+  hand-made mod's half-masked body takes each of two schemes' colour 1 on the masked half and keeps its
+  base texture on the other, in a flown build, an AI build's shared painter and a livery lab repaint, no
+  livery leaves the base texture, and its `suite_noselogo` surface wears each scheme's nose decal.
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is not
   checked against the campaign.

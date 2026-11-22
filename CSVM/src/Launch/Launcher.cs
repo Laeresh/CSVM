@@ -1635,8 +1635,9 @@ public partial class Launcher : Node3D
         {
             try
             {
-                ModAirframes.Add(planes, mod.Id, mod.Cockpit ?? mod.KindOf,
-                    mod.Read(Flight.Hangar.ModPlanes.ModelFile) ?? throw new InvalidDataException($"{Flight.Hangar.ModPlanes.ModelFile} is unreadable"));
+                byte[] Bytes(string path) => mod.Read(path) ?? throw new InvalidDataException($"{path} is unreadable");
+                ModAirframes.Add(planes, mod.Id, mod.Cockpit ?? mod.KindOf, Bytes(Flight.Hangar.ModPlanes.ModelFile),
+                    mod.Tint is { } tint ? ModTint.Decode(tint.Materials, Bytes(tint.Mask), Bytes(tint.Detail)) : null);
                 if (AirframeRegistry.Shared.Find(mod.Id) == null)
                 {
                     AirframeRegistry.Shared.Register(mod.Id, mod.Name, mod.KindOf);

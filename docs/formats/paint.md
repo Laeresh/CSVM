@@ -339,7 +339,8 @@ via `TextureArchive.FindByDecalIndex`.
 
 A model pack's replacement airframe takes the same paint only where its surfaces keep the original
 skin and decal texture names and UVs laid out like the original's; any other surface keeps its own
-fixed paint ([model-packs.md](model-packs.md), Liveries).
+fixed paint ([model-packs.md](model-packs.md), Liveries). A plane mod's own surfaces take the three
+colours through a region mask the mod ships in its own UVs ([mod-planes.md](mod-planes.md), Paint).
 
 ### Which `.BM` a model texture is painted from
 

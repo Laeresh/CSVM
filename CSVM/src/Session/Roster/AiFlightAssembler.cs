@@ -423,7 +423,7 @@ internal sealed class AiFlightAssembler
             return null;
         }
 
-        var made = new PlanePainter(_aircraft.Textures, _liveries.Patterns, scheme, prefix);
+        var made = new PlanePainter(_aircraft.Textures, _liveries.Patterns, scheme, prefix, ModAirframes.TintFor(planeName));
         _painters[key] = made;
         Log.Info("world", $"[paint] {planeName} ({prefix}): {scheme}{(made.PatternMissesAircraft ? $": pattern '{scheme.FolderName}' ships no {prefix} skins, decals only" : "")}");
         return made;
