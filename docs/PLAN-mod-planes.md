@@ -120,17 +120,17 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ Cockpit: own, named stock, or parent's
 22. ☑ Paint: base texture, tint mask and decals
-23. ☑ Damage: optional nodes and the auto-wreck
+23. ☐ Damage: optional nodes and the auto-wreck
 24. ☑ Engine sound: parent's or a named stock plane's
 25. ☑ Hangar builder for mod airframes
-26. ☑ Menu art: mod image or cached auto-render
+26. ☐ Menu art: mod image or cached auto-render
 
 ### Wave D, saves, campaign, bots, multiplayer
 
 31. ☐ Saves keep the mod id; a missing mod flies as its parent
-32. ☑ Campaign unlock field
-33. ☑ Bot seats may fly mod planes
-34. ☑ Multiplayer: string airframe id and a matching mod set
+32. ☐ Campaign unlock field
+33. ☐ Bot seats may fly mod planes
+34. ☐ Multiplayer: string airframe id and a matching mod set
 
 ### Wave E, the Avenger as the first mod
 
