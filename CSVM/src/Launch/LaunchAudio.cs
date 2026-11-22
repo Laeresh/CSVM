@@ -107,6 +107,7 @@ internal sealed class LaunchAudio(Node host)
             _music = new MusicPlayer(SoundDefs.Load(paths.Data.Zrdr), SoundDefs.LoadGroups(paths.Data.Zrdr))
             {
                 Loader = (def, looped) => _archive.Find(def.WavName, looped, warn: false),
+                LoaderOffThread = (def, looped) => _archive.FindOffThread(def.WavName, looped),
             };
             host.AddChild(_music);
             _rng = new System.Random((int)(masterSeed & 0x7fffffff));
