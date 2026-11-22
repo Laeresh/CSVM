@@ -23,6 +23,8 @@ jobs:
       GODOT_RELEASE: 4.7-stable
       GODOT_ZIP: Godot_v4.7-stable_mono_macos.universal.zip
       GODOT_TPZ: Godot_v4.7-stable_mono_export_templates.tpz
+      # InstallWebRtc.ps1 stages in $env:TEMP, which macOS does not set.
+      TEMP: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
 
