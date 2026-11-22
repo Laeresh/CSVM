@@ -76,6 +76,13 @@ the end-screen line:
 | 3 | `0049afc7` | a mode-specific objective, a Zeppelin vs Zeppelin hull lost |
 | 4 | `0049900f` / `004996a2`, after a death or a drop, when `FUN_004999f0` finds no two live pilots on different sides | nobody left to fight |
 
+[Evidence: decoded] **The end line.** `FUN_00499730` posts the line once, while the ended reason
+`0071c190` is still 0. It joins row 135 `MSG_STATE_GAMEOVER` ("Game Over:", `0x499829`) and the
+reason's row into one string and posts it through `FUN_004587d0` for five seconds: reason 1 takes
+row 7005 `MSG_MP_TIME` ("Time", `0x499798`), reason 2 row 7006 `MSG_MP_SCORE` ("Score",
+`0x49979f`), reason 3 row 7066 (`0x4997c1`) and reason 4 row 7067 (`0x4997f6`). A reason outside 1..4 keeps row 136 "Unknown"
+(`0x49974a`). No arm names a winner, and the message table has no winner row.
+
 ⚠ **A time-out has no overtime, no sudden death and no tiebreak.** Reason 1 sets the ended flag,
 prints its line and runs the five-second wait at `0071c19c`; nothing computes a winner, and two
 pilots tied at the top are simply tied on the board. The one thing that follows a time-out is the
@@ -253,6 +260,20 @@ team's term and `RegisterZeppelinKill` sets the term of a side whose hull downed
 on the board's total (`TeamTotalOf`), never in the number the Score limit reads (`TeamScoreOf`).
 A hull loss ends the match as `NetMatchEnd.Objective` with the winning team named in the state
 ([`multiplayer-zvz.md`](multiplayer-zvz.md)).
+
+The end line is two lines in every local pane, "Game Over:" over the second, where the original
+joins them into one. Reasons 3 and 4 keep the original's rows. A time or score end, a Capture the
+Flag win included, takes a remake-only second line in place of "Time" or "Score": the winner's name
+and "Wins" ("Red Team Wins", "Crawford Wins"), or "Draw" while the top is shared
+(`HudMessages.WinnerLine`). The remake has it because the original's row says only why the match
+ended, so a pilot learns who won only when Game Scores stands, five seconds after the end. The
+winner is the board's ranking (`VersusMatch.Winner`), a team by its lobby name and a seat by its
+callsign (the player's nickname, else the player tag), worded by `VersusMatch.NameOf`, which the
+board's headline and the status line's leader read too. The host ranks it and sends it in the end
+state's winner byte, and a guest words its line from that byte, never from its own copy of the
+scores. A draw has its own byte (`MatchStateMessage.DrawWinner`), since 0 is what a host of the
+same MAJOR.MINOR built before the winner line sends; a guest that reads 0 on a time or score end
+posts "Game Over:" alone.
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99
 (`DogfightLobby.ClampLives`), so the empty-box defect cannot launch. Ticking Limited Lives puts 3

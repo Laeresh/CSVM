@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using CSVM.Flight.Hud;
 using CSVM.UI.Boards;
 using Godot;
@@ -60,19 +59,9 @@ public sealed partial class VersusStatusLine : Control
     public static string LeaderText(VersusMatch match, int playerIndex, Func<int, string?>? seatName)
     {
         ArgumentNullException.ThrowIfNull(match);
-        if (match.Teamed)
-        {
-            int own = match.TeamOf(playerIndex);
-            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
-            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
-            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
-        }
-
-        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
-        if (leaders.Count != 1)
-            return "LEADER TIED";
-        int seat = leaders[0].PlayerIndex;
-        return $"LEADER {seatName?.Invoke(seat) ?? SplitScreen.PlayerTag(seat)}";
+        int own = match.Teamed ? match.TeamOf(playerIndex) : 0;
+        string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+        return $"{mine}LEADER {match.NameOf(match.Leader(), seatName) ?? "TIED"}";
     }
 
     public override void _Process(double delta)

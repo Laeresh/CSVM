@@ -437,6 +437,50 @@ public sealed class VersusMatch
         Revision++;
     }
 
+    /// <summary>Who the match's end names: <see cref="ObjectiveWinner"/> where an objective ended
+    /// it, else <see cref="Leader"/>. The results board's headline and the end line read it.</summary>
+    public int Winner() => ObjectiveWinner > 0 ? ObjectiveWinner : Leader();
+
+    /// <summary>The sole rank-1 side by the totals: its team number in a <see cref="Teamed"/>
+    /// match, else the seat plus one. 0 while the top rank is shared. The status line reads it.
+    /// </summary>
+    public int Leader()
+    {
+        int winner = 0, leaders = 0;
+        if (Teamed)
+        {
+            foreach (var team in TeamStandings())
+            {
+                if (team.Rank == 1)
+                {
+                    winner = team.Team;
+                    leaders++;
+                }
+            }
+        }
+        else
+        {
+            foreach (var standing in Standings())
+            {
+                if (standing.Rank == 1)
+                {
+                    winner = standing.PlayerIndex + 1;
+                    leaders++;
+                }
+            }
+        }
+
+        return leaders == 1 ? winner : 0;
+    }
+
+    /// <summary>The name <see cref="Winner"/>'s or <see cref="Leader"/>'s number reads as, null
+    /// for 0. A team goes by <see cref="TeamName"/>; a seat by <paramref name="seatName"/>, its
+    /// callsign or null for none, else its player tag.</summary>
+    public string? NameOf(int side, Func<int, string?>? seatName) =>
+        side <= 0 ? null
+        : Teamed ? TeamName(side)
+        : seatName?.Invoke(side - 1) ?? Net.NetSeats.PlayerTag(side - 1);
+
     /// <summary>Every player ranked by score descending, ties sharing a rank, rank 1 alone is the
     /// winner, rank 1 shared is a draw. Kills and deaths ride along for the results board / HUD to
     /// render.</summary>

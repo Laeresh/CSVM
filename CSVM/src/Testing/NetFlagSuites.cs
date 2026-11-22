@@ -123,7 +123,7 @@ internal static class NetFlagSuites
         + "floating flag and returning it scores score_return_flag; a guest carrier's ejectflag typed into the chat "
         + "floats its flag on every machine through the host and sends no chat line, its marker back on its "
         + "callsign; the uncaught flag goes home "
-        + "when its 15 s throw runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
+        + "when its 15 s throw runs out, scoring nobody; and a second capture ends the match on the Score limit by team, every pane posting \"Game Over:\" over the capturing team's win line")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
         var spec = Spec(ctx);
@@ -875,6 +875,7 @@ internal static class NetFlagSuites
         var titles = peers.Select(p => VersusBoard.Title(p.Dogfight!.Match)).ToArray();
         ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),
             $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
+        NetCombatSuites.EndLines(ctx, peers, peers[0].Dogfight!.Match.TeamName(2));
     }
 
     // Every marker line below is read off the run's own table, so a missing row would compare

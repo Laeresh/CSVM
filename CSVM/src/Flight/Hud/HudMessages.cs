@@ -314,6 +314,21 @@ public sealed partial class HudMessages : Control
         stack.Post(Text(strings, GameOverKey), Side.Neutral);
     }
 
+    /// <summary>The second line of a time or score end: the winner's name and "Wins", or "Draw" for a
+    /// null winner. Remake-only: the original's second line there is row 7005 "Time" or 7006
+    /// "Score", and its table has no winner row (docs/org/multiplayer-scoring.md).</summary>
+    public static string WinnerLine(string? winner) =>
+        winner is { Length: > 0 } name ? $"{name} Wins" : "Draw";
+
+    /// <summary>Posts a time or score end, "Game Over:" above <paramref name="result"/>, a
+    /// <see cref="WinnerLine"/>, as <see cref="PostAllAlone"/> posts reason 4's. A null result
+    /// posts "Game Over:" alone.</summary>
+    public static void PostResult(HudMessages stack, Messages? strings, string? result)
+    {
+        stack.Post(result, Side.Neutral);
+        stack.Post(Text(strings, GameOverKey), Side.Neutral);
+    }
+
     /// <summary>Posts reason 3's ending, "Game Over:" above "Zeppelin Destroyed", as
     /// <see cref="PostAllAlone"/> posts reason 4's.</summary>
     public static void PostHullLost(HudMessages stack, Messages? strings)

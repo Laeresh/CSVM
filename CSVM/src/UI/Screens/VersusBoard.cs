@@ -64,29 +64,10 @@ public sealed partial class VersusBoard : ResultsBoard
     /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
     /// objective names the team that won it, whatever the totals. The leader is named by its
     /// callsign from <paramref name="seats"/>, else by player tag.</summary>
-    public static string Title(VersusMatch match, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null)
-    {
-        if (match.ObjectiveWinner > 0)
-        {
-            return $"{match.TeamName(match.ObjectiveWinner).ToUpperInvariant()} WINS";
-        }
-
-        if (match.Teamed)
-        {
-            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
-            return teams.Count == 1 ? $"{teams[0].Name.ToUpperInvariant()} WINS" : "DRAW";
-        }
-
-        var winners = match.Standings().Where(st => st.Rank == 1).ToList();
-        if (winners.Count != 1)
-        {
-            return "DRAW";
-        }
-
-        int seat = winners[0].PlayerIndex;
-        string name = Net.NetSeats.SeatName(seats, seat)?.ToUpperInvariant() ?? SplitScreen.PlayerTag(seat);
-        return $"{name} WINS";
-    }
+    public static string Title(VersusMatch match, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null) =>
+        match.NameOf(match.Winner(), seat => Net.NetSeats.SeatName(seats, seat)) is { } name
+            ? $"{name.ToUpperInvariant()} WINS"
+            : "DRAW";
 
     public override void _ExitTree() => _match.MatchCompleted -= OnMatchCompleted;
 

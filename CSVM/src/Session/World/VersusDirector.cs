@@ -68,6 +68,9 @@ public sealed class VersusDirector
     private Action? _landOnScores;
     // Sim seconds since the match ended, counted here because no board halts this world.
     private float _endHeld;
+    // The winner the host's ending named (VersusMatch.Winner, 0 a draw), null where it named none.
+    // A guest takes it off the host's state and never ranks its own copy of the scores.
+    private int? _winner;
     // --debug-scoreboard: fires once, on the first sim step.
     private bool _debugKillFired;
 
@@ -735,10 +738,11 @@ public sealed class VersusDirector
             : match.AllAlone ? Net.NetMatchEnd.NobodyLeft
             : match.TimeLimit > 0f && match.Elapsed >= match.TimeLimit ? Net.NetMatchEnd.TimeLimit
             : Net.NetMatchEnd.ScoreTarget;
-        PostAllAlone(was);
+        _winner = End == Net.NetMatchEnd.Running ? null : match.Winner();
+        PostEnding(was);
         net.Broadcast(
             new Net.MatchStateMessage(match.TimeRemaining, match.TimeLimit, (short)match.KillTarget,
-                End, (float)_field.ClockTime(), (byte)Math.Clamp(match.ObjectiveWinner, 0, byte.MaxValue)),
+                End, (float)_field.ClockTime(), Net.MatchStateMessage.WinnerByte(_winner)),
             Net.NetChannels.Events);
     }
 
@@ -751,13 +755,14 @@ public sealed class VersusDirector
 
         var was = End;
         End = state.End;
+        _winner = state.NamedWinner;
         // The objective's winner and bonus land ahead of the ending, which is what the board reads.
-        if (state.End == Net.NetMatchEnd.Objective && state.Winner > 0)
+        if (state.End == Net.NetMatchEnd.Objective && _winner is > 0 and var team)
         {
-            ZvzPlay?.TakeEnding(state.Winner);
+            ZvzPlay?.TakeEnding(team);
         }
 
-        PostAllAlone(was);
+        PostEnding(was);
         _field.NetClock?.Observe(state.HostClock, _field.ClockTime());
         Match.ApplyState(state.ScoreTarget, state.TimeLimitSeconds, state.RemainingSeconds,
             state.End != Net.NetMatchEnd.Running);
@@ -769,17 +774,32 @@ public sealed class VersusDirector
         }
     }
 
-    // Reasons 3 and 4 in words, on every machine the moment its end turns to one. The original's
-    // "Game Over:" and "No Enemies Left" lines go into each local pane's stack, and a lost hull
-    // posts and speaks its own.
-    private void PostAllAlone(Net.NetMatchEnd was)
+    // The ending in words, on every machine the moment its end turns to one, into each local pane's
+    // stack. A lost hull posts and speaks its own. Reason 4 posts "Game Over:" and "No Enemies
+    // Left". A time or score end names the winner the host's state named.
+    private void PostEnding(Net.NetMatchEnd was)
     {
         if (End == Net.NetMatchEnd.Objective && was != Net.NetMatchEnd.Objective)
         {
             ZvzPlay?.Announce();
         }
 
-        if (was == Net.NetMatchEnd.NobodyLeft || End != Net.NetMatchEnd.NobodyLeft)
+        if (was == End)
+        {
+            return;
+        }
+
+        // A host that named no winner leaves "Game Over:" alone rather than a guessed draw.
+        string? result = _winner is { } named
+            ? HudMessages.WinnerLine(Match.NameOf(named, seat => Net.NetSeats.SeatName(_field.NetSeats, seat)))
+            : null;
+        Action<HudMessages>? post = End switch
+        {
+            Net.NetMatchEnd.NobodyLeft => stack => HudMessages.PostAllAlone(stack, _field.Strings),
+            Net.NetMatchEnd.TimeLimit or Net.NetMatchEnd.ScoreTarget => stack => HudMessages.PostResult(stack, _field.Strings, result),
+            _ => null,
+        };
+        if (post == null)
         {
             return;
         }
@@ -788,7 +808,7 @@ public sealed class VersusDirector
         {
             if (rig.Controller?.MessageStack is { } stack)
             {
-                HudMessages.PostAllAlone(stack, _field.Strings);
+                post(stack);
             }
         }
     }

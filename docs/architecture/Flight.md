@@ -1070,7 +1070,7 @@ Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed sco
 and its suicide value per death with no killer to the pilot who died (`MatchScores`, read from `player.zrd`). `RegisterKill`/`RegisterDeath`
 report those facts, `Advance(dt)` is the host-fed match clock (summed in double, so a guest reading it once a second sees whole seconds fall evenly), `MatchCompleted` fires once on a score reaching the target or
 on the time-out (leader wins, equal top scores draw), `Standings()` ranks by score with ties sharing a rank and carries kills
-and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
+and deaths for display, `Leader()` numbers the sole leader by the totals (a team, or a seat plus one, 0 on a tie), `Winner()` is the objective's winner or that leader, which the end message and the board's headline read (the status line reads `Leader()`), and `NameOf` words either number, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
 pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and adding to every other team's term (`TeamTermOf`), which `TeamTotalOf` shows and the Score limit never reads; `RegisterZeppelinKill` sets the term of the side whose hull downed a pilot. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusStatusLine`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
@@ -1086,7 +1086,7 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 
 ## src/Flight/Modes/VersusStatusLine.cs
 The per-pane match status line of every versus mode: remaining time, this pane's kills and deaths, and the
-leader (`LeaderText`: a seat by its callsign through `SeatName`, a person's nickname or a bot's, and a seat with none by player tag, or in a team match this pane's team total and the leading team), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
+leader (`LeaderText`: a seat by its callsign through `SeatName`, a person's nickname or a bot's, and a seat with none by player tag, or in a team match this pane's team total and the leading team, both through `VersusMatch.Leader` and `NameOf`), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
 It steps aside while `StatusHiddenWhile` answers true (the seat's held scores).
 `Build` binds the match and this pane's seat; `HumanFlightAdapter` builds one per local pane, `FlightHud.Attach` adds it to the pane's HUD canvas, and nothing feeds it per frame.
 It draws no per-seat markers: players find and mark each other through `TargetHud`, as in the original. A kill has no banner of its own here: `HudMessages`
@@ -1100,7 +1100,7 @@ reading pane sees it (its own pilot by name, a wingman with no name, any other a
 title, anything else destroyed), `SideOf` picks the colour arm off the victim's team, `WordsKillLine`
 keeps a hull flown into the world off that line, `PostCrash`/`PostTimeExpired` are the two notices
 that are not a death, and `MatchKillLines` words a Dogfight death the same on every machine and
-`FlagLine` a Capture the Flag row and `CaptureLine` a capture's score. All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+`FlagLine` a Capture the Flag row and `CaptureLine` a capture's score, and `PostAllAlone`, `PostHullLost` and `PostResult` post a match's end under "Game Over:", the last with `WinnerLine` ("X Wins" or "Draw"). All static, so a suite asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md), [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md).
 
 ## src/Flight/Hud/PromptLine.cs
 A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's

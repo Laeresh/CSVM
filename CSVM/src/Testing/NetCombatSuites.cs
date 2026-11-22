@@ -255,7 +255,8 @@ internal static class NetCombatSuites
         + "neither ends its match nor raises its board, its board leaves Restart off and says the "
         + "host calls the rematch while the host's offers it, its own rematch key does nothing, and a "
         + "match ended on the kill limit and then on the time limit holds all three machines with "
-        + "the same reason and the same scoreboard")]
+        + "the same reason and the same scoreboard, every pane posting \"Game Over:\" over the "
+        + "winner the host named (the leader's callsign, or Draw)")]
     internal static void MatchStateIsTheHostsAlone(TestContext ctx)
     {
         // The scripted climb the star suites fly. This suite is the longest of the three, and a
@@ -514,6 +515,25 @@ internal static class NetCombatSuites
 
         NetSeats.Validate(roster);
         return roster;
+    }
+
+    // Every pane on every machine reads the ending the host named: "Game Over:" directly over its
+    // winner's line, the same winner everywhere. A null winner is a draw. A pane's own crash notice
+    // may land above the pair, as it would over any line.
+    internal static void EndLines(TestContext ctx, GameSession[] peers, string? winner)
+    {
+        string top = MatchWording.Read(ctx).Row(HudMessages.GameOverKey);
+        string under = HudMessages.WinnerLine(winner);
+        string pair = $"{top} / {under}";
+        var shown = peers.Select(p => p.SeatRigs.Where((_, seat) => seat < p.NetSeats.Count && p.NetSeats[seat].HasPane)
+            .Select(r => r.Controller is { } pilot ? PaneLines(pilot) : "no pilot")
+            .ToArray()).ToArray();
+        ctx.Check(shown.All(panes => panes.Length > 0 && panes.All(lines => lines.Contains(pair, StringComparison.Ordinal))),
+            $"and every pane on every machine reads \"{top}\" over \"{under}\" ({string.Join(" | ", shown.Select(panes => string.Join(", ", panes)))})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(top == "Game Over:", $"in the message table's row 135 ({top})");
+        }
     }
 
     // One death on clean stacks: each machine's own pane then reads exactly the lines the run's
@@ -1003,6 +1023,7 @@ internal static class NetCombatSuites
         ctx.Check(peers[0].Dogfight!.Match.ScoreOf(1) >= HostKillTarget(ctx),
             $"seat 1 reaches the host's kill target of {HostKillTarget(ctx)} ({Scoreboard(peers[0])})");
         Held(ctx, peers, "the kill limit", NetMatchEnd.ScoreTarget);
+        EndLines(ctx, peers, peers[0].NetSeats[1].Callsign);
     }
 
     // The host's rematch, and the guest's own key before it. Only the host may call one: a guest
@@ -1048,6 +1069,9 @@ internal static class NetCombatSuites
         Held(ctx, peers, "the time limit", NetMatchEnd.TimeLimit);
         ctx.Check(peers.All(p => p.Dogfight!.Match.TimeRemaining <= 0f),
             $"and no machine has time left on it ({string.Join(", ", peers.Select(p => $"{p.Dogfight!.Match.TimeRemaining:0.00} s"))})");
+        // Read off the host's board: the rematch zeroed every score, and a crash since breaks the tie.
+        var top = peers[0].Dogfight!.Match.Standings().Where(s => s.Rank == 1).ToArray();
+        EndLines(ctx, peers, top.Length == 1 ? peers[0].NetSeats[top[0].PlayerIndex].Callsign : null);
     }
 
     // One ending, read on all three machines. The match over, the board holding the world, the

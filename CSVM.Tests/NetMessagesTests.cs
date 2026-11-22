@@ -274,6 +274,28 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void AnEndingsWinnerTellsADrawFromNoWinnerNamed()
+    {
+        int? Heard(int? winner)
+        {
+            var sent = new MatchStateMessage(0f, 300f, 10, NetMatchEnd.TimeLimit, 1f, MatchStateMessage.WinnerByte(winner));
+            var buffer = new byte[MatchStateMessage.Size];
+            sent.Write(buffer);
+            Assert.True(MatchStateMessage.TryRead(buffer, out var got));
+            return got.NamedWinner;
+        }
+
+        Assert.Equal(3, Heard(3));
+        Assert.Equal(0, Heard(0));
+        Assert.Null(Heard(null));
+
+        // A host from before the winner byte sends 0 on a time or score end: no winner named, never
+        // a draw.
+        Assert.Null(new MatchStateMessage(0f, 300f, 10, NetMatchEnd.ScoreTarget, 1f, Winner: 0).NamedWinner);
+        Assert.Equal(0, new MatchStateMessage(0f, 300f, 10, NetMatchEnd.ScoreTarget, 1f, Winner: MatchStateMessage.DrawWinner).NamedWinner);
+    }
+
+    [Fact]
     public void DirectorTransitionRoundTripsItsCodeIdAndStamp()
     {
         var sent = new DirectorTransitionMessage(Code: 2, Id: -1, HostClock: 412.25f);
