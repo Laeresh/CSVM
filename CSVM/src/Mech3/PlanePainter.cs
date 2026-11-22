@@ -160,6 +160,18 @@ public sealed class PlanePainter
         return made ?? original;
     }
 
+    // The original loader's integer arithmetic, bit for bit (docs/formats/paint.md). Div255 is one
+    // off rounded division on some triple products, as in the loader.
+    internal static int Div255(int x) => (int)(((257u * (uint)x) + 32768u) >> 16);
+
+    // One mask slot: blend amount m toward the value tinted by colour c, all 0..255.
+    internal static int Tint(int v, int m, int c) => Div255(Div255(m * v * c) + ((255 - m) * v));
+
+    // The overlay's fourth byte a is its blend amount over the painted value.
+    internal static int Over(int v, int o, int a) => Div255((a * o) + ((255 - a) * v));
+
+    private static int ToByte(float c) => Mathf.Clamp((int)((c * 255f) + 0.5f), 0, 255);
+
     private static void CopyAlphaFrom(ImageTexture? original, byte[] data, int w, int h)
     {
         if (original == null)
@@ -253,14 +265,11 @@ public sealed class PlanePainter
 
         int w = bm.Width, h = bm.Height, n = w * h;
         var data = new byte[n * 4];
-        var c1 = _scheme.Color1;
-        var c2 = _scheme.Color2;
-        var c3 = _scheme.Color3;
-        // Colours arrive as 0..1 floats; the masks and shading are 0..255, and the whole
-        // composite is done in the DX7-era sRGB space the skin shader samples in.
-        float r1 = c1.R * 255f, g1 = c1.G * 255f, b1 = c1.B * 255f;
-        float r2 = c2.R * 255f, g2 = c2.G * 255f, b2 = c2.B * 255f;
-        float r3 = c3.R * 255f, g3 = c3.G * 255f, b3 = c3.B * 255f;
+        // The original's tints are bytes; the composite runs in the DX7-era sRGB space the skin
+        // shader samples in.
+        var tints = new[] { _scheme.Color1, _scheme.Color2, _scheme.Color3 }
+            .Select(c => new[] { ToByte(c.R), ToByte(c.G), ToByte(c.B) }).ToArray();
+        var slots = new[] { bm.Slot1, bm.Slot2, bm.Slot3 };
 
         // ⚠ `.BM` rows are bottom-up, Godot's Image is top-down; read every source row from
         // h-1-y or the livery mirrors along V (docs/formats/rof.md).
@@ -269,33 +278,30 @@ public sealed class PlanePainter
             {
                 int i = y * w + x;              // destination texel (top-down)
                 int j = (h - 1 - y) * w + x;    // source texel (bottom-up)
-                float w1 = bm.Slot1[j], w2 = bm.Slot2[j], w3 = bm.Slot3[j];
-                // paint colour at this texel, 0..255 per channel
-                float pr = (w1 * r1 + w2 * r2 + w3 * r3) * (1f / 255f);
-                float pg = (w1 * g1 + w2 * g2 + w3 * g3) * (1f / 255f);
-                float pb = (w1 * b1 + w2 * b2 + w3 * b3) * (1f / 255f);
-                // modulated by the shading map (panel lines, rivets, baked shading)
                 int s = j * 3;
-                float outR = bm.Shading[s] * pr * (1f / 255f);
-                float outG = bm.Shading[s + 1] * pg * (1f / 255f);
-                float outB = bm.Shading[s + 2] * pb * (1f / 255f);
-
-                if (bm.HasOverlay)
+                int r = bm.Shading[s], g = bm.Shading[s + 1], b = bm.Shading[s + 2];
+                // ⚠ Slots apply in turn from the shading map, never as one weighted sum: an
+                // unmasked texel must keep the shading map (docs/formats/paint.md).
+                for (int k = 0; k < 3; k++)
                 {
-                    int o = j * 4;
-                    float a = bm.Overlay![o + 3] * (1f / 255f);
-                    if (a > 0f)
-                    {
-                        outR = outR * (1f - a) + bm.Overlay[o] * a;
-                        outG = outG * (1f - a) + bm.Overlay[o + 1] * a;
-                        outB = outB * (1f - a) + bm.Overlay[o + 2] * a;
-                    }
+                    int m = slots[k][j];
+                    r = Tint(r, m, tints[k][0]);
+                    g = Tint(g, m, tints[k][1]);
+                    b = Tint(b, m, tints[k][2]);
+                }
+
+                int o = j * 4;
+                if (bm.HasOverlay && bm.Overlay![o + 3] is var a and > 0)
+                {
+                    r = Over(r, bm.Overlay[o], a);
+                    g = Over(g, bm.Overlay[o + 1], a);
+                    b = Over(b, bm.Overlay[o + 2], a);
                 }
 
                 int d = i * 4;
-                data[d] = (byte)Mathf.Clamp((int)(outR + 0.5f), 0, 255);
-                data[d + 1] = (byte)Mathf.Clamp((int)(outG + 0.5f), 0, 255);
-                data[d + 2] = (byte)Mathf.Clamp((int)(outB + 0.5f), 0, 255);
+                data[d] = (byte)r;
+                data[d + 1] = (byte)g;
+                data[d + 2] = (byte)b;
                 data[d + 3] = 255;
             }
 

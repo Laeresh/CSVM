@@ -88,7 +88,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "a22a31f134fcf5089ff89236ffc979b4",
+      "hash": "a1a1f01c084ff72277daab42ddf2e410",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down seconds earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -102,7 +102,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "1e407a339cf9a5e3a2c8ecd56a4bc5bb",
+      "hash": "dccdc7a13202edf2afb27cc8a376dda5",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

@@ -320,13 +320,20 @@ archive, `src/Mech3/PlanePainter.cs` composites them, `src/Mech3/PaintScheme.cs`
 record, and the result reaches the renderer through a `SceneBuilder` texture-substitution hook
 that `PlaneBuilder` drives per aircraft.
 
-Per texel, exactly the formula in [rof.md](rof.md):
+Per texel and channel, the original loader's integer arithmetic (`crimson.exe` `0x00401910`,
+mask loop `0x00401B7A`–`0x00401C50`, overlay `0x00401D5F`–`0x00401DE7`), with masks, colours
+and overlay bytes all 0..255:
 
 ```
-shaded_paint = shading * (w1*colour1 + w2*colour2 + w3*colour3) / 255
+div255(x) = (257*x + 32768) >> 16
+v = shading
+for slot k in 1, 2, 3:  v = div255(div255(m_k * v * colour_k) + (255 - m_k) * v)
+v = div255(a * overlay + (255 - a) * v)      // a = the overlay's 4th byte
 ```
 
-then the pattern's overlay composited over it (4th channel as alpha). Two details
+The slots compound from the shading map rather than summing as weights, so a texel no mask
+covers keeps the shading map instead of going black, and two overlapping masks multiply their
+colours. Overlay bytes 0..2 are R, G, B. Two details
 matter: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
 name; and `.BM` rows are stored **bottom-up**, so each source row is read from `h-1-y` (see
 [rof.md](rof.md), without the flip every livery is mirrored along V, which is how the bug
@@ -442,9 +449,6 @@ colour, and all of them are gone:
   by rendering. `CustomPlane Paint1 Bloodhawk.png` shows Colour/Shade of *red/red*,
   *white/**black***, *white/white*, resolving to **red, black, white**, exactly the triple
   that the three-way render test singled out. Two unrelated routes, same answer.
-- **Overlay channel order** is still unconfirmed (see rof.md); treating the 4th channel as
-  alpha over RGB renders correctly on the content inspected, which is greyscale and so cannot
-  distinguish RGBA from BGRA.
 - **`player_fortune`'s colours** are inferred from artwork (above), not located in a file.
 - **`BROADWAY` and `ITSTAXI`** ship masks (Peacemaker and Autogyro) but no `paint_pattern`
   names them, so they have no canonical colours; the remake offers them with whatever colours
