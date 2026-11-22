@@ -334,6 +334,16 @@ public sealed class HangarFeature : IMenuFeature
         RememberAsOpened();
     }
 
+    /// <summary>A new build on airframe row <paramref name="row"/> in the paint <see cref="StartDefaultPlane"/>
+    /// gives it, leaving <see cref="Scratch"/> alone. For the hangar preview's warm-up, which wants the
+    /// paint the first build will wear before the name screen's OK makes it.</summary>
+    public CustomPlaneDef DefaultPaintOn(int row)
+    {
+        var build = new CustomPlaneDef();
+        NormalisePattern(build, row);
+        return build;
+    }
+
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
     /// what is on disk, so the store's own canonical serialisation is the deep copy. No defaults
     /// ask: the plane already is what its builder chose, and its airframe is already chosen.</summary>
@@ -1117,11 +1127,13 @@ public sealed class HangarFeature : IMenuFeature
     // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most
     // airframes' availability masks exclude, and a paint screen must never open on a paint job the
     // plane cannot wear.
-    private void NormalisePattern(int row)
+    private void NormalisePattern(int row) => NormalisePattern(Scratch, row);
+
+    private void NormalisePattern(CustomPlaneDef build, int row)
     {
         int airframe = StockIdOfRow(row);
         var tables = HangarPaintTables.Default;
-        if (tables.Available(Scratch.PaintPattern, airframe))
+        if (tables.Available(build.PaintPattern, airframe))
         {
             return;
         }
@@ -1130,7 +1142,7 @@ public sealed class HangarFeature : IMenuFeature
         {
             if (tables.Available(pattern, airframe))
             {
-                Scratch.LoadPatternDefaults(pattern);
+                build.LoadPatternDefaults(pattern);
                 return;
             }
         }

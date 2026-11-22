@@ -300,6 +300,23 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
             ? HangarPreviewPose.Of(_hangar!.Scratch, _hangar.StockIdOfRow(FocusedAirframe()), _hangar.ModOfRow(FocusedAirframe())?.Id)
             : null;
 
+    /// <summary>The door's own airframe in a new build's paint, which the hub's first picture wears.
+    /// The stage warms it on the name screen. Null without a feature.</summary>
+    public HangarPreviewPose? DoorPose
+    {
+        get
+        {
+            if (_hangar is not { } hangar)
+            {
+                return null;
+            }
+
+            int row = _hangarDefaultAirframe >= 0 && _hangarDefaultAirframe < hangar.AirframeRows
+                ? _hangarDefaultAirframe : HangarFeature.DefaultAirframe;
+            return HangarPreviewPose.Of(hangar.DefaultPaintOn(row), hangar.StockIdOfRow(row), hangar.ModOfRow(row)?.Id);
+        }
+    }
+
     /// <summary>Where the live picture stands in authored pixels, the rectangle a drag orbits it in;
     /// null wherever <see cref="Preview"/> is.</summary>
     public (float X, float Y, float Width, float Height)? PreviewArea => PreviewRect();
