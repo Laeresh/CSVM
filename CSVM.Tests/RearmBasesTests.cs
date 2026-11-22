@@ -107,6 +107,15 @@ public sealed class RearmBasesTests
         Assert.Equal("zep_rearm_node_2", RearmBases.NodeName(2, zeppelins: true));
     }
 
+    [Fact]
+    public void AMatchBaseKeyIsADeathmatchOrFlagMatchNodeAndNeverAZeppelinOne()
+    {
+        Assert.True(RearmBases.IsMatchBaseNode(RearmBases.NodeName(1, zeppelins: false)));
+        Assert.True(RearmBases.IsMatchBaseNode("REARM_NODE_2"));
+        Assert.False(RearmBases.IsMatchBaseNode(RearmBases.NodeName(1, zeppelins: true)));
+        Assert.False(RearmBases.IsMatchBaseNode("racmplx"));
+    }
+
     [ExtractedDataFact]
     public void TheShippedPlayerZrdLeavesTheRadiusAtTwentyFiveMetres()
     {

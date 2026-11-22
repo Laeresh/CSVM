@@ -94,6 +94,11 @@ public sealed class TargetPool
             // Non-Aircraft one). A Danger Zone arrives here with neither and is an objective.
             Offer(c, AimTargetKind.Structure, ownTeam, self,
                 objectiveTarget: c.Source is not ObjectiveSite site || site.Objective);
+            if (c.Source is ObjectiveSite { AlsoObjective: true })
+            {
+                // The same site on the Enemy cycle too, so either key reaches it.
+                Offer(c, AimTargetKind.Structure, ownTeam, self, objectiveTarget: true);
+            }
         }
     }
 

@@ -49,6 +49,11 @@ public sealed class ObjectiveSite
     /// class filter itself tests the two bytes in.</summary>
     public bool Objective { get; set; }
 
+    /// <summary>Whether an <c>other_target</c> site rides the Enemy cycle as an objective as well,
+    /// one entry on each cycle. Enhanced sets it on a Deathmatch or Capture the Flag rearm base,
+    /// a remake-only rule (docs/org/targeting.md).</summary>
+    public bool AlsoObjective { get; set; }
+
     /// <summary>The category line a pane on <paramref name="ownTeam"/> reads: the side's friend or
     /// foe line where a mode labels the site, else <see cref="Category"/>. Empty reads as none.
     /// ⚠ Pass the reading pane's own team. One site serves every pane, and splitscreen panes may

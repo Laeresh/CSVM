@@ -141,7 +141,7 @@ curated list admitting a mission's chosen structures and no other destructible. 
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited, and the empty stage's Capture the Flag arena passes its own node finder. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node (a replacement measured by its gamez model) and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
-rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
+rides its own aeroplane. Under Enhanced a match's rearm base flagged only `other_target` is marked `AlsoObjective`, a remake-only second place on the Enemy cycle. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/Campaign/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
