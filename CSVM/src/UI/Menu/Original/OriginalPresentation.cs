@@ -1208,8 +1208,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             return false;
         }
 
-        bool opened = false;
-        if (_planePreview == null)
+        // The opening frame builds nothing, so the hub draws before the first build's pause.
+        bool opening = _planePreview == null;
+        if (opening)
         {
             if (HangarPreviewStage.Open(Data, _dataRoot) is not { } stage)
             {
@@ -1218,13 +1219,16 @@ public sealed class OriginalPresentation : IMenuPresentation
 
             _planePreview = stage;
             _layer.AddChild(stage);
-            _view.LivePictures[OriginalHangarScreen.LivePictureName] = stage.GetTexture();
-            opened = true;
         }
 
         // Rendered at the picture's drawn size, so it stays sharp at any window size.
         var fit = BoardFit.For(_view.GetViewportRect().Size.X, _view.GetViewportRect().Size.Y);
-        _planePreview.Size = new Vector2I(Math.Max(1, (int)(area.Width * fit.Scale)), Math.Max(1, (int)(area.Height * fit.Scale)));
+        _planePreview!.Size = new Vector2I(Math.Max(1, (int)(area.Width * fit.Scale)), Math.Max(1, (int)(area.Height * fit.Scale)));
+        if (opening)
+        {
+            return false;
+        }
+
         _planePreview.Show(pose);
         float dragX = 0f, dragY = 0f;
         if (pointer is { Pressed: true } held && _planeDrag is { } last)
@@ -1243,7 +1247,13 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _planePreview.Step(dt, dragX, dragY);
-        return opened;
+        if (_planePreview.Warming || _view.LivePictures.ContainsKey(OriginalHangarScreen.LivePictureName))
+        {
+            return false;
+        }
+
+        _view.LivePictures[OriginalHangarScreen.LivePictureName] = _planePreview.GetTexture();
+        return true;
     }
 
     private void ClosePlanePreview()
