@@ -211,6 +211,16 @@ holds no target directive, so the original's C5 Deathmatch offers the base on th
 cycle alone. CSVM reads the same table, at the spot `mp1.gw` moves `rearm_node_2` to; the
 `mode-target-table` suite pins both C5 tables.
 
+⚠ **Under Enhanced a match's rearm base answers the Enemy/Objective keys in every chapter, a
+remake-only rule.** A `rearm_node_n` site (`RearmBases.IsMatchBaseNode`) that the table flags only
+`other_target` also rides the Enemy cycle as an objective (`ObjectiveSite.AlsoObjective`), one
+entry on each cycle, so E and Ctrl+E reach it and it sorts ahead of every aircraft as `racmplx`
+does, while R still reaches it. The reason is the key a player learns: on every other Deathmatch
+and Capture the Flag map the base is on E, and C5's Deathmatch alone moved it to R. The shipped
+tables make C5/MP1's `rearm_node_1` the one such site. The rule leaves Zeppelin vs Zeppelin's
+`zep_rearm_node_n` alone, whose bases are `other_target` on every map. Faithful keeps the
+original's table, and `mode-target-table` pins both modes.
+
 **Every mode reads its own file, and only the campaign edits it.** Which table a session gets is the
 chapter and mission folder it launches with (`C1/IA1`, `C4/MP3`), so the same mode differs per map.
 The campaign reads it under a director whose script can add and remove either half. Instant Action

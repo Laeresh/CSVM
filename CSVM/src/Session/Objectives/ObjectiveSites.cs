@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session.Objectives;
@@ -452,6 +454,9 @@ public sealed class ObjectiveSites
         site.Side = side;
         site.Position = at;
         site.Objective = objective;
+        // Remake-only: every other Deathmatch and Capture the Flag table flags its base objective.
+        // C5's Deathmatch flags it other_target, so Enhanced offers it on both cycles.
+        site.AlsoObjective = !objective && GraphicsMode.Enhanced && RearmBases.IsMatchBaseNode(key);
         return site;
     }
 

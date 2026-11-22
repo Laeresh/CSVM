@@ -9,6 +9,7 @@ using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Spec;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -17,8 +18,9 @@ namespace CSVM.Testing;
 /// flags the radio tower and its zeppelin match the two rearm bases. Each reaches the pilot's
 /// cycles off the table's own keys, with no graph behind them. The world's other destructibles,
 /// crates among them, sit in the pilot's structure scan and reach no cycle. C5's two match tables
-/// flag their rearm nodes themselves, on the cycle each table picks. The last arm is the binding
-/// rule, which a campaign launch whose profile did not load also passes.</summary>
+/// flag their rearm nodes themselves, on the cycle each table picks, and Enhanced adds the
+/// Deathmatch base to the Enemy cycle. The last arm is the binding rule, which a campaign launch
+/// whose profile did not load also passes.</summary>
 internal static class ModeTargetTableSuites
 {
     private const string Chapter = "C1";
@@ -29,7 +31,8 @@ internal static class ModeTargetTableSuites
     private const string RadioTower = "ap_transmitter";
 
     // C5 has no rabaset1 building, so its tables flag the rearm nodes themselves. MP1 flags
-    // rearm_node_1 other_target, where the other chapters' MP1 flag racmplx objective (docs/org/targeting.md).
+    // rearm_node_1 other_target, where the other chapters' MP1 flag racmplx objective, and Enhanced
+    // puts it on both cycles (docs/org/targeting.md).
     private const string C5 = "C5";
     private const string C5RearmBase = "rearm_node_1";
     private const string C5MovedNode = "rearm_node_2";
@@ -59,7 +62,8 @@ internal static class ModeTargetTableSuites
         + "destructibles in the same scan, the chapter's crates among them, reaches any cycle; "
         + "C5's Deathmatch table puts its rearm base on the Non-Aircraft cycle at the spot mp1.gw "
         + "moved the second node to, and its Capture the Flag table both rearm bases on the Enemy "
-        + "cycle beside the flags; "
+        + "cycle beside the flags; all of that under Faithful, and under Enhanced the same but for "
+        + "C5's Deathmatch base riding the Enemy cycle as an objective too, so E and R both reach it; "
         + "and the binding rule itself, which a campaign launch flying without a director passes")]
     internal static void ModeTargetTable(TestContext ctx)
     {
@@ -69,13 +73,23 @@ internal static class ModeTargetTableSuites
         var messages = ctx.Data.Messages;
 
         var report = new StringBuilder();
-        Mode(ctx, messages, report, Chapter, "IA1", NoKeys, new[] { RadioTower }, Crates);
-        Mode(ctx, messages, report, Chapter, "MP3", MatchAirships, RearmBases, Crates);
-        Mode(ctx, messages, report, C5, "MP1", NoKeys, new[] { C5RearmBase }, NoKeys,
-            (world, pool) => C5BaseStandsWherePlaced(ctx, world, pool, report));
-        Mode(ctx, messages, report, C5, "MP2", C5FlagMatchObjectives, NoKeys, NoKeys);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            Mode(ctx, messages, report, Chapter, "IA1", NoKeys, new[] { RadioTower }, Crates);
+            Mode(ctx, messages, report, Chapter, "MP3", MatchAirships, RearmBases, Crates);
+            Mode(ctx, messages, report, C5, "MP1", NoKeys, new[] { C5RearmBase }, NoKeys,
+                (world, pool) => C5BaseStandsWherePlaced(ctx, world, pool, report),
+                enhancedBoth: new[] { C5RearmBase });
+            Mode(ctx, messages, report, C5, "MP2", C5FlagMatchObjectives, NoKeys, NoKeys);
+        }
+        finally
+        {
+            GraphicsMode.Set(wasEnhanced);
+        }
+
         WhoBindsTheTable(ctx, report);
-        ctx.Note($"{Chapter}/IA1, {Chapter}/MP3, {C5}/MP1 and {C5}/MP2 offer their own targets.zrd flags with no director bound");
+        ctx.Note($"{Chapter}/IA1, {Chapter}/MP3, {C5}/MP1 and {C5}/MP2 offer their own targets.zrd flags with no director bound, and Enhanced adds {C5}/MP1's base to the Enemy cycle alone");
         ctx.WriteArtifact($"test-mode-target-table-{Chapter}.txt", report.ToString());
     }
 
@@ -114,10 +128,12 @@ internal static class ModeTargetTableSuites
         ObjectiveReadouts.BindsMissionTargetTable(spec, hasDirector, stunting, hasWorld, rigs);
 
     // One mode's session: its own table, the director-free feed over the built world, and the
-    // three cycles a pilot standing in it would walk.
+    // three cycles a pilot standing in it would walk. Faithful is the original's table, and
+    // Enhanced differs only by `enhancedBoth` also riding the Enemy cycle.
     private static void Mode(TestContext ctx, Messages messages, StringBuilder report, string chapter,
         string mission, IReadOnlyList<string> objectives, IReadOnlyList<string> others,
-        IReadOnlyList<string> crates, Action<TestWorld, TargetPool>? also = null)
+        IReadOnlyList<string> crates, Action<TestWorld, TargetPool>? also = null,
+        IReadOnlyList<string>? enhancedBoth = null)
     {
         ZrdrSet missionZrdr = ctx.MissionZrdr(chapter, mission);
         ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
@@ -125,8 +141,8 @@ internal static class ModeTargetTableSuites
 
         ctx.WithWorld(chapter, collision: false, mission, world =>
         {
-            var offered = new List<AimCandidate>();
-            new ObjectiveSites(messages, targets, world.Runtime).Collect(offered);
+            // One feed for both modes, as a live switch keeps it.
+            var sites = new ObjectiveSites(messages, targets, world.Runtime);
 
             // The pilot's own third pool, collected the way FlightController collects it. Nothing
             // reads it into the cycles; it is here to show what the curated list keeps out.
@@ -136,24 +152,54 @@ internal static class ModeTargetTableSuites
             var self = new FlightController { IsHumanPiloted = false, Team = AimAssist.PlayerTeam };
             try
             {
-                var selection = new TargetSelection();
-                selection.Rebuild(scan, null, AimAssist.PlayerTeam, self, Vector3.Zero,
-                    Basis.Identity, offered);
-                var pool = selection.Pool;
-                report.AppendLine($"{chapter}/{mission}: {targets.Count} table entr(ies), "
-                    + $"{offered.Count} site(s) offered, cycles enemy={pool.Enemy.Count} "
-                    + $"ally={pool.Ally.Count} nonAircraft={pool.NonAircraft.Count}, beside "
-                    + $"{scan.Structures.Count} destructible(s) in the same scan");
+                foreach (bool enhanced in new[] { false, true })
+                {
+                    GraphicsMode.Set(enhanced);
+                    string where = $"{chapter}/{mission} under {(enhanced ? "Enhanced" : "Faithful")}";
+                    var offered = new List<AimCandidate>();
+                    sites.Collect(offered);
+                    var selection = new TargetSelection();
+                    selection.Rebuild(scan, null, AimAssist.PlayerTeam, self, Vector3.Zero,
+                        Basis.Identity, offered);
+                    var pool = selection.Pool;
+                    report.AppendLine($"{where}: {targets.Count} table entr(ies), "
+                        + $"{offered.Count} site(s) offered, cycles enemy={pool.Enemy.Count} "
+                        + $"ally={pool.Ally.Count} nonAircraft={pool.NonAircraft.Count}, beside "
+                        + $"{scan.Structures.Count} destructible(s) in the same scan");
 
-                CheckFlagged(ctx, $"{chapter}/{mission}", targets, pool, objectives, others);
-                CheckTheUnflaggedStayOff(ctx, $"{chapter}/{mission}", world, scan, pool, crates, report);
-                also?.Invoke(world, pool);
+                    var both = enhanced ? enhancedBoth ?? NoKeys : NoKeys;
+                    CheckFlagged(ctx, where, targets, pool, objectives, others, both);
+                    CheckBothKeysReach(ctx, where, selection, both);
+                    if (!enhanced)
+                    {
+                        CheckTheUnflaggedStayOff(ctx, where, world, scan, pool, crates, report);
+                        also?.Invoke(world, pool);
+                    }
+                }
             }
             finally
             {
                 self.Free();
             }
         });
+    }
+
+    // Enhanced's match rearm base answers both keys: Nearest Enemy/Objective (E) and Nearest
+    // Non-Aircraft (R) each land on it.
+    private static void CheckBothKeysReach(TestContext ctx, string where, TargetSelection selection,
+        IReadOnlyList<string> both)
+    {
+        foreach (string key in both)
+        {
+            foreach (var cls in new[] { TargetClass.Enemy, TargetClass.NonAircraft })
+            {
+                selection.Nearest(cls);
+                selection.Resolve(Vector3.Zero, Basis.Identity);
+                ctx.Check(selection.Current is { } current
+                    && string.Equals(current.Name, key, StringComparison.OrdinalIgnoreCase),
+                    $"{where}: Nearest {cls} lands on '{key}', read '{selection.Current?.Name}'");
+            }
+        }
     }
 
     // mp1.gw moves rearm_node_2 onto rearm_node_1. A marker within the rearm radius of the moved node
@@ -175,22 +221,31 @@ internal static class ModeTargetTableSuites
             $"…and the Non-Aircraft cycle's base stands within the rearm radius of it, {apart:0.00} m, where mp1.gw placed it");
     }
 
-    // Each flagged key on the cycle its own flag picks, and on no other.
+    // Each flagged key on the cycle its own flag picks, and on no other. A key in `both` also
+    // rides the Enemy cycle as an objective.
     private static void CheckFlagged(TestContext ctx, string where, MissionTargets targets,
-        TargetPool pool, IReadOnlyList<string> objectives, IReadOnlyList<string> others)
+        TargetPool pool, IReadOnlyList<string> objectives, IReadOnlyList<string> others,
+        IReadOnlyList<string> both)
     {
         foreach (string key in others)
         {
+            bool alsoEnemy = both.Contains(key, StringComparer.OrdinalIgnoreCase);
             ctx.Check(targets.For(key).OtherTarget && !targets.For(key).Objective,
                 $"{where}'s own table flags '{key}' other_target");
             ctx.Same(1, Named(pool.NonAircraft, key),
                 $"…and the director-free feed puts it on the Non-Aircraft cycle, once");
-            ctx.Same(0, Named(pool.Enemy, key) + Named(pool.Ally, key),
-                $"…and on neither other cycle");
+            ctx.Same(alsoEnemy ? 1 : 0, Named(pool.Enemy, key),
+                $"…and on the Enemy cycle {(alsoEnemy ? "too, once" : "not at all")}");
+            ctx.Same(0, Named(pool.Ally, key), $"…nor on the Ally cycle");
             ctx.Check(Find(pool.NonAircraft, key) is
             { Objective: false, Kind: AimTargetKind.Structure } site
                 && site.DisplayName.Length > 0,
                 $"…labelled off the table's own description rather than the bare node name");
+            if (alsoEnemy)
+            {
+                ctx.Check(Find(pool.Enemy, key) is { Objective: true, Kind: AimTargetKind.Structure },
+                    $"…where it is an objective, sorting ahead of every aircraft as racmplx does");
+            }
         }
 
         foreach (string key in objectives)
@@ -207,8 +262,8 @@ internal static class ModeTargetTableSuites
         // table's own flagged half and the counts are exact.
         ctx.Same(others.Count, pool.NonAircraft.Count,
             $"{where}'s Non-Aircraft cycle is its table's other_target entries and nothing else");
-        ctx.Same(objectives.Count, pool.Enemy.Count,
-            $"…and its Enemy cycle the table's objective entries and nothing else");
+        ctx.Same(objectives.Count + both.Count, pool.Enemy.Count,
+            $"…and its Enemy cycle the table's objective entries and nothing else, plus [{string.Join(", ", both)}]");
     }
 
     // The whole point of a curated list: the world's other destructibles are in the pilot's scan

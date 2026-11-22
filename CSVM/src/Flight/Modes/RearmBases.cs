@@ -36,6 +36,8 @@ public sealed class RearmBases
     /// <c>0x628f10</c>'s initialised 625.0, which the shipped file leaves alone.</summary>
     public const float InitialRadiusSquared = 625f;
 
+    private const string MatchNodePrefix = "rearm_node_";
+
     private readonly Dictionary<int, bool> _inside = new();
 
     /// <summary>A rule over bases of squared radius <paramref name="radiusSquared"/>.</summary>
@@ -61,7 +63,12 @@ public sealed class RearmBases
     /// <c>zep_rearm_node_%d</c> on a Zeppelin vs Zeppelin map, else <c>rearm_node_%d</c>
     /// (<c>0x628f70</c>, <c>0x628f84</c>).</summary>
     public static string NodeName(int index, bool zeppelins) =>
-        (zeppelins ? "zep_rearm_node_" : "rearm_node_") + index.ToString(CultureInfo.InvariantCulture);
+        (zeppelins ? "zep_rearm_node_" : MatchNodePrefix) + index.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Whether a target key names a Deathmatch or Capture the Flag base, a
+    /// <see cref="NodeName"/> off a map with no zeppelins.</summary>
+    public static bool IsMatchBaseNode(string key) =>
+        key.StartsWith(MatchNodePrefix, StringComparison.OrdinalIgnoreCase);
 
     /// <summary><c>rearm_rad</c> squared, as <c>FUN_004735b0</c> stores it (<c>0x473fa1</c>), or
     /// <see cref="InitialRadiusSquared"/> for a file without the key.</summary>

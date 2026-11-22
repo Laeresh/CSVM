@@ -80,7 +80,7 @@ The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`
 `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own contract and why a spawn appears and a
 death disappears with no extra plumbing. It walks the aim assist's aeroplanes and live ordnance only; the mission's
 sites arrive through `objectives` under their record's flag, `objective` on the Enemy cycle and `other_target` on the
-Non-Aircraft, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
+Non-Aircraft, a site marked `AlsoObjective` on both, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
 while `selectedWeapon` carries `LOCK_ON`; a gun emplacement is on no cycle. The gamez ancestor chain `CollectOwners`
 hands the `rating_biases` match, and a pool's own anchor name `NameOf` returns, are cached per destructible instance:
 each name read allocates a finalizable `StringName`. A human aircraft carrying the race flag is on no cycle; `AircraftDisplayName` is the marker's name line. A stunt zone with no label pair, a course's sequence entry, gets a blank line 1 and its `Gate n` name. `TryTargetGeometry`, `TryRenderPosition` and `TargetLabel` read any target source's sim geometry, drawn position and log name for the AI's weapons, its acquisition and the HUD markers. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
@@ -788,7 +788,7 @@ by; `Node` is the last segment, what `targets.zrd` is looked up by. The script t
 ## src/Flight/Weapons/ObjectiveSite.cs
 One live objective site as the targeting path sees it: the flagged `ObjectiveTarget`, its resolved
 name, the two label lines its marker prints, its position this frame, and which of the record's two
-flags it stands on. ONE instance per site for as long as the mission flags it, because a selection
+flags it stands on, plus `AlsoObjective`, Enhanced's second cycle for a match's rearm base. ONE instance per site for as long as the mission flags it, because a selection
 is held by source identity. `TargetPool` labels it; `Session/Objectives/ObjectiveSites.cs` builds and refreshes
 the set. A team mode's `SiteSide` labels it by side instead, and `CategoryFor` answers per reading
 pane through `AimAssist.Friendly`. Decode: [../org/targeting.md](../org/targeting.md).
@@ -960,7 +960,7 @@ ids a hull's rounds carry. `VersusMatch.EndOnHullLoss` ends the match on the hul
 ## src/Flight/Modes/RearmBases.cs
 The multiplayer rearm's rules, engine-free: `RuleFor` serves any base in either Deathmatch and only
 the pilot's own team's in Capture the Flag and Zeppelin vs Zeppelin, `NodeName` names base `n`'s
-node, and `ReadRadiusSquared` takes `player.zrd`'s `rearm_rad` squared or the executable's 625.
+node, `IsMatchBaseNode` tells a Deathmatch or Capture the Flag base's key, and `ReadRadiusSquared` takes `player.zrd`'s `rearm_rad` squared or the executable's 625.
 `Enters` is one seat's step, true on the step it comes within the radius of a base serving it and
 latched until it is outside all of them; `NearestServing` is the base a bot's rearm run flies to. `Session/World/RearmRuntime.cs` runs it in a match and
 `FlightController.Rearm` is the restore. Read `RearmBasesTests.cs` and
