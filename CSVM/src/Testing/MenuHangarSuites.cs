@@ -251,8 +251,17 @@ internal static class MenuHangarSuites
             Press(host, seat, Accept);
             Press(host, seat, Down);
             int focused = shell.Hangar.Preview?.Airframe ?? -1;
-            ctx.Check(focused >= 0 && focused != hangar.Scratch.Airframe && stage.Shown?.Airframe == focused && stage.Model != built,
-                $"the open airframe list's focused row {focused} is what the stage rebuilds ({stage.Shown?.Airframe})");
+            ctx.Check(stage.Model == built,
+                $"a row the cursor passes over builds nothing at once ({stage.Shown?.Airframe})");
+            float rested = 0f;
+            for (; stage.Model == built && rested < 2f * HangarPreviewStage.SettleSeconds; rested += 1f / 60f)
+            {
+                host.Tick(1f / 60f);
+            }
+
+            ctx.Check(focused >= 0 && focused != hangar.Scratch.Airframe && stage.Shown?.Airframe == focused && stage.Model != built
+                && rested >= HangarPreviewStage.SettleSeconds - (1f / 60f),
+                $"the open airframe list's focused row {focused} is what the stage rebuilds once the cursor rests on it ({stage.Shown?.Airframe} after {rested:0.00} s)");
             ctx.Check(Mech3.ShaderTwins.Made == made,
                 $"and the warmed rebuild makes no shader ({Mech3.ShaderTwins.Made - made} made)");
             Press(host, seat, Back);
