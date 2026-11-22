@@ -97,11 +97,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, the Avenger model (Blender, previewed as a Brigand pack)
 
 1. ☑ Export the Brigand and Warhawk as templates and read their node trees
-2. ☐ Clean and orient the model: stand, gear, modelled rockets, frame
-3. ☐ Cut and hinge the control surfaces, split the props, apply stock names
-4. ☐ Model the canopy (frame + glass) and the pilot `head`
-5. ☐ Place firepoints, pylons and `cockpit_camera`
-6. ☐ UV unwrap and bake the procedural 2048 px texture and tint mask
+2. ☑ Clean and orient the model: stand, gear, modelled rockets, frame
+3. ☑ Cut and hinge the control surfaces, split the props, apply stock names
+4. ☑ Model the canopy (frame + glass) and the pilot `head`
+5. ☑ Place firepoints, pylons and `cockpit_camera`
+6. ☑ UV unwrap and bake the procedural 2048 px texture and tint mask
 7. ☐ Preview in game as a local HD pack over the Brigand
 
 ### Wave B, mod loading and airframe identity
@@ -109,23 +109,23 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Mod discovery and the `plane.json` format
 12. ☑ One airframe registry in place of the fixed eleven-plane lists
 13. ☑ Mod stats: synthetic def from `kind_of` plus literal overrides
-14. ☐ Build a mod plane from its GLB
+14. ☑ Build a mod plane from its GLB
 
 ### Wave C, the plane's surfaces
 
 21. ☐ Cockpit: own, named stock, or parent's
-22. ☐ Paint: base texture, tint mask and decals
-23. ☐ Damage: optional nodes and the auto-wreck
-24. ☐ Engine sound: parent's or a named stock plane's
-25. ☐ Hangar builder for mod airframes
-26. ☐ Menu art: mod image or cached auto-render
+22. ☑ Paint: base texture, tint mask and decals
+23. ☑ Damage: optional nodes and the auto-wreck
+24. ☑ Engine sound: parent's or a named stock plane's
+25. ☑ Hangar builder for mod airframes
+26. ☑ Menu art: mod image or cached auto-render
 
 ### Wave D, saves, campaign, bots, multiplayer
 
 31. ☐ Saves keep the mod id; a missing mod flies as its parent
-32. ☐ Campaign unlock field
-33. ☐ Bot seats may fly mod planes
-34. ☐ Multiplayer: string airframe id and a matching mod set
+32. ☑ Campaign unlock field
+33. ☑ Bot seats may fly mod planes
+34. ☑ Multiplayer: string airframe id and a matching mod set
 
 ### Wave E, the Avenger as the first mod
 
@@ -222,7 +222,13 @@ Brigand's stock loadout in `stock_loadouts.json`.
 **⚠ Traps.** The exports are game data: they stay in `.scratch/` and never enter a commit. The
 Godot guard blocks a direct `Godot_v4*.exe` launch; go through `RunProbe.ps1`.
 
-## A2 ☐ Clean and orient the model: stand, gear, modelled rockets, frame
+## A2 ☑ Clean and orient the model: stand, gear, modelled rockets, frame
+
+**Landed.** The OBJ has no display stand and no landing gear: the `Base_*` groups are prop bases and the bodies of the two finned underwing rockets, and the `Gear_*` groups are prop hubs (the "struts" under the nacelles are the downward prop blades). The rockets and their fins are deleted, the pylon rails kept. The groups are joined into named parts, centred on the fuselage axis at the wing (Blender (1.69, -4.0, 3.0) in OBJ space to the origin) and turned nose +Y in Blender, which the glTF exporter writes as nose -Z. Span 13.5 m, length 8.8 m; the OBJ's inch label is wrong, its numbers read as metres.
+
+**Verified.** Renders went to the user after each stage; the user's corrections (the nose grille, a rail on every pylon, the 3-view drawing) are applied. The look at the controls is A7's check.
+
+**Original approach (kept for reference).**
 
 **Goal.** One clean Avenger in CSVM's frame, without display stand, landing gear or modelled
 rockets, with pylon rails and nacelle pods kept.
@@ -245,7 +251,13 @@ transforms. Show the user a four-view render.
 **⚠ Traps.** The `Base_*` groups may be nacelle bases rather than the display stand; identify by
 geometry before deleting. Do not trust the OBJ's units comment.
 
-## A3 ☐ Cut and hinge the control surfaces, split the props, apply stock names
+## A3 ☑ Cut and hinge the control surfaces, split the props, apply stock names
+
+**Landed.** The surfaces are cut with bisect planes and closed faces from the untouched OBJ wing, stab and fin, sized from the user's 3-view drawing (`tmp/avenger/Grumman_E1c_Avenger.png`, about 102 px/m): ailerons from 3.5 to 5.13 m out at 28 % chord, elevators from 0.46 m to the tip at 30 % chord, one rudder at about 45 % chord reaching down between the elevators. Each sits in a hinge group with the stock names (`lailer1 > l_aileron1`, `railer1 > r_aileron1`, `lft_elev > l_elevator1`, `rt_elev > r_elevator1`, `lrudder1 > l_rudder1`); the group carries the hinge position and tilt (local X along the aileron and elevator hinges, local Y in glTF along the rudder hinge) and every surface node has an identity transform, as on the stock planes. The blades are `staticprop1` (port) and `staticprop2` (starboard) with pivots on the spinner axes; the inner flaps the drawing shows are not modelled, because CSVM animates no flaps.
+
+**Verified.** Renders went to the user after each stage; the user's corrections (the nose grille, a rail on every pylon, the 3-view drawing) are applied. The look at the controls is A7's check.
+
+**Original approach (kept for reference).**
 
 **Goal.** Ailerons, elevators and rudder are separate meshes with their origins on the hinge line,
 the two props are separate, and every part carries the stock name `ControlSurfaces` matches.
@@ -267,7 +279,13 @@ Split each spinner and blade set into `prop1`, `prop2`. Render with surfaces def
 **⚠ Traps.** Prop rotation direction for the two engines is not decided; settle it in A7 by
 looking. A single rudder needs the name form the regex accepts (`l_rudder1` style).
 
-## A4 ☐ Model the canopy (frame + glass) and the pilot `head`
+## A4 ☑ Model the canopy (frame + glass) and the pilot `head`
+
+**Landed.** The canopy is the hump's front 1.2 m (the drawing's glazed section): glass `canopy_glass` (glTF `BLEND`), a frame `canopy_frame` of five hoops, two sill rails and a top rail, and a solid painted `canopy_fairing` behind. The pilot is new low-poly geometry in the stock chain `pilot_pos > pilot > body > head` (torso, neck, head, leather helmet, goggles), seated under the glass. Six exhaust stacks per side (`exhausts`) follow the drawing.
+
+**Verified.** Renders went to the user after each stage; the user's corrections (the nose grille, a rail on every pylon, the 3-view drawing) are applied. The look at the controls is A7's check.
+
+**Original approach (kept for reference).**
 
 **Goal.** A static canopy with a painted frame and see-through glass panes, and a helmeted pilot
 head and shoulders named `head` visible under it.
@@ -288,7 +306,13 @@ cockpit position.
 **⚠ Traps.** Blended glass can sort wrongly against clouds and smoke; judge it in A7, not in
 Blender.
 
-## A5 ☐ Place firepoints, pylons and `cockpit_camera`
+## A5 ☑ Place firepoints, pylons and `cockpit_camera`
+
+**Landed.** Firepoints on the barrel muzzles in Brigand slot order, odd port: fp1/2 lower nose, fp3/4 upper nose, fp5/6 inner wing, fp7/8 outer wing (W1, the Brigand's heavy pair). Pylons 1-8 at 5.6, 5.13, 4.6 and 4.05 m out, odd port, outboard to inboard, each under a copy of the model's pylon rail. `cockpit_camera` at the pilot's eyes, `exhaust1/2` on the rearmost stacks, `ground_level` 1.2 m below the origin, `target` at the origin. The positions in the plane frame are A7's rig.json.
+
+**Verified.** Renders went to the user after each stage; the user's corrections (the nose grille, a rail on every pylon, the 3-view drawing) are applied. The look at the controls is A7's check.
+
+**Original approach (kept for reference).**
 
 **Goal.** The Brigand's count of `firepointN` and `pylonN` empties sit on the Avenger's visible
 barrels and rails, and `cockpit_camera` sits at the pilot's eyes.
@@ -316,7 +340,13 @@ fp1,2, so with `"turrets": []` that slot needs a decision in B13 before fp1,2 ar
 forward gun. Pylons are odd to port and even to starboard, numbered outboard to inboard, and a
 stock 4-rocket fit lands on pylons 1, 5, 2, 6, so those four must sit on the visible rails.
 
-## A6 ☐ UV unwrap and bake the procedural 2048 px texture and tint mask
+## A6 ☑ UV unwrap and bake the procedural 2048 px texture and tint mask
+
+**Landed.** One smart-project UV atlas over every painted part, one procedural material baked at 2048 px into three maps in `tmp/avenger/tex/`: `avenger_albedo.png` (deep blue; yellow cheatline, nacelle rings, wing, stab and fin tips; red-orange spinners on the nacelle nose cones; gunmetal guns, rails, blades and stacks; leather pilot; a black radiator grille with horizontal bars on the nose face; faint panel seams and grime), `avenger_mask.png` (R primary, G secondary including the canopy frame, B trim spinners; the grille is never tinted) and `avenger_detail.png` (grey detail). The blur discs get `avenger_disc.png`, a streaked translucent disc. The wing emblem and tail number art are left out.
+
+**Verified.** Renders went to the user after each stage; the user's corrections (the nose grille, a rail on every pylon, the 3-view drawing) are applied. The look at the controls is A7's check.
+
+**Original approach (kept for reference).**
 
 **Goal.** A clean UV unwrap, a 2048 px base texture (panel seams, rivets, wear, metal parts,
 glass) and a primary/secondary/trim tint mask in the same UVs.
@@ -338,6 +368,42 @@ rivet rows, grime); bake base colour and the mask to PNG; decal placeholder surf
 tint mask has no consumer until C22; in A7 the texture draws as fixed paint.
 
 ## A7 ☐ Preview in game as a local HD pack over the Brigand
+
+**Landed.** The Avenger draws in place of the Brigand in the viewer and in flight, from a local pack
+at `Z:\CSVM\tmp\avenger\pack\avenger\planes\player_brigand\` loaded with
+`--hd-models=Z:\CSVM\tmp\avenger\pack`, with no Brigand part left visible. The pack holds three
+files, written by `Z:\CSVM\tmp\avenger\make_pack.ps1` from `tmp\avenger\export\avenger.glb` (rerun
+it after each export):
+
+- `player_brigand.glb`, the root file: the export with renames and re-parents only, no transform
+  or vertex changed. A pack replaces only a node the original draws a mesh for, and the Brigand's
+  `tail`, `leftwing` and `rightwing` are meshless groups whose meshes are `g836`, `g837` and
+  `g838`, so `tail_body`, `Wing_L` and `Wing_R` become those names and the zone's other meshes move
+  under them. A replacement draws in the Brigand node's own frame (`model-packs.md`, What a file
+  must hold), and the Avenger's surfaces, pilot and props sit in frames of their own, so those
+  nodes are renamed `av_*` and merge, static, into their zone's mesh (`pilot_pos` moves under
+  `nose`; the blur discs stay under the meshless `dontmove` and draw nowhere).
+- `geometry.glb`, empty nodes keyed by the `geometry` ancestor, which hide the Brigand parts the
+  Avenger has no stand-in for: all six surfaces, `body`, `head`, `pdp1`..`pdp8`, `pdp2_h`,
+  `pdp3_h`, the turret's `g12436` and `g935`, `staticprop1`, `prop1`, `prop1b`, `nitroprop1`,
+  `nosecone`.
+- `rig.json`, the GLB's markers: `cockpit_camera`, `exhaust1/2`, `ground_level`, `target`,
+  `firepoint1`..`8` and `pylon1`..`8`, each binding pair one port and one starboard, odd pylons
+  port. No `props` or `surfaces` section: the Brigand has no node for a second prop, and its
+  surface nodes are hidden.
+
+What the preview cannot show: the control surfaces do not deflect and the props neither spin nor
+show blur discs. A pack spins a prop about its own node's origin and the Brigand has one, on the
+nose, so the twin props wait for B14; a deflecting surface would need its geometry expressed in the
+Brigand's surface frame plus a `surfaces` hinge override, a transform rebase that is not a rename.
+The Brigand's colliders, hit body, ground shadow, wreck pieces, wingtip flares (x ±5.75 m, inside
+the Avenger's wing) and turret (still fires, from the Brigand's tail, unseen) stay in force, and
+cockpit view draws the Brigand's `cockpit1` at the moved eye. The GLB needs no change for B14,
+which builds from its own frames; every change above is preview-only and lives in the script.
+
+**Verified.** <pending orchestrator run: user at the controls>
+
+**Original approach (kept for reference).**
 
 **Goal.** The Avenger draws in game in place of the Brigand, surfaces deflect, props spin, and the
 user judges look, glass and markers at the controls.
