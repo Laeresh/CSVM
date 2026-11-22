@@ -86,7 +86,7 @@ internal static class ShaderTwins
     public static int TextRewrites { get; private set; }
 
     /// <summary>Gets whether every key has its other mode's shader.</summary>
-    public static bool OtherModeWarm => All.All(t => t.Has(!GraphicsMode.Enhanced));
+    public static bool OtherModeWarm => All.All(t => t.WarmFor(!GraphicsMode.Enhanced));
 
     /// <summary>A key's twins, for a cache whose text reads <see cref="GraphicsMode.Enhanced"/>.
     /// <paramref name="label"/> names the key for an instrument.</summary>
@@ -183,10 +183,13 @@ internal static class ShaderTwins
         int warmed = 0;
         foreach (var twins in All)
         {
-            if (twins.Has(other))
+            if (twins.WarmFor(other))
                 continue;
-            // Asking for the RID has Godot create the shader and start its compile now.
+            // Asking for the RID has Godot create the shader and start its compile now. A key worn
+            // as a fade copy (a splash) needs the other mode's fade copy too.
             twins.For(other).GetRid();
+            if (twins.HasFade(!other))
+                twins.FadeFor(other).GetRid();
             warmed++;
             if (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds >= budgetMs)
                 break;
@@ -538,6 +541,13 @@ internal sealed class ModeShader
 
     /// <summary>Whether the mode's shader is made yet.</summary>
     public bool Has(bool enhanced) => Peek(enhanced) != null;
+
+    /// <summary>Whether the mode's fade copy is made yet.</summary>
+    public bool HasFade(bool enhanced) => (enhanced ? _fadeEnhanced : _fadeOriginal) != null;
+
+    /// <summary>Whether a switch to <paramref name="enhanced"/> would make nothing: its shader is
+    /// made, and so is its fade copy wherever the other mode's fade copy is.</summary>
+    public bool WarmFor(bool enhanced) => Has(enhanced) && (HasFade(enhanced) || !HasFade(!enhanced));
 
     /// <summary>The mode's shader, made on first use.</summary>
     public Shader For(bool enhanced) => Peek(enhanced) ?? Set(enhanced, ShaderTwins.Pooled(TextFor(enhanced), Family));
