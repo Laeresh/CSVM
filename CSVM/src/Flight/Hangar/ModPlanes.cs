@@ -107,7 +107,8 @@ public sealed class ModPlane
 
     /// <summary>The plane's stats: the parent's, as <see cref="PlaneStats.Load"/> or, for a bot,
     /// <see cref="PlaneStats.LoadForAi"/> with the parent's AI def loads them, then the overrides and
-    /// <see cref="ClearsTurrets"/>. An override name no field takes is logged and ignored.
+    /// <see cref="ClearsTurrets"/>. Engine sounds come from <see cref="Sound"/> when set.
+    /// An override name no field takes is logged and ignored.
     /// ⚠ <c>DefName</c> and <c>NodeName</c> stay the parent's: the stock fit and the AI def key on them.</summary>
     public PlaneStats Stats(ZrdrSet zrdr, bool forAi = false, string? aiDefName = null)
     {
@@ -123,6 +124,11 @@ public sealed class ModPlane
         if (ClearsTurrets)
         {
             stats.TurretMounts.Clear();
+        }
+
+        if (Sound != null)
+        {
+            stats.TakeEngineSounds(PlaneStats.Load(zrdr, Sound));
         }
 
         return stats;

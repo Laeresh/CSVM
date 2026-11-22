@@ -62,14 +62,14 @@ public class ModAirframesTests
     {
         var planes = Donor();
         var donorInterior = planes.ChildrenOf(planes.FindByName("player_brigand")!).Single();
-        ModAirframes.Graft(planes, "copied", "player_brigand", new List<Part> { Node("geometry") }, new[] { 0 });
+        Assert.False(ModAirframes.Graft(planes, "copied", "player_brigand", new List<Part> { Node("geometry") }, new[] { 0 }));
         var copied = planes.ChildrenOf(planes.FindByName("copied")!).Single(n => n.Name == "cockpit1");
         Assert.NotSame(donorInterior, copied);
         Assert.Equal(planes.ChildrenOf(donorInterior).Single().MeshIndex, planes.ChildrenOf(copied).Single().MeshIndex);
         // The stock interior keeps its own parent.
         Assert.Same(planes.FindByName("player_brigand"), planes.ParentOf(donorInterior));
 
-        ModAirframes.Graft(planes, "own", "player_brigand", new List<Part> { Node("cockpit1") }, new[] { 0 });
+        Assert.True(ModAirframes.Graft(planes, "own", "player_brigand", new List<Part> { Node("cockpit1") }, new[] { 0 }));
         Assert.Single(planes.ChildrenOf(planes.FindByName("own")!));
     }
 

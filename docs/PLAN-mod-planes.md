@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the plane's surfaces
 
-21. ☐ Cockpit: own, named stock, or parent's
+21. ☑ Cockpit: own, named stock, or parent's
 22. ☑ Paint: base texture, tint mask and decals
 23. ☐ Damage: optional nodes and the auto-wreck
 24. ☑ Engine sound: parent's or a named stock plane's
@@ -645,7 +645,43 @@ mesh. Pack meshes import through `Mech3/HdModelMeshes.cs`.
 
 # Wave C, the plane's surfaces
 
-## C21 ☐ Cockpit: own, named stock, or parent's
+## C21 ☑ Cockpit: own, named stock, or parent's
+
+**Landed.** B14's graft already chose the interior (the file's own `cockpit1`, else a copy of
+`plane.json`'s `cockpit`, else the parent's), and `PlaneBuilder.MountCockpitInterior` mounts it at
+the mod's `cockpit_camera` through `FlatMount`/`StereoMount` as on a stock plane. The own branch
+needed no change: a stock `cockpit1.glb` export put under the root draws from the file by the root-file
+rule, its gauges bind by the stock node names and its belts and zones by the texture names in
+`InteriorMaterials`, and the stereo build cuts its head plate by shape (`CockpitPlate.CutReplaced`).
+`cockpit1`'s own transform is dropped by the mount, so its subtree is read in interior units with the
+eye at its origin.
+
+- **Fixed: a copied interior drew from the mod's file.** The interior builder resolved the copy's
+  nodes through the mod's file like the airframe's, and a scoped lookup takes the one file node of a
+  name wherever it sits. Every interior shares generic names (`gauges`, `horiz`, `pfhorizon`, `speed`,
+  `comp`, `mgarrow`), so a file holding any interior under another name (a modder's leftover reference)
+  replaced 59 of the copied Warhawk interior's 69 meshes with the Fury's. `ModAirframes.Graft` now
+  returns whether the file holds its own `cockpit1`, `ModAirframes.HasOwnInterior(node)` exposes it,
+  and the interior builder takes no `HdAirframe` for a copied interior, so it draws the archive's meshes
+  alone; a user's HD pack stays off it, as B14 already kept it.
+- **Headset.** The stereo interior of each branch builds: a copy omits its head plate polygons
+  (`CockpitPlate.Find` on the archive), the own file's plate is cut by shape (25 Fury triangles), and a
+  model pack's `{ "cockpit": { "from": "body" } }` rig under `planes/<mod id>/` builds the body cockpit
+  panel and its stereo body twins on an own-interior and a copied-interior mod.
+- Format: `docs/formats/mod-planes.md`, `plane.glb` Cockpit row and Evidence. Coverage: the
+  `mod-plane-cockpit` suite (Brigand mods over `ctx.PlanesCopy()`: the Fury's interior exported into
+  the file as `cockpit1` with every state kept and the Warhawk named, the Warhawk named over a file
+  holding the Fury's interior as `fury_reference`, and no name; each checks the mount at the mod's
+  `cockpit_camera`, which meshes come from the file, the visible triangles and the gauge bind against
+  the donor on its stock plane, and the stereo plate; then the body cockpit rig), and
+  `ModAirframesTests.TheDonorCockpitIsCopiedOnlyWhenTheFileHasNone` for `Graft`'s answer. With the fix
+  reverted the suite fails on the named branch (`from_file=59 drawn=69`, 1098 triangles against the
+  Warhawk's 1060). Probe: the Avenger mod in C1 cockpit view draws the Warhawk interior with live
+  gauges, `Z:\CSVM\.scratchKeep\mod-planes\c21\cockpit.png`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A mod plane's cockpit view uses its own `cockpit1`, else the stock plane plane.json
 names, else the parent's, placed at the mod's `cockpit_camera`.
@@ -741,7 +777,33 @@ exploration agent. `PlaneCollider` already partitions the airframe into regions
 
 **⚠ Traps.** <TODO>
 
-## C24 ☐ Engine sound: parent's or a named stock plane's
+## C24 ☑ Engine sound: parent's or a named stock plane's
+
+**Landed.** The engine sound is chosen per airframe only by the def chain's engine-slot keys,
+`engine_sound`, `cockpit_engine_sound`, `damaged_engine_sound` (with its pitch range) and
+`prop_sound` (the whine, unauthored install-wide), which `PlaneStats` reads down the player chain on
+the flown and the AI load alike. engines.json carries engine power only. The volume and pitch curves
+are player.json's and every airframe's, the Enhanced mode's `EnhancedSoundTuning` is one set of
+curve amounts for every airframe, and a sound pack replaces a sound by its WAV name, so none of them
+keys on the airframe and each follows the defs. `ModPlane.Stats` therefore ends with
+`stats.TakeEngineSounds(PlaneStats.Load(zrdr, Sound))` when `sound` is set, a new `PlaneStats` method
+copying those seven fields (`DamagedTimer`, the def's shared re-arm timer, stays the parent's). Every
+non-test stats load of a mod goes through `ModPlane.Stats` (`GameSession.StatsFor`/`AiStatsFor`,
+`InspectionLabs`), so `FlightAudio`, `AiEngineAudio` and the sound lab hear it. No new audio file or
+loader.
+
+- Coverage: `ModPlaneStatsTests.SoundTakesTheNamedPlanesEngineSoundsAndAbsentKeepsTheParents` (the
+  synthetic tree's Kestrel mod with `"sound": "player_warhawk"` carries the Warhawk's engine-slot defs
+  on the flown and the bot load, keeps the parent's `fd_speed` and def name, and without `sound` the
+  Kestrel's loop).
+- Probe, the local Avenger in C1: without `sound`,
+  `[flight] audio: engine=snd_brigandengine damaged=snd_damagedengine whine=none (no def names prop_sound) rattle=snd_planeshake`;
+  with `"sound": "player_warhawk"` added for the run and removed after,
+  `[flight] audio: engine=snd_warhawkengine damaged=snd_damagedengine whine=none (no def names prop_sound) rattle=snd_planeshake`.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A mod plane sounds like its parent, or like the stock plane plane.json names.
 

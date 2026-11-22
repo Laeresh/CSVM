@@ -5,6 +5,7 @@ using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Hangar;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Tooling;
@@ -24,6 +25,11 @@ internal static class ModPlaneSuites
     private const string PaintId = "suite_mod_paint";
     private const string TintMaterial = "suite_tint";
     private const int PaintSize = 8;
+    private const string OwnDonor = "player_fury";
+    private const string NamedDonor = "player_warhawk";
+    private const string OwnMod = "suite_mod_own_cockpit";
+    private const string NamedMod = "suite_mod_named_cockpit";
+    private const string ParentMod = "suite_mod_parent_cockpit";
 
     // Metres: the file keeps float32 positions, so only the glTF round trip separates the two builds.
     private const float Tolerance = 1e-3f;
@@ -87,6 +93,116 @@ internal static class ModPlaneSuites
         finally
         {
             stock.Free();
+        }
+    }
+
+    [Suite("mod-plane-cockpit",
+        "a plane mod's cockpit view takes its own cockpit1, else plane.json's cockpit, else its parent's: three Brigand " +
+        "mods, one whose plane.glb carries the Fury's interior as cockpit1 (and names the Warhawk), one naming the " +
+        "Warhawk whose file keeps the Fury's interior under another name, one naming none, each mount at the mod's " +
+        "cockpit_camera the interior of the Fury from the file, the Warhawk and the Brigand from the archive, drawing as " +
+        "many triangles and binding as many gauges as that interior on its stock plane. Under the stereo build each " +
+        "drops or cuts that interior's head plate, and a body cockpit rig builds its panel")]
+    internal static void ModPlaneCockpit(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        foreach (string plane in new[] { Parent, OwnDonor, NamedDonor })
+        {
+            if (planes.FindByName(plane) == null)
+            {
+                throw new SuiteSkippedException($"{plane} is not in the aircraft archive");
+            }
+        }
+
+        using var textures = new TextureArchive(texturesPath);
+        string root = Path.Combine(ctx.ScratchDir, "mod-plane-cockpit");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        var stock = new Dictionary<string, (int Triangles, string Gauges, int Plate)>();
+        foreach (string plane in new[] { Parent, NamedDonor })
+        {
+            var model = Build(planes, textures, plane, out var builder);
+            stock[plane] = (Triangles(builder.CockpitInterior), GaugeLine(builder), PlatePolygons(planes, plane).Count);
+            model.Free();
+        }
+
+        var brigand = Build(planes, textures, Parent, out var brigandBuilder);
+        var fury = Build(planes, textures, OwnDonor, out var furyBuilder);
+        try
+        {
+            stock[OwnDonor] = (Triangles(furyBuilder.CockpitInterior), GaugeLine(furyBuilder), PlatePolygons(planes, OwnDonor).Sum(p => p.VertexIndices.Count - 2));
+            string named = WriteCockpitMod(root, NamedMod, NamedDonor);
+            string parent = WriteCockpitMod(root, ParentMod, null);
+            string own = WriteCockpitMod(root, OwnMod, NamedDonor);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(brigand, Path.Combine(parent, ModPlanes.ModelFile)), $"the {Parent} export write result");
+
+            // The Fury's interior in interior units, every state kept, as cockpit1.glb exports it. Without
+            // the name meta the export keeps it in the airframe file. As cockpit1 it is the file's own.
+            // Under another name it is a leftover sharing generic names (gauges, horiz) with the Warhawk's.
+            brigandBuilder.CockpitInterior!.Free();
+            var interior = furyBuilder.CockpitInterior!;
+            interior.GetParent().RemoveChild(interior);
+            interior.RemoveMeta(AnimRuntime.NameMeta);
+            interior.Transform = Transform3D.Identity;
+            interior.Visible = true;
+            interior.Name = "fury_reference";
+            brigand.AddChild(interior);
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(brigand, Path.Combine(named, ModPlanes.ModelFile), allStates: true), $"the leftover interior export write result");
+            interior.Name = "cockpit1";
+            ctx.Same((long)Error.Ok, (long)GltfExporter.Export(brigand, Path.Combine(own, ModPlanes.ModelFile), allStates: true), $"the own cockpit1 export write result");
+        }
+        finally
+        {
+            brigand.Free();
+            fury.Free();
+        }
+
+        var mods = ModPlanes.Open(root);
+        XrCockpit.DeclareEyeGlobals();
+        foreach (var (id, donor, fromFile) in new[] { (OwnMod, OwnDonor, true), (NamedMod, NamedDonor, false), (ParentMod, Parent, false) })
+        {
+            var mod = mods.Find(id);
+            ctx.Check(mod != null, $"the mod {id} loads");
+            if (mod == null)
+            {
+                continue;
+            }
+
+            ModAirframes.Add(planes, mod.Id, mod.Cockpit ?? mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+            CheckCockpit(ctx, planes, textures, id, donor, fromFile, stock[donor], brigandBuilder.CockpitCameraOffset);
+        }
+
+        // A model pack's body cockpit rig over each mod, under the stereo build: the stereo body twins.
+        string packRoot = Path.Combine(root, "pack");
+        foreach (string id in new[] { OwnMod, ParentMod })
+        {
+            Directory.CreateDirectory(Path.Combine(packRoot, "HDModels", "body", "planes", id));
+            File.WriteAllText(Path.Combine(packRoot, "HDModels", "body", "planes", id, "rig.json"), """{ "cockpit": { "from": "body" } }""");
+        }
+
+        using var pack = HdModels.Open(packRoot, "HDModels");
+        var saved = HdModels.Current;
+        HdModels.Current = pack;
+        try
+        {
+            foreach (string id in new[] { OwnMod, ParentMod })
+            {
+                var builder = new PlaneBuilder(planes, textures, spinningProps: true, cockpitInterior: true, xrInterior: true);
+                var model = builder.Build(id);
+                ctx.Check(builder.Cockpit is { FromBody: true } && builder.CockpitPanel != null && builder.CockpitInterior != null,
+                    $"{id}: a body cockpit rig builds its panel under the stereo build panel={builder.CockpitPanel != null}");
+                model.Free();
+            }
+        }
+        finally
+        {
+            HdModels.Current = saved;
         }
     }
 
@@ -219,6 +335,74 @@ internal static class ModPlaneSuites
 
         ctx.Check(Near(builder.CockpitCameraOffset, stockBuilder.CockpitCameraOffset) && builder.CockpitCameraOffset != Vector3.Zero,
             $"cockpit_camera {builder.CockpitCameraOffset} matches the parent's {stockBuilder.CockpitCameraOffset}");
+    }
+
+    // One cockpit mod's flat and stereo builds against the interior it should carry.
+    private static void CheckCockpit(TestContext ctx, GameZ planes, TextureArchive textures, string id, string donor, bool fromFile,
+        (int Triangles, string Gauges, int Plate) want, Vector3 parentEye)
+    {
+        var model = Build(planes, textures, id, out var builder);
+        try
+        {
+            var interior = builder.CockpitInterior;
+            ctx.Check(interior != null && Near(builder.CockpitCameraOffset, parentEye)
+                    && interior.Transform.IsEqualApprox(PlaneBuilder.FlatMount(builder.CockpitCameraOffset)),
+                $"{id}: an interior is mounted at the mod's cockpit_camera {builder.CockpitCameraOffset}");
+            var drawn = interior == null ? new List<MeshInstance3D>() : Meshes(interior, null).ToList();
+            int own = drawn.Count(m => m.HasMeta(SceneBuilder.GamezMeshMeta));
+            string other = string.Join(",", drawn.Where(m => m.HasMeta(SceneBuilder.GamezMeshMeta) != fromFile).Take(12).Select(m => AnimRuntime.NameOf(m.GetParent<Node3D>())));
+            ctx.Check(drawn.Count > 0 && own == (fromFile ? drawn.Count : 0),
+                $"{id}: {(fromFile ? "every" : "no")} interior mesh is drawn from the mod's file from_file={own} drawn={drawn.Count} other:{other}");
+            int triangles = Triangles(interior);
+            string gauges = GaugeLine(builder);
+            ctx.Check(triangles == want.Triangles && gauges == want.Gauges,
+                $"{id}: the interior is {donor}'s, {triangles} visible triangles (want {want.Triangles}), gauges {gauges} (want {want.Gauges})");
+        }
+        finally
+        {
+            model.Free();
+        }
+
+        var stereo = new PlaneBuilder(planes, textures, spinningProps: true, cockpitInterior: true, xrInterior: true);
+        var stereoModel = stereo.Build(id);
+        try
+        {
+            int plate = fromFile ? stereo.ReplacedPlateTriangles : stereo.InteriorOmittedPolygons;
+            ctx.Check(stereo.CockpitInterior != null && want.Plate > 0 && plate == want.Plate,
+                $"{id}: the stereo interior {(fromFile ? "cuts the file's head plate triangles" : "omits the head plate polygons")} {plate} (want {want.Plate})");
+        }
+        finally
+        {
+            stereoModel.Free();
+        }
+    }
+
+    // A cockpit mod's folder: a Brigand, naming `cockpit` when given; the caller writes its plane.glb.
+    private static string WriteCockpitMod(string root, string id, string? cockpit)
+    {
+        string folder = Path.Combine(ModPlanes.FolderIn(root), id);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, ModPlanes.DefinitionFile),
+            cockpit == null ? $$"""{ "kind_of": "{{Parent}}" }""" : $$"""{ "kind_of": "{{Parent}}", "cockpit": "{{cockpit}}" }""");
+        return folder;
+    }
+
+    // The head plate of `plane`'s cockpit1 in the archive.
+    private static HashSet<GameZPolygon> PlatePolygons(GameZ planes, string plane) =>
+        planes.ChildrenOf(planes.FindByName(plane)!).Find(n => n.Name.Equals("cockpit1", StringComparison.OrdinalIgnoreCase)) is { } interior
+            ? CockpitPlate.Find(planes, interior) : new HashSet<GameZPolygon>();
+
+    private static string GaugeLine(PlaneBuilder builder) => CockpitGauges.Bind(builder) is { } g
+        ? $"needles={g.NeedleCount} lamps={g.LampCount} readouts={g.ReadoutCount} belts={g.BeltCount} zones={g.DamageZoneCount}" : "none";
+
+    // The triangles the interior draws once shown: every mesh under it whose nodes below the interior are visible.
+    private static int Triangles(Node3D? interior)
+    {
+        int Count(Node node) => (node is MeshInstance3D { Mesh: ArrayMesh mesh } mi && mi.Name.ToString() == "mesh"
+                ? Enumerable.Range(0, mesh.GetSurfaceCount()).Sum(s => mesh.SurfaceGetArrayIndexLen(s) is > 0 and var n ? n / 3 : mesh.SurfaceGetArrayLen(s) / 3)
+                : 0)
+            + node.GetChildren().Where(c => c is not Node3D { Visible: false }).Sum(Count);
+        return interior == null ? 0 : Count(interior);
     }
 
     private static void CheckStatsAndFit(TestContext ctx, ModPlane mod, Node3D model)

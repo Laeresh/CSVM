@@ -21,7 +21,7 @@ public static class ModAirframes
 
     // Each grafted mod's own file, by id, which every build of that airframe draws from. The interior
     // donor gives its livery a skin prefix, and the tint is what that livery paints.
-    private static readonly Dictionary<string, (HdModelMeshes Meshes, string Donor, ModTint? Tint)> Files = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, (HdModelMeshes Meshes, string Donor, ModTint? Tint, bool OwnInterior)> Files = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Grafts the airframe in <paramref name="glb"/> into <paramref name="planes"/> under the root
     /// <paramref name="id"/>. A file holding no <c>cockpit1</c> under its root gets a copy of
@@ -59,10 +59,10 @@ public static class ModAirframes
             parts.Add(new Part(HdModelMeshes.WithoutRepeat(HdModelMeshes.NameOf(node)), node.Xform, node.Children, vertices, triangles));
         }
 
-        Graft(planes, id, cockpitFrom, parts, state.RootNodes);
+        bool ownInterior = Graft(planes, id, cockpitFrom, parts, state.RootNodes);
         lock (Files)
         {
-            Files[id] = (meshes, cockpitFrom, tint);
+            Files[id] = (meshes, cockpitFrom, tint, ownInterior);
         }
     }
 
@@ -76,10 +76,15 @@ public static class ModAirframes
     /// <summary>The stock airframe whose interior the mod <paramref name="node"/> was given, or null.</summary>
     public static string? DonorOf(string node) => Grafted(node)?.Donor;
 
+    /// <summary>Whether the airframe <paramref name="node"/>'s <c>cockpit1</c> is its file's own, drawn from
+    /// <see cref="MeshesFor"/>. False for a copied donor interior and for any airframe <see cref="Add"/> has not grafted.</summary>
+    public static bool HasOwnInterior(string node) => Grafted(node)?.OwnInterior == true;
+
     /// <summary>The engine-free half of <see cref="Add"/>: appends <paramref name="parts"/> under a new
     /// root <paramref name="id"/>, starting from <paramref name="roots"/>. A lone root named like a stock
-    /// airframe or the id (an export's <c>player_brigand</c>) stands for that root, its transform dropped.</summary>
-    internal static void Graft(GameZ planes, string id, string cockpitFrom, IReadOnlyList<Part> parts, IReadOnlyList<int> roots)
+    /// airframe or the id (an export's <c>player_brigand</c>) stands for that root, its transform dropped.
+    /// True when the file holds its own <c>cockpit1</c>, false when the donor's was copied in or none exists.</summary>
+    internal static bool Graft(GameZ planes, string id, string cockpitFrom, IReadOnlyList<Part> parts, IReadOnlyList<int> roots)
     {
         if (planes.FindByName(id) != null)
         {
@@ -135,17 +140,18 @@ public static class ModAirframes
             }
         }
 
-        if (!planes.ChildrenOf(root).Exists(IsInterior)
-            && planes.FindByName(cockpitFrom) is { } donor
+        bool own = planes.ChildrenOf(root).Exists(IsInterior);
+        if (!own && planes.FindByName(cockpitFrom) is { } donor
             && planes.ChildrenOf(donor).Find(IsInterior) is { } interior)
         {
             root.Children.Add(Copy(planes, interior));
         }
 
         planes.TablesGrew();
+        return own;
     }
 
-    private static (HdModelMeshes Meshes, string Donor, ModTint? Tint)? Grafted(string node)
+    private static (HdModelMeshes Meshes, string Donor, ModTint? Tint, bool OwnInterior)? Grafted(string node)
     {
         lock (Files)
         {

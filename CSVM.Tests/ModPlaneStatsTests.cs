@@ -116,12 +116,35 @@ public class ModPlaneStatsTests
         Assert.Same(brigand, Mod("""{ "fd_speed": 140 }""", "player_brigand").StockLoadout(stock));
     }
 
-    private static ModPlane Mod(string overrides, string kindOf = Parent)
+    // Decision 16: the engine-slot defs are the sound plane's on the flown and the bot load; nothing else moves.
+    [Fact]
+    public void SoundTakesTheNamedPlanesEngineSoundsAndAbsentKeepsTheParents()
+    {
+        var zrdr = SyntheticZrdr.Root();
+        var voice = PlaneStats.Load(zrdr, "player_warhawk");
+        var parent = PlaneStats.Load(zrdr, Parent);
+        Assert.NotEqual(parent.EngineSound, voice.EngineSound);
+
+        var mod = Mod("{}", extra: """, "sound": "player_warhawk" """);
+        foreach (var stats in new[] { mod.Stats(zrdr), mod.Stats(zrdr, forAi: true) })
+        {
+            Assert.Equal(voice.EngineSound, stats.EngineSound);
+            Assert.Equal(voice.CockpitEngineSound, stats.CockpitEngineSound);
+            Assert.Equal(voice.DamagedEngineSound, stats.DamagedEngineSound);
+            Assert.Equal(voice.WhineSound, stats.WhineSound);
+            Assert.Equal(parent.FdSpeed, stats.FdSpeed);
+            Assert.Equal(parent.DefName, stats.DefName);
+        }
+
+        Assert.Equal(parent.EngineSound, Mod("{}").Stats(zrdr).EngineSound);
+    }
+
+    private static ModPlane Mod(string overrides, string kindOf = Parent, string extra = "")
     {
         string root = TestData.TempDir();
         string mod = Path.Combine(ModPlanes.FolderIn(root), "testmod");
         Directory.CreateDirectory(mod);
-        File.WriteAllText(Path.Combine(mod, "plane.json"), $$"""{ "kind_of": "{{kindOf}}", "overrides": {{overrides}} }""");
+        File.WriteAllText(Path.Combine(mod, "plane.json"), $$"""{ "kind_of": "{{kindOf}}", "overrides": {{overrides}}{{extra}} }""");
         File.WriteAllText(Path.Combine(mod, "plane.glb"), "glb");
         return Assert.Single(ModPlanes.Open(root).Planes);
     }

@@ -62,8 +62,8 @@ machine in a network match needs the same mods, which the content hash compares.
 | `name` | The name a menu shows. Absent, the id. |
 | `overrides` | An object of def field name to number, each a finite JSON number, applied over the parent's def (`vehicle.json`, [vehicle.md](vehicle.md)); the names are in [Overrides](#overrides). `"turrets": []` clears the parent's turret mounts; any other `turrets` value fails. |
 | `unlock` | When the plane enters the campaign hangar: `start`, `with_parent` (the default), or a mission or chapter id. |
-| `cockpit` | A stock node whose cockpit interior the plane uses when its model has none. Absent, the parent's. |
-| `sound` | A stock node whose engine sound the plane uses. Absent, the parent's. |
+| `cockpit` | A stock node whose cockpit interior the plane uses when its model has no `cockpit1` ([`plane.glb`](#planeglb), Cockpit). Absent, the parent's. |
+| `sound` | A stock node whose engine sounds the plane uses: the engine loop, the cockpit-view loop, the damaged loop with its pitch range and the dive whine its def names, in the original and the Enhanced sound mode alike. Absent, the parent's. |
 | `portrait` | The path of an image inside the mod that menus show for the plane. |
 | `tint` | How a livery colours the plane's own surfaces: `mask` and `detail`, each the path of a `.png` inside the mod, and `materials`, a non-empty list of `plane.glb` material names. All three are required; a `_` key inside is prose. Absent, the plane's own surfaces keep their paint under every livery. The rules are in [Paint](#paint). |
 | `hangar_capacity` | The hangar's weight capacity in lb, a whole number from 1 to 100000, replacing the parent's stat-table capacity in the overweight check ([The hangar](#the-hangar)). Absent, the parent's. |
@@ -131,7 +131,7 @@ Brigand does.
 | Names | The stock names, matched without case. `geometry > healthy > nearest > {nose, tail, leftwing, rightwing}` holds the body. A control surface is `l_aileron1`, `r_elevator1`, `l_rudder1` and the rest under its hinge group (`lailer1`, `lft_elev`, `lrudder1`), whose origin and rotation set the hinge line; the surface turns about its own X (aileron, elevator) or Y (rudder). `dontmove > {staticpropN, propN, propNb}` are the props: the still `staticpropN` shows stopped and the `propN`/`propNb` blur discs spin. `pilot_pos > pilot > body > head` is the pilot. |
 | Markers | Empty nodes: `firepointN` and `pylonN` (the parent's fit binds by these names, so the mod carries every marker that fit names), `cockpit_camera` (the first-person eye), `exhaust1`/`exhaust2`, `ground_level` and `target`. Positions are read in the plane frame below the root. |
 | Meshes | Every mesh draws as a model pack's root file draws its nodes, its materials by the pack's rules ([model-packs.md](model-packs.md), "Materials"): a material named after an original texture wears that texture, and takes the livery when it is a skin of the airframe whose interior the mod carries (the painter reads the skin prefix there). Any other material wears its own base colour and texture, which the livery reaches only as [Paint](#paint) describes. Its triangles are also the gameplay geometry: the collision hulls, the hit body, the ground shadow and every box the game measures. |
-| Cockpit | A `cockpit1` node directly under the root is the plane's own interior, in interior units as a stock `cockpit1.glb` is. Without one the plane takes a copy of the interior of `plane.json`'s `cockpit`, else its parent's, mounted at the mod's `cockpit_camera`. |
+| Cockpit | A `cockpit1` node directly under the root is the plane's own interior. Its subtree is in interior units as a stock `cockpit1.glb` is (about 25 units per metre, the eye at `cockpit1`'s origin looking down -Z), drawn at 0.04 at the mod's `cockpit_camera`; `cockpit1`'s own transform is not read. The gauges, lamps and readouts are found by the stock node names (`gauges`, `speed`, `pfhorizon`, `lowalt_on`) and the belts and damage zones by the stock texture names, so a stock `cockpit1.glb` export put under the root works unedited. Without one the plane takes a copy of the interior of `plane.json`'s `cockpit`, else its parent's, mounted the same way and drawn from the archive only: no node of the file reaches it. |
 | Not read | Animation, skins, morph targets, cameras, lights and node visibility. A model pack's replacement files never reach a mod's meshes; its `planes/<id>/rig.json` does. |
 
 A file that does not import as glTF skips the mod when the game data binds, with the reason in the
@@ -184,8 +184,9 @@ each build logs `HD models: N mesh instance(s) of <id> drawn from its mod's plan
 no data of the mod's own takes its parent's: the camera block, the destroy def, the AI def and, with
 no `--loadout=`, the stock fit (with `"turrets": []` applied). The mod has no wreck pieces or damage
 panels unless its model holds the stock `destroyed` and `pdpN` nodes, a crash then playing the parent's
-destroy def without pieces, and its engine sounds as its parent's (the def's `engine_sound`). The
-campaign, bot seats and the network wire still list the stock eleven alone.
+destroy def without pieces. Its engine sounds as its parent's, or as `sound`'s plane, flown or as a
+bot; the build logs the loop it chose (`audio: engine=snd_brigandengine ...`). The campaign, bot
+seats and the network wire still list the stock eleven alone.
 
 ### The hangar
 
@@ -216,6 +217,15 @@ the lobbies carry the build as its parent's stock id.
   triangles, 15 collider hulls, 8 control surfaces, 2 spinning props, 17 weapon markers, reference
   markers and cockpit camera, and the Brigand fit binds 4 hardpoints with its turret slot firing
   forward.
+- The cockpit rules are covered by the `mod-plane-cockpit` suite: three Brigand mods mount, at the
+  mod's `cockpit_camera`, the Fury's interior exported into the file as `cockpit1`, the Warhawk's
+  named by `cockpit` (its file also holds the Fury's interior under another name, and no node of it
+  reaches the copy) and the Brigand's, each drawing as many triangles and binding as many gauges as on its stock
+  plane. Under the stereo build each leaves out or cuts that interior's head plate, and a model pack's
+  body cockpit rig over a mod builds its panel.
+- `sound` is `ModPlane.Stats` through `PlaneStats.TakeEngineSounds`, covered by
+  `CSVM.Tests/ModPlaneStatsTests.cs`. The Enhanced sound mode's tuning is one set of curves for every
+  airframe and a sound pack replaces a sound by its file name, so both follow the defs `sound` picks.
 - The `tint` field is `ModPlanes`' and the composite `Mech3/ModTint.cs`, which `Mech3/PlanePainter.cs`
   applies to the materials `SceneBuilder` hands it from the mod's file. Covered by
   `CSVM.Tests/ModTintTests.cs`, `CSVM.Tests/ModPlanesTests.cs` and the `mod-plane-paint` suite: a

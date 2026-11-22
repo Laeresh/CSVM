@@ -566,7 +566,9 @@ public sealed class PlaneBuilder
             _interiorScene.OmittedPolygons = xr && !body ? CockpitPlate.Find(_gamez, node) : null;
             // The airframe's own keys alone, so cockpit1.glb and the airframe's node files reach the
             // interior and a bare file does not. Its replacements are this builder's own, which bakes the interior's bias.
-            _interiorScene.HdAirframe = _scene.HdAirframe;
+            // ⚠ A mod's copied donor interior draws gamez meshes alone. Its generic names would take same-named file nodes.
+            bool copied = _scene.OwnMeshes != null && !ModAirframes.HasOwnInterior(root.Name);
+            _interiorScene.HdAirframe = copied ? null : _scene.HdAirframe;
             _interiorScene.HdAirframeKeysOnly = true;
             _interiorScene.OwnMeshes = _scene.OwnMeshes;
             // Only the transplanted parts of a body cockpit ever draw, under the airframe's shadow.

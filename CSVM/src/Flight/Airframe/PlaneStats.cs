@@ -537,6 +537,20 @@ public sealed class PlaneStats
         return true;
     }
 
+    /// <summary>Takes every engine-slot def <paramref name="voice"/>'s chain names (engine, cockpit,
+    /// damaged with its pitch range, whine) in place of this airframe's: a plane mod's <c>sound</c>.
+    /// The curves are player.json's and every airframe's alike. ⚠ Mutates this instance: a fresh load only.</summary>
+    public void TakeEngineSounds(PlaneStats voice)
+    {
+        EngineSound = voice.EngineSound;
+        CockpitEngineSound = voice.CockpitEngineSound;
+        WhineSound = voice.WhineSound;
+        DamagedEngineSound = voice.DamagedEngineSound;
+        DamagedEnginePitchLo = voice.DamagedEnginePitchLo;
+        DamagedEnginePitchHi = voice.DamagedEnginePitchHi;
+        DamagedEnginePitchRandom = voice.DamagedEnginePitchRandom;
+    }
+
     private static PlaneStats LoadCore(ZrdrSet zrdr, string planeNodeName, bool forAi,
         string? aiDefName = null)
     {
