@@ -70,6 +70,20 @@ public class HangarFeatureTests : IDisposable
     }
 
     [Fact]
+    public void AFreshBuildWearsFortuneHuntersAndAPatternPickLoadsItsDecals()
+    {
+        var feature = Feature();
+        feature.Open(_store);
+
+        feature.StartNewPlane();
+        Assert.Equal(HangarFeature.StockPattern, feature.Scratch.PaintPattern);
+        Assert.Equal((40, 8, 7), (feature.Scratch.NoseDecal, feature.Scratch.TailDecal, feature.Scratch.WingDecal));
+
+        feature.SetPattern(6); // hughes
+        Assert.Equal((21, 11, 11), (feature.Scratch.NoseDecal, feature.Scratch.TailDecal, feature.Scratch.WingDecal));
+    }
+
+    [Fact]
     public void StartingFromASavedPlaneEditsACopyAndNeverTheFile()
     {
         var saved = new CustomPlaneDef { Name = "Kept", Airframe = 3, Engine = 2 };

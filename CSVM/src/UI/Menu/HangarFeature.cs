@@ -65,6 +65,10 @@ public sealed class HangarFeature : IMenuFeature
     /// which is the plane the original's construction screens open over.</summary>
     public const int DefaultAirframe = 5;
 
+    /// <summary>The pattern a fresh build wears, Fortune Hunters: every airframe's stock template
+    /// at <c>0x00619f58</c> carries pattern 4 with decals 40/8/7 (docs/org/hangar.md).</summary>
+    public const int StockPattern = 4;
+
     /// <summary>The longest name a plane may carry: the original's saved-plane index is 33-byte
     /// records (docs/formats/paint.md), so 32 characters plus the terminator.</summary>
     public const int MaxNameLength = 32;
@@ -304,12 +308,13 @@ public sealed class HangarFeature : IMenuFeature
         ReadRoster();
     }
 
-    /// <summary>Starts a fresh build with nothing committed: no airframe is chosen, so the
-    /// airframe screen opens on a plain list with no row ticked and no question asked. The
-    /// defaults ask waits for the pilot's own pick.</summary>
+    /// <summary>Starts a fresh build with nothing committed. No airframe is chosen, so the airframe
+    /// screen opens with no row ticked and no question asked. The defaults ask waits for the
+    /// pilot's own pick. The paint is the stock template's.</summary>
     public void StartNewPlane()
     {
         Scratch = new CustomPlaneDef();
+        Scratch.LoadPatternDefaults(StockPattern);
         EditingName = null;
         AirframeChosen = false;
         DefaultsWanted = false;
@@ -332,6 +337,16 @@ public sealed class HangarFeature : IMenuFeature
         NormalisePattern(pick);
         AirframeChosen = true;
         RememberAsOpened();
+    }
+
+    /// <summary>A new build on airframe row <paramref name="row"/> in the paint <see cref="StartDefaultPlane"/>
+    /// gives it, leaving <see cref="Scratch"/> alone. For the hangar preview's warm-up, which wants the
+    /// paint the first build will wear before the name screen's OK makes it.</summary>
+    public CustomPlaneDef DefaultPaintOn(int row)
+    {
+        var build = new CustomPlaneDef();
+        NormalisePattern(build, row);
+        return build;
     }
 
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
@@ -1117,11 +1132,13 @@ public sealed class HangarFeature : IMenuFeature
     // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most
     // airframes' availability masks exclude, and a paint screen must never open on a paint job the
     // plane cannot wear.
-    private void NormalisePattern(int row)
+    private void NormalisePattern(int row) => NormalisePattern(Scratch, row);
+
+    private void NormalisePattern(CustomPlaneDef build, int row)
     {
         int airframe = StockIdOfRow(row);
         var tables = HangarPaintTables.Default;
-        if (tables.Available(Scratch.PaintPattern, airframe))
+        if (tables.Available(build.PaintPattern, airframe))
         {
             return;
         }
@@ -1130,7 +1147,7 @@ public sealed class HangarFeature : IMenuFeature
         {
             if (tables.Available(pattern, airframe))
             {
-                Scratch.LoadPatternDefaults(pattern);
+                build.LoadPatternDefaults(pattern);
                 return;
             }
         }

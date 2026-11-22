@@ -763,6 +763,8 @@ internal static class MenuOriginalCampaignSuites
             $"the Paint tab carries the first decal box ({shell.Screen})");
         if (decals != null)
         {
+            // The stock nose decal, 40, opens the grid on its last rows; decal 0 opens it at the head.
+            hangar.SetDecal(0, 0);
             Click(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
             ctx.Check(shell.Hangar!.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.Hangar!.OpenHangarDropdown ?? "none"})");
             WheelAndDrag(ctx, host, seat, shell, fit, "PT_D_DECALS0", "Plane Construction's decal list");
