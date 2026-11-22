@@ -70,8 +70,8 @@ public sealed class WorldEffectsFactory
 
     private AnimRuntime? _worldEffects;
 
-    // The session's heat-shimmer quads, built on the first fireball that asks for one and null
-    // otherwise, so the faithful presentation carries no pool and no node at all.
+    // The session's heat-shimmer quads. Enhanced builds them with the world effects, or at the
+    // first fireball without those. The faithful presentation leaves this null.
     private HeatShimmer? _shimmer;
 
     // The builder for the planes-gamez half of a crash rig's template stage. Kept for the session
@@ -112,8 +112,8 @@ public sealed class WorldEffectsFactory
     /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
     public SurfaceDefTable? TouchdownDefs { get; private set; }
 
-    /// <summary>The session's heat-shimmer pool, null until a fireball has asked for one and on the
-    /// faithful presentation always. Observation only; the pool stays owned here.</summary>
+    /// <summary>The session's heat-shimmer pool, null on the faithful presentation always.
+    /// Observation only; the pool stays owned here.</summary>
     internal HeatShimmer? Shimmer => _shimmer;
 
     /// <summary>The effect-template ROOT names the world-effects stage builds, the set
@@ -281,6 +281,7 @@ public sealed class WorldEffectsFactory
                 _worldEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, worldProgram);
                 // Built here rather than per rig: one level, one touchdown vector (see the property).
                 TouchdownDefs = EffectCatalogue.TouchdownDefTable(worldProgram);
+                WarmShimmer();
             }
             catch (Exception e)
             {
@@ -386,7 +387,7 @@ public sealed class WorldEffectsFactory
 
     /// <summary>A live graphics-mode switch. The world-effects runtime takes the replaced-light set of
     /// the mode now standing. The faithful mode frees the heat shimmer pool, which it never builds.
-    /// Enhanced builds a fresh one at its next fireball, as a fresh session does.</summary>
+    /// Enhanced builds and warms a fresh one, as a fresh session does.</summary>
     internal void FollowGraphicsMode()
     {
         if (_worldEffects != null)
@@ -396,6 +397,10 @@ public sealed class WorldEffectsFactory
             _shimmer.GetParent()?.RemoveChild(_shimmer);
             _shimmer.QueueFree();
             _shimmer = null;
+        }
+        else if (_worldEffects != null)
+        {
+            WarmShimmer();
         }
     }
 
@@ -672,6 +677,16 @@ public sealed class WorldEffectsFactory
         }
         StartupProfile.Record("emitters", mark);
         Log.Info("anim", $"world effects: baked {baked} puffer atlas(es) ahead in {Stopwatch.GetElapsedTime(mark).TotalMilliseconds:0} ms");
+    }
+
+    // Under Enhanced the pool is built and drawn once with the session. Its first draw compiles a
+    // screen-reading shader, which on the first fireball's frame cost 50 ms or more.
+    private void WarmShimmer()
+    {
+        if (!GraphicsMode.Enhanced || _shimmer != null)
+            return;
+        _shimmer = HeatShimmer.Attach(_worldRoot);
+        _shimmer.Warm();
     }
 
     /// <summary>One per-plane crash rig, mid-build. The four steps are the build's own natural

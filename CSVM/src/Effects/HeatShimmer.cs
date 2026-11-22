@@ -124,6 +124,7 @@ public sealed partial class HeatShimmer : Node3D
     private MultiMesh _mm = null!;
     private int _spawned;
     private double _time;
+    private int _warmUntilFrame;
 
     /// <summary>Quads refracting right now, the count the pool cap bounds.</summary>
     public int LiveCount { get; private set; }
@@ -157,6 +158,11 @@ public sealed partial class HeatShimmer : Node3D
         parent.AddChild(pool);
         return pool;
     }
+
+    /// <summary>Submits the empty pool's draw for the next two frames, every quad scaled to nothing.
+    /// Its shader, pipeline and the colour-buffer copy it reads are then made while the session
+    /// loads, not on the first fireball's frame.</summary>
+    public void Warm() => _warmUntilFrame = Engine.GetFramesDrawn() + 2;
 
     /// <summary>Lights a quad over the burst at <paramref name="at"/>. <paramref name="stillBurning"/>
     /// is the fireball's own liveness, the same closure the burst light reads, so the quad is dropped
@@ -219,7 +225,7 @@ public sealed partial class HeatShimmer : Node3D
             live++;
         }
         LiveCount = live;
-        _mmi.Visible = live > 0;
+        _mmi.Visible = live > 0 || Engine.GetFramesDrawn() < _warmUntilFrame;
     }
 
     // Full at ignition and decaying from there: the air is hottest the instant the charge goes
