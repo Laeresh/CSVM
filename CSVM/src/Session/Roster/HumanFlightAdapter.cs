@@ -668,7 +668,7 @@ internal sealed class HumanFlightAdapter
             controller.VersusStatusLine = VersusStatusLine.Build(versus, pi);
             controller.VersusStatusLine.StatusHiddenWhile = () => controller.ScoresShown;
             var seats = _human.NetSeats;
-            controller.VersusStatusLine.BotName = s => Net.NetSeats.BotCallsign(seats, s);
+            controller.VersusStatusLine.SeatName = s => Net.NetSeats.SeatName(seats, s);
             if (verbose)
                 Log.Info("flight", $"versus HUD: match timer/K-D/leader line");
         }

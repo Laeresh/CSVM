@@ -34,34 +34,37 @@ public sealed partial class VersusBoard : ResultsBoard
 
     private VersusMatch _match = null!;
     private string _context = "";
-    private System.Func<int, string?>? _botName;
+    private System.Collections.Generic.IReadOnlyList<Net.NetSeat>? _seats;
 
     // A rematch clears Completed, which the shell's _Process turns into the hide and the release.
     protected override bool StillEnded => _match.Completed;
 
     /// <summary>Builds the (hidden) board and subscribes to the match's completion. Add it to a
     /// CanvasLayer above the splitscreen panes. It wakes itself on
-    /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch. <paramref name="botName"/>
-    /// gives a computer pilot's callsign by <c>PlayerIndex</c>, null for a person's seat.</summary>
+    /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch. <paramref name="seats"/>
+    /// is the match's roster by <c>PlayerIndex</c>, which names each seat.</summary>
     public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu,
-        PauseState state, System.Func<int, MenuInput> inputFor, System.Func<int, string?>? botName = null)
+        PauseState state, System.Func<int, MenuInput> inputFor, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null)
     {
-        var board = new VersusBoard { _match = match, _context = context, _botName = botName };
+        var board = new VersusBoard { _match = match, _context = context, _seats = seats };
         board.InitShell(state, exitsToMenu, inputFor);
         match.MatchCompleted += board.OnMatchCompleted;
         return board;
     }
 
-    /// <summary>What a row's tag cell reads. A person keeps the seat's player tag. A bot reads its
-    /// callsign from <paramref name="botName"/> and then <see cref="BotTag"/>.</summary>
-    public static string RowTag(int playerIndex, System.Func<int, string?>? botName) =>
-        botName?.Invoke(playerIndex) is { } callsign ? $"{callsign} {BotTag}" : SplitScreen.PlayerTag(playerIndex);
+    /// <summary>What a row's tag cell reads: the seat's callsign from <paramref name="seats"/>
+    /// (<see cref="Net.NetSeats.SeatName"/>), followed by <see cref="BotTag"/> for a bot, else its
+    /// player tag.</summary>
+    public static string RowTag(int playerIndex, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats) =>
+        Net.NetSeats.SeatName(seats, playerIndex) is { } callsign
+            ? seats![playerIndex].IsBot ? $"{callsign} {BotTag}" : callsign
+            : SplitScreen.PlayerTag(playerIndex);
 
     /// <summary>The board's headline for a finished match: the one leader's name and WINS, or DRAW
     /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
-    /// objective names the team that won it, whatever the totals. A bot leader is named by its
-    /// callsign from <paramref name="botName"/>, a person by player tag.</summary>
-    public static string Title(VersusMatch match, System.Func<int, string?>? botName = null)
+    /// objective names the team that won it, whatever the totals. The leader is named by its
+    /// callsign from <paramref name="seats"/>, else by player tag.</summary>
+    public static string Title(VersusMatch match, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats = null)
     {
         if (match.ObjectiveWinner > 0)
         {
@@ -81,7 +84,7 @@ public sealed partial class VersusBoard : ResultsBoard
         }
 
         int seat = winners[0].PlayerIndex;
-        string name = botName?.Invoke(seat) is { } callsign ? callsign.ToUpperInvariant() : SplitScreen.PlayerTag(seat);
+        string name = Net.NetSeats.SeatName(seats, seat)?.ToUpperInvariant() ?? SplitScreen.PlayerTag(seat);
         return $"{name} WINS";
     }
 
@@ -90,12 +93,12 @@ public sealed partial class VersusBoard : ResultsBoard
     private void OnMatchCompleted()
     {
         // Log the final standings too, so a match is reviewable from a headless run's log.
-        Log.Info("flight", $"dogfight results: {Title(_match, _botName)}");
+        Log.Info("flight", $"dogfight results: {Title(_match, _seats)}");
         foreach (var team in _match.TeamStandings())
             Log.Info("flight", $"  #{team.Rank}  {team.Name}  {team.Score} pts  {team.Kills}K/{team.Deaths}D");
         foreach (var st in _match.Standings())
             Log.Info("flight",
-                $"  #{st.Rank}  {RowTag(st.PlayerIndex, _botName)}  {st.Score} pts  {st.Kills}K/{st.Deaths}D");
+                $"  #{st.Rank}  {RowTag(st.PlayerIndex, _seats)}  {st.Score} pts  {st.Kills}K/{st.Deaths}D");
         Populate();
         Wake();
     }
@@ -110,7 +113,7 @@ public sealed partial class VersusBoard : ResultsBoard
         var standings = _match.Standings().ToList();
         var teams = _match.TeamStandings().ToList();
         var winners = standings.Where(st => st.Rank == 1).ToList();
-        string title = Title(_match, _botName);
+        string title = Title(_match, _seats);
         var titleColor = !_match.Teamed && winners.Count == 1 ? SplitScreen.PlayerColor(winners[0].PlayerIndex) : TitleColor;
 
         body.AddChild(Centered(Label(title, (int)(TitleFont * s), titleColor)));
@@ -155,13 +158,14 @@ public sealed partial class VersusBoard : ResultsBoard
         AddStandardMenu(body, s);
     }
 
-    // A row's tag cell in the seat's colour: a person's player tag, or a bot's callsign. The bot
-    // tag follows a callsign in the headers' smaller ink, so it reads as a note on the name.
+    // A row's tag cell in the seat's colour: the seat's callsign, else its player tag. The bot tag
+    // follows a bot's callsign in the headers' smaller ink, so it reads as a note on the name.
     private void AddTag(GridContainer grid, int seat, int font, int noteFont, int minWidth)
     {
-        if (_botName?.Invoke(seat) is not { } callsign)
+        string? callsign = Net.NetSeats.SeatName(_seats, seat);
+        if (callsign == null || !_seats![seat].IsBot)
         {
-            AddCell(grid, SplitScreen.PlayerTag(seat), font, SplitScreen.PlayerColor(seat), HorizontalAlignment.Left, minWidth);
+            AddCell(grid, callsign ?? SplitScreen.PlayerTag(seat), font, SplitScreen.PlayerColor(seat), HorizontalAlignment.Left, minWidth);
             return;
         }
 

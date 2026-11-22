@@ -5,9 +5,9 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The results board's tag cell and headline. A person keeps the seat's player tag; a seat
-/// a computer pilot flies reads its callsign and the bot tag. The seat list is read by player index.
-/// </summary>
+/// <summary>The results board's tag cell and headline. A seat reads its callsign, a person's
+/// nickname or a bot's, and a bot's carries the bot tag. A seat with none keeps its player tag.
+/// The seat list is read by player index.</summary>
 [Trait("Tier", "Quick")]
 public sealed class VersusBoardTagTests
 {
@@ -19,32 +19,30 @@ public sealed class VersusBoardTagTests
     };
 
     [Fact]
-    public void ABotsRowReadsItsCallsignAndTheBotTagWhilePeopleKeepTheirPlayerTags()
+    public void ABotsRowReadsItsCallsignAndTheBotTagWhilePeopleReadTheirNicknames()
     {
-        Assert.Equal("Crawford BOT", VersusBoard.RowTag(2, BotName));
+        Assert.Equal("Crawford BOT", VersusBoard.RowTag(2, Seats));
+        Assert.Equal("Zachary", VersusBoard.RowTag(0, Seats));
+        Assert.Equal("Lucy", VersusBoard.RowTag(1, Seats));
 
-        // ABLE-TO-FAIL CONTROL: a person's row, a seat past the list and a board given no seat list
-        // read the plain player tag, never a callsign.
-        Assert.Equal("P1", VersusBoard.RowTag(0, BotName));
-        Assert.Equal("P2", VersusBoard.RowTag(1, BotName));
-        Assert.Equal("P4", VersusBoard.RowTag(3, BotName));
+        // ABLE-TO-FAIL CONTROL: a seat past the list and a board given no seat list read the plain
+        // player tag, never a callsign.
+        Assert.Equal("P4", VersusBoard.RowTag(3, Seats));
         Assert.Equal("P3", VersusBoard.RowTag(2, null));
     }
 
     [Fact]
-    public void ABotThatWinsIsNamedInTheHeadlineByItsCallsign()
+    public void TheWinnerIsNamedInTheHeadlineByCallsign()
     {
         var match = new VersusMatch(3, killTarget: 0, timeLimit: 60f);
         match.RegisterKill(2, 0);
+        Assert.Equal("CRAWFORD WINS", VersusBoard.Title(match, Seats));
 
-        Assert.Equal("CRAWFORD WINS", VersusBoard.Title(match, BotName));
-
-        // ABLE-TO-FAIL CONTROL: a person who wins keeps the player tag.
         var won = new VersusMatch(3, killTarget: 0, timeLimit: 60f);
         won.RegisterKill(1, 2);
-        Assert.Equal("P2 WINS", VersusBoard.Title(won, BotName));
-    }
+        Assert.Equal("LUCY WINS", VersusBoard.Title(won, Seats));
 
-    private static string? BotName(int seat) =>
-        seat >= 0 && seat < Seats.Length && Seats[seat].IsBot ? Seats[seat].Callsign : null;
+        // ABLE-TO-FAIL CONTROL: a board given no seat list names the winner by player tag.
+        Assert.Equal("P2 WINS", VersusBoard.Title(won));
+    }
 }

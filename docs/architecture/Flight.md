@@ -1086,7 +1086,7 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 
 ## src/Flight/Modes/VersusStatusLine.cs
 The per-pane match status line of every versus mode: remaining time, this pane's kills and deaths, and the
-leader (`LeaderText`: a bot by callsign through `BotName` and a person by player tag, or in a team match this pane's team total and the leading team), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
+leader (`LeaderText`: a seat by its callsign through `SeatName`, a person's nickname or a bot's, and a seat with none by player tag, or in a team match this pane's team total and the leading team), in `StuntRunHud`'s run-status slot. It is the only in-flight readout of match time and score.
 It steps aside while `StatusHiddenWhile` answers true (the seat's held scores).
 `Build` binds the match and this pane's seat; `HumanFlightAdapter` builds one per local pane, `FlightHud.Attach` adds it to the pane's HUD canvas, and nothing feeds it per frame.
 It draws no per-seat markers: players find and mark each other through `TargetHud`, as in the original. A kill has no banner of its own here: `HudMessages`

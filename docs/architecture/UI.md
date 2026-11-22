@@ -508,7 +508,7 @@ way. It lives in `UI.Screens` because `UI.Boards` ranks below `Flight` in the fa
 ## src/UI/Screens/VersusBoard.cs
 The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
 `SplitScreen.PlayerColor` (`Title`, a team match's leading team, or a draw), ranked team rows,
-then one ranked row per player with tag (a bot's callsign and `BotTag`, from the seat list `Build` takes),
+then one ranked row per player with tag (the seat's callsign from the seat list `Build` takes, `BotTag` after a bot's, else its player tag),
 score, kills and deaths from `VersusMatch.Standings()`; score is the ranked column. Wakes on `MatchCompleted` and retires on the rematch, its rows drawn
 from that completion alone, so `Restart()` zeroing the live state never redraws them. Restart
 routes through `VersusDirector.Restart`, which R and pad Y reach directly. A network guest's

@@ -184,9 +184,7 @@ internal sealed class SessionBoards
     public VersusBoard BuildDogfightBoard(VersusMatch match, string context, Action restart,
         string? restartWithheld)
     {
-        var seats = _in.NetSeats;
-        var board = VersusBoard.Build(match, context, exitsToMenu: _in.MenuDriven, _in.PauseState, InputFor,
-            seat => Net.NetSeats.BotCallsign(seats, seat));
+        var board = VersusBoard.Build(match, context, exitsToMenu: _in.MenuDriven, _in.PauseState, InputFor, _in.NetSeats);
         board.Restart = restart;
         if (restartWithheld != null)
             board.RestartWithheld = restartWithheld;
