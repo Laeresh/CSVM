@@ -187,6 +187,22 @@ public class ModPlanesTests
         Assert.Contains("no plane.json", reasons["empty"]);
     }
 
+    // A network roster carries a seat's airframe in 31 bytes of UTF-8, so a longer id skips the mod.
+    [Fact]
+    public void AnIdPastTheRostersPlaneFieldSkipsTheMod()
+    {
+        string root = TestData.TempDir();
+        string fits = new string('a', Net.SeatRosterMessage.PlaneBytes - 1);
+        string past = new string('b', Net.SeatRosterMessage.PlaneBytes);
+        Folder(root, fits, """{ "kind_of": "player_brigand" }""");
+        Folder(root, past, """{ "kind_of": "player_brigand" }""");
+
+        var mods = ModPlanes.Open(root);
+
+        Assert.Equal(fits, Assert.Single(mods.Planes).Id);
+        Assert.Contains("the most a network roster carries", Assert.Single(mods.Skipped).Reason);
+    }
+
     [Fact]
     public void NoFolderIsNoMods()
     {

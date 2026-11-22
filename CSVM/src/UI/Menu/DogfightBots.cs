@@ -135,7 +135,7 @@ public sealed class DogfightBots
 
     /// <summary>Puts row <paramref name="id"/> on one of the eleven stock airframes or on
     /// <see cref="DogfightLobbySeat.RandomAirframe"/>, or on plane mod <paramref name="mod"/> with its
-    /// parent's stock id as <paramref name="airframe"/>. Only a local field offers a mod.</summary>
+    /// parent's stock id as <paramref name="airframe"/>.</summary>
     public bool SetAirframe(int id, int airframe, string? mod = null) =>
         (airframe is >= 0 and < DogfightLobby.AirframeCount || (airframe == DogfightLobbySeat.RandomAirframe && mod == null))
         && Edit(id, bot => bot with { Airframe = (byte)airframe, ModAirframe = mod });

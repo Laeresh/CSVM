@@ -654,7 +654,6 @@ internal static class NetWorldSuites
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,
                 NetHost = isHost,
-                NetAirframes = Airframes,
             });
             pane.AddChild(session);
             return new Ends(pane, session, session.StartSession());

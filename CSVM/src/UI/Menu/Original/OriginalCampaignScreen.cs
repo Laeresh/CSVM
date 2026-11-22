@@ -1761,7 +1761,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
                 // A co-op host's guests fly with it, so the door's wire leaves with the launch.
                 var net = _net() is { IsCoopHost: true } host ? host : null;
-                var exit = _campaign.BuildExit(pads, networked: net != null);
+                var exit = _campaign.BuildExit(pads);
                 if (exit != null && net != null)
                 {
                     exit = exit with { Net = net.BuildLaunch() };

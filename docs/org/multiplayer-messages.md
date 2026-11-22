@@ -405,7 +405,7 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
-line and race call at `0x67` to `0x6A` and its course pylon touch at `0x6C` ("Stunt race" below), the lobby's co-op persisted object at `0x6B`, and a Stunt Race host's course at `0x6D` ("Dogfight lobby" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
+line and race call at `0x67` to `0x6A` and its course pylon touch at `0x6C` ("Stunt race" below), the lobby's co-op persisted object at `0x6B`, a Stunt Race host's course at `0x6D` ("Dogfight lobby" below), and a host's plane mod set at `0x6E` ("Plane mods" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -1040,6 +1040,7 @@ sees them.
 | `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, flags at 9 (bit 0 the host asks a password), two reserved bytes, the game's name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
 | `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3, booted 4, wrong password 5), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
 | `0x56` | Build version | reliable, each end to each peer on connect | the build version at 4 (8 bytes) |
+| `0x6E` | Plane mod set | reliable, a host with a plane mod to each guest, on connect and at each join | the mod count at 4 (at most 64), three reserved bytes, then per mod its parent's stock airframe id, its id in 32 bytes UTF-8 zero padded and its 32-byte SHA-256 content hash (8 bytes, plus 65 a mod) |
 
 A guest that reads a closed reason tells the player the host closed the game, that the game was
 full, or which two versions kept them apart, instead of reading the dropped link as a lost
@@ -1066,6 +1067,34 @@ command line's `--net-host` and `--net-join` stand no lobby on the carrier and c
 ⚠ The layouts of `0x56`, `0x4F` and the LAN discovery reply do not change. They are how two builds
 of different minors recognise each other, so a change makes an older build read a newer one as
 silent or foreign instead of naming the mismatch.
+
+### Plane mods
+
+Plane mods are remake-only ([`../formats/mod-planes.md`](../formats/mod-planes.md)), and every machine
+flies them from its own copy, so a guest must hold the host's. A host with at least one mod sends `0x6E`
+from its lobby on connect, after the build version and the advert, and from its session to each joining
+peer before the handshake, which serves the command line's join that stands no lobby. A host with none
+sends nothing, so a stock session's wire is unchanged. A guest compares the set with its own mods:
+each host mod must be one it holds under the same id and hash. A guest missing one, or holding one
+under another hash, refuses the host itself, as it refuses a host of another version. Its door reads
+"Install the host's plane mods: " and the ids, and a `--net-join` logs them and never builds. A
+guest's lobby takes the set from its host alone and a host's lobby never takes one, so a guest cannot
+push a set through it.
+
+The rule refuses on any difference in the host's set, not only on a mod a seat flies. A lobby's picks,
+bots and Random draws can put any host mod on a seat until the launch, so a check per seat would have
+to run again at every change. A mod the guest holds and the host lacks refuses nothing; it is no row of
+the session, so nothing offers it.
+
+The set fixes the session's airframe rows: rows 0 to 10 are the stock airframes in id order, and row 11
++ i is the host's i-th mod, in the host's load order (name order). Every lobby airframe byte is such a
+row: the pick's airframe at `0x51`, a Dogfight roster row's at `0x54`, a bot's. So the bytes keep their
+widths and a stock row reads as before. The plane rules, the stat table and the art judge a mod row by
+its parent, which the set carries. A custom plane keeps its parent's stock id in the build's airframe
+byte and names the mod's row in byte 23 of the 26 build bytes (`0x5D`, `0x5F`), 0 for a stock build,
+so every reader of the airframe byte reads the parent. A co-op host seats a guest on a hangar plane by
+that row, and the seat roster carries the mod's id from there. Each seat's livery crosses as the usual
+pattern, swatch and decal indices, which each machine applies to its own copy's tint mask.
 
 ### Game and Player Information
 
@@ -1118,16 +1147,20 @@ Bit 4 marks a machine's own player who gave no name, whose callsign field holds 
 every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). Bit 5 marks a
 bot, a remake-only computer pilot the host flies, and bits 6 and 7 carry its skill tier (0 novice, 1
 veteran, 2 ace). A bot entry carries the host bit, is never at seat 0, and is flown by no guest; a
-reader refuses a roster with tier 3 or with skill bits on a person's entry. The two bytes after
-the airframe carry a bot's militia, its row in the Instant Action militia table, and the accent it
+reader refuses a roster with tier 3 or with skill bits on a person's entry. The byte after the
+flags is reserved; it carried the airframe as an index into the stock eleven before plane mods. The
+two bytes after it carry a bot's militia, its row in the Instant Action militia table, and the accent it
 speaks in, both drawn by the host with its plane and `0xFF` on a person's entry. Every machine arms,
 paints and voices the bot by them; a reader refuses a militia past the table's 13 rows, an accent
 past 16 (Fortune Hunter's re-roll ceiling), or either on a person's entry. The callsign field
 after them is 40 bytes, UTF-8 and zero padded: the Callsign box's 12 characters at up to three bytes
 each, a further seat's " P4" and the terminator, so no seat's name is cut. The pick, the Dogfight
-roster's rows and the lobby chat carry a name in the same 40 bytes. The entry is 46 bytes, and a
-reader refuses a roster of any other width, so the layout ships only in a minor release, never in
-a patch. A
+roster's rows and the lobby chat carry a name in the same 40 bytes. The seat's airframe follows in
+32 bytes, UTF-8 and zero padded: its `planes.zbd` node, a stock one or a plane mod's id, which the mod
+loader holds to 31 bytes ("Plane mods" below). The entry is 78 bytes, and a reader refuses a roster
+of any other width, so the layout ships only in a minor release, never in a patch. A build with the
+46-byte entry and this one each read the other's roster as malformed, so the two never fly one field,
+even where no build version was compared (`--net-host`, `--net-join`). A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
 carries none. The callsign, the voice and the game name are remembered in `options.json`
 for the next session; a password never is. Game Information's password is the one the host asks,
@@ -1202,11 +1235,11 @@ reaches a session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the host's own seats at 14, how many seats after its player number the guest was given at 15 (0 for one), objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none, bits 5 and 6 the seat's place among its machine's own, bit 7 another seat's pick follows), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (40 bytes, zero-padded; 60 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none, bits 5 and 6 the seat's place among its machine's own, bit 7 another seat's pick follows), airframe row at 6 ("Plane mods" above), the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (40 bytes, zero-padded; 60 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
-| `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7, flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
+| `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7 (a mod plane's parent; its build names the mod's row), flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
 | `0x6B` | Co-op persisted object | reliable, host to each guest | chapter at 4, flags at 5 (bit 0 destroyed, bit 1 the launch's first word), the capturing story position as a signed 16-bit word at 6 (-1 for none), the gamez node index at 8 (-1 for the one word of an empty log), health as a float at 12 (16 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
@@ -1298,9 +1331,9 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture, bit 6 the host lands on Game Scores at the end, a remake bit), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 60 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe (`0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 40 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (968 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, how many seats its machine was given at 7 (its rows side by side from its own, 0 from a host a patch older reading as one), then sixteen rows of 60 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain, bit 3 a host's bot, bits 4 and 5 its tier: novice 0, veteran 1, ace 2), airframe row ("Plane mods" above; `0xFF` a bot's Random plane, drawn by the host at launch, or a person whose pick the host has not heard), team number (0 for none), one reserved byte, the name in 40 bytes, the picked custom plane's name in 16 bytes (empty on a stock plane), which the host has from the guest's plane build (968 bytes). A reader refuses a tier of 3, tier bits on a person's row, and a bot row marked host or captain |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 40 bytes at 4, the line in 84 bytes at 44 (128 bytes) |
-| `0x5D` | Plane build | reliable, guest to host (each of its seats' picks) and host to each guest (every seat, at launch) | seat at 4 (a guest's own seat from `0xFF` for its first down to `0xFC` for its fourth, a launch seat below `0xFC`), flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
+| `0x5D` | Plane build | reliable, guest to host (each of its seats' picks) and host to each guest (every seat, at launch) | seat at 4 (a guest's own seat from `0xFF` for its first down to `0xFC` for its fourth, a launch seat below `0xFC`), flags at 5 (bit 0 custom), then 26 bytes: airframe (a mod's parent), engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, the plane mod's airframe row (0 for none), two spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
 | `0x6D` | Stunt Race course | reliable, host to each guest | round at 4, then four strings, each a 16-bit byte count and that many bytes of UTF-8: the chapter, the name (the file's stem, empty for the Danger Zones), `Course.Hash` and the course file's JSON (at most 65535 bytes in all) |
 

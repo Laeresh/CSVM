@@ -13,7 +13,7 @@ how an existing airframe looks; a mod adds an airframe the game did not have.
   [paint](#paint), [damage](#damage), [content hash](#content-hash)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases): [a skipped mod](#a-skipped-mod),
   [flying a mod](#flying-a-mod), [the hangar](#the-hangar), [the campaign](#the-campaign), [menu art](#menu-art),
-  [bot seats](#bot-seats)
+  [bot seats](#bot-seats), [multiplayer](#multiplayer)
 - [Evidence & limits](#evidence--limits)
 
 ## Conceptual model
@@ -31,7 +31,7 @@ machine in a network match needs the same mods, which the content hash compares.
 | Item | Rule |
 |---|---|
 | Folder | `Mods/Planes` under the data root, or `Planes` under the folder `--mods=<folder>` names (`docs/cli.md`). Each subfolder and each `.zip` directly inside it is one mod; loose files at its top are ignored. Mods load in name order. A `--det` or `--run-tests` run reads no mods unless `--mods=` names a folder, so no golden or suite depends on what one machine dropped in. |
-| Id | The folder's name, or the zip's name without `.zip`, as spelt on disk. Ids match without case. An id that is a stock airframe's `planes.zbd` node (`player_avenger` is the Hellhound's) or an earlier mod's id skips the mod. |
+| Id | The folder's name, or the zip's name without `.zip`, as spelt on disk. Ids match without case. An id that is a stock airframe's `planes.zbd` node (`player_avenger` is the Hellhound's) or an earlier mod's id skips the mod, and so does one longer than 31 bytes of UTF-8, the network roster's plane field ([Multiplayer](#multiplayer)). |
 | Files | `plane.json` and `plane.glb` at the mod's top, both required. Other files (a portrait) may sit anywhere below it. Paths inside a mod match without case, with `/` or `\`. |
 | Zip | `plane.json` at the zip's root, or under one top folder (`avenger/plane.json`), marks the mod's top; entries outside it are not part of the mod. `plane.json` under two top folders and none at the root skips the mod. |
 | Hidden files | A file or folder whose name starts with `.` (`.DS_Store`, `.git`) is not part of the mod. |
@@ -203,8 +203,8 @@ no `--loadout=`, the stock fit (with `"turrets": []` applied). A crash plays the
 mod's own wreck or the auto-wreck ([Damage](#damage)), logging `crash rig '<id>': zones cut from the
 mesh nose N, tail N, leftwing N, rightwing N triangle(s), M effect anchor(s) added`. Its engine sounds
 as its parent's, or as `sound`'s plane, flown or as a bot; the build logs the loop it chose
-(`audio: engine=snd_brigandengine ...`). The network wire still lists the stock eleven alone;
-[bot seats](#bot-seats) fly mods off the wire.
+(`audio: engine=snd_brigandengine ...`). A network seat flies it on every machine that holds the
+mod ([Multiplayer](#multiplayer)).
 
 ### The hangar
 
@@ -220,8 +220,8 @@ A saved build keeps the mod's id as `modAirframe` beside its parent's stock id i
 CSVM's custom plane file; a stock build's file carries no `modAirframe`. The plane pickers fly such a
 build as the mod's own node. With the mod not installed the record is kept untouched, the build
 flies and prices as the stored parent, and the log says so once per id (`custom plane <name>: mod
-airframe <id> is not installed, it flies as <parent>`). The network wire and the lobbies carry the
-build as its parent's stock id.
+airframe <id> is not installed, it flies as <parent>`). On the wire the build carries its parent's
+stock id and the mod's row of the session ([Multiplayer](#multiplayer)).
 
 ### The campaign
 
@@ -231,8 +231,10 @@ and the plane list"); a stock plane's record carries no `modAirframe`. With the 
 plane flies as the mod's own node from the flight check and from a `--campaign=` launch, and the
 plane selection and flight check name it by its `name`. With the mod not installed it flies and is
 named as the stored parent, the log says so once per id (`campaign plane <name>: mod airframe <id>
-is not installed, it flies as <parent>`), and the record is never rewritten. A co-op campaign
-launch, the co-op wire, the wingman and the records keep the parent's stock id.
+is not installed, it flies as <parent>`), and the record is never rewritten. A co-op host flies its
+mod plane, and a guest seated on a hangar plane built on a mod flies the mod, since every guest
+holds the host's mods ([Multiplayer](#multiplayer)). The campaign wingman, the mission records and
+the per-airframe kill tallies keep the parent's stock id.
 
 The hangar offers a mod by `unlock`, against the profile's completed-mission count as it offers a
 stock airframe by the stat table's availability:
@@ -268,21 +270,23 @@ of its own, and kept as PNGs in `mod_art/` under Godot's user folder, named
 `<id>_<first 16 hex digits of the content hash>_<view>.png`. A later launch reads the files; a
 changed mod has a new hash and renders again. A run with no renderer (`--headless`) renders nothing,
 and the slots then draw the parent's art. A screen the render lands after is composed again. Every
-other plane picture stays the parent's: the campaign pages, the network lobby and the bot panel carry
-the parent's stock id ([The hangar](#the-hangar)), and the local lobby's Select Plane column names
-the build as a stock airframe of its parent.
+other plane picture stays the parent's: the campaign pages and the bot panel carry the parent's stock
+id ([The hangar](#the-hangar)), the network lobby names a mod row by its `name` over the parent's icon
+and ratings, and the local lobby's Select Plane column names the build as a stock airframe of its
+parent.
 
 ### Bot seats
 
-A bot seat of a field flown on one machine may fly a mod: a local Dogfight or stunt race from the
+A bot seat may fly a mod in every field that seats bots: a local Dogfight or stunt race from the
 command line (`--vs-bot=<id>`) or from the join board, whose Edit Bot plane list offers each loaded
-mod after the eleven stock airframes under its `name`.
+mod after the eleven stock airframes under its `name`, a `--net-host` field, and the network lobby,
+whose bot plane list offers each mod of the host's set after the eleven. A networked field needs no
+rule of its own, since every guest holds the host's mods ([Multiplayer](#multiplayer)).
 
 | Seat | Plane |
 |---|---|
-| Named mod, local field | the mod's id, on a militia that flies its parent, which paints it (the tint mask takes that militia's colours) |
-| Random, local field | any militia/airframe pair at equal odds, each mod adding a copy of its parent's pairs, so a mod is drawn as often as its parent |
-| Named mod, networked field (`--net-host`, the network lobby) | its parent, with the warning `bot: plane mod <id> flies as its parent <parent> in a networked field`; Random draws stock airframes alone |
+| Named mod | the mod's id, on a militia that flies its parent, which paints it (the tint mask takes that militia's colours) |
+| Random | any militia/airframe pair at equal odds, each mod adding a copy of its parent's pairs, so a mod is drawn as often as its parent |
 | A node no airframe has | Random, with the warning `bot: '<node>' is no airframe node, the bot flies a Random one` |
 
 The plane is checked when the field is seated, after the mods are registered, so `--vs-bot=` keeps
@@ -293,6 +297,39 @@ its parent's stock id: on the join board its icon and ratings are the parent's, 
 refuses the parent a named mod bot flies Random and the Random draw passes the mod over.
 
 Scripted campaign enemies and Instant Action's waves stay as the mission authors them.
+
+### Multiplayer
+
+Every machine in a network session flies the host's mods from its own copy, so each guest must hold
+them. The host names its mod set, each mod's id, content hash and parent, to every guest: its lobby on
+connect, and its session at each join before the handshake. A host with no mod sends nothing, so a
+stock session's wire is what it was ([multiplayer-messages.md](../org/multiplayer-messages.md), "Plane
+mods").
+
+| Case | What happens |
+|---|---|
+| The guest holds every host mod with the same hash | it joins; any seat may fly any of the host's mods |
+| The guest lacks a host mod, or holds it with another hash | the guest refuses the host. A menu join reads `Install the host's plane mods: <id>, ...` over the games list; a `--net-join` logs `net: the host flies plane mods this machine lacks or holds in another version, the join failed: <id>, ...` and never builds |
+| The guest holds a mod the host lacks | it joins; that mod is offered nowhere in the session (the lobby's plane list, its custom planes) |
+
+The rule refuses on any difference in the host's set, not only on a mod a seat flies, because a
+lobby's picks, bots and Random draws can put any host mod on a seat until the launch. Each seat's
+airframe crosses as its node, the mod's id, so every machine builds the mod from its own `plane.glb`
+and paints it from the livery's usual pattern, swatch and decal indices. In the lobby a plane is a
+row of the host's set: the eleven stock airframes, then the host's mods in name order, each offered
+under its `name` with its parent's icon and ratings. A custom plane on a mod crosses as its parent's
+build with the mod's row beside it, and only where the session holds the mod.
+
+| Seat | Plane |
+|---|---|
+| `--net-host --plane=<id>` | the host's seats, and each guest's (a command-line guest flies the host's plane), fly the mod |
+| A lobby pilot's pick or custom plane on a mod | the mod, on every machine |
+| A bot, named, picked in the lobby or Random | the mod ([Bot seats](#bot-seats)) |
+| A co-op host's plane, or a co-op guest's hangar plane built on a mod | the mod |
+| The co-op wingman | its parent's stock airframe |
+
+The master server's game listing carries no mod set; a player learns of a mismatch when the join is
+refused.
 
 
 ## Evidence & limits
@@ -336,13 +373,24 @@ Scripted campaign enemies and Instant Action's waves stay as the mission authors
   mod renders under its new hash, a mod's portrait image is shown and only its silhouettes render) and
   the `menu-original-hangar-mod` suite (the hub draws a mod's portrait in the blueprint's place).
 - The bot seat rules are `Session/Roster/BotSeats.cs` (`Named`, the mod pairs of `DrawPair`), which
-  `Launch/SeatFields.cs` calls with mods for a local field and without them on the wire, and the join
-  board's `DogfightBot.ModAirframe`. Covered by `CSVM.Tests/BotSeatsTests.cs`,
-  `CSVM.Tests/VsBotFlagTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs` and the `mod-plane-bot` suite: a
-  Brigand mod is seated named and drawn as Random on a Brigand militia in a local field and as the
-  Brigand on the wire, builds from its file, takes the Brigand's AI def with its `fd_speed` override,
-  is named by no militia def and binds its fit with the turret slot forward. Probe: `--vs
-  --vs-bot=avenger_e1c --mods=<folder>` seats the local Avenger for Medusa, painted in Medusa's colours.
+  every field of `Launch/SeatFields.cs` calls, and the join board's `DogfightBot.ModAirframe`. Covered
+  by `CSVM.Tests/BotSeatsTests.cs`, `CSVM.Tests/VsBotFlagTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs`
+  and the `mod-plane-bot` suite: a Brigand mod is seated named and drawn as Random on a Brigand
+  militia, a registry without it draws none, it builds from its file, takes the Brigand's AI def with
+  its `fd_speed` override, is named by no militia def and binds its fit with the turret slot forward.
+  Probe: `--vs --vs-bot=avenger_e1c --mods=<folder>` seats the local Avenger for Medusa, painted in
+  Medusa's colours.
+- The multiplayer rules are `Net/NetModSet.cs` (the set, its rows, `MissingFrom` and `ModSetMessage`),
+  the seat roster's plane field (`SeatRosterMessage`), `NetSession`'s and `NetLobby`'s use of the set,
+  `NetPlaneBuild.ModRow` through `Flight/Hangar/CustomPlaneWire.cs`, and the lobby rows of
+  `UI/Menu/DogfightLobby.cs`. Covered by `CSVM.Tests/NetMessagesTests.cs` (a stock node and a mod id
+  round trip, a 46-byte entry refused, the set's round trip and rows, the comparison),
+  `CSVM.Tests/NetSessionTests.cs` (a matched guest joins on a mod seat, a stale one names the mod, a
+  stock host sends nothing new), `CSVM.Tests/NetPlaneMessagesTests.cs` (a build on a mod),
+  `CSVM.Tests/DogfightLobbyTests.cs` (a guest's mod pick and a bot on a mod row reach the launch's
+  roster) and the `net-mod-plane` suite: over loopback a host's guest seat on a scratch mod builds from
+  its `plane.glb` on both ends, and a guest holding the mod with another `plane.json` is refused with the
+  mod named, in the session and in the lobby.
 - The format is CSVM's own. The override names are checked when the stats load, not when the mod
   loads, so a misspelt name warns without skipping the mod. A mission or chapter `unlock` id is
   checked against `cm_sequence` when the game data binds, not when the mod loads, so an unknown id

@@ -1732,7 +1732,7 @@ internal static class NetCoopMissionSuites
         door.TellCoopPersisted(SeatFields.CoopPersistedFor(profile, profilesDir));
         var fits = seatFits;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir, keepFlying), launch.Transport,
-            isHost: true, HostSeed, roster, Flight.Hangar.StockAirframes.Nodes,
+            isHost: true, HostSeed, roster, null,
             seat => SeatFields.CoopSeatFitFor(seat, fits, null, stock));
     }
 
@@ -1757,7 +1757,7 @@ internal static class NetCoopMissionSuites
         ctx.Check(door.CoopLaunchDue, $"a guest's door hears the host's opener");
         var launch = door.BuildLaunch()!;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock), keepFlying: keepFlying), launch.Transport,
-            isHost: false, HostSeed + 1, null, Flight.Hangar.StockAirframes.Nodes,
+            isHost: false, HostSeed + 1, null, null,
             seat => SeatFields.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman,
             coopPersisted: hostLog ? () => door.CoopPersisted : null);
     }
@@ -1779,7 +1779,7 @@ internal static class NetCoopMissionSuites
         var spec = SessionSpec.FromCampaign(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), "", mission.Seq,
             Enumerable.Repeat(plane, seats).ToArray(), seats, Enumerable.Repeat<LoadoutChoice?>(null, seats).ToArray());
         return NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: false, HostSeed + 1, null,
-            Flight.Hangar.StockAirframes.Nodes, seat => SeatFields.CoopSeatFitFor(seat, null, door, stock),
+            null, seat => SeatFields.CoopSeatFitFor(seat, null, door, stock),
             () => door.CoopWingman, coopPersisted: () => door.CoopPersisted);
     }
 

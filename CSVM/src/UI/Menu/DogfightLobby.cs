@@ -21,7 +21,7 @@ public readonly record struct DogfightScore(string Name, int Points, int Kills, 
 /// come and go. It carries a callsign, a stock airframe or
 /// <see cref="DogfightLobbySeat.RandomAirframe"/>, a skill tier and a lobby team (0 for none).
 /// <paramref name="Placed"/> marks a team the host picked. The lobby balances any other.
-/// <paramref name="ModAirframe"/> is a plane mod's id on a local field, whose parent is the airframe.
+/// <paramref name="ModAirframe"/> is a plane mod's id, whose parent is the airframe.
 /// </summary>
 public readonly record struct DogfightBot(int Id, string Callsign, byte Airframe, NetBotSkill Skill, byte Team, bool Placed = false,
     string? ModAirframe = null)
@@ -98,7 +98,8 @@ public sealed class DogfightLobby
     /// row.</summary>
     public const byte DefaultAirframe = CoopGuestPick.StarterAirframe;
 
-    /// <summary>How many stock airframes the Select Plane list offers.</summary>
+    /// <summary>How many stock airframes the Select Plane list offers, ahead of the session's plane
+    /// mods (<see cref="Mods"/>).</summary>
     public const int AirframeCount = 11;
 
     /// <summary>The pilot count Fill-to-N's box opens on: the eight the original's colour table and
@@ -301,8 +302,13 @@ public sealed class DogfightLobby
     /// any type but a Stunt Race. A guest takes it from its host's word, never from a choice of its own.</summary>
     public string? LaunchCourse => IsStuntRace(Options) ? LobbyCourse?.Name : null;
 
-    /// <summary>The stock airframe this pilot picked, an index into the eleven.</summary>
+    /// <summary>The airframe this pilot picked, a row of <see cref="Mods"/>: a stock id, or a plane
+    /// mod's row past the eleven.</summary>
     public byte Airframe => _picks[0].Airframe;
+
+    /// <summary>The session's plane mods, whose rows every airframe byte here names: the host's own,
+    /// or on a guest its host's. A guest's own mods the host lacks are no row of them.</summary>
+    public NetModSet Mods => _wire.Mods;
 
     /// <summary>The ammunition and ordnance this pilot picked, stock when all zero.</summary>
     public CoopFit Fit => _picks[0].Fit;
@@ -846,14 +852,23 @@ public sealed class DogfightLobby
     /// Refused for a blank name and for one another row holds.</summary>
     public bool SetBotCallsign(int id, string callsign) => EditsBots && _bots.Rename(id, callsign, PeopleNames());
 
-    /// <summary>Puts bot row <paramref name="id"/> on one of the eleven stock airframes or on
-    /// <see cref="DogfightLobbySeat.RandomAirframe"/>. Refused on an airframe the plane rules refuse
-    /// a person's stock pick of.</summary>
-    public bool SetBotAirframe(int id, int airframe) => EditsBots && AdmitsBotAirframe(airframe) && _bots.SetAirframe(id, airframe);
+    /// <summary>Puts bot row <paramref name="id"/> on an airframe row of <see cref="Mods"/>, a stock
+    /// airframe or a plane mod, or on <see cref="DogfightLobbySeat.RandomAirframe"/>. Refused on an
+    /// airframe the plane rules refuse a person's stock pick of, a mod by its parent.</summary>
+    public bool SetBotAirframe(int id, int airframe) => EditsBots && AdmitsBotAirframe(airframe)
+        && (airframe == DogfightLobbySeat.RandomAirframe
+            ? _bots.SetAirframe(id, airframe)
+            : _bots.SetAirframe(id, Mods.StockOf(airframe), airframe >= AirframeCount ? Mods.NodeOf(airframe) : null));
 
     /// <summary>Whether <see cref="SetBotAirframe"/> takes <paramref name="airframe"/> under the
     /// plane rules, so the bot's plane list greys and steps over what it would refuse.</summary>
-    public bool AdmitsBotAirframe(int airframe) => airframe == DogfightLobbySeat.RandomAirframe || Rules.AdmitsStock(airframe);
+    public bool AdmitsBotAirframe(int airframe) =>
+        airframe == DogfightLobbySeat.RandomAirframe || (Mods.StockOf(airframe) is >= 0 and var stock && Rules.AdmitsStock(stock));
+
+    /// <summary>The airframe row bot <paramref name="bot"/> flies in <see cref="Mods"/>; its parent's
+    /// stock airframe for a mod the session does not hold.</summary>
+    public byte BotRow(DogfightBot bot) =>
+        bot.ModAirframe is { } mod && Mods.RowOf(mod) is >= 0 and var row ? (byte)row : bot.Airframe;
 
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
     public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);
@@ -906,11 +921,11 @@ public sealed class DogfightLobby
     public bool SetOutlawed(int flag, bool outlawed) =>
         flag is >= 0 and < NetPlaneRules.Flags && !IsStuntRace(_options) && ChangeRules(_rules.With(flag, outlawed));
 
-    /// <summary>Picks this pilot's stock airframe and fit, live whether or not it is Ready. A changed
-    /// pick clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
+    /// <summary>Picks this pilot's airframe row and fit, live whether or not it is Ready. A changed
+    /// pick clears this pilot's own Ready. Refused outside the rows of <see cref="Mods"/>.</summary>
     public bool Pick(int airframe, CoopFit fit)
     {
-        if (airframe is < 0 or >= AirframeCount)
+        if (airframe < 0 || airframe >= Mods.Rows)
         {
             return false;
         }
@@ -930,7 +945,7 @@ public sealed class DogfightLobby
             return false;
         }
 
-        Take(local, build.Airframe, build.Copy(), fit);
+        Take(local, build.ModRow >= AirframeCount ? build.ModRow : build.Airframe, build.Copy(), fit);
         return true;
     }
 
@@ -948,10 +963,10 @@ public sealed class DogfightLobby
 
     /// <summary>Picks a further seat's stock airframe and fit, as <see cref="Pick"/> does seat 0's;
     /// <see cref="PickCustom"/> picks its custom plane. A changed pick clears this machine's Ready,
-    /// which stands for every seat. Refused for seat 0, past the fourth seat and outside the eleven.</summary>
+    /// which stands for every seat. Refused for seat 0, past the fourth seat and outside the rows.</summary>
     public bool PickSeat(int local, int airframe, CoopFit fit)
     {
-        if (local < 1 || local >= _picks.Length || airframe is < 0 or >= AirframeCount)
+        if (local < 1 || local >= _picks.Length || airframe < 0 || airframe >= Mods.Rows)
         {
             return false;
         }
@@ -1180,9 +1195,6 @@ public sealed class DogfightLobby
         return false;
     }
 
-    // The airframe a guest seat's pick names, or the mark of a pick the host has not heard.
-    private static byte PickedAirframe(CoopPickMessage? pick) =>
-        pick is not { } heard ? DogfightLobbySeat.NoPick : heard.Airframe < AirframeCount ? heard.Airframe : DefaultAirframe;
 
     // Whether these options may fly the Danger Zones: anything but a Stunt Race, or one in a chapter
     // that ships them.
@@ -1308,7 +1320,7 @@ public sealed class DogfightLobby
     // custom plane is the one that seat's build named.
     private bool Admits(int peer, CoopPickMessage pick, int local = 0) =>
         pick.Ready && pick.Epoch == _options.Epoch
-        && Rules.Refuses(pick.Airframe, _wire.BuildAt(peer, local)) == PlaneRefusal.None;
+        && Rules.Refuses(Mods.StockOf(pick.Airframe), _wire.BuildAt(peer, local)) == PlaneRefusal.None;
 
     // The original's Ready check over every seat this machine flies, true when it refuses. An
     // outlawed ammunition or rocket also resets every gun's or pylon's to none, so the next Ready
@@ -1319,7 +1331,7 @@ public sealed class DogfightLobby
         for (int local = 0; local < SeatsFlown; local++)
         {
             var seat = _picks[local];
-            Refuse(rules.Refuses(seat.Airframe, seat.Build));
+            Refuse(rules.Refuses(Mods.StockOf(seat.Airframe), seat.Build));
             Refuse(rules.AmmoOutlawed(seat.Fit) && !rules.Has(NetPlaneRules.AllAmmoFlag) ? PlaneRefusal.Ammo : PlaneRefusal.None);
             Refuse(rules.RocketsOutlawed(seat.Fit) && !rules.Has(NetPlaneRules.AllRocketsFlag) ? PlaneRefusal.Rockets : PlaneRefusal.None);
             seat.Fit = rules.Enforce(seat.Fit);
@@ -1442,6 +1454,9 @@ public sealed class DogfightLobby
         _chat.Add(new DogfightChatLine(line.Name, line.Text));
     }
 
+    // The airframe row a guest seat's pick names, or the mark of a pick the host has not heard.
+    private byte PickedAirframe(CoopPickMessage? pick) =>
+        pick is not { } heard ? DogfightLobbySeat.NoPick : heard.Airframe < Mods.Rows ? heard.Airframe : DefaultAirframe;
     private List<DogfightLobbySeat> HostRows()
     {
         int self = _wire.LocalPeer;
@@ -1464,7 +1479,7 @@ public sealed class DogfightLobby
         // A bot is always Ready: it has no plane of its own to consent to.
         foreach (var bot in _bots.Rows)
         {
-            rows.Add(new DogfightLobbySeat(bot.Callsign, bot.Airframe, true, false, bot.Team, false, NetPilot.Bot, bot.Skill));
+            rows.Add(new DogfightLobbySeat(bot.Callsign, BotRow(bot), true, false, bot.Team, false, NetPilot.Bot, bot.Skill));
         }
 
         return rows;

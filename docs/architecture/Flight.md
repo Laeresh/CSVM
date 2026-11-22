@@ -1681,16 +1681,16 @@ pickers read. `ModAirframe` is a mod build's string id beside its parent's stock
 ## src/Flight/Hangar/StockAirframes.cs
 The airframe id 0-10 to `planes.zbd` node table and its inverse, read off `Mech3/AirframeRegistry.cs`'s
 stock rows: `Node` clamps like the def's own fields, `IdOf` answers null for a node none of the
-eleven fly as (a mod airframe included), and `Nodes` is the list a network roster indexes. The int
-id for the plane pickers, the campaign director's own and wingman planes, saves and the wire.
+eleven fly as (a mod airframe included), and `Nodes` the eleven in id order, a network session's
+first eleven airframe rows. The int id for the plane pickers, the campaign director's own and wingman planes and saves.
 Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`, `CSVM.Tests/AirframeRegistryTests.cs`.
 
 ## src/Flight/Hangar/ModPlanes.cs
 The plane mods in `<dataRoot>/Mods/Planes`: each subfolder and top-level `.zip` is one `ModPlane`,
 its id the folder or zip name, read in name order. `Open` checks `plane.json` (a stock `kind_of`,
 literal overrides, `unlock`, stock `cockpit` and `sound`, a portrait inside the mod, a `tint` whose mask and detail PNGs are in it) and the
-`plane.glb` beside it, and hashes every file by path for multiplayer matching. A mod that fails a
-check, or whose id is a stock node or an earlier mod's, is left out with a warning and listed in
+`plane.glb` beside it, and hashes every file by path; `Wire` is the set a network session names. A mod that fails a
+check, or whose id is a stock node, an earlier mod's or past the roster's 31 bytes, is left out with a warning and listed in
 `Skipped`; `ModPlane.Read` reads a mod's file on demand. `Open` takes the mods folder `--mods=` names in place of `Mods`, and `Skip` leaves out a mod that loaded but failed later (its model, its registration) as a load skip does. `Launch/Launcher.cs` opens `Current` (no `--det` or `--run-tests` run reads the default folder) and grafts each mod's model (`Mech3/ModAirframes.cs`); a session takes a mod's stats from `ModPlane.Stats` and, with no `--loadout=`, its fit from `ModPlane.StockLoadout`. `ModPlane.Stats` is the parent's `PlaneStats` (a bot's on the parent's AI def) with each override set through `PlaneStats.OverrideDefField`, an unknown name warned and ignored, and the turret mounts cleared under `"turrets": []`, then a `sound` plane's engine-slot defs through `PlaneStats.TakeEngineSounds`; `ModPlane.StockLoadout` is the parent's fit with each turret slot a forward gun on its own firepoints, then `plane.json`'s `loadout` guns and pylons over it through `CustomPlaneBuild.LoadoutFor`; `ModPlanes.StockFitFor` picks that or the stock table's fit by node. `HangarCapacity` is the hangar weight capacity `HangarEconomy.StatsFor` uses. `FindOrWarn` resolves a saved record's mod id (a custom plane's, a campaign plane's), warning once per missing id. `ModPlane.BindCampaign`, run by the launcher at each data bind, checks a mission or chapter `unlock` against `cm_sequence`; `CampaignAvailability` is the result in the stat table's availability units.
 Engine-free. Format: [../formats/mod-planes.md](../formats/mod-planes.md). Coverage: `CSVM.Tests/ModPlanesTests.cs`, `CSVM.Tests/ModPlaneStatsTests.cs`, `CSVM.Tests/ModPlaneHangarTests.cs`, `CSVM.Tests/ModPlaneCampaignTests.cs`.
 
@@ -1929,4 +1929,4 @@ radius the wheel and the drag work in.
 The bridge between a saved `CustomPlaneDef` and the `Net/NetPlaneMessages.cs` build the wire
 carries. `Build` copies every field that decides how the plane flies, takes hits or looks; `Def`
 reads one back held to the decoded ranges, which is what every machine, the owner's included, flies.
-The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.
+The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them. A build on a plane mod names the mod's row of the session's `NetModSet` (`ModRow`), and `Def` reads it back as the id beside the parent.

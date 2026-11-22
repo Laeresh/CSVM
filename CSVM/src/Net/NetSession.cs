@@ -31,7 +31,7 @@ public sealed class NetSession : INetTransportListener
     private readonly HashSet<(int Peer, NetMessageType Type)> _forgeriesLogged = new();
     private readonly List<NetSeat> _seats = new();
     private readonly List<NetSeatEntry> _received = new();
-    private readonly IReadOnlyList<string> _airframes;
+    private readonly NetModSet _mods;
     private readonly Func<double> _clock;
     private readonly byte[] _scratch = new byte[SendBufferBytes];
     private readonly ulong _seed;
@@ -42,14 +42,14 @@ public sealed class NetSession : INetTransportListener
     private int _extraSeats;
 
     private NetSession(INetTransport transport, bool isHost, ulong seed, Func<double>? clock,
-        IReadOnlyList<NetSeat>? roster, IReadOnlyList<string>? airframes)
+        IReadOnlyList<NetSeat>? roster, NetModSet? mods)
     {
         ArgumentNullException.ThrowIfNull(transport);
         _transport = transport;
         IsHost = isHost;
         _seed = seed;
         _clock = clock ?? (() => 0.0);
-        _airframes = airframes ?? Array.Empty<string>();
+        _mods = mods ?? NetModSet.None;
         if (roster != null)
         {
             _seats.AddRange(roster);
@@ -58,6 +58,7 @@ public sealed class NetSession : INetTransportListener
 
         if (!isHost)
         {
+            Route<ModSetMessage>(TakeModSet);
             Route<HandshakeMessage>(TakeHandshake);
             Route<SeatRosterMessage>(TakeRoster);
         }
@@ -120,7 +121,11 @@ public sealed class NetSession : INetTransportListener
     /// <summary>Whether this session has everything it needs to build. A host always does. A guest
     /// does once the handshake and the roster have arrived and the roster holds the guest's seat.
     /// </summary>
-    public bool Joined => IsHost || (_handshake != null && _rosterArrived && HoldsLocalSeat());
+    public bool Joined => IsHost || (RefusedMods.Count == 0 && _handshake != null && _rosterArrived && HoldsLocalSeat());
+
+    /// <summary>The host's plane mods this guest lacks or holds under another hash, in the host's
+    /// order. A guest with any never joins. Empty on a host and before the host's set arrives.</summary>
+    public IReadOnlyList<NetMod> RefusedMods { get; private set; } = Array.Empty<NetMod>();
 
     /// <summary>Every peer this session can send to, this end excluded.</summary>
     public IReadOnlyList<int> Peers => _transport.Peers;
@@ -164,19 +169,19 @@ public sealed class NetSession : INetTransportListener
     /// <summary>Opens the match's own end: <paramref name="roster"/> is the whole field as this
     /// machine has it, <paramref name="seed"/> the master every peer draws from, and
     /// <paramref name="clock"/> what the handshake stamps. Every peer already on the transport is
-    /// answered at once.</summary>
+    /// answered at once. <paramref name="mods"/> are this host's plane mods, named to each joiner.</summary>
     public static NetSession Host(INetTransport transport, IReadOnlyList<NetSeat> roster,
-        ulong seed, Func<double>? clock = null, IReadOnlyList<string>? airframes = null)
+        ulong seed, Func<double>? clock = null, NetModSet? mods = null)
     {
         ArgumentNullException.ThrowIfNull(roster);
-        return new NetSession(transport, isHost: true, seed, clock, roster, airframes);
+        return new NetSession(transport, isHost: true, seed, clock, roster, mods);
     }
 
     /// <summary>Opens a joining end, which knows nothing until the host answers.
-    /// <paramref name="airframes"/> is the order both peers read a roster's airframe index
-    /// against.</summary>
-    public static NetSession Guest(INetTransport transport, IReadOnlyList<string>? airframes = null)
-        => new(transport, isHost: false, seed: 0, clock: null, roster: null, airframes);
+    /// <paramref name="mods"/> are this machine's plane mods. They must hold every mod the host
+    /// names (<see cref="RefusedMods"/>).</summary>
+    public static NetSession Guest(INetTransport transport, NetModSet? mods = null)
+        => new(transport, isHost: false, seed: 0, clock: null, roster: null, mods);
 
     /// <summary>Hands a lobby's carrier back when this session still holds it, so the next flight
     /// can bind it. A bare carrier binds once for its life and is left as it is.</summary>
@@ -496,9 +501,15 @@ public sealed class NetSession : INetTransportListener
     }
 
     // The host's answer to one joining peer, handshake first: it names the seats, and the roster
-    // that follows is read against them. Reliable, so the order the guest sees is this order.
+    // that follows is read against them. Reliable, so the order the guest sees is this order. A host
+    // with plane mods names them before either, so a guest without them refuses before it builds.
     private void SendJoin(int peer)
     {
+        if (_mods.Mods.Count > 0)
+        {
+            Send(peer, new ModSetMessage(_mods));
+        }
+
         int seat = SeatOf(peer);
         Send(peer, new HandshakeMessage(_seed, _clock(), (byte)seat, (byte)ExtraSeatsOf(peer, seat)));
         Send(peer, new SeatRosterMessage((uint)_seed, RosterEntries()));
@@ -523,7 +534,7 @@ public sealed class NetSession : INetTransportListener
         {
             var seat = _seats[i];
             entries[i] = new NetSeatEntry(
-                (byte)seat.SeatIndex, (byte)seat.TeamId, AirframeIndex(seat.PlaneNode),
+                (byte)seat.SeatIndex, (byte)seat.TeamId, seat.PlaneNode,
                 seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice, seat.Unnamed,
                 seat.Pilot, seat.Skill, seat.Militia, seat.Accent);
         }
@@ -601,7 +612,7 @@ public sealed class NetSession : INetTransportListener
                 Skill = entry.Skill,
                 Callsign = entry.Callsign,
                 Unnamed = entry.Unnamed,
-                PlaneNode = AirframeName(entry.Plane),
+                PlaneNode = entry.Plane,
                 Voice = entry.Voice,
                 Militia = entry.Militia,
                 Accent = entry.Accent,
@@ -622,19 +633,5 @@ public sealed class NetSession : INetTransportListener
         return false;
     }
 
-    private byte AirframeIndex(string plane)
-    {
-        for (int i = 0; i < _airframes.Count; i++)
-        {
-            if (string.Equals(_airframes[i], plane, StringComparison.Ordinal))
-            {
-                return (byte)i;
-            }
-        }
-
-        return NetMessage.NoSeat;
-    }
-
-    private string AirframeName(byte index) =>
-        index < _airframes.Count ? _airframes[index] : "";
+    private void TakeModSet(int peer, ModSetMessage message) => RefusedMods = message.Set.MissingFrom(_mods);
 }

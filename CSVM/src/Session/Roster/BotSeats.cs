@@ -123,12 +123,12 @@ public static class BotSeats
     /// A bot with no callsign draws one from <paramref name="pool"/>, shuffled once, never a name drawn
     /// before or held, else <see cref="SessionSpec.BotCallsign"/>. Zeppelin vs Zeppelin caps torpedoes
     /// (<paramref name="oneTorpedoPerTeam"/>). A plane <paramref name="rules"/> refuse, or an unknown
-    /// node, is drawn as Random, and a bot left no airframe is left out. Only under <paramref name="mods"/>
-    /// may a bot fly a plane mod of <paramref name="airframes"/>, by default the shared registry.</summary>
+    /// node, is drawn as Random, and a bot left no airframe is left out. A bot may fly a plane mod of
+    /// <paramref name="airframes"/>, by default the shared registry, named or drawn.</summary>
     public static IReadOnlyList<SeatedBot> Resolve(
         IReadOnlyList<VsBotEntry> bots, IEnumerable<string> taken, IReadOnlyList<string> pool, Random rng,
         bool oneTorpedoPerTeam = false, NetPlaneRules? rules = null, Func<byte, string, bool>? armsAdmitted = null,
-        bool mods = false, AirframeRegistry? airframes = null)
+        AirframeRegistry? airframes = null)
     {
         ArgumentNullException.ThrowIfNull(bots);
         ArgumentNullException.ThrowIfNull(taken);
@@ -162,9 +162,9 @@ public static class BotSeats
         for (int i = 0; i < bots.Count; i++)
         {
             var bot = bots[i];
-            string? named = Named(bot.Plane, registry, mods);
+            string? named = Named(bot.Plane, registry);
             string? asked = named != null && rules is { } outlaws && !AirframeAdmitted(outlaws, named, registry) ? null : named;
-            var pair = DrawPair(asked, oneTorpedoPerTeam && torpedoTeams.Contains(bot.Team), rng, rules, armsAdmitted, mods ? registry : null);
+            var pair = DrawPair(asked, oneTorpedoPerTeam && torpedoTeams.Contains(bot.Team), rng, rules, armsAdmitted, registry);
             if (pair == null && asked == null)
             {
                 continue;
@@ -223,9 +223,8 @@ public static class BotSeats
     }
 
     /// <summary>The plane a bot named flies, null for Random. A node <paramref name="airframes"/> does not
-    /// know is Random. Without <paramref name="mods"/>, a networked field whose wire carries stock
-    /// airframes alone, a named mod flies its parent. Each change is logged.</summary>
-    public static string? Named(string? plane, AirframeRegistry airframes, bool mods)
+    /// know is Random, which is logged.</summary>
+    public static string? Named(string? plane, AirframeRegistry airframes)
     {
         ArgumentNullException.ThrowIfNull(airframes);
         if (plane == null)
@@ -237,12 +236,6 @@ public static class BotSeats
         {
             Log.Warn("core", $"bot: '{plane}' is no airframe node, the bot flies a Random one");
             return null;
-        }
-
-        if (!mods && !known.IsStock)
-        {
-            Log.Warn("core", $"bot: plane mod '{known.Node}' flies as its parent {known.StockNode} in a networked field");
-            return known.StockNode;
         }
 
         return known.Node;

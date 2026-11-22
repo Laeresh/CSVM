@@ -49,14 +49,13 @@ public class ModPlaneCampaignTests
     }
 
     [Fact]
-    public void AnInstalledModFliesAsItsOwnNodeExceptOnANetworkedLaunch()
+    public void AnInstalledModFliesAsItsOwnNode()
     {
         var mods = Mods(("avenger", """{ "name": "E-1C Avenger", "kind_of": "player_brigand" }"""));
         var (feature, _) = Seated(mods, "avenger");
 
         Assert.Equal("avenger", feature.Profile!.Planes[2].FlownNode(mods));
         Assert.Equal("avenger", feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 } })!.Seats[0].PlaneNode);
-        Assert.Equal("node4", feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 } }, networked: true)!.Seats[0].PlaneNode);
     }
 
     [Fact]

@@ -2179,10 +2179,9 @@ public sealed record LauncherContext
     /// Meaningless without a <see cref="NetTransport"/>.</summary>
     public bool NetHost { get; init; }
 
-    /// <summary>The airframe order every peer reads a roster's airframe index against, since the
-    /// roster carries an index and a seat flies a named node. Empty leaves a guest's seats without
-    /// a pick, which falls back to this machine's own launch flags.</summary>
-    public IReadOnlyList<string>? NetAirframes { get; init; }
+    /// <summary>This machine's plane mods as a session names them. A host's go to each joiner, and a
+    /// guest refuses a host whose mods it lacks. Null reads <c>ModPlanes.Current</c>.</summary>
+    public Net.NetModSet? NetMods { get; init; }
 
     /// <summary>The fit a seat flown elsewhere carries, by seat index, or null for its stock fit.
     /// Read once the field is known, which on a guest is after the host's roster arrived. A seat

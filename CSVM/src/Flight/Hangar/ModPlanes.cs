@@ -284,6 +284,8 @@ public sealed class ModPlanes
 
     /// <summary>The mods left out, in name order, each with its reason.</summary>
     public IReadOnlyList<SkippedMod> Skipped { get; }
+    /// <summary>These mods as a network session names them, in row order: id, hash and parent.</summary>
+    public Net.NetModSet Wire => new(Planes.Select(p => new Net.NetMod(p.Id, p.Hash, (byte)(StockAirframes.IdOf(p.KindOf) ?? 0))).ToArray());
 
     /// <summary>The folder under the data root, or under the mods folder <paramref name="mods"/>
     /// (relative to the data root unless rooted), that plane mods are read from.</summary>
@@ -328,6 +330,7 @@ public sealed class ModPlanes
         Log.Info("flight", $"mod planes: {planes.Count} loaded, {skipped.Count} skipped from {dir}");
         return new(planes, skipped);
     }
+
 
     /// <summary>The mod whose id is <paramref name="id"/>, matched without case, or null.</summary>
     public ModPlane? Find(string id) =>
@@ -390,6 +393,11 @@ public sealed class ModPlanes
         if (id.Length == 0)
         {
             throw new InvalidDataException("the id is empty");
+        }
+
+        if (System.Text.Encoding.UTF8.GetByteCount(id) >= Net.SeatRosterMessage.PlaneBytes)
+        {
+            throw new InvalidDataException($"id {id} is longer than {Net.SeatRosterMessage.PlaneBytes - 1} bytes, the most a network roster carries");
         }
 
         if (StockAirframes.IdOf(id) != null)

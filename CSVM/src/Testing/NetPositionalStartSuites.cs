@@ -197,8 +197,8 @@ internal static class NetPositionalStartSuites
             new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
-        var hostNet = NetSession.Host(mesh[0], roster, Seed, null, Airframes);
-        var guestNet = NetSession.Guest(mesh[1], Airframes);
+        var hostNet = NetSession.Host(mesh[0], roster, Seed);
+        var guestNet = NetSession.Guest(mesh[1]);
         for (int i = 0; i < 200 && !guestNet.Joined; i++)
         {
             hostNet.Step(StepDt);

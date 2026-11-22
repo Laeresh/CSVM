@@ -208,9 +208,9 @@ public sealed class NetInstrumentsTests
             new() { PeerId = 1, SeatIndex = 1, Callsign = "first", PlaneNode = Airframes[1] },
             new() { PeerId = 2, SeatIndex = 2, Callsign = "second", PlaneNode = Airframes[0] },
         };
-        var host = NetSession.Host(mesh[0], seats, 1UL, null, Airframes);
-        var first = NetSession.Guest(mesh[1], Airframes);
-        var second = NetSession.Guest(mesh[2], Airframes);
+        var host = NetSession.Host(mesh[0], seats, 1UL);
+        var first = NetSession.Guest(mesh[1]);
+        var second = NetSession.Guest(mesh[2]);
         first.Step(0.016);
         second.Step(0.016);
         int sent = host.Sent;
@@ -239,7 +239,7 @@ public sealed class NetInstrumentsTests
             new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
             new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
         };
-        var host = NetSession.Host(mesh[0], seats, 1UL, null, Airframes);
+        var host = NetSession.Host(mesh[0], seats, 1UL);
         var poses = new RemotePoseTally(0, 0, 7, 2, 1, 2, 3.0, 2.25f, 1);
 
         string line = NetInstruments.Describe(host, poses);
@@ -253,7 +253,7 @@ public sealed class NetInstrumentsTests
     public void A_guests_readout_line_ends_with_its_clock_offset_snaps_and_round_trip()
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
-        var guest = NetSession.Guest(mesh[1], Airframes);
+        var guest = NetSession.Guest(mesh[1]);
         var clock = new NetClockSlew(10.0);
         clock.ObserveRoundTrip(1.0, 11.5, 1.04);
         clock.Observe(30.0, 2.0);

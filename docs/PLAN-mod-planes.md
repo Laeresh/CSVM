@@ -130,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ Saves keep the mod id; a missing mod flies as its parent
 32. ☑ Campaign unlock field
 33. ☑ Bot seats may fly mod planes
-34. ☐ Multiplayer: string airframe id and a matching mod set
+34. ☑ Multiplayer: string airframe id and a matching mod set
 
 ### Wave E, the Avenger as the first mod
 
@@ -1184,7 +1184,104 @@ planes with the parent's AI def; scripted mission enemies are unchanged.
 
 **⚠ Traps.** <TODO>
 
-## D34 ☐ Multiplayer: string airframe id and a matching mod set
+## D34 ☑ Multiplayer: string airframe id and a matching mod set
+
+**Landed.** A seat's airframe crosses as its node, and a host's plane mods cross as a set every guest
+must hold. Rules and wire: `docs/org/multiplayer-messages.md` "Plane mods", `docs/formats/mod-planes.md`
+"Multiplayer".
+
+- **Seat roster `0x27`.** `NetSeatEntry.Plane` is a string. The byte after the flags, which carried the
+  index into `StockAirframes.Nodes`, is reserved, and a 32-byte UTF-8 field after the callsign carries
+  the node, a stock one or a mod id. The entry is 78 bytes (was 46), and a reader refuses any other
+  width. `NetSession` no longer takes an airframe list (`NetAirframes`, the `airframes:` arguments are
+  gone) and copies `PlaneNode` both ways. `ModPlanes` skips a mod whose id is longer than 31 bytes of
+  UTF-8, the field's width.
+- **Protocol version.** The peer protocol's version is the build's MAJOR.MINOR (`BuildVersionMessage`,
+  frozen layout), which the lobby compares on connect. `project.godot` stays 0.8.0: the version is set
+  by the release, and this layout must ship in a minor release (0.9.0), the rule the roster's width
+  already carried. Inside one MAJOR.MINOR the width refuses on its own: a 46-byte build and this one
+  each read the other's roster as malformed, so a `--net-join` across them fails its join (`no
+  handshake or roster`) instead of flying different planes.
+- **The mod set.** `Net/NetModSet.cs`: `NetMod(Id, Hash, Parent)`, `NetModSet` (the session's airframe
+  rows, `NodeOf`, `StockOf`, `RowOf`, `MissingFrom`) and `ModSetMessage` `0x6E` (count, three reserved,
+  then per mod its parent byte, its id in 32 bytes and its 32-byte hash; at most 64 mods).
+  `ModPlanes.Wire` is a machine's own set. A host's `NetLobby` (`mods:`, from `NetPlayFeature.OpenHost`)
+  sends it on connect after the version and the advert, and `NetSession.Host(..., mods)` sends it at
+  each join before the handshake, for the command line's join that stands no lobby. Only a host with
+  a mod sends it, so a stock session's wire and payload counts are unchanged. A guest's lobby keeps it
+  as `Mods`; a host's lobby never takes a peer's.
+- **The rule: refuse whenever the guest lacks a mod of the host's set or holds it under another hash.**
+  Every host mod counts, not only those a seat flies, because a lobby's picks, bots and Random draws
+  can put any host mod on a seat until the launch, and a per-seat check would have to run again at each
+  change and could throw a seated guest out mid-lobby. The menu guest's door fails with
+  `CoopDoorText.ModsMissing` ("Install the host's plane mods: <ids>"); a `--net-join` guest's
+  `NetSession.RefusedMods` stops `SessionNet.AwaitJoin` at once with `net: the host flies plane mods
+  this machine lacks or holds in another version, the join failed: <ids>`. A guest's own mods the host
+  lacks refuse nothing and are no row of the session: the lobby's plane lists hold only the host's
+  rows, its custom plane list leaves out a build on a mod the session lacks, and
+  `CustomPlaneWire.Build` sends such a build as its parent's.
+- **Lobby rows.** Every lobby airframe byte is a row of the host's set: 0-10 the stock ids, 11 + i the
+  host's i-th mod in name order (the pick `0x51`, the Dogfight roster `0x54`, a bot), so no lobby
+  message changed width. `DogfightLobby.Mods`; `Pick`, `PickSeat` and a guest pick's read bound to
+  `Mods.Rows`; `PickCustom` takes the build's mod row; the plane rules judge `Mods.StockOf(row)`;
+  `SetBotAirframe(row)` stores the parent and the mod id in `DogfightBot` (D33's pair) and `BotRow`
+  lists it. `OriginalLobbyScreen`'s plane and bot dropdowns list every row, a mod row worded
+  `Stock <name>` (`PlaneWord`, `PlaneText`, `ModName`); its icon, ratings and caption column stays the
+  parent's, as C26 left the network lobby's art.
+- **Custom builds.** `NetPlaneBuild.ModRow` is byte 23 of the 26 build bytes (two spare remain), 0 for a
+  stock build, so a stock build's bytes are unchanged; `Airframe` stays the parent, so every reader of
+  it (rules, stat table, engine rows) reads the parent. `CustomPlaneWire.Build(def, mods)` and
+  `Def(build, mods)` map the row to the id and set `Airframe` from the set's parent.
+- **The formerly int-only sites.** `NetFlight.cs:347` (`NetAirframes = StockAirframes.Nodes`) is gone:
+  `LauncherContext.NetMods`, null reading `ModPlanes.Current.Wire`, feeds `SessionNet`'s host and guest.
+  `SeatFields.cs:76` (a co-op guest's seat) resolves the hangar word's row, its build's `ModRow` when
+  set, through the lobby's set; `SeatFields.cs:159` (a lobby pick) resolves the pick's row.
+  `InspectionLabs.cs:396` (the lighting lab's plane list) lists `AirframeRegistry.Shared.All`, mods
+  included. `CustomPlaneWire.Of`/`Build` names the mod row (`OriginalLobbyScreen`, `SeatFields.SeatBuildsFor`,
+  `CampaignFeature.HangarBuildOf` with `ModSet.Wire`), and `SeatBuildFor` reads it back with the door's
+  `Mods`. `DogfightLobby` and `NetPlaneMessages` as above. `OriginalLobbyScreen.StockDef` takes a mod
+  row's own default through `ModPlanes.StockFitFor`, and its launch seats `Mods.NodeOf(row)`. D31's co-op
+  host launch: `CampaignFeature.BuildExit` lost `networked`, so the host flies its mod id. D31's co-op
+  hangar words: the word's airframe stays the parent (a guest's copy indexes art by it) and its build
+  names the mod's row, so the host seats a guest on a hangar mod plane as the mod. D33's networked
+  fields: `BotSeats.Resolve`, `BotSeats.Named` and `SeatFields.ResolveBots` lost `mods`, so
+  `CliHostField` and `VersusLaunchField` seat named mods and Random draws them. D33's network lobby bot
+  list lists the host's mod rows. `--net-host --plane=<mod>` needed no code beyond the roster: the host's
+  seats, and each command-line guest's (it flies the host's plane), carry the mod id.
+- **Still the parent.** The co-op wingman (`CoopWingmanMessage` keeps a parent byte, so the host's and
+  every guest's wingman stay one airframe; the plan allowed it), the mission records and per-airframe
+  kill tallies, the network lobby's art column, a co-op guest's own pages naming a hangar mod plane
+  (its `CampaignFeature` holds no session set, so `GuestBuildOf` reads the build without one), and a
+  host's mods past the 64th, which its guests are not offered.
+- **Master server.** The game listing carries the version and the password mark but no content
+  requirement, so it is unchanged; a mismatch shows at the join.
+- Coverage: `NetMessagesTests` (`SeatRosterCarriesTheAirframeAsItsNode`: two stock nodes, a mod id and a
+  31-byte id round trip, a 46-byte entry refused; `ModSetRoundTripsAndNamesTheSessionsAirframeRows`;
+  `AGuestMissingAHostModOrHoldingAnotherHashIsNamedEachMissingMod`), `NetSessionTests.A_guest_joins_a_mod_host_only_holding_its_mods`
+  (a matched guest joins on a mod seat, a stale one never joins and names the mod, a stock host still
+  sends two payloads), `NetPlaneMessagesTests.ABuildOnAPlaneModCrossesAsItsParentAndTheModsRow`,
+  `DogfightLobbyTests.AHostsPlaneModIsALobbyRowTheLaunchSeatsByItsId` (a guest's pick of row 11 and a
+  bot on row 11 reach the host's launch roster as the mod id; a stock host offers 11 rows), the updated
+  `BotSeatsTests.AFieldSeatsAPlaneModOnItsParentsMilitias` and `ModPlaneCampaignTests.AnInstalledModFliesAsItsOwnNode`,
+  and the `net-mod-plane` suite (loopback host and two guests over a scratch mod: the matched guest
+  joins, both ends seat the guest on the mod and build it from its `plane.glb`; a guest holding the mod
+  with another `plane.json` never joins and names it; a guest's lobby reads the host's set on connect
+  and the door's notice names the mod). The `mod-plane-bot` suite now checks a field draws the mod and a
+  registry without it does not.
+- Probe, two processes on the hidden desktop over the local Avenger: `--net-host=127.0.0.1:47811 --vs
+  --chapter=C1 --plane=avenger_e1c --mods=Z:\CSVM\Mods` and `--net-join=127.0.0.1:47811 --vs
+  --chapter=C1 --plane=player_fury --mods=Z:\CSVM\Mods`. The guest logs `net: joined as seat 1 of 2` and
+  `HD models: 31 mesh instance(s) of avenger_e1c drawn from its mod's plane.glb` for both seats, and its
+  chase view shows its own seat as the Avenger in Fortune Hunter's colours
+  (`Z:\CSVM\.scratchKeep\mod-planes\d34\guest.png`, the host's `host.png`, logs beside them). The same
+  guest with `--mods=` an empty folder logs `net: the host flies plane mods this machine lacks or holds
+  in another version, the join failed: avenger_e1c` (`guest-refused.err.txt`). It then idles at the
+  load screen until killed, as any failed command-line join already did (no handshake from the host);
+  the menu's join returns to the games list instead.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A seat's airframe travels as a string id; a lobby advertises its mod planes by id and
 hash, and a peer without a matching mod is told which one to install instead of joining with a

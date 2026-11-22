@@ -326,8 +326,8 @@ public sealed class BotSeatsTests
         NetSeats.AddBots(host, 0, bots);
 
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(41));
-        var hostSession = NetSession.Host(mesh[0], host.ToArray(), 7UL, null, StockAirframes.Nodes);
-        var guest = NetSession.Guest(mesh[1], StockAirframes.Nodes);
+        var hostSession = NetSession.Host(mesh[0], host.ToArray(), 7UL);
+        var guest = NetSession.Guest(mesh[1]);
         guest.Step(0.016);
 
         Assert.True(guest.Joined);
@@ -345,10 +345,10 @@ public sealed class BotSeatsTests
         Assert.Empty(SessionSpec.Parse(new[] { "--vs", "--net-join=127.0.0.1:47600", "--vs-bot=random" }).VsBots);
     }
 
-    // A local field seats a plane mod on its parent's militias, and Random draws it as often as the
-    // parent. A networked field (no mods) flies a named mod as its parent and never draws one.
+    // A field, local or on the wire, seats a plane mod on its parent's militias, and Random draws it
+    // as often as the parent. Every guest holds the host's mods, so the wire needs no exception.
     [Fact]
-    public void ALocalFieldSeatsAPlaneModOnItsParentsMilitias()
+    public void AFieldSeatsAPlaneModOnItsParentsMilitias()
     {
         const string mod = "bot_seats_mod";
         var airframes = new AirframeRegistry();
@@ -356,22 +356,23 @@ public sealed class BotSeatsTests
         var flying = BotSeats.Pairs.Where(p => p.Plane == "player_brigand").Select(p => p.Militia).ToHashSet();
 
         var named = BotSeats.Resolve(Enumerable.Repeat(new VsBotEntry(mod, NetBotSkill.Veteran, 0, "x"), 100).ToArray(),
-            Array.Empty<string>(), Array.Empty<string>(), new Random(3), mods: true, airframes: airframes);
+            Array.Empty<string>(), Array.Empty<string>(), new Random(3), airframes: airframes);
         Assert.All(named, bot => Assert.Equal(mod, bot.Plane));
         Assert.Equal(flying, named.Select(bot => bot.Militia).ToHashSet());
 
         var randoms = Enumerable.Repeat(new VsBotEntry(null, NetBotSkill.Veteran, 0, "x"), 7000).ToArray();
-        var drawn = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), mods: true, airframes: airframes);
+        var drawn = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), airframes: airframes);
         int mods = drawn.Count(bot => bot.Plane == mod);
         int parents = drawn.Count(bot => bot.Plane == "player_brigand");
         Assert.InRange(mods, parents * 0.8, parents * 1.25);
 
-        // ABLE-TO-FAIL CONTROL: the same field on the wire draws no mod and flies the named one as its parent.
-        var stock = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), airframes: airframes);
+        // ABLE-TO-FAIL CONTROL: a registry without the mod draws none, and flies the named one as Random.
+        var stockOnly = new AirframeRegistry();
+        var stock = BotSeats.Resolve(randoms, Array.Empty<string>(), Array.Empty<string>(), new Random(5), airframes: stockOnly);
         Assert.DoesNotContain(stock, bot => bot.Plane == mod);
-        var networked = BotSeats.Resolve(new[] { new VsBotEntry(mod, NetBotSkill.Veteran, 0, "x") },
-            Array.Empty<string>(), Array.Empty<string>(), new Random(3), airframes: airframes);
-        Assert.Equal("player_brigand", networked[0].Plane);
+        var unknown = BotSeats.Resolve(new[] { new VsBotEntry(mod, NetBotSkill.Veteran, 0, "x") },
+            Array.Empty<string>(), Array.Empty<string>(), new Random(3), airframes: stockOnly);
+        Assert.Contains(unknown[0].Plane, StockAirframes.Nodes);
     }
 
     // The spec keeps a plane as written, since mods register after the parse; the seating checks it.
@@ -379,7 +380,7 @@ public sealed class BotSeatsTests
     public void ANamedPlaneIsCheckedAtSeating()
     {
         var bots = new[] { new VsBotEntry("player_zeppelin", NetBotSkill.Veteran, 0, "a"), new VsBotEntry("player_fury", NetBotSkill.Veteran, 0, "b") };
-        var seated = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(9), mods: true);
+        var seated = BotSeats.Resolve(bots, Array.Empty<string>(), Array.Empty<string>(), new Random(9));
         Assert.Contains(seated[0].Plane, StockAirframes.Nodes);
         Assert.Equal("player_fury", seated[1].Plane);
     }

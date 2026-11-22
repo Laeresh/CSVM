@@ -1351,6 +1351,37 @@ public sealed class DogfightLobbyTests
         Assert.Empty(guests[0].LaunchBots);
     }
 
+    // A host's plane mods are rows of every lobby. A guest hears the set on connect and picks the
+    // mod's row, and the host's launch seats the mod's id. A bot on a mod row launches on it and is
+    // listed under that row.
+    [Fact]
+    public void AHostsPlaneModIsALobbyRowTheLaunchSeatsByItsId()
+    {
+        var mods = new NetModSet(new[] { new NetMod("avenger_e1c", new string('e', 64), 4) });
+        var (host, guests, _) = Lobbies(2, "Lucy", hostMods: mods);
+        Settle(host, guests);
+        Assert.Equal(12, guests[0].Mods.Rows);
+        Assert.True(guests[0].Pick(11, default));
+        host.FillTo(3);
+        Assert.True(host.SetBotAirframe(host.Bots[0].Id, 11));
+        Settle(host, guests);
+
+        var stock = Flight.Weapons.StockLoadouts.Load(System.IO.Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+        var (roster, _) = Launch.SeatFields.VersusLaunchField(Steps[host][0], new[] { "player_fury" }, new Flight.Weapons.LoadoutChoice?[] { null }, stock);
+        Assert.Equal(new[] { "player_fury", "avenger_e1c" }, roster.Select(s => s.PlaneNode));
+        Assert.Equal(new string?[] { "avenger_e1c" }, host.LaunchBots.Select(b => b.Plane));
+        Assert.Equal((byte)4, host.Bots[0].Airframe);
+        Assert.Contains(guests[0].Players, row => row.IsBot && row.Airframe == 11);
+
+        // ABLE-TO-FAIL CONTROL: past the host's rows nothing is picked, and a lobby whose host holds no
+        // mod offers the stock eleven alone.
+        Assert.False(guests[0].Pick(12, default));
+        var (plain, plainGuests, _) = Lobbies(2, "Ann");
+        Settle(plain, plainGuests);
+        Assert.Equal(11, plainGuests[0].Mods.Rows);
+        Assert.False(plainGuests[0].Pick(11, default));
+    }
+
     // Seated stands in for the door's admission, so a test can seat a guest after the field fills.
     [Fact]
     public void AGuestSeatedOnAFullFieldTakesTheNewestBotsPlaceInJoinOrder()
@@ -1511,7 +1542,7 @@ public sealed class DogfightLobbyTests
         // on both wires.
         string widest = NetSeats.FurtherSeatName(new string('€', NetPlayerInfo.CallsignLimit), host: false, local: 3);
         var roster = new byte[SeatRosterMessage.SizeFor(1)];
-        new SeatRosterMessage(1u, new[] { new NetSeatEntry(0, 0, 0, true, widest) }).Write(roster);
+        new SeatRosterMessage(1u, new[] { new NetSeatEntry(0, 0, "plane0", true, widest) }).Write(roster);
         Assert.True(SeatRosterMessage.TryRead(roster, out var seats));
         Assert.Equal(widest, seats.Seats[0].Callsign);
         var list = new byte[DogfightRosterMessage.Size];
@@ -1584,10 +1615,11 @@ public sealed class DogfightLobbyTests
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
         int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1,
-        Func<int, bool>? seated = null, int guestSeats = 1, Func<int, int>? seatsOf = null, string hostName = "Host")
+        Func<int, bool>? seated = null, int guestSeats = 1, Func<int, int>? seatsOf = null, string hostName = "Host",
+        NetModSet? hostMods = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
-        var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
+        var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0], mods: hostMods);
         var host = new DogfightLobby(hostWire, () => hostName)
         {
             LocalSeats = () => localSeats,

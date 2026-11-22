@@ -44,8 +44,8 @@ public sealed class AirframeRegistry
     /// <summary>The registry the game registers its mods into.</summary>
     public static AirframeRegistry Shared { get; } = new();
 
-    /// <summary>The eleven stock airframes in airframe-id order, the order saves and the network
-    /// roster index.</summary>
+    /// <summary>The eleven stock airframes in airframe-id order, the order saves index and a network
+    /// session's first eleven airframe rows.</summary>
     public static IReadOnlyList<AirframeEntry> Stock => StockTable;
 
     /// <summary>The stock airframes, then every registered mod in registration order.</summary>

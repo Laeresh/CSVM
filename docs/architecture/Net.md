@@ -303,7 +303,15 @@ rules, teams, wingman, film and Stunt Race `LobbyCourse`); others are held up to
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
 address after `Boot`, a wrong password, a full game) stand off every peer list at once, before the
-carrier's hang-up lands. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
+carrier's hang-up lands. `Mods` is a host's own plane mod set, sent on connect, or its guest's copy; ⚠ a host never takes a peer's. Read `NetLobbyTests.cs` and `NetLobbyAdmissionTests.cs`.
+
+## src/Net/NetModSet.cs
+A host's plane mods (`NetMod`: id, content hash, parent's stock id) and the session's airframe rows:
+0 to 10 the stock airframes, 11 + i the i-th mod. `NodeOf`, `StockOf` and `RowOf` read a lobby's
+airframe byte, and `MissingFrom` is the join rule, every host mod under the same id and hash.
+`ModSetMessage` (`0x6E`) carries the set, sent only by a host with a mod. Rules and wire:
+[../org/multiplayer-messages.md](../org/multiplayer-messages.md), "Plane mods". Read
+`NetMessagesTests.cs` and `NetSessionTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch
@@ -414,7 +422,7 @@ original's `0x1a` subtypes. Decode: [../org/multiplayer-messages.md](../org/mult
 ## src/Net/NetPlaneMessages.cs
 Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armour, hardpoints, guns
 and paint as the saved record holds them, and `PlaneBuildMessage` carries one: a guest seat's pick under
-`MineAt` its place, or a seat's build at launch. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
+`MineAt` its place, or a seat's build at launch. A build on a plane mod keeps its parent in `Airframe` and names the mod's row of the session's `NetModSet` in `ModRow`. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
 original's 34-flag outlaw list; `Refuses` and `Enforce` are the original's Ready check, so every end
 judges a plane alike. `CourseBarred` holds the airframes a Stunt Race's course leaves out, read off the course on every end and never sent. `LobbyPlaneRulesMessage` sends the rules. Decode:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
@@ -533,7 +541,7 @@ falls back to `Events`, which costs ordering rather than delivery.
 The one object a session owns to talk to its peers: it holds the transport, sends a typed message
 under the class the type declares, and routes an arrival to the handler on its type word. The only meaning it knows is the join, a host answering each
 peer with the handshake (which names its first seat and the run after it, `LocalSeatCount`) and then the roster; `On` refuses those two types,
-and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
+and a guest refuses a join `NetSeats.Validate` would throw on, or one whose host names a `NetModSet` mod it lacks (`RefusedMods`). The star's relay: `SendToSeat`
 addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
 `RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
 its sender; `FliesOnTeam` answers a team line's addressing by the persons a machine seats, never its bots. A host's `RequireSeatOwner` drops, before relay and handler, a type whose seat the sender does not fly. A suite reads the counters (`Sent`,

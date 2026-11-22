@@ -43,6 +43,7 @@ internal static class ModPlaneSuites
 
     // The story position the campaign mod's unlock names, a mid-campaign mission.
     private const int CampaignUnlockSeq = 6;
+    private const string NetModId = "suite_mod_net";
     private const string ArtMod = "suite_mod_art";
     private const string PortraitMod = "suite_mod_portrait";
 
@@ -112,8 +113,8 @@ internal static class ModPlaneSuites
     }
 
     [Suite("mod-plane-bot",
-        "a bot seat on a plane mod: a local field seats the mod's id, named or drawn as Random, on a militia that flies " +
-        "its parent, and a networked field flies a named mod as its parent; the seat builds from the mod's plane.glb, " +
+        "a bot seat on a plane mod: a field seats the mod's id, named or drawn as Random, on a militia that flies " +
+        "its parent, and a registry without the mod draws none; the seat builds from the mod's plane.glb, " +
         "its hull is the parent's def with fd_speed overridden, its AI flavour is the parent's AI def with the same " +
         "override and no turret, no militia def names the mod so it flies the stock arms, and the mod's fit binds " +
         "its turret slot as a forward gun on the model's firepoints")]
@@ -537,6 +538,115 @@ internal static class ModPlaneSuites
         }
     }
 
+    [Suite("net-mod-plane",
+        "a network session over a plane mod: a host naming its mod set seats a guest on the mod, and a guest holding " +
+        "the mod under the same hash joins, reads the mod's id as that seat's airframe, and both ends build the seat " +
+        "from the mod's plane.glb; a guest holding the mod with another plane.json, so another hash, never joins and " +
+        "names the mod, its lobby reads the host's set on connect, and the door's refusal names the mod to install")]
+    internal static void NetModPlane(TestContext ctx)
+    {
+        ctx.RequireData(ctx.Data.Planes, $"planes gamez");
+        TextureSet texturesPath = ctx.ChapterTextures("C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planes = ctx.PlanesCopy();
+        if (planes.FindByName(Parent) == null)
+        {
+            throw new SuiteSkippedException($"{Parent} is not in the aircraft archive");
+        }
+
+        using var textures = new TextureArchive(texturesPath);
+        string root = Path.Combine(ctx.ScratchDir, "net-mod-plane");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        // The host's and the matched guest's copy, then a guest's copy whose plane.json differs.
+        string stale = Path.Combine(root, "stale");
+        foreach (string dataRoot in new[] { root, stale })
+        {
+            string folder = Path.Combine(ModPlanes.FolderIn(dataRoot), NetModId);
+            Directory.CreateDirectory(folder);
+            ctx.Same((long)Error.Ok, (long)WriteWreckFixture(folder, NetModId, ownWreck: false), $"the {NetModId} fixture's write result");
+        }
+
+        File.WriteAllText(Path.Combine(ModPlanes.FolderIn(stale), NetModId, ModPlanes.DefinitionFile),
+            $$"""{ "kind_of": "{{Parent}}", "overrides": { "fd_speed": 99.5 } }""");
+        try
+        {
+            var mods = ModPlanes.Open(root);
+            var staleMods = ModPlanes.Open(stale);
+            var mod = mods.Find(NetModId);
+            ctx.Check(mod != null && staleMods.Find(NetModId) is { } other && other.Hash != mod.Hash,
+                $"the mod loads from both folders under two hashes ({mod?.Hash[..12]}, {staleMods.Find(NetModId)?.Hash[..12]})");
+            if (mod == null)
+            {
+                return;
+            }
+
+            ModAirframes.Add(planes, mod.Id, mod.KindOf, mod.Read(ModPlanes.ModelFile)!);
+            var set = mods.Wire;
+            var roster = new[]
+            {
+                new Net.NetSeat { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "host", PlaneNode = "player_fury" },
+                new Net.NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = NetModId },
+                new Net.NetSeat { PeerId = 2, SeatIndex = 2, Callsign = "stale", PlaneNode = "player_fury" },
+            };
+            var mesh = Net.LoopbackTransport.Mesh(3, Net.LoopbackConditions.Perfect, new System.Random(34));
+            var host = Net.NetSession.Host(mesh[0], roster, 0xD34UL, mods: set);
+            var guest = Net.NetSession.Guest(mesh[1], set);
+            var refused = Net.NetSession.Guest(mesh[2], staleMods.Wire);
+            for (int i = 0; i < 8 && !guest.Joined; i++)
+            {
+                guest.Step(1.0 / 60.0);
+                refused.Step(1.0 / 60.0);
+            }
+
+            string onHost = host.Seats[1].PlaneNode;
+            string onGuest = guest.Joined ? guest.Seats[1].PlaneNode : "not joined";
+            ctx.Check(guest.Joined && onHost == NetModId && onGuest == NetModId && guest.Seats[0].PlaneNode == "player_fury",
+                $"the matched guest joins and both ends seat the guest on {NetModId} (host {onHost}, guest {onGuest})");
+            foreach (var (end, node) in new[] { ("host", onHost), ("guest", onGuest) })
+            {
+                var model = Build(planes, textures, node, out var builder);
+                try
+                {
+                    var drawn = Meshes(model, builder.CockpitInterior).ToList();
+                    ctx.Check(drawn.Count > 0 && drawn.All(m => m.HasMeta(SceneBuilder.GamezMeshMeta)),
+                        $"the {end}'s copy of the guest's seat builds from the mod's plane.glb ({drawn.Count(m => m.HasMeta(SceneBuilder.GamezMeshMeta))} of {drawn.Count} meshes)");
+                }
+                finally
+                {
+                    model.Free();
+                }
+            }
+
+            string named = string.Join(", ", refused.RefusedMods.Select(m => m.Id));
+            ctx.Check(!refused.Joined && named == NetModId, $"the guest holding another hash never joins and names {named}");
+
+            // The lobby's half: a host's set reaches a guest on connect, and the door names the mod.
+            var lobbyMesh = Net.LoopbackTransport.Mesh(2, Net.LoopbackConditions.Perfect, new System.Random(35));
+            var hostLobby = new Net.NetLobby(lobbyMesh[0], mods: set);
+            var guestLobby = new Net.NetLobby(lobbyMesh[1]);
+            for (int i = 0; i < 4; i++)
+            {
+                hostLobby.Step(1.0 / 60.0);
+                guestLobby.Step(1.0 / 60.0);
+            }
+
+            string notice = UI.Menu.CoopDoorText.ModsMissing(guestLobby.Mods.MissingFrom(staleMods.Wire));
+            ctx.Check(guestLobby.Mods.RowOf(NetModId) == Net.NetModSet.StockRows && guestLobby.Mods.MissingFrom(set).Count == 0
+                    && notice.Contains(NetModId, StringComparison.Ordinal),
+                $"the guest's lobby holds the host's set (row {guestLobby.Mods.RowOf(NetModId)}) and the stale guest reads \"{notice}\"");
+            hostLobby.Dispose();
+            guestLobby.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Suite("mod-plane-art",
         "a plane mod's menu art: a Brigand export without a portrait renders a coloured three-quarter portrait " +
         "and black plan and head-on silhouettes once into the cache, named by its content hash, and binds them " +
@@ -919,23 +1029,21 @@ internal static class ModPlaneSuites
         return interior == null ? 0 : Count(interior);
     }
 
-    // The seats BotSeats makes of the mod: named or Random in a local field, and as the parent on the wire.
+    // The seats BotSeats makes of the mod, named or Random, in any field: every guest holds the host's mods.
     private static void CheckBotSeats(TestContext ctx, AirframeRegistry airframes)
     {
         var flying = BotSeats.Pairs.Where(p => p.Plane == Parent).Select(p => p.Militia).ToHashSet();
         var none = Array.Empty<string>();
         var named = BotSeats.Resolve(Enumerable.Repeat(new VsBotEntry(ModId, Net.NetBotSkill.Ace, 0, "x"), 50).ToArray(), none, none,
-            new System.Random(3), mods: true, airframes: airframes);
+            new System.Random(3), airframes: airframes);
         ctx.Check(named.All(b => b.Plane == ModId && flying.Contains(b.Militia)),
             $"a named bot seats the mod on a militia that flies {Parent} ({string.Join(",", named.Select(b => b.Plane).Distinct())}, militias {string.Join(",", named.Select(b => b.Militia).Distinct())})");
 
         var randoms = Enumerable.Repeat(new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "x"), 400).ToArray();
-        int local = BotSeats.Resolve(randoms, none, none, new System.Random(5), mods: true, airframes: airframes).Count(b => b.Plane == ModId);
-        int wire = BotSeats.Resolve(randoms, none, none, new System.Random(5), airframes: airframes).Count(b => b.Plane == ModId);
-        string networked = BotSeats.Resolve(new[] { new VsBotEntry(ModId, Net.NetBotSkill.Ace, 0, "x") }, none, none,
-            new System.Random(3), airframes: airframes)[0].Plane;
-        ctx.Check(local > 0 && wire == 0 && networked == Parent,
-            $"Random draws the mod in a local field ({local} of {randoms.Length}) and never on the wire ({wire}), where a named mod flies {networked}");
+        int drawn = BotSeats.Resolve(randoms, none, none, new System.Random(5), airframes: airframes).Count(b => b.Plane == ModId);
+        int stock = BotSeats.Resolve(randoms, none, none, new System.Random(5), airframes: new AirframeRegistry()).Count(b => b.Plane == ModId);
+        ctx.Check(drawn > 0 && stock == 0,
+            $"Random draws the mod ({drawn} of {randoms.Length}), and never from a registry without it ({stock})");
     }
 
     private static void CheckStatsAndFit(TestContext ctx, ModPlane mod, Node3D model)

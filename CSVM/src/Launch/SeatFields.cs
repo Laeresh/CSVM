@@ -73,7 +73,9 @@ internal static class SeatFields
         {
             if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
             {
-                guests.Add((guest.Peer, Flight.Hangar.StockAirframes.Node(guest.Airframe), guest.Name));
+                // A hangar plane on a plane mod keeps the parent's airframe; its build names the mod.
+                int row = guest.Build is { ModRow: > 0 } onMod ? onMod.ModRow : guest.Airframe;
+                guests.Add((guest.Peer, NodeOf(wire, row), guest.Name));
                 voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
                 seatFits.Add(guest.Fit);
             }
@@ -156,7 +158,7 @@ internal static class SeatFields
                     : name.Length > 0 ? name
                     : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 Unnamed = name.Length == 0 && local == 0,
-                PlaneNode = pick != null ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
+                PlaneNode = pick != null ? NodeOf(wire, chosen.Airframe) : planes[0],
                 Voice = pick != null ? chosen.Voice : (byte)0,
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
@@ -208,7 +210,7 @@ internal static class SeatFields
             if (roster[seat].HasPane)
             {
                 int menu = Net.NetSeats.LocalOrdinal(roster, seat);
-                builds[seat] = menu >= 0 && menu < customs.Count ? Flight.Hangar.CustomPlaneWire.Build(customs[menu]) : null;
+                builds[seat] = menu >= 0 && menu < customs.Count ? Flight.Hangar.CustomPlaneWire.Build(customs[menu], ModsOf(wire)) : null;
                 continue;
             }
 
@@ -275,7 +277,7 @@ internal static class SeatFields
         var build = launched != null
             ? seat >= 0 && seat < launched.Count ? launched[seat] : null
             : door?.SeatBuilds.TryGetValue(seat, out var told) == true ? told : null;
-        return Flight.Hangar.CustomPlaneWire.Def(build);
+        return Flight.Hangar.CustomPlaneWire.Def(build, door?.Mods);
     }
 
     /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
@@ -302,7 +304,7 @@ internal static class SeatFields
         }
 
         var seats = Net.NetSeats.LocalPanes(spec.Players);
-        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages, rules, mods: true));
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messages, rules));
         Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         Log.Info("core", $"local roster of {seats.Count} seat(s), {seats.Count - spec.Players} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
@@ -359,11 +361,10 @@ internal static class SeatFields
     /// <summary>The spec's bots resolved for a field whose people are
     /// <paramref name="people"/>. The pilot names are read once from the message table, which
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
-    /// a stream of their own, a function of the master seed alone. A field on the wire passes no
-    /// <paramref name="mods"/> and seats no plane mod (<see cref="Session.Roster.BotSeats.Named"/>).</summary>
+    /// a stream of their own, a function of the master seed alone. A bot may fly a registered plane
+    /// mod, named or drawn; every guest holds the host's (<see cref="Net.NetModSet"/>).</summary>
     internal static IReadOnlyList<Net.SeatedBot> ResolveBots(
-        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages, Net.NetPlaneRules? rules = null,
-        bool mods = false)
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, Messages messages, Net.NetPlaneRules? rules = null)
     {
         if (spec.VsBots.Count == 0)
         {
@@ -374,7 +375,7 @@ internal static class SeatFields
         return Session.Roster.BotSeats.Resolve(spec.VsBots,
             System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
             new System.Random(Rng.IntSeedFor(Rng.BotField)),
-            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin, rules, mods: mods);
+            oneTorpedoPerTeam: spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin, rules);
     }
 
     /// <summary>The rules a local race's bots draw under: the airframes the spec's course leaves
@@ -427,6 +428,13 @@ internal static class SeatFields
             return (militia, _) => InstantAction.Militias[militia].Name == InstantAction.PlayerMilitia;
         }
     }
+
+    // The session's plane mods as the lobby under the wire holds them; none on a bare carrier.
+    private static Net.NetModSet ModsOf(Net.INetTransport wire) => (wire as Net.NetLobby)?.Mods ?? Net.NetModSet.None;
+
+    // The node a lobby airframe byte names: a row of the session's mods, read as a stock id past them.
+    private static string NodeOf(Net.INetTransport wire, int row) =>
+        ModsOf(wire).NodeOf(row) is { Length: > 0 } node ? node : Flight.Hangar.StockAirframes.Node(row);
 
     // One line per bot seat of a roster just built, prefixed by where it was built.
     private static void LogBotSeats(string where, IReadOnlyList<Net.NetSeat> seats)

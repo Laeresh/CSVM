@@ -898,8 +898,8 @@ public sealed class CampaignFeature : IMenuFeature
     /// A seat carries its aircraft's node, stored ammunition and ordnance, and hangar build. A
     /// reward aircraft with no file takes its award template, and the stock Devastator no build. A
     /// wingman kept off its saved plane rides as <see cref="WingmanOverride"/>. Null with nobody seated.
-    /// A mod plane flies as its mod's node, except <paramref name="networked"/>: the wire carries stock ids.</summary>
-    public CampaignMissionExit? BuildExit(IReadOnlyList<IReadOnlyList<int>> padsPerPlayer, bool networked = false)
+    /// A mod plane flies as its mod's node, a co-op host's too: every guest holds the host's mods.</summary>
+    public CampaignMissionExit? BuildExit(IReadOnlyList<IReadOnlyList<int>> padsPerPlayer)
     {
         ArgumentNullException.ThrowIfNull(padsPerPlayer);
         if (Profile is not { } profile)
@@ -920,7 +920,7 @@ public sealed class CampaignFeature : IMenuFeature
                 : Field.IsStock(plane) ? null
                 : Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane);
             seats.Add(new MenuSeatChoice(
-                (networked ? null : plane.ModIn(ModSet)?.Id) ?? _nodeOfAirframe(plane.Airframe),
+                plane.ModIn(ModSet)?.Id ?? _nodeOfAirframe(plane.Airframe),
                 padsPerPlayer[player],
                 CampaignLoadout.For(plane, Stock),
                 custom));
@@ -1276,7 +1276,7 @@ public sealed class CampaignFeature : IMenuFeature
     }
 
     // The build a hangar plane flies, as the wire carries it: its store file, else an award's own
-    // template, else none.
+    // template, else none. A build on a plane mod names the mod's row of this host's set.
     private Net.NetPlaneBuild? HangarBuildOf(CampaignProfileDef profile, OwnedPlane plane)
     {
         if (!ReferenceEquals(_hangarBuildsFor, profile))
@@ -1287,7 +1287,7 @@ public sealed class CampaignFeature : IMenuFeature
 
         if (!_hangarBuilds.TryGetValue(plane.Name, out var build))
         {
-            build = CSVM.Flight.Hangar.CustomPlaneWire.Build(Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane));
+            build = CSVM.Flight.Hangar.CustomPlaneWire.Build(Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane), ModSet.Wire);
             _hangarBuilds[plane.Name] = build;
         }
 

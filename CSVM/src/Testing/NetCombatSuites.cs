@@ -595,7 +595,7 @@ internal static class NetCombatSuites
             ctx.Check(roster.Length == 2 && roster[1].Callsign == GuestName,
                 $"[named host] and the guest's seat the callsign its pick carried ({(roster.Length > 1 ? roster[1].Callsign : "-")})");
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                Flight.Hangar.StockAirframes.Nodes);
+                null);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -610,7 +610,7 @@ internal static class NetCombatSuites
             }
 
             guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                Flight.Hangar.StockAirframes.Nodes);
+                null);
             ctx.Check(host.Built && guest.Built, $"[named host] both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {
@@ -672,7 +672,7 @@ internal static class NetCombatSuites
             var planes = new[] { Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = SeatFields.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                Flight.Hangar.StockAirframes.Nodes);
+                null);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -687,7 +687,7 @@ internal static class NetCombatSuites
             }
 
             guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                Flight.Hangar.StockAirframes.Nodes);
+                null);
             ctx.Check(host.Built && guest.Built, $"[{how}] both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {
@@ -1647,7 +1647,7 @@ internal static class NetCombatSuites
     {
         public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport? transport,
             bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster,
-            IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
+            NetModSet? mods = null, Func<int, LoadoutChoice?>? seatFit = null,
             Func<CoopWingmanMessage?>? coopWingman = null,
             Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
             IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null,
@@ -1692,7 +1692,7 @@ internal static class NetCombatSuites
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,
                 NetHost = isHost && transport != null,
-                NetAirframes = transport == null ? null : airframes ?? AirframesFor(spec),
+                NetMods = mods,
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
                 NetCoopPersisted = coopPersisted,

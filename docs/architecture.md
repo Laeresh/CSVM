@@ -1101,6 +1101,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/RouterAccess.cs`, a host's hold on its router: the port mapping and the IPv6 pinhole, each a lease renewed on its own thread and given back on close.
 - `src/Net/NetLobby.cs`, a carrier's first listener before any session binds it: the host's session advert and closing word out, the latest of each in, every other payload held for the session.
 - `src/Net/NetBuildVersion.cs`, the build's MAJOR.MINOR two peers compare before they play, patch ignored and unknown playing only with unknown, and the lobby's `0x56` message that carries it.
+- `src/Net/NetModSet.cs`, a host's plane mods by id, hash and parent, the session's airframe rows a lobby byte names, the join rule a guest checks, and the `0x6E` message.
 - `src/Net/LanDiscovery.cs`, the LAN search's datagram pair outside the carrier: a query and a reply of one width, so a responder never amplifies, and the `ILanSocket` seam.
 - `src/Net/LanResponder.cs`, an open door's answer to a LAN search: each well-formed query answered with the advert and game port, a bounded count per frame.
 - `src/Net/LanSearch.cs`, a guest's broadcast search in rounds under fresh tokens, one query to each target a round: the games that answered, dropped after a round without an answer.

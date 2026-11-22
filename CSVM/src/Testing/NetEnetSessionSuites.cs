@@ -277,7 +277,6 @@ internal static class NetEnetSessionSuites
             NetSeats = isHost ? roster : null,
             NetTransport = transport,
             NetHost = isHost,
-            NetAirframes = NetCombatSuites.AirframesFor(spec),
         });
         pane.AddChild(session);
         return new Ends(pane, session, session.StartSession());

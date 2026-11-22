@@ -8,15 +8,15 @@ namespace CSVM.Flight.Hangar;
 /// <summary>
 /// The eleven stock airframes by int id: the <c>planes.zbd</c> node each airframe id 0-10 flies as,
 /// and back, read off <see cref="AirframeRegistry.Stock"/>. The id is
-/// <see cref="CustomPlaneDef.Airframe"/>'s, a campaign profile's and a network roster's. A mod
+/// <see cref="CustomPlaneDef.Airframe"/>'s and a campaign profile's, and the first eleven rows of a
+/// network session's (<see cref="Net.NetModSet"/>). A mod
 /// airframe has no int id: <see cref="IdOf"/> answers null for it and these readers stay stock-only.
 /// </summary>
 public static class StockAirframes
 {
     private static readonly string[] NodeTable = AirframeRegistry.Stock.Select(a => a.Node).ToArray();
 
-    /// <summary>The eleven stock nodes in airframe-id order. A network roster carries an airframe
-    /// as its index into this list, so both peers have to read the one order.</summary>
+    /// <summary>The eleven stock nodes in airframe-id order.</summary>
     public static IReadOnlyList<string> Nodes => NodeTable;
 
     /// <summary>The stock node an airframe id flies as, clamped like the def's own fields.</summary>
