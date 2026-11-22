@@ -179,6 +179,7 @@ public partial class Launcher : Node3D
     {
         _net = new NetFlight(ReturnToMenu, ExitSession);
         _audio = new LaunchAudio(this);
+        LoadGate.Changed += _audio.FollowLoadGate;
         _menu = new ProcessMenu(this, _audio, _net, () => _paths, OnMenuExit)
         {
             // Read on the menu's first show, after _Ready has booted the headset path or not.
@@ -1379,6 +1380,8 @@ public partial class Launcher : Node3D
     // The load screen over the whole window, on the board layer; what it draws is LaunchBoards'.
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null, string? briefing = null)
     {
+        // ⚠ Replace, never stack: a board left standing unreferenced holds the load gate closed for good.
+        HideLoadScreen();
         var board = Boards.LoadScreen(campaign, missionType, missionSeq, _net.TeamedLobbyFlight, briefing);
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
         _loadLayer.AddChild(board);
@@ -1395,6 +1398,14 @@ public partial class Launcher : Node3D
         _loadLayer.QueueFree();
         _loadLayer = null;
     }
+
+#pragma warning disable SA1202
+    // The two load-screen calls for the suite that pins the replace rule. A --run-tests launch
+    // builds no session, so nothing else would stand a board on this node. Kept beside them.
+    internal void ShowLoadScreenForTest() => ShowLoadScreen(false, null);
+
+    internal void HideLoadScreenForTest() => HideLoadScreen();
+#pragma warning restore SA1202
 
     // Instantiates this launch's session node from the current _spec and
     // the persistent references, and runs its build. Returns the build's verdict; on false the

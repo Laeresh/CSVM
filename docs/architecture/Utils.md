@@ -119,6 +119,16 @@ Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propell
 `UI/Screens/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).
 
+## src/Utils/LoadGate.cs
+The gate the load screen holds closed for as long as it stands, a network flight's board held for
+the other machines included. `UI/Screens/LoadBoard.cs` closes it on entering the tree and opens it
+on leaving, counted, so a second board or a theater rehost cannot open it early. The readers are
+`Bindings/PlayerActions.cs` (no action resolves, and a control held through the drop reads released
+until let go), `Bindings/Pads.cs`'s `InputBlocked`, `UI/Boards/ScreenPointer.cs`'s pointer and right
+button, `UI/Boards/MenuInput.cs`'s direct key reads, `UI/Screens/MenuSeatDevices.cs`'s join board
+(primed as the gate opens), and `Launch/LaunchAudio.cs`'s master-bus mute over `Changed`. The board
+also stops the root window's input events. Engine-free. Read `UI/Screens/LoadBoard.cs` next.
+
 ## src/Utils/StartCover.cs
 The ramp behind the cover a session starts under: opaque while the world is still assembling, then
 up from a dark tone over about a second once the session reports the first frame the player is

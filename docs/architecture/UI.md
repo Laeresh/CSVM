@@ -332,6 +332,7 @@ frame the way every shared board does. Holds no composition of its own, so what 
 tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves. It is
 also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone: it composes the board pumped and opens the moving layer on the cycle's first frame, then a step the build reports puts the bar's fill and the propeller's frame on that layer and presents there, which is how the screen moves at all, a queued redraw being no use while the build holds the loop that would flush it.
 `--debug-load` stands the screen over a CLI launch and photographs each presented frame, the only way to read the bar back with nobody at the menu, and `_ExitTree` writes every reported step against the build's own wall clock as one line.
+For its tree lifetime it holds `Utils/LoadGate.cs` closed and the root window's input events off.
 
 ## src/UI/Screens/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
@@ -676,7 +677,8 @@ listens (`ControlCapture.TakeListening`) a trigger pull clicks and switches noth
 The one pointer every polled reader takes: the desktop mouse's viewport position and left button,
 or the reading of the pointer that overrides it (`TheaterPointer.cs` under a headset, whose layout is
 the eye's size where the desktop cursor cannot reach). With no override every read is the mouse's,
-call for call. Its readers are `AuthoredPointer.cs`, `Screens/PauseBoard.cs`,
+call for call, and every read is off the screen while the load screen stands (`Utils/LoadGate.cs`),
+`SecondaryPressed` (the right button) included. Its readers are `AuthoredPointer.cs`, `Screens/PauseBoard.cs`,
 `Screens/PausePreferences.cs` and seat 0's pointer in `Launch/ProcessMenu.cs`, which the Original
 presentation reads.
 
@@ -1775,7 +1777,7 @@ The pad side of the shared player setup, for any presentation, over seat 0's `Me
 feature. `P1Pad` is the captain's pad, the first to sign on. `Sync` reconciles the
 seats with the connected pads: a seat whose pad vanished is unjoined, a vanished captain's pad frees
 seat 0, and seat 0's poller is bound to the captain's pad or to every unclaimed one.
-`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are the join board's and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from, whose `Closed` entries are the seats past the feature's `SeatLimit`. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are the join board's and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from, whose `Closed` entries are the seats past the feature's `SeatLimit`. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back. The first scan after the load gate opens primes, so a button held through the load screen takes no seat.
 `PadOf` reads a joined seat's pad back off its
 `MenuInputSeat`, and `FlightPads` is the binding a launch carries, the answer the presentation
 hands the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.

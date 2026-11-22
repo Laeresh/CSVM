@@ -69,6 +69,9 @@ public sealed class MenuSeatDevices : IJoinRoster
     private readonly Dictionary<int, string> _guids = new();
     // How long each held pad has been off the roster, entries only while one is away.
     private readonly Dictionary<int, float> _away = new();
+    // Scanned while the load gate was closed. The first scan after it opens primes, so a button held
+    // through the load screen signs nothing on or off.
+    private bool _behindGate;
 
     /// <summary>Over seat 0's poller (<paramref name="player1"/>, the keyboard plus the pads it
     /// borrows) and the feature the seats live in.</summary>
@@ -357,6 +360,16 @@ public sealed class MenuSeatDevices : IJoinRoster
         bool dirty = false;
         bool cast = false;
         bool pressed = false;
+        if (LoadGate.Closed)
+        {
+            _behindGate = true;
+        }
+        else if (_behindGate)
+        {
+            _behindGate = false;
+            PrimeBoard();
+        }
+
         foreach (int pad in Pads.Connected())
         {
             var now = (On: MenuInput.SignOnPressed(pad), Off: MenuInput.SignOffPressed(pad), Cast: MenuInput.JoinPressed(pad));

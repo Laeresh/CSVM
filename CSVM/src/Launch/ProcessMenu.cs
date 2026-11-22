@@ -100,7 +100,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         seatInput.LoadSavedKeymap(1);
         var seat = new PointerSeat(
             new UI.Screens.MenuInputSeat(seatInput), MousePosition, () => PrimaryPressed(stamp), TakeWheel,
-            () => Input.IsMouseButtonPressed(MouseButton.Right));
+            ScreenPointer.SecondaryPressed);
         var registry = new PresentationRegistry();
         // The factories read the aid when they run, which is inside a Show. The cold start's instance
         // gets it, and the fresh instance a switch creates gets none.

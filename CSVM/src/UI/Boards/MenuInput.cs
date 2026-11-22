@@ -514,7 +514,7 @@ public sealed class MenuInput
         _erasePrev = erase;
     }
 
-    private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
+    private bool KeyDown(Key key) => Keyboard && !Utils.LoadGate.Closed && Input.IsKeyPressed(key);
 
     // One resolution of this tick for every read below. The snapshot guarantee is per Poll, so two
     // reads in one frame cannot disagree the way two hardware reads could; the keyboard gate is

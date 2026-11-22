@@ -12,11 +12,10 @@ namespace CSVM.UI.Screens;
 /// The load screen drawn over the whole window while a session builds: the composition
 /// <see cref="LoadScreens"/> makes, through the campaign boards' authored-pixel surface.
 /// A build is one synchronous block that stalls the frame loop, so this board draws from inside
-/// it: the build reports each of its steps to <see cref="LoadProgress"/>, and the pump puts the
-/// bar's fill and the propeller's frame straight on the moving layer and asks for a frame there.
-/// ⚠ Install the pump nowhere but this node's own tree lifetime; a build with no screen over it
-/// (every CLI launch bar <c>--debug-load</c>) must leave <see cref="LoadProgress.Current"/> null
-/// and gain no draw.
+/// it. The build reports each step to <see cref="LoadProgress"/>, whose pump draws the fill and
+/// the propeller. The board also holds <see cref="LoadGate"/> closed while it stands.
+/// ⚠ Install the pump nowhere but this node's own tree lifetime. A build with no screen over it
+/// (every CLI launch bar <c>--debug-load</c>) must leave <see cref="LoadProgress.Current"/> null.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {
@@ -74,9 +73,20 @@ public sealed partial class LoadBoard : Control
         LoadProgress.Current = _progress;
     }
 
+    /// <summary>Closes the <see cref="LoadGate"/> for this board's tree lifetime, and stops every
+    /// input event at the root window. The root is the one to stop, since a theater rehost moves the
+    /// board into a surface of its own.</summary>
+    public override void _EnterTree()
+    {
+        LoadGate.Close();
+        GetTree().Root.GuiDisableInput = true;
+    }
+
     /// <inheritdoc/>
     public override void _ExitTree()
     {
+        LoadGate.Open();
+        GetTree().Root.GuiDisableInput = LoadGate.Closed;
         if (ReferenceEquals(LoadProgress.Current, _progress))
         {
             LoadProgress.Current = null;

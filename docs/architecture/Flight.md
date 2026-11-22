@@ -168,7 +168,7 @@ frame the control that confirmed it is still down, and one control serves both s
 until that control lets go; `Latched` names the discrete commands covered and
 `SeatControls.Command` is the one read site they share. The arm takes no button reading: a
 re-entry point can run inside an input handler whose snapshot predates the press this exists to
-swallow. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
+swallow. The rule itself is `Bindings/HandoverLatch.cs`, which the load gate shares. Pure state, public so its own unit tests drive it. Read `FireControl.cs` next.
 
 ## src/Flight/Weapons/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free

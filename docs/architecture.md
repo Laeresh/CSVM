@@ -737,6 +737,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs`, the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/LoadProgress.cs`, the load screen's progress under a blocking build: the authored milestone table, the monotonic setter and the throttled repaint pump.
+- `src/Utils/LoadGate.cs`, the gate the load screen holds closed while it stands: no game sound, no input to the flight, the pause board or the menus.
 - `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TextureUpload.cs`, every Image handed to a texture, at creation or repaint, held until the render thread lets go so a queued upload never reads a refilled one or swaps a handle off the main thread.
@@ -976,6 +977,7 @@ both sit on top of these types.
 - `src/Bindings/BindingLabels.cs`, what a rebinding screen prints: an action's name, a control's keycap name, and a row that counts what it is not showing.
 - `src/Bindings/ActionSnapshot.cs`, the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
 - `src/Bindings/PlayerActions.cs`, the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players.
+- `src/Bindings/HandoverLatch.cs`, a control held through a handover reads released until let go: the rule flight's re-entry latch and the load gate share.
 - `src/Bindings/InputContext.cs`, which set of controls a seat is reading (flight, menu, camera), because one control means different things per mode.
 - `src/Bindings/DefaultBindings.cs`, the shipped keymap as data, one map per context, reproducing `docs/controls.md`, and the placeholder a pad default uses.
 - `src/Bindings/BindingProfile.cs`, one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.

@@ -16,7 +16,7 @@ internal sealed class LaunchAudio(Node host)
 {
     // Master-bus index. default_bus_layout.tres sends Music, Effects and Voice into Master. A gain or
     // a mute written here reaches every sound and leaves a player's own mix on the child buses alone.
-    private const int MasterBus = 0;
+    internal const int MasterBus = 0;
 
     // The score, and the archive it streams from. Both are process-lifetime, unlike the build-scoped
     // SessionArchives.Sounds. One channel has to survive a mission launch, or the cabin track would
@@ -71,8 +71,8 @@ internal sealed class LaunchAudio(Node host)
     }
 
     /// <summary>Mutes or unmutes the master bus and gates pad reads, on window focus. Idempotent,
-    /// since the notification can arrive more than once. It only ever clears a mute it set itself,
-    /// so it cannot stomp on a mute from anywhere else.</summary>
+    /// since the notification can arrive more than once. It never clears the load screen's mute,
+    /// which <see cref="FollowLoadGate"/> holds on the same bus.</summary>
     public void SetFocusMuted(bool muted)
     {
         if (_focusMuted == muted)
@@ -80,7 +80,7 @@ internal sealed class LaunchAudio(Node host)
             return;
         }
         _focusMuted = muted;
-        AudioServer.SetBusMute(MasterBus, muted);
+        ApplyMute();
         // Pad reads follow focus (Pads.For), so a stick drifting while alt-tabbed cannot fly
         // the plane. The roster deliberately does not, see Pads.cs's docs/architecture.md
         // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
@@ -89,6 +89,15 @@ internal sealed class LaunchAudio(Node host)
             Log.Info("sound", $"focus: lost, audio muted, pad reads gated");
         else
             Log.Info("sound", $"focus: regained, audio restored, pad reads live");
+    }
+
+    /// <summary>Mutes the master bus while the load screen stands, as focus loss does. The mute
+    /// lifts once the screen is down, unless focus still holds it. The launcher hands this to
+    /// <see cref="LoadGate.Changed"/>.</summary>
+    public void FollowLoadGate()
+    {
+        ApplyMute();
+        Log.Info("sound", $"load gate: {(LoadGate.Closed ? "closed, audio muted, input gated" : "open")}");
     }
 
     /// <summary>Opens the music channel and its archive under <paramref name="paths"/>, seeded from
@@ -197,4 +206,7 @@ internal sealed class LaunchAudio(Node host)
         _archive?.Dispose();
         _archive = null;
     }
+
+    // The one writer of the master-bus mute, so neither cause can lift the other's.
+    private void ApplyMute() => AudioServer.SetBusMute(MasterBus, _focusMuted || LoadGate.Closed);
 }

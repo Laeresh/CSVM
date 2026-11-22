@@ -34,12 +34,23 @@ public static class ScreenPointer
     }
 
     /// <summary>The pointer over <paramref name="viewport"/> and whether its primary button is
-    /// down: the override's reading, else the mouse's viewport position and left button.</summary>
+    /// down: the override's reading, else the mouse's viewport position and left button. Off the
+    /// screen while the load screen stands (<see cref="Utils.LoadGate"/>).</summary>
     public static (Vector2 At, bool Pressed)? Read(Viewport viewport)
     {
         ArgumentNullException.ThrowIfNull(viewport);
+        if (Utils.LoadGate.Closed)
+        {
+            return null;
+        }
+
         return Overrides(out var reading)
             ? reading
             : (viewport.GetMousePosition(), Input.IsMouseButtonPressed(MouseButton.Left));
     }
+
+    /// <summary>Whether the desktop mouse's right button is down, false while the load screen
+    /// stands, the gate <see cref="Read"/> keeps.</summary>
+    public static bool SecondaryPressed() =>
+        !Utils.LoadGate.Closed && Input.IsMouseButtonPressed(MouseButton.Right);
 }

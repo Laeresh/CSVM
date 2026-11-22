@@ -353,6 +353,7 @@
     "launch-velocity-decay": 0.041,
     "lens-flare-gates": 0.035,
     "lighting-lab": 8.523,
+    "load-gate": 0.15,
     "load-progress": 2.187,
     "load-sheet": 0.124,
     "loadout-bind": 0.261,
