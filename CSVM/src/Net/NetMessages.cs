@@ -1133,12 +1133,14 @@ public readonly record struct MatchStateMessage(
         _ => Winner,
     };
 
-    /// <summary>The <c>Winner</c> byte for <c>VersusMatch.Winner</c>'s number, 0 for null.</summary>
+    /// <summary>The <c>Winner</c> byte for <c>VersusMatch.Winner</c>'s number, 0 for null. The
+    /// number is a seat plus one or a lobby team, both at most <see cref="NetSeats.SeatCapacity"/>,
+    /// so the cast never reaches <see cref="DrawWinner"/>.</summary>
     public static byte WinnerByte(int? winner) => winner switch
     {
         null => 0,
         <= 0 => DrawWinner,
-        _ => (byte)Math.Min(winner.Value, DrawWinner - 1),
+        _ => (byte)winner.Value,
     };
 
     /// <inheritdoc/>

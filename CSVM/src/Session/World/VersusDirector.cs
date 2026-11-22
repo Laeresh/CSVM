@@ -675,7 +675,7 @@ public sealed class VersusDirector
     }
 
     private string LocalName(int seat) =>
-        IsBot(seat) ? _field.NetSeats[seat].Callsign : SplitScreen.PlayerTag(seat);
+        IsBot(seat) ? _field.NetSeats[seat].Callsign : Net.NetSeats.PlayerTag(seat);
 
     // A match death as the host decided it, posted into every local pane once: the host from its
     // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below. A

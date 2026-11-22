@@ -234,7 +234,7 @@ internal static class CoopCutsceneSuites
             split.NoteSkip(2);
             var notice = split.SkipNotice;
             report.AppendLine($"skip notice: '{notice?.Text}' in {notice?.Modulate}");
-            ctx.Check(notice != null && notice.Text.Contains(SplitScreen.PlayerTag(2)),
+            ctx.Check(notice != null && notice.Text.Contains(Net.NetSeats.PlayerTag(2)),
                 $"a skip by player 3 names that player on screen: '{notice?.Text}'");
             ctx.Check(notice != null && notice.Modulate.IsEqualApprox(SplitScreen.PlayerColor(2)),
                 $"…in that player's own identity colour, the one their pane and their menu cursor use: {notice?.Modulate}");

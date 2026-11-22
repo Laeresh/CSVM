@@ -178,10 +178,6 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Player <paramref name="index"/>'s identity colour (menu cursor, HUD tags).</summary>
     public static Color PlayerColor(int index) => Colors4[Mathf.PosMod(index, Colors4.Length)];
 
-    /// <summary>Player <paramref name="index"/>'s short tag ("P1"), used wherever several players
-    /// share one list or scoreboard.</summary>
-    public static string PlayerTag(int index) => $"P{index + 1}";
-
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft). It adds only this player's own bit,
     /// with this player's <see cref="WorldFlareLayer"/> and <see cref="HeadOverlayLayer"/>. The spyglass
@@ -305,7 +301,7 @@ public sealed partial class SplitScreen : CanvasLayer
     public void NoteSkip(int playerIndex)
     {
         _skipNotice ??= BuildSkipNotice();
-        _skipNotice.Text = $"{PlayerTag(playerIndex)} SKIPPED";
+        _skipNotice.Text = $"{Net.NetSeats.PlayerTag(playerIndex)} SKIPPED";
         _skipNotice.Modulate = PlayerColor(playerIndex);
         _skipNotice.Visible = true;
         _skipNoticeLeft = SkipNoticeS;

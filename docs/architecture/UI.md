@@ -586,8 +586,8 @@ for the wash-over-HUD ordering is a verification rule; the weather decode is [..
 
 ## src/UI/Boards/SplitScreen.cs
 The splitscreen rig for two to four players (one player never constructs it): the black gutter
-backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the player colour and
-tag table. The main viewport draws no world while the rig stands (`Disable3D`). Two panes stack, or
+backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the player colour
+table (the tag is `Net.NetSeats.PlayerTag`). The main viewport draws no world while the rig stands (`Disable3D`). Two panes stack, or
 stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid. **Every pane is a
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the window for a cutscene; `NoteSkip` names a

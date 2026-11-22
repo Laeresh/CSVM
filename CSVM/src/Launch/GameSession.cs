@@ -3344,7 +3344,7 @@ public partial class GameSession : Node3D
             Race = race,
             Match = _dogfight?.Match,
             Name = seat => _wire.Seats.FirstOrDefault(s => s.SeatIndex == seat) is { Callsign.Length: > 0 } net
-                ? net.Callsign : SplitScreen.PlayerTag(seat),
+                ? net.Callsign : Net.NetSeats.PlayerTag(seat),
             Carried = seat => _dogfight?.Flags?.Flags.Carried(seat) ?? 0,
             Words = OriginalScoresWords.From(strings),
         };

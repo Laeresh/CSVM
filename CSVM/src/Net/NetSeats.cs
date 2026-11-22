@@ -216,7 +216,7 @@ public static class NetSeats
                 PeerId = localPeer,
                 SeatIndex = seats.Count,
                 FlownHere = true,
-                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Callsign = PlayerTag(i),
                 Unnamed = i == 0,
                 PlaneNode = localPlanes[i],
             });
@@ -256,7 +256,7 @@ public static class NetSeats
                 PeerId = OfflinePeer,
                 SeatIndex = seats.Count,
                 FlownHere = true,
-                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Callsign = PlayerTag(i),
             });
         }
 
@@ -290,7 +290,7 @@ public static class NetSeats
                 FlownHere = local,
                 Callsign = name.Length > 0
                     ? name
-                    : $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    : PlayerTag(i),
                 Unnamed = name.Length == 0 && first,
                 PlaneNode = local ? localPlanes[i] : guests[i - localPlanes.Count].Plane,
             });

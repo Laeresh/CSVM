@@ -286,6 +286,7 @@ public class NetMessagesTests
         }
 
         Assert.Equal(3, Heard(3));
+        Assert.Equal(NetSeats.SeatCapacity, Heard(NetSeats.SeatCapacity));
         Assert.Equal(0, Heard(0));
         Assert.Null(Heard(null));
 

@@ -353,7 +353,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         float y = EntryTop + (entry * EntryPitch);
         layers.Fills.Add(new BoardFill(ManifestX, y, ChipWidth, ChipHeight, 0, 0, 0,
             signed ? 1f : 0.25f, Ink: SeatStrip.Ink(entry)));
-        layers.Lines.Add(new BoardLine(SplitScreen.PlayerTag(entry), ManifestX, y + TagDrop, ChipWidth, SmallFont,
+        layers.Lines.Add(new BoardLine(Net.NetSeats.PlayerTag(entry), ManifestX, y + TagDrop, ChipWidth, SmallFont,
             BoardInk.Dialog, Justify: BoardJustify.Center, Bold: true));
         if (!signed && roster?.Closed(entry) == true)
         {

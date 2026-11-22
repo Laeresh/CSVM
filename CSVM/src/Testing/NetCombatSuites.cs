@@ -254,9 +254,10 @@ internal static class NetCombatSuites
         + "clock reaches both slews through the same tick, a guest that counts the target locally "
         + "neither ends its match nor raises its board, its board leaves Restart off and says the "
         + "host calls the rematch while the host's offers it, its own rematch key does nothing, and a "
-        + "match ended on the kill limit and then on the time limit holds all three machines with "
+        + "match ended on the kill limit and then level on the time limit holds all three machines with "
         + "the same reason and the same scoreboard, every pane posting \"Game Over:\" over the "
-        + "winner the host named (the leader's callsign, or Draw)")]
+        + "winner the host named (the leader's callsign, then Draw), even on a guest whose own copy "
+        + "of the scores was skewed before the time limit to rank another seat first")]
     internal static void MatchStateIsTheHostsAlone(TestContext ctx)
     {
         // The scripted climb the star suites fly. This suite is the longest of the three, and a
@@ -1057,26 +1058,33 @@ internal static class NetCombatSuites
     }
 
     // The other way a match stops. The host's clock is wound to just short of the limit, then
-    // stepped over it through the phase a flown match runs. The end is therefore the real one.
+    // stepped over it through the phase a flown match runs. The end is therefore the real one. The
+    // rematch zeroed every score, so it ends level. The first guest's own copy of the scores is
+    // skewed first, so a guest ranking that copy would name seat 2 over the host's draw.
     private static void EndsOnTheTimeLimit(TestContext ctx, GameSession[] peers)
     {
         float limit = HostTimeMinutes * 60f;
         peers[0].Dogfight!.Match.Advance(limit - peers[0].Dogfight!.Match.Elapsed - 0.5f);
         ctx.Check(!peers[0].Dogfight!.Match.Completed,
             $"the host's clock stands half a second short of its limit ({peers[0].Dogfight!.Match.TimeRemaining:0.00} s left)");
+        ctx.Check(peers[0].Dogfight!.Match.Leader() == 0,
+            $"and the host's standings are level, so its end names a draw ({Scoreboard(peers[0])})");
 
+        var skewed = peers[1].Dogfight!.Match;
+        skewed.RegisterKill(shooter: 2, victim: 0);
         Lockstep(TickSteps, peers);
-        Held(ctx, peers, "the time limit", NetMatchEnd.TimeLimit);
+        Held(ctx, peers, "the time limit", NetMatchEnd.TimeLimit, skewed: 1);
         ctx.Check(peers.All(p => p.Dogfight!.Match.TimeRemaining <= 0f),
             $"and no machine has time left on it ({string.Join(", ", peers.Select(p => $"{p.Dogfight!.Match.TimeRemaining:0.00} s"))})");
-        // Read off the host's board: the rematch zeroed every score, and a crash since breaks the tie.
-        var top = peers[0].Dogfight!.Match.Standings().Where(s => s.Rank == 1).ToArray();
-        EndLines(ctx, peers, top.Length == 1 ? peers[0].NetSeats[top[0].PlayerIndex].Callsign : null);
+        ctx.Check(skewed.Winner() == 3,
+            $"ABLE-TO-FAIL CONTROL: the first guest's own copy of the scores ranks seat 2 alone first ({Scoreboard(peers[1])})");
+        EndLines(ctx, peers, null);
     }
 
     // One ending, read on all three machines. The match over, the board holding the world, the
-    // host's own reason, and one ranked scoreboard derived from the scores each was sent.
-    private static void Held(TestContext ctx, GameSession[] peers, string what, NetMatchEnd reason)
+    // host's own reason, and one ranked scoreboard derived from the scores each was sent. A guest
+    // whose copy a step skewed on purpose is left out of the last.
+    private static void Held(TestContext ctx, GameSession[] peers, string what, NetMatchEnd reason, int skewed = -1)
     {
         ctx.Check(peers.All(p => p.Dogfight!.Match.Completed),
             $"{what}: the match is over on all three machines ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Completed))})");
@@ -1086,8 +1094,8 @@ internal static class NetCombatSuites
             $"and each names the host's own reason, {reason} ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
 
         var boards = peers.Select(Scoreboard).ToArray();
-        ctx.Check(boards.All(b => b == boards[0]),
-            $"and the scoreboard is identical on all three, derived from the scores and never sent ({string.Join(" | ", boards)})");
+        ctx.Check(boards.Where((_, i) => i != skewed).All(b => b == boards[0]),
+            $"and the scoreboard is identical on every machine left unskewed, derived from the scores and never sent ({string.Join(" | ", boards)})");
     }
 
     // A dogfight board's menu rows and any line standing in for Restart, as one line.

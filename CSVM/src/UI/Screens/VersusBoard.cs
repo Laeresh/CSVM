@@ -61,7 +61,7 @@ public sealed partial class VersusBoard : ResultsBoard
     public static string RowTag(int playerIndex, System.Collections.Generic.IReadOnlyList<Net.NetSeat>? seats) =>
         Net.NetSeats.SeatName(seats, playerIndex) is { } callsign
             ? seats![playerIndex].IsBot ? $"{callsign} {BotTag}" : callsign
-            : SplitScreen.PlayerTag(playerIndex);
+            : Net.NetSeats.PlayerTag(playerIndex);
 
     /// <summary>The board's headline for a finished match: the one leader's name and WINS, or DRAW
     /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
@@ -104,9 +104,9 @@ public sealed partial class VersusBoard : ResultsBoard
         // already-drawn labels.
         var standings = _match.Standings().ToList();
         var teams = _match.TeamStandings().ToList();
-        var winners = standings.Where(st => st.Rank == 1).ToList();
+        int winner = _match.Winner();
         string title = Title(_match, _seats);
-        var titleColor = !_match.Teamed && winners.Count == 1 ? SplitScreen.PlayerColor(winners[0].PlayerIndex) : TitleColor;
+        var titleColor = !_match.Teamed && winner > 0 ? SplitScreen.PlayerColor(winner - 1) : TitleColor;
 
         body.AddChild(Centered(Label(title, (int)(TitleFont * s), titleColor)));
         body.AddChild(Centered(Label(_context, (int)(ContextFont * s), ContextColor)));
@@ -134,7 +134,7 @@ public sealed partial class VersusBoard : ResultsBoard
 
         foreach (var st in standings)
         {
-            bool won = !_match.Teamed && st.Rank == 1 && winners.Count == 1;
+            bool won = !_match.Teamed && st.PlayerIndex + 1 == winner;
             // The winner's row wears their own identity colour; everyone else stays neutral so
             // the placing reads at a glance, same rule StuntRaceBoard's winner row follows.
             var color = won ? SplitScreen.PlayerColor(st.PlayerIndex) : RowColor;
@@ -157,7 +157,7 @@ public sealed partial class VersusBoard : ResultsBoard
         string? callsign = Net.NetSeats.SeatName(_seats, seat);
         if (callsign == null || !_seats![seat].IsBot)
         {
-            AddCell(grid, callsign ?? SplitScreen.PlayerTag(seat), font, SplitScreen.PlayerColor(seat), HorizontalAlignment.Left, minWidth);
+            AddCell(grid, callsign ?? Net.NetSeats.PlayerTag(seat), font, SplitScreen.PlayerColor(seat), HorizontalAlignment.Left, minWidth);
             return;
         }
 

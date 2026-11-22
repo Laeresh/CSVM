@@ -447,7 +447,7 @@ public sealed class OriginalLocalLobby : IOriginalScreenModule
 
             var seat = seats[slot];
             string plane = (slot == 0 || seat.Locked) && seat.Cursor < roster.Count ? roster[seat.Cursor].Name : string.Empty;
-            _lobby.ComposePlayerRow(layers, slot, $"{SplitScreen.PlayerTag(slot)}  {seat.Source.DeviceLabel}", plane, true, 0f, false,
+            _lobby.ComposePlayerRow(layers, slot, $"{NetSeats.PlayerTag(slot)}  {seat.Source.DeviceLabel}", plane, true, 0f, false,
                 seat.Confirmed);
         }
     }

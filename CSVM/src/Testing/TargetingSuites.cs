@@ -864,8 +864,8 @@ internal static class TargetingSuites
 
         foreach (var (own, other) in new[] { (p1, p2), (p2, p1) })
         {
-            string tag = UI.Boards.SplitScreen.PlayerTag(own.PlayerIndex);
-            string foe = UI.Boards.SplitScreen.PlayerTag(other.PlayerIndex);
+            string tag = Net.NetSeats.PlayerTag(own.PlayerIndex);
+            string foe = Net.NetSeats.PlayerTag(other.PlayerIndex);
             if (own.PilotHud.TargetHud is not { } hud)
             {
                 ctx.Check(false, $"{tag}'s pane has a target HUD");

@@ -4,7 +4,7 @@ namespace CSVM.UI.Boards;
 /// The player chip strip in a screen's top-right corner once a second seat has joined: <c>P1</c>
 /// to <c>P4</c>, each in that player's identity colour. A pilot finds the
 /// same tag in the same place on every screen. The tag and the colour are
-/// <c>SplitScreen.PlayerTag</c> and <c>SplitScreen.PlayerColor</c>. This is the strip's shape, in
+/// <c>Net.NetSeats.PlayerTag</c> and <c>SplitScreen.PlayerColor</c>. This is the strip's shape, in
 /// authored board points scaled through the screen's own <see cref="BoardFit"/>. Original composes
 /// with no font metric at hand, so each chip centres in a fixed <see cref="Pitch"/> cell over a ground.
 /// </summary>

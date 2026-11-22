@@ -112,7 +112,7 @@ internal static class LocalBotSuites
             // Half a second short, so the clock runs out in flight with each pose pair moving.
             director.Match.Advance(director.Match.TimeLimit - director.Match.Elapsed - 0.5f);
             HeldEnd(ctx, session, $"{cell}, time limit", NetMatchEnd.TimeLimit,
-                HudMessages.WinnerLine(UI.Boards.SplitScreen.PlayerTag(1)));
+                HudMessages.WinnerLine(NetSeats.PlayerTag(1)));
 
             // R on the risen board is the rematch. The board retires on its own frame, which a
             // suite's one frame never runs.
@@ -138,7 +138,7 @@ internal static class LocalBotSuites
             }
 
             HeldEnd(ctx, session, $"{cell}, score limit", NetMatchEnd.ScoreTarget,
-                HudMessages.WinnerLine(UI.Boards.SplitScreen.PlayerTag(0)));
+                HudMessages.WinnerLine(NetSeats.PlayerTag(0)));
         }
         finally
         {
@@ -432,7 +432,7 @@ internal static class LocalBotSuites
             var after = Expect(Board(session), killer: 1, victim: 0, session.Dogfight!.Match.Scores.Kill);
             victim.Body!.TakeProjectileHit(DebugKillTarget.LethalWeapon(killer)!, victim.WorldPosition, 0, killer.PlayerIndex, LethalScale);
             int steps = StepUntil(() => victim.Crashed && Board(session).SequenceEqual(after), session);
-            string tag = UI.Boards.SplitScreen.PlayerTag(1);
+            string tag = NetSeats.PlayerTag(1);
             ctx.Check(victim.Crashed && Board(session).SequenceEqual(after) && PaneLines(victim).Contains(tag, StringComparison.Ordinal),
                 $"[{cell}] P2's kill of P1 scores P2 and P1's pane names its killer {tag} ({Scoreboard(session)}; {PaneLines(victim)}, {steps} step(s))");
             steps = UntilBack(victim, session);

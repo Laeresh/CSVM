@@ -141,7 +141,7 @@ public sealed partial class PauseBoard : Control
         // OwnerPlayerIndex is captured once here (Populate runs only from a fresh pause), so the
         // board keeps naming the player who paused even if ownership were ever cleared underneath it.
         int owner = _state.OwnerPlayerIndex;
-        string ownerTag = SplitScreen.PlayerTag(owner);
+        string ownerTag = Net.NetSeats.PlayerTag(owner);
         var ownerColor = SplitScreen.PlayerColor(owner);
 
         body.AddChild(ResultsBoard.Centered(ResultsBoard.Label("PAUSED", (int)(TitleFont * s), ResultsBoard.TitleColor)));

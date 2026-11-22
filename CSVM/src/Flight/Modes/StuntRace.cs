@@ -101,7 +101,7 @@ public sealed class Racer
     /// select so a player recognises "their" colour from menu to results.</summary>
     public Color Color => UI.Boards.SplitScreen.PlayerColor(Index);
 
-    public string Tag => UI.Boards.SplitScreen.PlayerTag(Index);
+    public string Tag => Net.NetSeats.PlayerTag(Index);
 
     /// <summary>Counts every change to this record, so a network host sends a racer's line only
     /// when it moved.</summary>

@@ -1188,7 +1188,7 @@ public sealed class DogfightLobby
 
     // A seat's name in a list by seat, or its player tag past the list.
     private static string NameIn(IReadOnlyList<string> names, int seat) =>
-        seat >= 0 && seat < names.Count ? names[seat] : "P" + (seat + 1).ToString(CultureInfo.InvariantCulture);
+        seat >= 0 && seat < names.Count ? names[seat] : Net.NetSeats.PlayerTag(seat);
 
     private static List<CSVM.Flight.Modes.VersusStanding> Members(CSVM.Flight.Modes.VersusMatch match, int team)
     {
