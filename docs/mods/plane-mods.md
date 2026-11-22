@@ -3,7 +3,7 @@
 A walk-through for preparing a model so CSVM flies it as a new plane. It follows a Blender workflow,
 since Blender's glTF exporter writes what CSVM reads; any tool that writes the same glTF works. Every
 exact rule (keys, limits, what is skipped) is in the reference,
-[formats/mod-planes.md](formats/mod-planes.md); this page is the order to do things in and the mistakes
+[formats/mod-planes.md](../formats/mod-planes.md); this page is the order to do things in and the mistakes
 that cost the most time.
 
 ## What a mod is
