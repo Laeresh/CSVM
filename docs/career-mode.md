@@ -13,6 +13,7 @@ weapons, AI and zeppelins from the player's own install, and it never edits a ca
 ## Contents
 
 - [Pillars](#pillars)
+- [The flight](#the-flight)
 - [The fantasy](#the-fantasy)
 - [The core loop](#the-core-loop)
 - [The strategic map](#the-strategic-map)
@@ -30,6 +31,7 @@ weapons, AI and zeppelins from the player's own install, and it never edits a ca
 - [Failure and how a career ends](#failure-and-how-a-career-ends)
 - [Career options](#career-options)
 - [Co-op](#co-op)
+- [Generated worlds (exploratory)](#generated-worlds-exploratory)
 - [Screens](#screens)
 - [What CSVM already has, and what is new](#what-csvm-already-has-and-what-is-new)
 - [Data model sketch](#data-model-sketch)
@@ -49,6 +51,18 @@ weapons, AI and zeppelins from the player's own install, and it never edits a ca
    contract to contract, so the generated missions form a story the player authored by choice.
 5. **Short sessions, long arcs.** One contract is one sortie of 5 to 15 minutes. A career runs
    for dozens of hours across all five regions.
+6. **The captain always flies.** Every sortie is flown by the player as the flight's leader. There
+   is no auto-resolve and no sending the gang out alone; a contract the captain cannot fly (wounded,
+   no plane) waits or expires.
+
+## The flight
+
+A sortie's player side is **at most four planes**: the captain plus up to three wingmen. Each
+wingman seat is filled either by an AI pilot from the gang's roster or by a co-op human (see
+[Co-op](#co-op)), in any mix: solo with three AI, host plus one human and two AI, up to four
+humans. The cap holds for every job type, base defence included, and is what the opposition budget,
+the AI and the frame budget are sized against. The gang can own more pilots and planes than four;
+the flight check chooses which four go up.
 
 ## The fantasy
 
@@ -172,7 +186,8 @@ the gang's colours.
 
 ### Pilots
 
-Pilots are wingmen in the flight roster, flown by the AI pilot. Each pilot has four skills from 1
+The captain is the player's own pilot: they gain fame but no skills, since the player's hands are
+the skill. The other pilots are wingmen in the flight roster, flown by the AI pilot. Each pilot has four skills from 1
 to 10, which map onto the AI pilot's existing parameters:
 
 | Skill | Effect in flight |
@@ -326,6 +341,27 @@ Action from an `InstantActionDef`. The generator works in five steps.
    HUD message systems already show: primary (must be done for payment), secondary (paid extra),
    and the hidden bonus objectives.
 
+### Added ground targets
+
+A generated sortie may place **new objects into the original's worlds**: depots, fuel tanks, flak
+emplacements, radio masts, parked aircraft, rail cars, moored boats, a crashed plane to rescue. The
+career is remake-only, so this is always allowed in a career sortie, and it never changes what a
+campaign or Instant Action mission shows.
+
+- **The models come from the install.** A placed object is a model the original already ships
+  (mission entities, destructibles, turrets, vehicles), with its own damage and destroy
+  choreography. The repo still ships no assets; a template names models, it does not carry them.
+- **Placement is checked against the built world.** A site offers a footprint; the placer samples
+  the ground through the world query, refuses slopes above a limit, keeps a clearance from every
+  original node and from the AI nets' flight volumes, and snaps the object to the ground height.
+  A failed placement drops that object and the generator picks another site; it never floats or
+  buries one.
+- **Placed groups are prefabs.** A "fuel depot" is a small authored layout (tanks, a hut, two flak
+  guns, a fence) in remake data, placed as one unit, so a generated target looks built on purpose.
+  Each prefab carries its own tags, footprint and value for the opposition budget.
+- **The catalogue learns from placements.** A site where prefabs fit reliably is marked so, which
+  keeps the generator from retrying sites that fail every time.
+
 **Determinism.** The spec is generated from a seed stored with the contract, so a contract shows
 the same mission whenever it is flown and a reported bug can be replayed with `--career-seed=`.
 The generator is engine-free and unit-tested: given a site catalogue and a seed, it returns a
@@ -449,12 +485,78 @@ Set when a career starts, shown in the career's save slot:
 
 ## Co-op
 
-A co-op career is the career of one **seated profile**, flown with the existing campaign co-op
-rules (see "Campaign co-op" in [`CONTEXT.md`](../CONTEXT.md)). Other humans join as **guests**
-and fly in the wingman seats instead of AI pilots, on team id `1`. A guest's kills, ammunition
+A co-op career is the career of one **seated profile**, the host's, flown with the existing
+campaign co-op rules (see "Campaign co-op" in [`CONTEXT.md`](../CONTEXT.md)). One to three other
+humans join as **guests** and take wingman seats, on team id `1`; any seat no human takes is
+filled by an AI pilot from the gang's roster, so the flight is always at most four planes (see
+[The flight](#the-flight)). A guest's kills, ammunition
 and damage are charged to the gang's ledger like an AI wingman's, but a guest has no wage, no
 injury and no persistent skills, and cannot spend from the ledger. Whether a guest may claim a
 named pilot slot from the gang's roster is an open question.
+
+## Generated worlds (exploratory)
+
+The five regions the original's worlds cover are a small part of the setting's broken-up North
+America. Generated worlds would let the strategic map grow past them: each new region is a
+**biome** standing for one stretch of that map, and its worlds are generated from a seed instead
+of read from a chapter. This section is a direction to prototype, not a commitment; the career
+works without it.
+
+### Biomes
+
+Each biome is a recipe: a terrain shape, a ground palette, vegetation sets, settlement style,
+water, weather odds and the job types and powers it favours. The list is by geography; each
+region's name on the strategic map follows the setting's nation for that ground where the
+install's own strings name it.
+
+| Biome | Terrain | Settlements and targets | Favoured jobs |
+|---|---|---|---|
+| Desert mesas | flat basins cut by mesas, arroyos and slot canyons | adobe towns, mines, rail water stops | smuggling runs, rail raids, canyon duels |
+| Great Plains | rolling grassland, river breaks, rare buttes | grain towns, oil derricks, long rail lines | convoy raids, escorts, patrols |
+| River delta and bayou | flat wetland, braided channels, cypress swamp | stilt towns, riverboats, fuel barges | strikes, smuggling, boat convoys |
+| Great Lakes industry | lake shore, flat farmland, dense factory cities | factories, steel mills, freighters, airship docks | strikes, zeppelin assaults, base defence |
+| Appalachian ridges | parallel forested ridges and narrow valleys | mining towns, stills, rail tunnels | smuggling, recon, rescue |
+| Atlantic barrier islands | sand islands, inlets, shallow sound | fishing harbours, lighthouses, pirate havens | prize captures, sea convoys |
+| Northern lakes and pine | glacial lakes, pine forest, low hills | logging camps, seaplane bases | patrols, rescue, races |
+| Alpine high country | peaks, passes, glaciers, high plateaus | passes with forts, observatories, cable cars | bounties, recon, duels |
+
+### How a world is generated
+
+1. **Terrain.** A heightfield from layered noise shaped by the biome's recipe, with a hydraulic
+   erosion pass for valleys and a carve pass for the features the recipe names (a canyon, a river,
+   a coastline). It is meshed into chunks at a resolution close to the original worlds', so it
+   reads as the same game and stays inside the frame budget.
+2. **Ground.** Ground textures are picked from the **install's own textures** by slope, height,
+   moisture and biome, and blended per chunk. Nothing new is painted or shipped; a biome names the
+   textures it uses.
+3. **Water.** Sea and lakes use the wave ocean (`Ocean`, `SeaState`) with a shore mask baked from
+   the generated ground, the same way it is baked for a chapter.
+4. **Vegetation and towns.** The Rich vegetation scatter and the Enhanced city's buildings already
+   stamp models onto ground by rule; a generated world drives them from the biome's sets instead
+   of from a chapter's sidecar. Towns are laid along roads and rail by a small layout grammar
+   (main street, rail yard, airfield, docks).
+5. **Flight data.** The generator writes what a chapter's data would hold: AI patrol nets along
+   valleys and roads, landing approaches for every airfield, spawn tables, and the **site
+   catalogue** the mission generator reads. A generated world then feeds the same contract and
+   mission pipeline as an original one.
+6. **Sky.** Weather odds, fog, cloud deck and light per biome through the existing weather and
+   zone lighting.
+
+A world is a function of its seed and biome, so it is never saved, only regenerated, and a cache
+keeps the built meshes between sorties in the same region.
+
+### Risks to prototype first
+
+- **The look.** The original's worlds are hand-painted; generated terrain under the same textures
+  can read as noise. The first prototype is one biome (desert mesas suit low-detail ground best)
+  judged at the controls beside a chapter world.
+- **Collision and AI.** The AI's terrain avoidance and the ground contact were tuned on the
+  original's meshes. Generated ground must give them the same kind of surface.
+- **Build time.** Generation must fit inside a loading screen, or happen on travel days with the
+  result cached.
+- **Variety.** Eight recipes and a seed give many worlds that look alike. Hand-placed **landmarks**
+  per region (a dam, a giant studio sign, a ruined fort), placed by the generator as prefabs, give
+  each region a memory.
 
 ## Screens
 
@@ -485,9 +587,11 @@ fonts where it fits.
 | Need | Exists | Gap |
 |---|---|---|
 | Worlds, terrain, weather, time of day | chapter worlds, `Weather`, zone lighting | a per-chapter site catalogue |
+| Added ground targets | mission entities, destructibles, turrets, the world query | a placer and the prefab layouts |
+| Generated worlds | `EmptyStage`, Rich vegetation and city stamps, the wave ocean | everything in [Generated worlds](#generated-worlds-exploratory) |
 | Building a session from a description | `InstantActionDef` and its producers | a mission spec rich enough for convoys, targets and waves |
 | Enemy aircraft and their AI | `AiPilot`, target ranking, AI nets, enemy generators | AI skill parameters exposed per pilot |
-| Wingmen | the flight check's crew slots, `AiEscort` | orders from the player, more than one wingman |
+| Wingmen | the flight check's crew slots, `AiEscort` | orders from the player, three wingmen in formation |
 | Zeppelins | broadside, damage, motion, replicas | a player-side zeppelin as the base |
 | Ladder boarding | the ladder switch, the airframe swap | boarding a prize instead of a plane |
 | Planes and parts | `CustomPlaneDef`, the hangar, prices and weights | per-instance condition and a parts hold |
@@ -568,16 +672,19 @@ phase builds on it.
    and morale, mutiny.
 6. **Legends and co-op.** The campaign missions as Legends contracts, guests in the wingman seats,
    the career options and Ironman.
+7. **Generated worlds (exploratory).** A single desert-mesa biome as a prototype outside the
+   career, judged at the controls beside a chapter world. Only if it holds up: the generator's
+   flight data and site catalogue, then new regions on the strategic map, one biome at a time.
+
+The ground-target placer and the prefabs arrive in phase 1, since a strike contract needs them.
+Three AI wingmen in formation are proven in phase 2 against the frame budget, with the worst case
+(four planes, a zeppelin and a full opposition budget) as the perf scenario.
 
 ## Open questions
 
-- Is the captain always the human's plane, or can the player stay on the bridge and send the
-  gang out alone, with the sortie resolved by simulation?
-- How many wingmen can fly at once before the AI and the frame budget suffer? The original's
-  missions fly one wingman; the career wants up to three.
-- Does a generated sortie need more of the world than the site catalogue offers, such as new
-  ground targets placed into a world that never had them, and would placing them be a change to the
-  original's worlds that a Faithful setting should refuse?
+- Which wingman orders does the captain get (attack my target, cover me, go home, engage at will),
+  and on which controls, given that a co-op human in a seat ignores them?
+- Does a generated world replace a region's original worlds, or only add regions beyond the five?
 - Should the strategic map be the original's briefing map art, a new illustrated map, or a
   zeppelin-window view of the region?
 - How much of the career should run in the original presentation, which has no art for most of
