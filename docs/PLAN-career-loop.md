@@ -60,6 +60,7 @@ first bind; the design doc holds the rest.
 | 16 | The board's behaviour | **Five slots, daily refill**; offers last 3 to 7 days |
 | 17 | Employers in phase 1 | **Kinds only** (nation, corporation, militia, broker); named employers arrive with standing |
 | 18 | Save layout | **One file per career plus a backup**, `user://Careers/<name>.json` and `.json.bak` |
+| 19 | Wingmen in phase 1 | **The sortie supports all three wingman seats; the starting gang fills one.** Instant Action already flies up to five wingmen (`InstantActionRuntime.FlownWingmen`), so three is in the engine's range. The other seats fill as the gang grows, once hiring and the market arrive in phase 2 |
 
 ## ⚠ Read this before implementing anything
 
@@ -339,9 +340,8 @@ are primary (paid) and secondary (paid extra). Modifiers (step 4) are phase 4.
 of waypoints over an AI net leg with enemy groups along it. Strike: two to five target sites and a
 flak ring. Enemies come from the employer's enemy's roster with its paint. <TODO: how an enemy
 plane is valued for the budget (airframe cost plus guns, or a separate tune table).> <TODO: whether
-phase 1 has reinforcement waves through the enemy generators, or a fixed spawn only.> <TODO:
-whether phase 1 flies the captain alone or with one stock AI wingman; decision 2 says "no crew
-skills", which does not settle whether a wingman flies.>
+phase 1 has reinforcement waves through the enemy generators, or a fixed spawn only.> The spec carries up to three wingman seats, one per fit pilot with a fit
+plane (decision 19); the starting gang fills one.
 
 **Model recommendation.** <TODO>
 
