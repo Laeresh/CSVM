@@ -851,7 +851,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 
 ### `src/Session/`, the session-build layer
 
-The session-build clusters `GameSession` delegates to, in five sub-namespaces, one folder each.
+The session-build clusters `GameSession` delegates to, in six sub-namespaces, one folder each.
 `Objectives` sits at the bottom and names one other (`Campaign`, once).
 
 **`Session.InstantAction`**, one Instant Action mission.
@@ -941,6 +941,18 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Objectives/NetTrailerTargets.cs`, resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.
 - `src/Session/Objectives/NetDirectorLink.cs`, the objectives graph over the wire: the host publishes every event its graph raises, stamped with its clock, and a guest's replicated graph replays them in order.
 - `src/Session/Objectives/NetDirectorCatchUp.cs`, a guest's catch-up on a late director event: applies it, then advances the timers, cutscenes and sounds it started by how late it arrived.
+
+**`Session.Career`**, the career mode's state, engine-free: money, time, planes, stock and contracts.
+
+- `src/Session/Career/CareerState.cs`, one career's whole state and the operations that pass time: paydays, restocks, board refreshes, repairs, accepting a contract.
+- `src/Session/Career/CareerStore.cs`, JSON persistence for careers under `user://Careers/`, one file each with the previous save kept as a backup.
+- `src/Session/Career/CareerTunes.cs`, every economy number the career uses, each a tune, in one class.
+- `src/Session/Career/CareerDice.cs`, the career's keyed randomness: a pure function of the career's seed, a stream name and integer keys.
+- `src/Session/Career/Ledger.cs`, cash, debt and every entry that moved them; a bill cash cannot cover becomes debt.
+- `src/Session/Career/PlaneInstance.cs`, one owned plane: its hangar build, the armour each zone has lost, damaged parts and the repair quote.
+- `src/Session/Career/Hold.cs`, the zeppelin's hold: gun rounds per calibre and kind, rockets per weapon id.
+- `src/Session/Career/PortShelf.cs`, the port's ammunition shelf: unlimited slug, weekly-rolled specialist rounds and rockets.
+- `src/Session/Career/ContractBoard.cs`, the port's contract board: daily refill of seeded patrol and strike offers within the threat floor.
 
 ### `src/Bindings/`, the input binding model
 

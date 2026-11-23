@@ -52,6 +52,14 @@ first bind; the design doc holds the rest.
 | 8 | Menu presentation | **Modern presentation only** for new screens; existing original pages reused where they match. Career logic stays UI-free because the modern presentation will be replaced |
 | 9 | Starting region | **Player chooses** later; each region has a threat floor. Phase 1 has one region only |
 | 10 | The captain always flies | **Yes**; no auto-resolve |
+| 11 | A bill cash cannot cover | **The shortfall becomes debt**; cash never goes negative, seizure is a later phase |
+| 12 | Where the tunes live | **One C# class**, `CareerTunes`; a JSON override can come later |
+| 13 | How repair works | **The whole plane in one action**: one quote in dollars and days |
+| 14 | A damaged part in flight | **A damaged gun cannot fire; a damaged engine loses some top speed** |
+| 15 | How gun ammunition is counted | **Rounds per calibre and kind**; slug unlimited at the port, sold per hundred |
+| 16 | The board's behaviour | **Five slots, daily refill**; offers last 3 to 7 days |
+| 17 | Employers in phase 1 | **Kinds only** (nation, corporation, militia, broker); named employers arrive with standing |
+| 18 | Save layout | **One file per career plus a backup**, `user://Careers/<name>.json` and `.json.bak` |
 
 ## ⚠ Read this before implementing anything
 
@@ -61,7 +69,7 @@ Nothing has been disproven yet; the table below is the confidence roll-up only.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | none | |
 | **Direction sound, magnitude a judgement call** | none | |
-| **Leads only, no mechanism yet** | A1 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
+| **Leads only, no mechanism yet** | B11 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
 
 ## What the data actually ships
 
@@ -115,11 +123,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the engine-free career core
 
-1. ☐ `Career` namespace, `CareerState` and the versioned save
-2. ☐ Calendar and ledger, with the weekly bill and the debt
-3. ☐ Plane instances: zone condition, damaged parts, repair cost and days
-4. ☐ The hold and the port's ammunition shelf
-5. ☐ Contracts and the seeded board (patrol, strike, threat rating, fee, expiry)
+1. ☑ `Career` namespace, `CareerState` and the versioned save
+2. ☑ Calendar and ledger, with the weekly bill and the debt
+3. ☑ Plane instances: zone condition, damaged parts, repair cost and days
+4. ☑ The hold and the port's ammunition shelf
+5. ☑ Contracts and the seeded board (patrol, strike, threat rating, fee, expiry)
 
 ### Wave B, the sortie seam
 
@@ -151,7 +159,13 @@ where the career's pages mount.>
 
 # Wave A, the engine-free career core
 
-## A1 ☐ `Career` namespace, `CareerState` and the versioned save
+## A1 ☑ `Career` namespace, `CareerState` and the versioned save
+
+**Landed.** `Session.Career` namespace (inside the `Session` family, so the family-order test needed no new row). `CareerState` holds name, seed, day, ledger, planes, hold, shelf, board and the active contract; `CareerStore` writes one file per career at `user://Careers/<name>.json`, copies the previous file to `<name>.json.bak` before each save, and loads from the backup when the file does not read. Plane builds nest `CustomPlaneStore`'s JSON. Starting planes' builds come from the caller (C21), so Wave A reads no game data.
+
+**Verified.** `CareerTests`: exact round-trip through a store and a second store instance, backup fallback on a damaged file, refusal of another version and of malformed text, delete removes both files.
+
+**Original approach (kept for reference).**
 
 **Goal.** A career's whole state is one engine-free object that round-trips through a JSON save at
 `user://career/<name>.json`, with a version field and a backup written before each overwrite.
@@ -175,7 +189,13 @@ cleanly; a failed write leaves the backup readable.>
 **⚠ Traps.** Every formatted number uses `CultureInfo.InvariantCulture` (coding conventions), or a
 German-locale save will not load on another machine.
 
-## A2 ☐ Calendar and ledger, with the weekly bill and the debt
+## A2 ☑ Calendar and ledger, with the weekly bill and the debt
+
+**Landed.** `Ledger` (cash, debt, entries by day and category) and the calendar inside `CareerState` (`Day`, `Week`, `NextPayday`, `AdvanceDays`). A payday charges wages, upkeep, then interest and the instalment. A bill cash cannot cover becomes debt as arrears; cash never goes negative; seizure is deferred. All numbers live in the `CareerTunes` class (decision 12), with a JSON override possible later.
+
+**Verified.** `CareerTests`: the first payday's figures by hand (cash 3,600, debt 24,500), and a broke payday's arrears plus interest.
+
+**Original approach (kept for reference).**
 
 **Goal.** Days advance by explicit actions (repair, rest); every seventh day the ledger charges
 wages, upkeep and the debt instalment with interest, and every entry is listed by day and category.
@@ -197,7 +217,13 @@ a multi-day repair.>
 
 **⚠ Traps.** <TODO>
 
-## A3 ☐ Plane instances: zone condition, damaged parts, repair cost and days
+## A3 ☑ Plane instances: zone condition, damaged parts, repair cost and days
+
+**Landed.** `PlaneInstance` wraps an unchanged `CustomPlaneDef` and adds per-zone armour units lost (wings independent), damaged parts (four gun slots, the engine), sorties and kills. Repair is one action for the whole plane (decision 13): `QuoteRepair` charges $5 a unit and half of a part's hangar price, `CareerState.Repair` pays and passes the days. What a damaged part does in flight (decision 14: a damaged gun cannot fire, a damaged engine loses some top speed) is applied on the flight side in B14/B15.
+
+**Verified.** `CareerTests`: the starting wear, a repair quote by hand, a paid repair clearing the damage and passing two days, damage clamped to the zone.
+
+**Original approach (kept for reference).**
 
 **Goal.** Each owned plane is an instance carrying its `CustomPlaneDef` record, the condition of its
 four armour zones and a set of damaged parts, and the repair of each has a price and a number of
@@ -221,7 +247,13 @@ and whether repair is one action for the whole plane or per zone.>
 and the mission side damages one wing at a time ([`org/hangar.md`](org/hangar.md)); the instance
 must keep the wings independent.
 
-## A4 ☐ The hold and the port's ammunition shelf
+## A4 ☑ The hold and the port's ammunition shelf
+
+**Landed.** `Hold` counts gun rounds per calibre and kind (decision 15) and rockets per `wep_*` id. `PortShelf` sells slug without limit and specialist rounds and rockets from a weekly stock rolled from the career's seed; rounds sell in lots of a hundred. Phase 1 sells ammunition only.
+
+**Verified.** `CareerTests`: an unlimited slug purchase charged by hand, a specialist purchase limited by stock, a purchase cash cannot cover changing nothing, the restock pure in seed and week.
+
+**Original approach (kept for reference).**
 
 **Goal.** Ammunition and rockets are stock in the hold. The phase 1 port sells slug rounds without
 limit and specialist rounds and rockets from a weekly stock.
@@ -243,7 +275,13 @@ ammunition, if anything (armour for repairs counts as repair, not stock).>
 
 **⚠ Traps.** <TODO>
 
-## A5 ☐ Contracts and the seeded board (patrol, strike, threat rating, fee, expiry)
+## A5 ☑ Contracts and the seeded board (patrol, strike, threat rating, fee, expiry)
+
+**Landed.** `Contract` and `ContractBoard`: five slots, expired offers drop daily and empty slots refill (decision 16), offers last 3 to 7 days. Threat is the lower of two draws above the threat floor; the fee is a draw in the threat's band; employers are kinds only (decision 17). Draws key on the offer's id, so ids and offers replay exactly. `CareerState.Accept` takes one contract at a time.
+
+**Verified.** `CareerTests`: two careers with one seed show identical boards after 20 days, fees inside their bands, the threat floor holding at 4, one active contract at a time.
+
+**Original approach (kept for reference).**
 
 **Goal.** The port's board offers a few contracts, each a patrol or a strike with a threat rating
 of one to five skulls, a fee and an expiry in days, all derived from the career's seed and the day.

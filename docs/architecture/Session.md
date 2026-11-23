@@ -1,6 +1,6 @@
 # Session
 
-The session-build clusters `GameSession` (`Launch.md`) delegates to. Five sub-namespaces, one folder each, and one page for all of them: `Session.InstantAction`, `Session.Campaign` (the director and the profile), `Session.Roster` (who flies and how each got an aeroplane), `Session.World` (the simulation step and the non-aeroplane things in the world) and `Session.Objectives` (the mission script and its rules). The module index in `docs/architecture.md` groups the entries by sub-namespace.
+The session-build clusters `GameSession` (`Launch.md`) delegates to. Six sub-namespaces, one folder each, and one page for all of them: `Session.InstantAction`, `Session.Campaign` (the director and the profile), `Session.Roster` (who flies and how each got an aeroplane), `Session.World` (the simulation step and the non-aeroplane things in the world), `Session.Objectives` (the mission script and its rules) and `Session.Career` (the career mode's engine-free state). The module index in `docs/architecture.md` groups the entries by sub-namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -695,3 +695,55 @@ the screen rig in flat Enhanced; `Launch/SkyStage.cs` chooses at the build); ste
 hands its wash to `UI/Boards/HeadLockedQuads`. AgX tonemaps these quads and not the canvas, so under Enhanced the rings
 take a per-ring gain (`EnhancedGain`, measured in `docs/org/weather.md`). Each pane's quads stand on its own
 `UI.Boards.SplitScreen.WorldFlareLayer` (`LayerOf`), which no picture camera draws.
+
+## src/Session/Career/CareerState.cs
+One career's whole state: name, seed, day, ledger, planes, hold, shelf, board and the active
+contract. `New` takes the starting planes' builds from the caller, who makes them from the tunes'
+starting airframes and the stock loadouts, and wears each zone by the tunes' share. Every operation
+that passes time goes through `AdvanceDays`, which refreshes the board daily and runs the payday
+weekly. Nothing in flight reads it. The design is [../career-mode.md](../career-mode.md); persisted
+by `CareerStore`.
+
+## src/Session/Career/CareerStore.cs
+JSON persistence for careers, one file each under `user://Careers/<name>.json`, after
+`CampaignProfileStore`. A save first copies the previous file to `<name>.json.bak`, and a file that
+does not read loads from the backup. Plane builds are nested in `CustomPlaneStore`'s own JSON. A
+file of another version, or with any malformed part, reads as nothing.
+
+## src/Session/Career/CareerTunes.cs
+Every economy number the career uses, each a tune for playtesting: starting money and debt, the
+weekly bill, repair rates, the board's size, threat floor and fee bands, ammunition and rocket
+prices and shelf stock. Plane, gun, engine and armour prices are not here; they are
+`Flight/Hangar/HangarEconomy`'s decode. Starting values: [../career-mode.md](../career-mode.md),
+"Economy tunes".
+
+## src/Session/Career/CareerDice.cs
+The career's randomness, a pure function of the career's seed, a stream name and up to three
+integer keys, through splitmix64. Kept apart from `Utils/Rng`, whose master changes per sortie;
+a career's seed is saved with it. The board keys by offer id and the shelf by week.
+
+## src/Session/Career/Ledger.cs
+Cash, debt and the entries that moved them, by day and category. `TrySpend` refuses a purchase
+cash cannot cover; `Charge` pays a bill and turns the shortfall into debt as arrears; `ServiceDebt`
+adds the weekly interest and pays the instalment. Cash never goes below zero.
+
+## src/Session/Career/PlaneInstance.cs
+One owned plane: a `CustomPlaneDef` build unchanged, the armour units each zone has lost, the
+damaged parts (four gun slots, the engine), and sorties and kills as flavour. A zone holds its
+build's presses times five units, and the two wings stay independent. `QuoteRepair` prices a full
+repair from the tunes and the hangar economy's part prices.
+
+## src/Session/Career/Hold.cs
+The zeppelin's hold: gun rounds per calibre and kind (`AmmoLine`), rockets per `wep_*` id. A
+flight check loads from it and a debrief returns what was not fired. The ammunition vocabulary is
+[../formats/loadouts.md](../formats/loadouts.md)'s.
+
+## src/Session/Career/PortShelf.cs
+The port's ammunition shelf. Slug rounds are unlimited; specialist rounds and rockets come from a
+stock rolled each week from the career's seed. Rounds sell in lots of a hundred; a purchase the
+shelf or the cash cannot cover changes nothing.
+
+## src/Session/Career/ContractBoard.cs
+The port's contract board and the `Contract` record. Each day expired offers drop and empty slots
+refill to the board size. An offer's threat is the lower of two draws above the floor, its fee a
+draw in its threat's band, and its seed is what the mission generator builds the sortie from.
