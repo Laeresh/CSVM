@@ -1615,13 +1615,14 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
         switch (row.Key)
         {
-            case NameFieldKey:
             case HubNameFieldKey:
-                // An edit box takes the focus and nothing else; the typing is the screen's.
+                // The hub's box renames the build with every keystroke and has no OK of its own.
+                // Enter there presses nothing, since READY would leave the tab.
                 return null;
             case NameDefaultsKey:
                 _hangarDefaults = !_hangarDefaults;
                 return null;
+            case NameFieldKey:
             case NameOkKey:
                 AcceptName();
                 return null;

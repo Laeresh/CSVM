@@ -582,9 +582,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     /// <summary>Back from a match onto its lobby's Game Scores page, every Ready cleared, a stunt race's
-    /// table in <paramref name="race"/>. A start the host <paramref name="cancelled"/> lands on the
-    /// lobby's first tab instead, the last scores kept. False when the door no longer holds a lobby,
-    /// and the caller then shows the games list.</summary>
+    /// table in <paramref name="race"/>. A start or game the host <paramref name="cancelled"/> lands
+    /// on the lobby's first tab instead, the last scores kept. False when the door no longer holds a
+    /// lobby, and the caller then shows the games list.</summary>
     public bool Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null, bool cancelled = false)
     {
         ArgumentNullException.ThrowIfNull(scores);

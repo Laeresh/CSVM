@@ -51,7 +51,8 @@ internal static class NetTeamSuites
         + "on the Ally cycle in the friendly green and the other team in red, a teammate kill costs the "
         + "killer score_suicide and counts no kill, the host ends the match when a team's total reaches the "
         + "Score target though no pilot reached it alone, every machine's board names the winning "
-        + "team and every pane posts \"Game Over:\" over its win line, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
+        + "team and every pane posts \"Game Over:\" over its win line, every board waiting out the "
+        + "end's hold before it rises, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.Zrdr))}");
@@ -247,7 +248,7 @@ internal static class NetTeamSuites
             $"ABLE-TO-FAIL CONTROL: one kill short of the target the match runs on every machine ({Totals(peers)})");
 
         Down(peers, victim: 2, killer: 0);
-        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget && p.Pause is { Ended: true }),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget),
             $"team 1's total of {target} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
         ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Dogfight!.Match.ScoreOf(seat) < target)),
             $"though no pilot reached it alone ({Totals(peers)})");
@@ -255,6 +256,7 @@ internal static class NetTeamSuites
         ctx.Check(titles.All(t => t == "RED SQUADRON WINS"),
             $"and every machine's board names the winning team by its lobby name ({string.Join(" | ", titles)})");
         NetCombatSuites.EndLines(ctx, peers, peers[0].Dogfight!.Match.TeamName(1));
+        NetCombatSuites.HoldsTheBoard(ctx, peers, GrantSteps);
     }
 
     // The host's rematch puts every score back to zero on every machine.

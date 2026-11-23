@@ -77,13 +77,31 @@ internal static class NetCombatSuites
     // Steps that span a whole match-state tick whatever step the window opens on.
     private const int TickSteps = MatchStateCadence.TickStepInterval + 1;
 
+    // How far a guest's board may rise behind the host's, in sim steps: the steps a perfect
+    // loopback takes to carry the host's end message.
+    private const int BoardLagSteps = 2;
+
     // How far one host frame is wound on for the slew reading, in seconds. Past
     // NetClockSlew.SnapSeconds on purpose: a snap is countable and a walk is not.
     private const double SlewLeadSeconds = 6.0;
 
+    // The guest's pick in the host-left suite's lobby, a stock airframe other than the starter.
+    private const byte PickedAirframe = UI.Menu.CoopGuestPick.StarterAirframe == 1 ? 2 : 1;
+
     // The airframe order every peer reads a roster's airframe index against. Two different
     // entries, so a seat's pick crossing the wire cannot be satisfied by both ends sharing a default.
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
+
+    // How a lobby Dogfight's host goes in HostLeaves.
+    private enum HostExit
+    {
+        LinkDropped,
+        WindowClosed,
+        PauseSheet,
+        PauseSheetOlderGuest,
+        PauseSheetRoundlessGuest,
+        AfterTheEnd,
+    }
 
     [Suite("net-combat-events",
         "a host session and a guest session in one process: the rounds one owner fires are spawned "
@@ -257,7 +275,9 @@ internal static class NetCombatSuites
         + "match ended on the kill limit and then level on the time limit holds all three machines with "
         + "the same reason and the same scoreboard, every pane posting \"Game Over:\" over the "
         + "winner the host named (the leader's callsign, then Draw), even on a guest whose own copy "
-        + "of the scores was skewed before the time limit to rank another seat first")]
+        + "of the scores was skewed before the time limit to rank another seat first; after each end "
+        + "every results board waits out the end's hold under those lines, the host's R inside it "
+        + "rematching nothing, then rises on all three machines within two steps of one another")]
     internal static void MatchStateIsTheHostsAlone(TestContext ctx)
     {
         // The scripted climb the star suites fly. This suite is the longest of the three, and a
@@ -356,16 +376,26 @@ internal static class NetCombatSuites
     [Suite("net-versus-host-left",
         "a lobby Dogfight flown by a host and a guest through their doors over a perfect loopback: a "
         + "host whose link drops ends the guest's flight with Host left the game and the host "
-        + "retires the guest's seat, and a host leaving through its pause sheet sends the guest a "
-        + "close notice that ends the guest's flight the same way")]
+        + "retires the guest's seat, a host whose window closes sends the guest a close notice that "
+        + "ends the guest's flight the same way, and a host leaving through its pause sheet calls the "
+        + "game off: both machines land on the lobby itself with their doors kept, every player's "
+        + "team and plane as before the flight on both machines, and the host can launch again; a "
+        + "guest whose loaded word came from an older build, or named no round of the flight, is "
+        + "dropped instead and leaves with Host left the game; a host leaving a match that has "
+        + "already ended lands on Game Scores, calls nothing off and keeps its door, the guest's "
+        + "link up")]
     internal static void AVersusHostLeaves(TestContext ctx)
     {
         var spec = MatchSpec(ctx, out _);
         var ambient = Ambient.Save();
         try
         {
-            HostLeaves(ctx, spec, 7301, quits: false);
-            HostLeaves(ctx, spec, 7302, quits: true);
+            HostLeaves(ctx, spec, 7301, HostExit.LinkDropped);
+            HostLeaves(ctx, spec, 7302, HostExit.WindowClosed);
+            HostLeaves(ctx, spec, 7303, HostExit.PauseSheet);
+            HostLeaves(ctx, spec, 7304, HostExit.PauseSheetOlderGuest);
+            HostLeaves(ctx, spec, 7305, HostExit.PauseSheetRoundlessGuest);
+            HostLeaves(ctx, spec, 7306, HostExit.AfterTheEnd);
         }
         finally
         {
@@ -537,6 +567,41 @@ internal static class NetCombatSuites
         }
     }
 
+    // The end's hold on every machine, entered at most `since` steps after the host's end. Every
+    // board waits under the end lines with its world flying on, and the host's R inside the hold
+    // rematches nothing. Every board then rises once the hold is up, a guest's within
+    // BoardLagSteps of the host's, since its hold counts from the host's end message.
+    internal static void HoldsTheBoard(TestContext ctx, GameSession[] peers, int since)
+    {
+        ctx.Check(peers.All(p => p.Boards?.DogfightBoard is { Visible: false } && p.Pause is { Ended: false }),
+            $"every machine's results board waits under the end lines, its world flying on ({Raised(peers)})");
+        peers[0].SeatRigs[0].Controller!.RestartMatch!();
+        Lockstep(1, peers);
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End != NetMatchEnd.Running),
+            $"and the host's R inside the hold rematches nothing ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+
+        int hold = (int)Math.Ceiling(CSVM.Session.World.VersusDirector.EndHoldS / GameClock.FixedDt);
+        var rose = Enumerable.Repeat(-1, peers.Length).ToArray();
+        for (int step = 2; step <= hold + SettleSteps && rose.Contains(-1); step++)
+        {
+            Lockstep(1, peers);
+            for (int i = 0; i < peers.Length; i++)
+            {
+                if (rose[i] < 0 && peers[i].Pause is { Ended: true })
+                {
+                    rose[i] = step;
+                }
+            }
+        }
+
+        ctx.Check(rose.Min() >= hold - since - 1 && rose.Max() <= hold + BoardLagSteps && rose.Max() - rose.Min() <= BoardLagSteps
+                  && peers.All(p => p.Boards?.DogfightBoard is { Visible: true }),
+            $"and every board rises once the end has held {CSVM.Session.World.VersusDirector.EndHoldS:0.#} s, all within {BoardLagSteps} step(s) of one another (risen {string.Join(",", rose)} step(s) in, a hold of {hold} from an end at most {since} back; {Raised(peers)})");
+    }
+
+    private static string Raised(GameSession[] peers) =>
+        string.Join(", ", peers.Select(p => $"board up {p.Boards?.DogfightBoard?.Visible}, halted {p.Pause?.Ended}"));
+
     // One death on clean stacks: each machine's own pane then reads exactly the lines the run's
     // table words, top line newest. A relayed copy posted twice, or one machine silent, fails it.
     // A real extraction's panes are also read against the shipped wording, `shipped`.
@@ -667,12 +732,18 @@ internal static class NetCombatSuites
         }
     }
 
-    // One lobby Dogfight, launched through both doors, whose host then goes: its link cut, or its
-    // pause sheet's exit run in the launcher's order. The guest's door is stepped as the launcher
-    // steps it in flight.
-    private static void HostLeaves(TestContext ctx, SessionSpec spec, int seed, bool quits)
+    // One lobby Dogfight, launched through both doors, whose host then goes: its link cut, its
+    // window closed, or its pause sheet's exit. Each runs in the launcher's order, and the guest's
+    // door is stepped as the launcher steps it in flight.
+    private static void HostLeaves(TestContext ctx, SessionSpec spec, int seed, HostExit exit)
     {
-        string how = quits ? "pause-sheet exit" : "dropped link";
+        string how = exit switch
+        {
+            HostExit.LinkDropped => "dropped link",
+            HostExit.WindowClosed => "window closed",
+            HostExit.AfterTheEnd => "ended match",
+            _ => "pause-sheet exit",
+        };
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
         var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
         var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
@@ -684,6 +755,7 @@ internal static class NetCombatSuites
             guestDoor.OpenJoin();
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(guestDoor.IsDogfightGuest, $"[{how}] the guest joins the host's Dogfight ({guestDoor.Stage})");
+            var stood = exit == HostExit.PauseSheet && guestDoor.IsDogfightGuest ? StandTheLobby(ctx, hostDoor, guestDoor) : ("", "");
             var hostLaunch = hostDoor.BuildLaunch();
             if (!guestDoor.IsDogfightGuest || hostLaunch == null)
             {
@@ -720,13 +792,26 @@ internal static class NetCombatSuites
                 $"ABLE-TO-FAIL CONTROL: [{how}] with the host flying the guest's flight goes on ({guestDoor.Stage})");
 
             var guestWire = (NetLobby)guestLaunch.Transport;
-            int steps = quits
-                ? QuitThroughThePause(host, guest, hostDoor, guestDoor, hostLaunch.Transport)
+            if (exit == HostExit.AfterTheEnd)
+            {
+                LeaveTheEnd(ctx, host, guest, hostDoor, guestDoor, hostLaunch.Transport);
+                return;
+            }
+
+            if (exit is not (HostExit.LinkDropped or HostExit.WindowClosed))
+            {
+                QuitToTheLobby(ctx, exit, host, guest, hostDoor, guestDoor, hostLaunch.Transport, guestWire, stood);
+                return;
+            }
+
+            bool closed = exit == HostExit.WindowClosed;
+            int steps = closed
+                ? CloseTheHost(host, guest, hostDoor, guestDoor, hostLaunch.Transport)
                 : DropTheHost(ctx, mesh, host, guest, hostDoor, guestDoor);
             ctx.Check(NetFlight.VersusGuestFlightOver(guestDoor) && guestDoor.Fault == UI.Menu.CoopDoorText.HostLeft,
                 $"[{how}] the guest's flight ends {steps} step(s) later with \"{UI.Menu.CoopDoorText.HostLeft}\" ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
-            ctx.Check(quits ? guestWire.Closed is { Reason: NetCloseReason.Closed } : guestWire.Closed == null,
-                $"[{how}] {(quits ? "on the host's close notice" : "with no close notice, off the link alone")} ({guestWire.Closed?.Reason.ToString() ?? "none"})");
+            ctx.Check(closed ? guestWire.Closed is { Reason: NetCloseReason.Closed } : guestWire.Closed == null,
+                $"[{how}] {(closed ? "on the host's close notice" : "with no close notice, off the link alone")} ({guestWire.Closed?.Reason.ToString() ?? "none"})");
         }
         finally
         {
@@ -755,9 +840,9 @@ internal static class NetCombatSuites
         return steps;
     }
 
-    // The launcher's order for a host's pause-sheet exit: the session freed, then the wire handed
-    // to the door's end of the flight. The menu steps the host's door from then on.
-    private static int QuitThroughThePause(Ends host, Ends guest, UI.Menu.NetPlayFeature hostDoor,
+    // The launcher's order for a host that quits the game from its window. The session is freed,
+    // then the wire goes to the door's end of the flight with no lobby to keep.
+    private static int CloseTheHost(Ends host, Ends guest, UI.Menu.NetPlayFeature hostDoor,
         UI.Menu.NetPlayFeature guestDoor, INetTransport hostWire)
     {
         host.Close();
@@ -771,6 +856,120 @@ internal static class NetCombatSuites
         }
 
         return steps;
+    }
+
+    // The lobby's players as each machine lists them: name, airframe, team and custom plane, with
+    // the Ready a landing clears left out.
+    private static string LobbyRows(UI.Menu.DogfightLobby? lobby) =>
+        lobby == null ? "no lobby" : string.Join("; ", lobby.Players.Select(p => $"{p.Name}/{p.Airframe}/{p.Team}/{p.Plane}"));
+
+    // Before the launch, the host captains a team the guest joins, and the guest picks a plane other
+    // than the starter. The rows each machine lists then, which the call-off must keep.
+    private static (string Host, string Guest) StandTheLobby(TestContext ctx, UI.Menu.NetPlayFeature hostDoor,
+        UI.Menu.NetPlayFeature guestDoor)
+    {
+        var hostLobby = hostDoor.Dogfight!;
+        var guestLobby = guestDoor.Dogfight!;
+        guestLobby.Show();
+        hostLobby.CreateTeam("Red");
+        StepDoors(SettleSteps, hostDoor, guestDoor);
+        byte team = guestLobby.Teams.Count > 0 ? guestLobby.Teams[0].Number : (byte)0;
+        bool joined = guestLobby.JoinTeam(team);
+        bool picked = guestLobby.Pick(PickedAirframe, default);
+        StepDoors(SettleSteps, hostDoor, guestDoor);
+        var rows = hostLobby.Players;
+        ctx.Check(joined && picked && rows.Count == 2 && rows.All(p => p.Team == team && team != 0) && rows[1].Airframe == PickedAirframe,
+            $"ABLE-TO-FAIL CONTROL: the lobby stands on a team both pilots joined and the guest's own plane ({LobbyRows(hostLobby)})");
+        return (LobbyRows(hostLobby), LobbyRows(guestLobby));
+    }
+
+    // The launcher's order for a host's pause-sheet exit: the call-off, the session freed, then the
+    // wire kept by the door. The guest follows the call the same way. A guest posed as deaf to the
+    // call (an older build's unmarked loaded word, or one under no round) is dropped instead.
+    private static void QuitToTheLobby(TestContext ctx, HostExit exit, Ends host, Ends guest, UI.Menu.NetPlayFeature hostDoor,
+        UI.Menu.NetPlayFeature guestDoor, INetTransport hostWire, INetTransport guestWire, (string Host, string Guest) stood)
+    {
+        string how = exit switch
+        {
+            HostExit.PauseSheetOlderGuest => "pause-sheet exit, older guest",
+            HostExit.PauseSheetRoundlessGuest => "pause-sheet exit, roundless guest",
+            _ => "pause-sheet exit",
+        };
+        bool deaf = exit != HostExit.PauseSheet;
+        if (deaf && guest.Session.Wire is { Link: { } link, StartGate: { } gate })
+        {
+            var word = exit == HostExit.PauseSheetOlderGuest
+                ? new StartGateMessage(NetStartWord.Loaded, gate.Round)
+                : StartGateMessage.LoadedWord(0);
+            link.Send(link.HostPeer, word, NetChannels.Events);
+            FlyTogether(SettleSteps, host, guest, hostDoor, guestDoor);
+        }
+
+        bool calledOff = NetFlight.CallGameOff(true, hostDoor.Dogfight, host.Session.Wire);
+        ctx.Check(calledOff, $"[{how}] the host's exit calls the game off");
+        host.Close();
+        NetFlight.EndNetWire(hostDoor, hostWire, keepLobby: calledOff);
+        int steps = 0;
+        while (steps < SettleSteps && !NetFlight.VersusGuestFlightOver(guestDoor) && (deaf || !guest.Session.Wire.GameCalledOff))
+        {
+            guest.Session._PhysicsProcess(GameClock.FixedDt);
+            StepDoors(1, hostDoor, guestDoor);
+            steps++;
+        }
+
+        if (deaf)
+        {
+            ctx.Check(NetFlight.VersusGuestFlightOver(guestDoor) && guestDoor.Fault == UI.Menu.CoopDoorText.HostLeft,
+                $"[{how}] the host drops its link, which ends its flight {steps} step(s) later with \"{UI.Menu.CoopDoorText.HostLeft}\" ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
+            ctx.Check(hostDoor.Stage == UI.Menu.NetDoorStage.Hosting && !hostDoor.Released,
+                $"[{how}] while the host keeps its door for the lobby ({hostDoor.Stage})");
+            return;
+        }
+
+        bool follows = NetFlight.CallGameOff(true, guestDoor.Dogfight, guest.Session.Wire);
+        ctx.Check(follows && !NetFlight.VersusGuestFlightOver(guestDoor),
+            $"[{how}] the guest hears the call {steps} step(s) later and lands on the lobby, its link up ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
+        guest.Close();
+        NetFlight.EndNetWire(guestDoor, guestWire, keepLobby: follows);
+        StepDoors(SettleSteps, hostDoor, guestDoor);
+        ctx.Check(hostDoor.Stage == UI.Menu.NetDoorStage.Hosting && !hostDoor.Released && guestDoor.IsDogfightGuest && !guestDoor.Released,
+            $"[{how}] both doors keep the wire ({hostDoor.Stage}, {guestDoor.Stage})");
+        var after = (Host: LobbyRows(hostDoor.Dogfight), Guest: LobbyRows(guestDoor.Dogfight));
+        ctx.Check(after == stood,
+            $"[{how}] the lobby keeps its players, their team and their planes on both machines (host {after.Host} was {stood.Host}; guest {after.Guest} was {stood.Guest})");
+        var again = hostDoor.BuildLaunch();
+        ctx.Check(again != null, $"[{how}] and the host can launch the next game from it");
+    }
+
+    // The launcher's order for a host leaving inside an ended match's hold. The landing is read off
+    // the live session, then the session is freed and the wire goes to the door.
+    private static void LeaveTheEnd(TestContext ctx, Ends host, Ends guest, UI.Menu.NetPlayFeature hostDoor,
+        UI.Menu.NetPlayFeature guestDoor, INetTransport hostWire)
+    {
+        var match = host.Session.Dogfight!.Match;
+        for (int i = 0; i <= match.KillTarget && !match.Completed; i++)
+        {
+            match.RegisterKill(shooter: 0, victim: 1);
+        }
+
+        FlyTogether(SettleSteps, host, guest, hostDoor, guestDoor);
+        ctx.Check(match.Completed && guest.Session.Dogfight!.Match.Completed,
+            $"[ended match] the host's kills end the match on both machines ({match.Completed}, {guest.Session.Dogfight!.Match.Completed})");
+        var landing = NetFlight.Landing(true, hostDoor.Dogfight, host.Session);
+        ctx.Check(landing is { Cancelled: false, Scores.Count: 2 },
+            $"[ended match] the host lands on Game Scores with both pilots' lines, not on a call-off (cancelled {landing?.Cancelled}, {landing?.Scores.Count} line(s))");
+        host.Close();
+        NetFlight.EndNetWire(hostDoor, hostWire, keepLobby: landing != null);
+        for (int i = 0; i < SettleSteps; i++)
+        {
+            guest.Session._PhysicsProcess(GameClock.FixedDt);
+            StepDoors(1, hostDoor, guestDoor);
+        }
+
+        ctx.Check(!guest.Session.Wire.GameCalledOff && !NetFlight.VersusGuestFlightOver(guestDoor),
+            $"[ended match] no call-off reaches the guest, whose link stays up ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
+        ctx.Check(hostDoor.Stage == UI.Menu.NetDoorStage.Hosting && !hostDoor.Released,
+            $"[ended match] and the host keeps its door for the lobby ({hostDoor.Stage})");
     }
 
     // A flight's step on both ends, the way the launcher runs one: each session, then each door.
@@ -1025,6 +1224,7 @@ internal static class NetCombatSuites
             $"seat 1 reaches the host's kill target of {HostKillTarget(ctx)} ({Scoreboard(peers[0])})");
         Held(ctx, peers, "the kill limit", NetMatchEnd.ScoreTarget);
         EndLines(ctx, peers, peers[0].NetSeats[1].Callsign);
+        HoldsTheBoard(ctx, peers, SettleSteps);
     }
 
     // The host's rematch, and the guest's own key before it. Only the host may call one: a guest
@@ -1049,6 +1249,12 @@ internal static class NetCombatSuites
 
         peers[0].SeatRigs[0].Controller!.RestartMatch!();
         Lockstep(SettleSteps, peers);
+        // Each board retires on its own frame, which a suite's fixed steps never run.
+        foreach (var peer in peers)
+        {
+            peer.Boards?.DogfightBoard?._Process(GameClock.FixedDt);
+        }
+
         string scores = string.Join(" | ",
             peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(s => p.Dogfight!.Match.ScoreOf(s)))));
         ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running),
@@ -1079,6 +1285,7 @@ internal static class NetCombatSuites
         ctx.Check(skewed.Winner() == 3,
             $"ABLE-TO-FAIL CONTROL: the first guest's own copy of the scores ranks seat 2 alone first ({Scoreboard(peers[1])})");
         EndLines(ctx, peers, null);
+        HoldsTheBoard(ctx, peers, TickSteps);
 
         // The board a guest ranking its own copy would title, which is what it read before it took
         // the host's winner.
@@ -1088,15 +1295,13 @@ internal static class NetCombatSuites
             $"and every machine's board headline reads the host's draw, the skewed guest's too, whose own ranking would title it '{ownRanking}' ({string.Join(" | ", headlines)})");
     }
 
-    // One ending, read on all three machines. The match over, the board holding the world, the
-    // host's own reason, and one ranked scoreboard derived from the scores each was sent. A guest
-    // whose copy a step skewed on purpose is left out of the last.
+    // One ending, read on all three machines. The match over, the host's own reason, and one
+    // ranked scoreboard derived from the scores each was sent. A guest whose copy a step skewed on
+    // purpose is left out of the last.
     private static void Held(TestContext ctx, GameSession[] peers, string what, NetMatchEnd reason, int skewed = -1)
     {
         ctx.Check(peers.All(p => p.Dogfight!.Match.Completed),
             $"{what}: the match is over on all three machines ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Completed))})");
-        ctx.Check(peers.All(p => p.Pause is { Ended: true }),
-            $"and the wrap-up board holds every one of them ({string.Join(", ", peers.Select(p => p.Pause!.Ended))})");
         ctx.Check(peers.All(p => p.Dogfight!.End == reason),
             $"and each names the host's own reason, {reason} ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
 

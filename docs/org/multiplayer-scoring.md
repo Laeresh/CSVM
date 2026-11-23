@@ -281,8 +281,11 @@ state's winner byte, and a guest words its line from that byte, never from its o
 scores. A draw has its own byte (`MatchStateMessage.DrawWinner`), since 0 is what a host of the
 same MAJOR.MINOR built before the winner line sends; a guest that reads 0 on a time or score end
 posts "Game Over:" alone. A local split screen match has no host to send the state, so it ranks and
-posts the same lines itself, and its results board waits out the original's five seconds
-(`VersusDirector.EndHoldS`) before it covers them. Through that hold, and a lobby match's before it
+posts the same lines itself. Every results board, the local match's and that of a network match
+that does not land on Game Scores (one launched from the command line with
+`--net-host`/`--net-join`, or a lobby flight whose host has no lobby screen up), waits out the
+original's five seconds (`VersusDirector.EndHoldS`) before it covers them; a guest's hold counts from the host's end message, so the boards rise one
+message apart, as the end lines do. Through that hold, and a lobby match's before it
 lands on Game Scores, every aircraft flies on, as the original's do; a results board, once up, holds
 the world still.
 

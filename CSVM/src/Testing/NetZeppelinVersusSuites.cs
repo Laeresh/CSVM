@@ -73,7 +73,8 @@ internal static class NetZeppelinVersusSuites
         + "once; a downed seat returns by its hull above the spawn table; a pilot a hull's broadside "
         + "downs costs it no score and sets that hull's side's term to score_zep_kill; and the third "
         + "bag of multiplayer1zep ends the match for team 1 with player.zrd's score_zep that the "
-        + "Score limit never reads; the board's Restart then takes every machine, guest and host, to "
+        + "Score limit never reads, every board waiting out the end's hold before it rises; the "
+        + "board's Restart then takes every machine, guest and host, to "
         + "the lobby rather than rerunning on the burnt hull, and the lobby's next launch flies both "
         + "hulls whole on every machine, every part at full health, both broadsides engaged, the "
         + "markers and both rearm bases back and every score and term at zero")]
@@ -591,6 +592,7 @@ internal static class NetZeppelinVersusSuites
         ctx.Check(peers.All(p => p.Dogfight!.ZvzPlay!.LinesPosted > 0) && peers[2].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_dest")
                   && peers[0].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost") && peers[1].Dogfight!.ZvzPlay!.Spoken.Contains("snd_Zep_lost"),
             $"and every machine posts the ending, the winners hearing a zeppelin destroyed and the losers theirs lost ({Spoken(peers)})");
+        NetCombatSuites.HoldsTheBoard(ctx, peers, PartSteps);
     }
 
     // The board's Restart on a guest and then the host, each on a finished match. The original's end

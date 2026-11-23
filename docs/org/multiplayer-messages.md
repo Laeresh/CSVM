@@ -882,7 +882,7 @@ waits in the lobby.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start, count, cancel) | word at 4 (loaded 1, start 2, hold 3, count 4, cancel 5), round at 5, the count's players loaded at 6 and players in all at 7 on a count or a hold, 1 at 7 on a loaded word from a build that takes a cancel, 0 elsewhere (8 bytes) |
+| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start, count, cancel, the last also in flight) | word at 4 (loaded 1, start 2, hold 3, count 4, cancel 5), round at 5, the count's players loaded at 6 and players in all at 7 on a count or a hold, 1 at 7 on a loaded word from a build that takes a cancel, 0 elsewhere (8 bytes) |
 
 Each host flight takes a round, 1 to 255, that the flight before it on the same process did not.
 Once its own world is built, the host sends hold under that round to every machine it waits on.
@@ -935,7 +935,7 @@ goes on, and a click on either answer takes it. The original's barrier offers no
 guest's Yes drops its wire and lands it on the games list; the host takes that as a departure, as
 it takes any link dropping, and the others' start goes on. A host's Yes broadcasts cancel under its
 round and lands on its lobby with the wire kept; a guest that hears it, at once or once its own
-build ends, lands on the same lobby. Only the hold is cancellable: a build still running finishes
+build ends, lands on the same lobby. A build still running is not interrupted: it finishes
 first. An older build drops cancel unread, so every loaded word now carries a mark at byte 7, and
 on a cancel the host drops the link of each guest whose loaded word came unmarked; that guest goes
 down its lost-link path to the games list. An older guest still loading at the cancel has sent no
@@ -945,6 +945,17 @@ unmarked loaded word drops its sender's link, so that guest takes the same path 
 build ends rather than holding to `NetStartGate.TimeoutSeconds`. The build version cannot tell
 the two apart, since it carries only MAJOR.MINOR and 0.8.0 and 0.8.1 share 0.8. A guest under an
 older host can still leave; only the host's cancel needs the newer host.
+
+**Leaving a game in flight.** The same cancel word, sent after the release, takes a lobby game back
+to its lobby. A lobby host whose lobby a screen stands on, and whose own exit leaves a Dogfight
+or a stunt race before its end, broadcasts cancel under its round and lands on its lobby's first tab with the wire kept; a guest
+that hears it under its own round lands on the same lobby, its wire kept too, so the lobby keeps
+every player, team and plane for the next launch. The host drops each guest that cannot hear the
+word: one whose loaded word came unmarked (an older build), and one whose latest loaded word named
+no round of the flight (a guest whose gate opened on its timeout before any hold reached it). Such
+a guest goes down its lost-link path to the games list with "Host left the game". A guest reads
+the same line when its host closes its window, loses its link or closes the network from the
+lobby. A guest that leaves through its own pause sheet leaves alone. The call is the remake's own.
 
 ## Stunt race
 
@@ -1061,8 +1072,9 @@ live leaderboard line. A run it had in progress stops, nothing more counts for i
 window leaves it out. Only a mid-race leave marks the racer: a guest that flew the whole window and
 leaves from the ended race's board keeps an unmarked row, since the host marks nobody once the race
 has ended. A race left with one pilot runs on to the window's end, since a race builds no
-Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race closes its
-door, which ends every guest's flight as a Dogfight's host leaving does.
+Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race calls the
+race off, which takes every machine back to the lobby as a Dogfight's host leaving does ("Leaving a
+game in flight" above).
 
 **The lobby.** The host's board names its exit Lobby. Taken from an ended race it sends a lobby call
 and lands the host on the lobby's Game Scores, its door kept; each guest's launcher follows the call

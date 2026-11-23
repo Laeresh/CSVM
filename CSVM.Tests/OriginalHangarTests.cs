@@ -92,6 +92,33 @@ public class OriginalHangarTests : IDisposable
     }
 
     [Fact]
+    public void EnterInTheNameBoxIsOkRefusingAnEmptyNameTheSameWay()
+    {
+        var host = Host(out var hangar);
+        host.Module.OpenHangar(null, HangarFeature.DefaultAirframe);
+        host.FocusKey(OriginalHangarScreen.NameFieldKey);
+
+        Type(host, "   ");
+        Accept(host);
+        Assert.Equal(EmptyNameRefusal, host.Dialog!.Message);
+        Assert.Equal(OriginalScreen.PlaneName, host.Screen);
+        Click(host, OriginalShell.DialogOkKey);
+        Assert.Equal(OriginalHangarScreen.NameFieldKey, host.FocusedKey);
+
+        Type(host, "Ace");
+        Accept(host);
+        Assert.Null(host.Dialog);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
+        Assert.Equal("Ace", hangar.Scratch.Name);
+
+        // The hub's own box presses nothing on Enter: it renames in place and READY is a tab away.
+        host.FocusKey(OriginalHangarScreen.HubNameFieldKey);
+        Accept(host);
+        Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
+        Assert.Equal(OriginalHangarScreen.HubNameFieldKey, host.FocusedKey);
+    }
+
+    [Fact]
     public void TheNameDialogAndItsRowsRideThePaneCentredOnTheBoard()
     {
         var host = Host(out _);

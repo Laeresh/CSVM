@@ -641,6 +641,32 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
+    /// <summary>Enter in the name box is the name screen's OK, its refusal included. A click in
+    /// the box only puts the caret there.</summary>
+    [Fact]
+    public void EnterInThePlaneNameBoxConfirmsTheNameAndAClickInItDoesNot()
+    {
+        WithHangarShell((shell, _, _, _) =>
+        {
+            Click(shell, "MM_B_INSTANTACTION");
+            Click(shell, OriginalInstantActionScreen.BuildKey);
+            Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
+
+            shell.Step(new MenuCommands { Accept = true });
+            Assert.NotNull(shell.Dialog);
+            Click(shell, OriginalShell.DialogOkKey);
+
+            shell.Step(new MenuCommands { Typed = "Ace" });
+            Click(shell, OriginalHangarScreen.NameFieldKey);
+            Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+            Assert.Null(shell.Dialog);
+
+            shell.Step(new MenuCommands { Accept = true });
+            Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+            Assert.Equal("Ace", shell.Hangar!.HangarName);
+        });
+    }
+
     /// <summary>The seam to the hangar module (<see cref="OriginalHangarTests"/> drives the module
     /// alone). The Build door opens it on the screen the door stands on. A dialog it raises is the
     /// shell's messagebox, and its typing goes through the shell's one text seam. A commit comes

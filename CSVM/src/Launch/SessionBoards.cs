@@ -180,13 +180,13 @@ internal sealed class SessionBoards
 
     /// <summary>The match's shared results board, one layer over the whole window, since the match
     /// ends for everybody at once. The withheld line is what a board shows in place of a Restart
-    /// its machine may not call, null where it may. A <paramref name="held"/> board rises on
-    /// <see cref="VersusBoard.Raise"/> rather than on the end itself. <paramref name="winner"/> is
+    /// its machine may not call, null where it may. The board rises on
+    /// <see cref="VersusBoard.Raise"/> once the end has held. <paramref name="winner"/> is
     /// who the end names.</summary>
     public VersusBoard BuildDogfightBoard(VersusMatch match, string context, Action restart,
-        string? restartWithheld, Func<int> winner, bool held = false)
+        string? restartWithheld, Func<int> winner)
     {
-        var board = VersusBoard.Build(match, context, exitsToMenu: _in.MenuDriven, _in.PauseState, InputFor, _in.NetSeats, held, winner);
+        var board = VersusBoard.Build(match, context, exitsToMenu: _in.MenuDriven, _in.PauseState, InputFor, _in.NetSeats, winner);
         board.Restart = restart;
         if (restartWithheld != null)
             board.RestartWithheld = restartWithheld;
