@@ -10,8 +10,9 @@ addresses are given so any claim can be re-checked at source.
 **What this page settles.** How a vehicle def's `paint_pattern`, `paint_decal1..3` and
 `paint_color1..3` reach a spawned aircraft: the slots they parse into, the per-field rule that
 decides between an authored def value and a per-instance override, and how three colour components
-become one packed dword. The authored side (which key means what, the `.BM` masks, the pattern
-census) is [`formats/paint.md`](../formats/paint.md); this page is the engine half.
+become one packed dword. It also covers how the retail `.BM` loader uses that scheme to tint,
+overlay and expand a skin. The authored side (which key means what, the `.BM` byte layout, the
+pattern census) is [`formats/paint.md`](../formats/paint.md); this page is the engine half.
 
 ⚠ **This page is a decode, not a proposal.** Where CSVM deliberately differs, that is listed at the
 bottom rather than hidden.
@@ -24,6 +25,8 @@ bottom rather than hidden.
 | `FUN_0047c210` | Assembles a spawn's scheme record from the override record and the def |
 | `FUN_0057a090` | The def's by-name property lookup, called once per key |
 | `FUN_00414f40` | Copies the finished scheme into a dispatched message (`FUN_004084a0(8, …)`) |
+| `FUN_00401910` | Loads one `.BM`, applies its three tint masks and overlay, and expands the result |
+| `FUN_00401e80` | The type-8 message handler; builds each skin's `.BM` path and calls the loader (`0x00401f1a`) |
 | `0x0071db08` | The global default scheme, 17 dwords, copied wholesale on one branch |
 
 ## The def's paint slots
@@ -49,7 +52,8 @@ the struct was initialised and inherits nothing by name.
 ## Assembling a spawn's scheme
 
 `FUN_0047c210` (`0x0047de45`–`0x0047dfc5`) builds a 17-dword scheme record on the stack: the
-pattern, one further field, the three decals, then the three packed colours. Two paths reach it.
+airframe index, the pattern index, the three decals, then the three packed colours (the loader's
+use of the first two is in "Compositing a skin"). Two paths reach it.
 
 **The default-scheme path.** When the byte flag at `[EBP+0xb]` is set, the whole record is
 `REP MOVSD`-copied from the global at `0x0071db08` (`0x0047de4c`) and the vehicle def is never
@@ -106,17 +110,66 @@ repetitions that follow):
 The first authored component ends up in the low byte. Each component is masked to `0xff` on the way
 in, so an out-of-range authored value wraps rather than clamping.
 
-## What this page does not settle
+`FUN_00401910` reads tint bytes 0, 1 and 2 as red, green and blue. The first authored component in
+the low byte therefore reaches red, the second reaches green, and the third reaches blue.
 
-The scheme record is handed to `FUN_00414f40`, which copies it into a message built by
-`FUN_004084a0(8, …)` and dispatches it. Which painted region each colour slot reaches is decided in
-that message's handler, past the end of this decode. The slot-to-region reading in
-[`formats/paint.md`](../formats/paint.md) ("Slot order, confirmed") therefore still rests on the
-render comparison and the paint UI's Colour/Shade reading, with this page adding only the
-independent point that nothing between `vehicle.json` and the scheme record permutes the three.
+## Compositing a skin
+
+The scheme record is handed to `FUN_00414f40` (`0x0047dff1`), which copies its first eight dwords
+into a message and passes it to `FUN_004084a0` with type 8. Record dwords 0 and 1 land at message
+`+0x2c` and `+0x40`, and the three packed colours (dwords 5, 6 and 7, stored at `0x0047df25`,
+`0x0047df79` and `0x0047dfc5`) land at `+0x68`, `+0x6c` and `+0x70`. The dispatcher's case 8 calls
+`FUN_00401e80` with the message directly. That function builds
+`assets\graphics\<pattern>\<skin>.bm` from the 14-entry pattern-folder table indexed by `+0x40` and
+the per-aircraft skin-name table indexed by `+0x2c`, and calls `FUN_00401910` (`0x00401f1a`, its
+only call site) once per skin with `+0x68` as the tint pointer. Nothing on the way permutes the
+colours, so tint 1, 2 and 3 are `paint_color1..3`.
+
+The file layout is in [`formats/rof.md`](../formats/rof.md#bitmap-textures). For each output
+channel, the loader starts `v` at the corresponding shading-map byte and applies mask slots 1, 2
+and 3 in file order. For mask amount `m` and the matching tint channel `c`, both in 0..255:
+
+```text
+round255(x) = (257*x + 32768) >> 16
+tinted = round255(m*v*c)
+v = round255(tinted + (255-m)*v)
+```
+
+The formula shown for `round255` is the loader's exact integer operation. The name is shorthand:
+the operation approximates rounded division by 255 over these products and can differ from it by
+at most 1. A zero mask leaves `v` unchanged; a full mask scales it by the tint channel.
+Intermediate values blend the tinted channel into the current value, so slot order remains
+significant even when the three mask amounts total 255. The mask loop runs from `0x00401b7a` to
+`0x00401c50`.
+
+The overlay follows the masks. Its bytes 0, 1 and 2 are red, green and blue; byte 3 is blend amount
+`a`. For overlay channel `o`:
+
+```text
+v = round255(a*o + (255-a)*v)
+```
+
+The overlay loop is at `0x00401d5f` to `0x00401de7`. The surface conversion at `0x005d201a`
+packs working bytes 2, 1 and 0 into the high, middle and low colour fields. It does not copy byte 3
+to the returned texture's alpha channel.
+
+The loader expands the composed `width` by `height` image to a square whose side is
+`max(width, height)`. The two integer divisions at `0x00401969` and `0x00401986` derive the axis
+expansion factors; shorter axes repeat pixels with nearest-neighbour sampling. The evidenced files
+exercise 1:1 and 2:1 ratios, so non-integral ratios remain unestablished. Output row zero still
+comes from source row `height - 1`.
+
+These addresses are absolute virtual addresses in the project's `crimson.exe`, SHA-256
+`530F29B4A5B293B482A66895D76E3108073DBAA62851228EBB69783EA45E6081`. An instruction-emulation
+check covers 99 invented records, run on a CSFix-patched executable whose code at every cited
+address is identical to this one's, and the decoder output is also checked over the six
+`FORTUNE/FIR_*.BM` files with invented tints. This evidence does not establish that every `.BM` is
+selected at runtime.
 
 ## Where CSVM differs
 
+- `PlanePainter` applies the loader's mask and overlay arithmetic but keeps the source rectangle
+  instead of expanding it to a square.
 - CSVM has no per-instance override record. A player scheme comes from the launch menu or `--paint=`
   and an AI scheme from the def or the livery picker, so the per-field fallback above has no
   equivalent yet; it becomes relevant only when a mission or a saved plane can override one

@@ -336,9 +336,9 @@ archive, `src/Mech3/PlanePainter.cs` composites them, `src/Mech3/PaintScheme.cs`
 record, and the result reaches the renderer through a `SceneBuilder` texture-substitution hook
 that `PlaneBuilder` drives per aircraft.
 
-Per texel and channel, the original loader's integer arithmetic (`crimson.exe` `0x00401910`,
-mask loop `0x00401B7A`–`0x00401C50`, overlay `0x00401D5F`–`0x00401DE7`), with masks, colours
-and overlay bytes all 0..255:
+Per texel and channel, `PlanePainter` applies the original loader's integer arithmetic, decoded in
+[`org/paint.md`](../org/paint.md#compositing-a-skin), with masks, colours and overlay bytes all
+0..255:
 
 ```
 div255(x) = (257*x + 32768) >> 16
@@ -349,11 +349,12 @@ v = div255(a * overlay + (255 - a) * v)      // a = the overlay's 4th byte
 
 The slots compound from the shading map rather than summing as weights, so a texel no mask
 covers keeps the shading map instead of going black, and two overlapping masks multiply their
-colours. Overlay bytes 0..2 are R, G, B. Two details
+colours. Overlay bytes 0..2 are R, G, B. Unlike the loader, `PlanePainter` keeps the source
+rectangle rather than expanding it to a square. Two details
 matter: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
 name; and `.BM` rows are stored **bottom-up**, so each source row is read from `h-1-y` (see
-[rof.md](rof.md), without the flip every livery is mirrored along V, which is how the bug
-first surfaced in-game). Parts a pattern ships no `.BM`
+[rof.md](rof.md), without the flip every livery is mirrored along V, which is how the bug first
+surfaced in-game). Parts a pattern ships no `.BM`
 for keep their shipped ZBD texture; the ZBD skin's alpha channel is carried onto the composite
 where the two agree on dimensions, so `SceneBuilder`'s blend-vs-scissor choice stays valid.
 
@@ -418,12 +419,11 @@ puts black on the outer wing panels and the white swoosh between them, as the re
 White in both trims loses the black wing entirely; black in slot 3 paints the swoosh instead
 of the panel.
 
-The executable corroborates the ordering discipline but not the region reading: `FUN_00479240`
-parses the three colours into fixed consecutive slots and `FUN_0047c210` resolves and packs them
-positionally, so nothing between `vehicle.json` and the scheme record permutes them
-([`org/paint.md`](../org/paint.md)). Which region each slot reaches is decided past the message
-dispatch that decode stops at, so the assignment above still rests on the render test and the
-Colour/Shade reading.
+The executable independently confirms the whole route: `FUN_00479240` parses the colours into
+fixed consecutive slots, `FUN_0047c210` resolves and packs them positionally, the type-8 message
+carries them unpermuted to the loader, and `FUN_00401910` applies mask planes 1 to 3 to tint
+colours 1 to 3 in that order ([`org/paint.md`](../org/paint.md#compositing-a-skin)). The render
+comparison is a content check of the same mapping.
 
 That also pins down **`player_fortune`'s missing colours** as `223,0,41 / 0,0,0 / 255,255,255`,
 the same shape every shipped scheme has (`hughes` is yellow/black/white). The red comes from
