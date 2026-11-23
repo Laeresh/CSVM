@@ -108,6 +108,42 @@ public sealed class CareerTunes
     /// <summary>Most rockets of one id a shelf stocks in a week.</summary>
     public int MaxRocketsPerId { get; init; } = 8;
 
+    /// <summary>Opposition budget per skull of threat, in the same dollars as the hangar's prices.</summary>
+    public int BudgetPerSkull { get; init; } = 10000;
+
+    /// <summary>The share of the air budget held back for the one reserve wave.</summary>
+    public double ReserveShare { get; init; } = 0.33;
+
+    /// <summary>A plane's value multiplier per pilot skill tier, rookie to ace.</summary>
+    public IReadOnlyList<double> SkillFactors { get; init; } = new[] { 0.8, 1.0, 1.3, 1.8 };
+
+    /// <summary>The share of a strike's budget spent on flak batteries, and one battery's value.</summary>
+    public double FlakShare { get; init; } = 0.3;
+
+    public int FlakBatteryValue { get; init; } = 1500;
+
+    public int MaxFlakBatteries { get; init; } = 4;
+
+    /// <summary>Fewest and most ground targets a strike places.</summary>
+    public int MinStrikeTargets { get; init; } = 2;
+
+    public int MaxStrikeTargets { get; init; } = 5;
+
+    /// <summary>How far, in metres, a strike's targets may lie from its first target.</summary>
+    public float StrikeRadius { get; init; } = 2500f;
+
+    /// <summary>How far, in metres, the flight starts from the area's centre.</summary>
+    public float StartDistance { get; init; } = 3000f;
+
+    /// <summary>The lowest altitude, in metres, the flight or an enemy starts at.</summary>
+    public float MinStartAltitude { get; init; } = 300f;
+
+    /// <summary>The radius, in metres, of the ring a strike's defenders start on.</summary>
+    public float DefenderRing { get; init; } = 800f;
+
+    /// <summary>Seconds after the start a patrol's reserve wave arrives.</summary>
+    public int ReserveDelaySeconds { get; init; } = 120;
+
     /// <summary>The fee band for <paramref name="threat"/>, clamped to one to five skulls.</summary>
     public (int Min, int Max) FeeBand(int threat) => FeeBands[Math.Clamp(threat, 1, FeeBands.Count) - 1];
 

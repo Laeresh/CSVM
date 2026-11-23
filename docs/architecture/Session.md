@@ -754,3 +754,17 @@ committed: routes from the chapter's `AiNets` (a net with a trailer is dropped, 
 offsets around a moving target), ground candidates under them one per 400 m cell, each mission's
 `PLAYER_INIT` start and its zeppelin starts. Terrain is not judged here: sea, land and flat ground
 are the placer's checks in the built world. Area queries measure on the ground plane.
+
+## src/Session/Career/MissionSpec.cs
+A generated sortie as plain data, the one input the session builds a career sortie from: the
+area's centre, the flight's start and heading, the wingman seats (up to three), every enemy
+aircraft with its wave and value, every ground target as a prefab id on a ground point, the
+objectives, and what releases the reserve wave. Built by `MissionGenerator`.
+
+## src/Session/Career/MissionGenerator.cs
+A contract and a `SiteCatalogue` into a `MissionSpec`, every draw from the contract's seed. The
+threat rating is an opposition budget in hangar dollars; an enemy costs its airframe, middle engine
+and stock armour at the decoded prices times its skill factor, its airframe drawn by the decoded
+availability column. A third of the air budget is one reserve wave. A patrol flies a fixed route;
+a strike places two to five targets and flak from a cluster of ground candidates. Tunes are in
+`CareerTunes`. Null when the catalogue lacks the job's sites.

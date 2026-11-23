@@ -32,7 +32,7 @@ public class SiteCatalogueTests
 
         // Every fixed-net point lies in the 400 m cell at the origin, so one candidate stands.
         var candidate = Assert.Single(catalogue.GroundCandidates);
-        Assert.Equal(new GroundCandidate(10f, 20f, "TestTrailerless"), candidate);
+        Assert.Equal(new GroundCandidate(10f, 20f, 250f, "TestTrailerless"), candidate);
     }
 
     [Fact]

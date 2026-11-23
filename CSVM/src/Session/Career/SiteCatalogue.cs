@@ -8,9 +8,10 @@ using Godot;
 
 namespace CSVM.Session.Career;
 
-/// <summary>A point under a route where a ground target may go. Only x and z are known; the
-/// placer finds the ground height and refuses water, slopes and clutter in the built world.</summary>
-public readonly record struct GroundCandidate(float X, float Z, string Net);
+/// <summary>A point under a route where a ground target may go. Only x and z are known on the
+/// ground; <paramref name="Altitude"/> is the route's own flying height there. The placer finds the
+/// ground height and refuses water, slopes and clutter in the built world.</summary>
+public readonly record struct GroundCandidate(float X, float Z, float Altitude, string Net);
 
 /// <summary>Where a zeppelin starts in some mission of the chapter, and the net it flies.</summary>
 public readonly record struct ZeppelinSite(Vector3 Position, float YawDeg, string Net);
@@ -77,7 +78,7 @@ public sealed class SiteCatalogue
                 var cell = ((int)MathF.Floor(p.X / CandidateSpacing), (int)MathF.Floor(p.Z / CandidateSpacing));
                 if (cells.Add(cell))
                 {
-                    candidates.Add(new GroundCandidate(p.X, p.Z, net.Name));
+                    candidates.Add(new GroundCandidate(p.X, p.Z, p.Y, net.Name));
                 }
             }
         }

@@ -63,6 +63,8 @@ first bind; the design doc holds the rest.
 | 19 | Wingmen in phase 1 | **The sortie supports all three wingman seats; the starting gang fills one.** Instant Action already flies up to five wingmen (`InstantActionRuntime.FlownWingmen`), so three is in the engine's range. The other seats fill as the gang grows, once hiring and the market arrive in phase 2 |
 | 20 | When the site catalogue is built | **At runtime** from the install, cached in memory; nothing derived from game data is committed |
 | 21 | Terrain tags (sea, land, flat ground) | **Checked at placement** in the built world (B13), not stored in the catalogue |
+| 22 | How an enemy is valued against the threat budget | **Its hangar price times a skill factor**: airframe, middle engine and stock armour at the decoded prices; flak batteries a fixed value |
+| 23 | Reinforcements in phase 1 | **One reserve wave on a trigger**: a third of the air budget, released after a delay on a patrol and by the first destroyed target on a strike |
 
 ## ⚠ Read this before implementing anything
 
@@ -72,7 +74,7 @@ Nothing has been disproven yet; the table below is the confidence roll-up only.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | none | |
 | **Direction sound, magnitude a judgement call** | none | |
-| **Leads only, no mechanism yet** | B12 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
+| **Leads only, no mechanism yet** | B13 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
 
 ## What the data actually ships
 
@@ -135,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the sortie seam
 
 11. ☑ The site catalogue for the phase 1 chapter
-12. ☐ `MissionSpec` and the generator for patrol and strike
+12. ☑ `MissionSpec` and the generator for patrol and strike
 13. ☐ The ground-target placer and the first prefabs
 14. ☐ The session builds a sortie from a `MissionSpec` (`--career-seed=`)
 15. ☐ `SortieResult`: what the sortie reports back
@@ -334,7 +336,13 @@ data.> <TODO: the tag list and the rule that assigns each tag.>
 derived from the install, but nothing that reproduces world data in bulk; check against the hard
 rule in PROJECT_CONTEXT.md before choosing the build-time option.
 
-## B12 ☐ `MissionSpec` and the generator for patrol and strike
+## B12 ☑ `MissionSpec` and the generator for patrol and strike
+
+**Landed.** `MissionSpec` (plain data: centre, the flight's start and heading, wingman seats capped at three, enemy flights with airframe, skill tier, position, heading, route, wave and value, ground targets as prefab id and ground point, objectives, the reserve trigger) and `MissionGenerator`. Every draw comes from the contract's seed. Budget is threat times $10,000; an enemy's value is its airframe, middle engine and stock armour at the decoded hangar prices times a skill factor (decision 22), guns left out because the stock fit is data the session reads. Airframes are drawn by the decoded availability column; skill rises with threat. The first wave always gets one plane; a third of the air budget is the reserve (decision 23). Patrol: a fixed route, the first wave on its points, primary "destroy the first wave", secondary "destroy the reserve", reserve after 120 s. Strike: a cluster of two to five ground candidates as `fuel_depot`/`supply_dump` targets, 30 % of the budget as flak batteries (at most four) 200 m off them, defenders on an 800 m ring, primary "destroy the targets", secondary "destroy the first wave", reserve on the first target destroyed. Null when the catalogue lacks routes or candidates. `GroundCandidate` gained the route's altitude so a strike's defenders start at flying height. All numbers are TUNE, to be balanced in C25.
+
+**Verified.** `MissionGeneratorTests` over a hand-built catalogue: one contract one spec, the budget never overrun except by a first wave's single guaranteed plane (200 seeds by 5 threats by both jobs), threat 5 fielding over twice threat 1's mean, a patrol's first wave on its route's points, a strike's targets and flak counts by hand, the flight starting 3,000 m out facing the centre in the spawn heading convention, wingman seats capped, an empty catalogue yielding no spec, a Warhawk's value by hand.
+
+**Original approach (kept for reference).**
 
 **Goal.** Given a contract and the site catalogue, the generator returns a `MissionSpec`: the world,
 the area, the player's spawn, the enemies bought against the opposition budget, the placed targets

@@ -954,6 +954,8 @@ The session-build clusters `GameSession` delegates to, in six sub-namespaces, on
 - `src/Session/Career/PortShelf.cs`, the port's ammunition shelf: unlimited slug, weekly-rolled specialist rounds and rockets.
 - `src/Session/Career/ContractBoard.cs`, the port's contract board: daily refill of seeded patrol and strike offers within the threat floor.
 - `src/Session/Career/SiteCatalogue.cs`, the places on one chapter a generated sortie can use: fixed patrol nets, ground candidates, mission starts, zeppelin starts.
+- `src/Session/Career/MissionSpec.cs`, a generated sortie as plain data: the flight's start, wingman seats, enemies by wave, ground targets, objectives, the reserve trigger.
+- `src/Session/Career/MissionGenerator.cs`, a contract and a site catalogue into a `MissionSpec`: patrol and strike templates, enemies bought against a threat budget.
 
 ### `src/Bindings/`, the input binding model
 
