@@ -701,7 +701,7 @@ One career's whole state: name, seed, day, ledger, planes, hold, shelf, board an
 contract. `New` takes the starting planes' builds from the caller, who makes them from the tunes'
 starting airframes and the stock loadouts, and wears each zone by the tunes' share. Every operation
 that passes time goes through `AdvanceDays`, which refreshes the board daily and runs the payday
-weekly. `CompleteSortie` applies a `SortieResult` and closes the contract. Nothing in flight reads it. The design is [../career-mode.md](../career-mode.md); persisted
+weekly. `CompleteSortie` applies a `SortieResult` and closes the contract; `Repair` lends a gang with no plane fit to fly what its cash cannot cover. Nothing in flight reads it. The design is [../career-mode.md](../career-mode.md); persisted
 by `CareerStore`.
 
 ## src/Session/Career/CareerStore.cs
@@ -739,7 +739,7 @@ flight check loads from it and a debrief returns what was not fired. The ammunit
 [../formats/loadouts.md](../formats/loadouts.md)'s.
 
 ## src/Session/Career/PortShelf.cs
-The port's ammunition shelf. Slug rounds are unlimited; specialist rounds and rockets come from a
+The port's ammunition shelf. Slug rounds are unlimited and free; specialist rounds and rockets come from a
 stock rolled each week from the career's seed. Rounds sell in lots of a hundred; a purchase the
 shelf or the cash cannot cover changes nothing.
 

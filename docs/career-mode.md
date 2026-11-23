@@ -515,10 +515,13 @@ again with a gang they built.
 
 ## Failure and how a career ends
 
-- **Bankruptcy.** When the ledger cannot pay the weekly bill, the gang goes into debt. Above a
-  debt limit, the moneylender seizes planes, then the zeppelin. A seized zeppelin ends the career,
-  unless the option *Second chances* is on, in which case the captain starts over with one plane
-  and keeps their fame.
+- **Bankruptcy.** When the ledger cannot pay the weekly bill, the shortfall is added to the
+  debt. A gang with no plane fit to fly repairs on credit, and slug rounds are free, so a broke
+  gang can always fly its way out.
+- **The debt collectors.** A missed payment sends the moneylender's collectors after the
+  zeppelin: a base-defence sortie against the collectors' fighters. If the zeppelin falls, the
+  career ends. If the gang wins, the downed collectors leave salvage to sell or fit to the
+  gang's own planes. This replaces seizure by a debt limit.
 - **The zeppelin falls.** A base-defence sortie lost with the hull destroyed ends the career.
 - **The captain dies.** With *Ironman* on, the player character's death ends the career. Without
   it, the captain is badly hurt and the gang must wait (and pay) for their recovery.
@@ -731,7 +734,7 @@ phase builds on it.
 4. **The full board.** The remaining job types, negotiation, modifiers, bonus objectives, prizes
    and the ladder boarding.
 5. **The living sky.** Standing, heat and fame, rival gangs and named aces, events, the Articles
-   and morale, mutiny and traitors.
+   and morale, mutiny and traitors, the debt collectors' attack on the zeppelin.
 6. **Legends and co-op.** The Legends acts on the calendar, guests in the wingman seats with their
    relaunch, the career options (starting region included) and Ironman.
 7. **Generated worlds (exploratory).** A single desert-mesa biome as a prototype outside the

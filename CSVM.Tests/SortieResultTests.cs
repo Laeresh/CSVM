@@ -30,7 +30,7 @@ public class SortieResultTests
         Assert.Equal(bonus, outcome.Bonus);
         Assert.Equal(cash + fee + bonus, state.Ledger.Cash);
         Assert.Null(state.ActiveContract);
-        Assert.Equal(1, state.Day);
+        Assert.Equal(2, state.Day);
     }
 
     [Fact]

@@ -951,7 +951,7 @@ The session-build clusters `GameSession` delegates to, in six sub-namespaces, on
 - `src/Session/Career/Ledger.cs`, cash, debt and every entry that moved them; a bill cash cannot cover becomes debt.
 - `src/Session/Career/PlaneInstance.cs`, one owned plane: its hangar build, the armour each zone has lost, damaged parts and the repair quote.
 - `src/Session/Career/Hold.cs`, the zeppelin's hold: gun rounds per calibre and kind, rockets per weapon id.
-- `src/Session/Career/PortShelf.cs`, the port's ammunition shelf: unlimited slug, weekly-rolled specialist rounds and rockets.
+- `src/Session/Career/PortShelf.cs`, the port's ammunition shelf: free unlimited slug, weekly-rolled specialist rounds and rockets.
 - `src/Session/Career/ContractBoard.cs`, the port's contract board: daily refill of seeded patrol and strike offers within the threat floor.
 - `src/Session/Career/SiteCatalogue.cs`, the places on one chapter a generated sortie can use: fixed patrol nets, ground candidates, mission starts, zeppelin starts.
 - `src/Session/Career/MissionSpec.cs`, a generated sortie as plain data: the flight's start, wingman seats, enemies by wave, ground targets, objectives, the reserve trigger.

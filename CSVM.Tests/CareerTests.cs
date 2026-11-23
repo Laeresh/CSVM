@@ -91,6 +91,41 @@ public class CareerTests
     }
 
     [Fact]
+    public void AGroundedGang_RepairsOnCredit()
+    {
+        var state = CareerState.New("Grounded", Seed, new[] { Warhawk() }, new CareerTunes { StartingCash = 100, StartingDebt = 0 });
+        state.Planes[0].Wreck();
+        Assert.False(state.AnyPlaneCanFly);
+        int cost = state.Planes[0].QuoteRepair(state.Tunes).Cost;
+
+        Assert.True(state.Repair(0));
+
+        Assert.True(state.Planes[0].CanFly);
+        Assert.Equal(0, state.Ledger.Cash);
+        Assert.True(state.Ledger.Debt >= cost - 100);
+    }
+
+    [Fact]
+    public void AGangThatCanFly_GetsNoCredit()
+    {
+        var state = CareerState.New("Flying", Seed, new[] { Warhawk(), Brigand() }, new CareerTunes { StartingCash = 100 });
+        state.Planes[0].Wreck();
+        Assert.True(state.AnyPlaneCanFly);
+
+        Assert.False(state.Repair(0));
+        Assert.Equal(100, state.Ledger.Cash);
+    }
+
+    [Fact]
+    public void ADamagedGun_DoesNotGroundAPlane()
+    {
+        var plane = new PlaneInstance(Warhawk()) { DamagedParts = PlaneParts.Gun1 };
+        Assert.True(plane.CanFly);
+        plane.DamagedParts |= PlaneParts.Engine;
+        Assert.False(plane.CanFly);
+    }
+
+    [Fact]
     public void Damage_IsClampedToWhatTheZoneHolds()
     {
         var plane = new PlaneInstance(Warhawk());
@@ -107,7 +142,7 @@ public class CareerTests
 
         Assert.True(state.Shelf.BuyRounds(slug, 10, state.Day, state.Hold, state.Ledger, state.Tunes));
         Assert.Equal(1000, state.Hold.RoundsOf(slug));
-        Assert.Equal(6000 - (10 * 12), state.Ledger.Cash);
+        Assert.Equal(6000, state.Ledger.Cash);
 
         var (line, rounds) = state.Shelf.SpecialistStock.First();
         int lots = rounds / PortShelf.RoundsPerLot;
@@ -120,9 +155,16 @@ public class CareerTests
     public void Shelf_RefusesAPurchaseCashCannotCover()
     {
         var state = CareerState.New("Poor", Seed, new[] { Warhawk() }, new CareerTunes { StartingCash = 10 });
-        Assert.False(state.Shelf.BuyRounds(new AmmoLine(4, AmmoKind.Slug), 1, 0, state.Hold, state.Ledger, state.Tunes));
+        var line = state.Shelf.SpecialistStock.First().Key;
+        Assert.False(state.Shelf.BuyRounds(line, 1, 0, state.Hold, state.Ledger, state.Tunes));
         Assert.Equal(10, state.Ledger.Cash);
-        Assert.Equal(0, state.Hold.RoundsOf(new AmmoLine(4, AmmoKind.Slug)));
+        Assert.Equal(0, state.Hold.RoundsOf(line));
+
+        // Slug is free, so even a gang with no cash can arm its planes.
+        var slug = new AmmoLine(4, AmmoKind.Slug);
+        Assert.True(state.Shelf.BuyRounds(slug, 5, 0, state.Hold, state.Ledger, state.Tunes));
+        Assert.Equal(10, state.Ledger.Cash);
+        Assert.Equal(500, state.Hold.RoundsOf(slug));
     }
 
     [Fact]

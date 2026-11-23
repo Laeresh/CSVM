@@ -26,7 +26,7 @@ public sealed class PortShelf
 
     /// <summary>The price of one lot of <paramref name="line"/>.</summary>
     public static int LotPrice(AmmoLine line, CareerTunes tunes) =>
-        tunes.SlugPricePer100[Math.Clamp(line.Calibre, 0, tunes.SlugPricePer100.Count - 1)] * tunes.KindPriceFactor[line.Kind];
+        tunes.RoundPricePer100[Math.Clamp(line.Calibre, 0, tunes.RoundPricePer100.Count - 1)] * tunes.KindPriceFactor[line.Kind];
 
     /// <summary>Lots of <paramref name="line"/> on the shelf; slug answers <see cref="int.MaxValue"/>.</summary>
     public int LotsOf(AmmoLine line) =>
@@ -42,7 +42,7 @@ public sealed class PortShelf
         var dice = CareerDice.For(careerSeed, "shelf", week);
         int draw = 0;
         int maxLots = tunes.MaxSpecialistRounds / RoundsPerLot;
-        for (int calibre = 0; calibre < tunes.SlugPricePer100.Count; calibre++)
+        for (int calibre = 0; calibre < tunes.RoundPricePer100.Count; calibre++)
         {
             foreach (var kind in SpecialistKinds)
             {
@@ -73,7 +73,8 @@ public sealed class PortShelf
             return false;
         }
 
-        if (!ledger.TrySpend(day, LedgerCategory.Ammunition, lots * LotPrice(line, tunes), Describe(line, lots)))
+        int price = lots * LotPrice(line, tunes);
+        if (price > 0 && !ledger.TrySpend(day, LedgerCategory.Ammunition, price, Describe(line, lots)))
         {
             return false;
         }

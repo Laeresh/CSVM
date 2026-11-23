@@ -67,6 +67,10 @@ first bind; the design doc holds the rest.
 | 23 | Reinforcements in phase 1 | **One reserve wave on a trigger**: a third of the air budget, released after a delay on a patrol and by the first destroyed target on a strike |
 | 24 | A crashed gang plane | **Comes back a wreck**: every zone emptied, engine and mounted guns damaged, repaired at full cost; never lost |
 | 25 | How a contract pays | **The fee, plus 25 % of it per secondary met**; an unmet primary pays nothing |
+| 26 | The first economy tune | **Sorties take two days and fees are three quarters of the design's bands**, chosen against the simulated curve |
+| 27 | A broke gang with no plane fit to fly | **Repairs on credit**: the moneylender pays the shortfall and adds it to the debt |
+| 28 | A broke gang with no ammunition | **Slug rounds are free**; specialist rounds and rockets still cost money |
+| 29 | A missed payment, later phase | **The debt collectors attack the zeppelin**: lose and the career ends, win and their wrecks are salvage. Recorded in `career-mode.md`; not phase 1 |
 
 ## ⚠ Read this before implementing anything
 
@@ -150,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ The bridge, contract board and ledger pages
 23. ☐ Flight check and briefing over the career, loading from the hold
 24. ☐ Debrief, the bill and the hangar's repair
-25. ☐ The economy simulation and the first tune pass
+25. ◐ The economy simulation and the first tune pass
 
 ## Dependency and parallelism notes
 
@@ -523,7 +527,15 @@ phase 1 is repair only, or also refits from the hold.>
 
 **⚠ Traps.** <TODO>
 
-## C25 ☐ The economy simulation and the first tune pass
+## C25 ◐ The economy simulation and the first tune pass
+
+**Landed (the simulation and the first tune).** `CSVM.Tests/CareerSimulation.cs`: a scripted gang over a real `CareerState` for 100 weeks, with an outcome model in place of flying (win odds fall as threat outruns the flight; damage, part hits and crashes rise with threat; a loss doubles the crash odds). It repairs what it can, buys slug for one sortie, and takes the best-paying contract its flight can handle. The model and the policy are the test's tunes, not the game's. `CareerSimulationTests` prints the mean curve of 20 seeds and pins its shape: mean net worth below -$5,000 at week 2 and above zero at week 24.
+
+The design's starting tunes were far too generous (cash doubled in the first week, $490k by week 99). The chosen tune (decision 26): sorties take two days and fee bands are 75 % of the design's. Two soft-locks then showed: a gang whose planes were all wrecks with no cash to repair them, and a gang with fit planes and no cash for ammunition. Both are closed: repairs on credit for a grounded gang (decision 27, `CareerState.Repair`, `PlaneInstance.CanFly`) and free slug (decision 28). The resulting mean curve: net worth -$19,000 at the start, -$10,700 at week 2, break-even about week 7, +$42,800 at week 24, the debt cleared about week 36. All 20 seeds recover.
+
+**Still open.** The playtest at the controls once the loop can be flown; zeppelin upgrades and the full market, the long-term money sinks, arrive in later phases, so money piles up after the first months.
+
+**Original approach (kept for reference).**
 
 **Goal.** A scripted gang takes random contracts for a hundred weeks, and the tunes are set so the
 first two weeks are tight and a well-run gang is comfortable by the end of the region.

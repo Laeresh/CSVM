@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using CSVM.Flight.Hangar;
 
 namespace CSVM.Session.Career;
@@ -58,6 +59,12 @@ public sealed class PlaneInstance
 
     /// <summary>Whether any zone or part needs the machine shop.</summary>
     public bool NeedsRepair => DamagedParts != PlaneParts.None || TotalZoneDamage > 0;
+
+    /// <summary>Whether the plane can fly a sortie: its engine works and no armoured zone is
+    /// emptied. A damaged gun does not ground it.</summary>
+    public bool CanFly =>
+        !DamagedParts.HasFlag(PlaneParts.Engine)
+        && Enum.GetValues<ArmourZone>().All(z => ZoneCapacity(z) == 0 || ZoneArmour(z) > 0);
 
     /// <summary>Armour units lost across all four zones.</summary>
     public int TotalZoneDamage => _zoneDamage[0] + _zoneDamage[1] + _zoneDamage[2] + _zoneDamage[3];

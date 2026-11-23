@@ -65,19 +65,22 @@ public sealed class CareerTunes
 
     public int MaxExpiryDays { get; init; } = 7;
 
-    /// <summary>Fee band per threat rating, index 0 for one skull: the lowest and highest fee.</summary>
+    /// <summary>Fee band per threat rating, index 0 for one skull: the lowest and highest fee. Set
+    /// against the simulated economy's curve (<c>CareerSimulationTests</c>).</summary>
     public IReadOnlyList<(int Min, int Max)> FeeBands { get; init; } = new[]
     {
-        (1500, 2500), (3000, 5000), (5000, 8000), (7500, 12000), (10000, 16000),
+        (1100, 1900), (2200, 3800), (3700, 6000), (5600, 9000), (7500, 12000),
     };
 
-    /// <summary>Price of a hundred slug rounds per calibre, index 0 for .30 through 4 for .70.</summary>
-    public IReadOnlyList<int> SlugPricePer100 { get; init; } = new[] { 8, 10, 12, 14, 16 };
+    /// <summary>The base price of a hundred rounds per calibre, index 0 for .30 through 4 for .70,
+    /// which each specialist kind multiplies.</summary>
+    public IReadOnlyList<int> RoundPricePer100 { get; init; } = new[] { 8, 10, 12, 14, 16 };
 
-    /// <summary>Price multiplier of each ammunition kind over slug, by kind.</summary>
+    /// <summary>Price multiplier of each ammunition kind over the base. Slug is free, so a gang
+    /// with no cash can still arm its planes.</summary>
     public IReadOnlyDictionary<AmmoKind, int> KindPriceFactor { get; init; } = new Dictionary<AmmoKind, int>
     {
-        [AmmoKind.Slug] = 1,
+        [AmmoKind.Slug] = 0,
         [AmmoKind.DumDum] = 2,
         [AmmoKind.ArmourPiercing] = 3,
         [AmmoKind.Magnesium] = 3,
@@ -167,7 +170,7 @@ public sealed class CareerTunes
     public double SecondaryBonusShare { get; init; } = 0.25;
 
     /// <summary>Days a sortie takes, travel to the area and back included.</summary>
-    public int SortieDays { get; init; } = 1;
+    public int SortieDays { get; init; } = 2;
 
     /// <summary>The fee band for <paramref name="threat"/>, clamped to one to five skulls.</summary>
     public (int Min, int Max) FeeBand(int threat) => FeeBands[Math.Clamp(threat, 1, FeeBands.Count) - 1];

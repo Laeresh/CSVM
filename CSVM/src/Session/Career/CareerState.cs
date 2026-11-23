@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Hangar;
 
 namespace CSVM.Session.Career;
@@ -51,6 +52,9 @@ public sealed class CareerState
     /// <summary>The next payday's day number.</summary>
     public int NextPayday => (Week + 1) * CareerTunes.DaysPerWeek;
 
+    /// <summary>Whether any plane of the gang can fly a sortie.</summary>
+    public bool AnyPlaneCanFly => _planes.Any(p => p.CanFly);
+
     /// <summary>A new career. <paramref name="starters"/> are the starting planes' builds, which
     /// the caller makes from <see cref="CareerTunes.StartingAirframes"/> and the stock loadouts.
     /// Each starts with <see cref="CareerTunes.StartingWear"/> of every zone lost.</summary>
@@ -91,12 +95,26 @@ public sealed class CareerState
     }
 
     /// <summary>Repairs plane <paramref name="index"/> fully: pays the quote and passes its days.
-    /// Refused, changing nothing, when cash cannot cover it or there is nothing to repair.</summary>
+    /// Refused when there is nothing to repair, or cash cannot cover it while another plane flies.
+    /// A grounded gang repairs on credit: the moneylender pays the shortfall and adds it to the debt.</summary>
     public bool Repair(int index)
     {
         var plane = _planes[index];
         var quote = plane.QuoteRepair(Tunes);
-        if (quote.IsNothing || !Ledger.TrySpend(Day, LedgerCategory.Repair, quote.Cost, plane.Build.Name))
+        if (quote.IsNothing)
+        {
+            return false;
+        }
+
+        if (Ledger.CanAfford(quote.Cost))
+        {
+            Ledger.TrySpend(Day, LedgerCategory.Repair, quote.Cost, plane.Build.Name);
+        }
+        else if (!AnyPlaneCanFly)
+        {
+            Ledger.Charge(Day, LedgerCategory.Repair, quote.Cost, plane.Build.Name);
+        }
+        else
         {
             return false;
         }
