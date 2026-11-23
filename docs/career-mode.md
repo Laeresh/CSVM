@@ -68,6 +68,8 @@ the flight check chooses which four go up.
 
 The captain gives orders to the whole flight, not to single wingmen. AI wingmen obey them,
 weighted by their Teamwork skill; a co-op human in a seat sees each order as a HUD message.
+The controls are chosen when the orders are implemented: either an extra layer on the d-pad, or
+context buttons that reuse a control idle at that moment, as the respawn control is.
 
 | Order | AI wingmen |
 |---|---|
@@ -273,8 +275,10 @@ fight (a sortie against the deserters stealing two planes).
 
 **Traitors.** Every crew member carries a very small chance of being a traitor in a rival's or the
 law's pay, rising as their morale falls. A traitor pilot turns on the flight mid-sortie and flies
-as an enemy; a traitor among the ground crew sabotages a plane or tips off an ambush. A good
-radio operator can catch the signs before it happens.
+as an enemy; a traitor among the ground crew sabotages a plane or tips off an ambush. A traitor
+pilot always gives themselves away first with a **radio warning**, a suspicious line on the
+mission radio a few seconds before they break formation, so an alert captain can turn first. A
+good radio operator can catch the signs before the sortie.
 
 ## The hangar: aircraft, parts and condition
 
@@ -551,8 +555,9 @@ has the same one relaunch as the captain.
 The five regions the original's worlds cover are a small part of the setting's broken-up North
 America. Generated worlds would let the strategic map grow past them: each new region is a
 **biome** standing for one stretch of that map, and its worlds are generated from a seed instead
-of read from a chapter. Generated areas also mix into the five original regions, beside their
-chapter worlds, so a familiar region offers new ground as well. This section is a direction to prototype, not a commitment; the career
+of read from a chapter. Generated areas also mix into the five original regions as **separate
+worlds** reached from the region's ports, beside its chapter worlds and never joined onto them,
+so a familiar region offers new ground as well. This section is a direction to prototype, not a commitment; the career
 works without it.
 
 ### Biomes
@@ -739,9 +744,5 @@ The four flight orders and the relaunch arrive with the wingmen and the zeppelin
 
 ## Open questions
 
-- Which controls carry the four flight orders, on a pad, a stick and a keyboard, without taking a
-  binding the original's controls already use?
-- How does a generated area mix into an original region: a separate world reached from the
-  region's ports, or ground joined onto a chapter world's edge?
-- What does a traitor's turn look like at the controls: a warning on the radio first, or no
-  warning at all?
+None at present. The controls for the flight orders are decided when the orders are implemented
+(see [Wingman orders](#wingman-orders)).
