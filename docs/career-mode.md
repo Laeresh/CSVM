@@ -3,7 +3,7 @@
 This page is a design concept for an open-ended career mode, in the spirit of a mercenary-company
 career: the player runs a pirate air gang from a zeppelin, flies procedurally generated contracts
 for money, and spends that money keeping the zeppelin aloft, the crew paid and the planes flying.
-No code implements it yet. It is a remake-only feature (see "Remake-only rule" in
+No code implements it yet; it is planned as a new milestone after the story campaign. It is a remake-only feature (see "Remake-only rule" in
 [`CONTEXT.md`](../CONTEXT.md)): the original has no career mode, so nothing here is a decode, and
 every number below is a starting tune for playtesting, not a measurement.
 
@@ -27,7 +27,7 @@ weapons, AI and zeppelins from the player's own install, and it never edits a ca
 - [Standing, heat and the law](#standing-heat-and-the-law)
 - [Rival gangs and named aces](#rival-gangs-and-named-aces)
 - [Between missions: events](#between-missions-events)
-- [Legends: the story campaign as career contracts](#legends-the-story-campaign-as-career-contracts)
+- [Legends: the story campaign on the career's timeline](#legends-the-story-campaign-on-the-careers-timeline)
 - [Failure and how a career ends](#failure-and-how-a-career-ends)
 - [Career options](#career-options)
 - [Co-op](#co-op)
@@ -64,6 +64,30 @@ humans. The cap holds for every job type, base defence included, and is what the
 the AI and the frame budget are sized against. The gang can own more pilots and planes than four;
 the flight check chooses which four go up.
 
+### Wingman orders
+
+The captain gives orders to the whole flight, not to single wingmen. AI wingmen obey them,
+weighted by their Teamwork skill; a co-op human in a seat sees each order as a HUD message.
+
+| Order | AI wingmen |
+|---|---|
+| Attack my target | Switch to the captain's current target |
+| Cover me | Fly escort on the captain and engage whatever attacks them |
+| Engage at will | Pick targets by the normal target ranking |
+| Use rockets | Shorten their wait between rocket salvos, spending ordnance faster |
+
+### Shot down: the relaunch
+
+Every **human** in the flight (the captain and each co-op guest) has **one relaunch per sortie**.
+A relaunch needs the gang's zeppelin on the sortie's map (see [Launch and
+recovery](#the-zeppelin)) and a spare plane aboard: a fit plane in the hangar that is not already
+flying. The pilot launches from the trapeze in that plane, and its damage and spent stock count
+like any other plane's. AI wingmen never relaunch.
+
+A captain with no relaunch left (already used, no zeppelin on the map, or no spare plane) ends the
+sortie when shot down: the surviving wingmen withdraw, the contract pays only for objectives
+already met, and the captain rolls for injury like any pilot.
+
 ## The fantasy
 
 The player inherits a tired cargo zeppelin, two worn fighters, a mechanic who drinks and a debt to
@@ -99,11 +123,14 @@ ledger pays wages, upkeep and the debt.
 
 ## The strategic map
 
-The map is the five regions the original's worlds cover, each a cluster of **ports**:
+The map is a new illustrated map of the broken-up continent, drawn by the remake (not the
+original's briefing art), with ports as pins and the rivals' last known positions marked. Its
+playable regions are the five the original's worlds cover, each a cluster of **ports**, listed
+from easiest to hardest:
 
 | Region | Worlds it draws on | Character |
 |---|---|---|
-| Hawaii | `C3` | Island chains, open sea, naval patrols. Starting region. |
+| Hawaii | `C3` | Island chains, open sea, naval patrols. The easiest region. |
 | Northwest | `C1`, `C1B`, `C1C` | Forests, rivers, rail and logging towns, frequent fog and rain. |
 | Hollywood | `C2`, `C2B` | Studios, rich cargo, rich targets, a heavy police presence. |
 | Colorado | `C4` | Canyons and mountain rail lines, smuggling country, rival gangs. |
@@ -119,6 +146,10 @@ base or a floating market. Each port has:
 - prices for fuel and repairs, and a **law level** that decides how much heat is tolerated before
   the port closes to the gang.
 
+The player **chooses the starting region** when the career begins. Each region has a **threat
+floor**, the lowest threat rating its boards offer, so a later start region is a harder career,
+shown as a difficulty label on the choice, and not a richer start.
+
 Travel between two ports in a region costs 1 to 2 days. Travel between regions costs 3 to 6 days
 and fuel in proportion. While travelling, a road event can fire (an ambush, a storm, a distress
 call, a merchant zeppelin worth boarding).
@@ -132,7 +163,7 @@ week:
 |---|---|---|
 | Contract payment | per sortie | the negotiated fee plus bonuses |
 | Salvage sales | per sortie | what the player chose to sell |
-| Ammunition and rockets spent | per sortie | the rounds and ordnance actually fired, at market price |
+| Ammunition and rockets | when bought | stock bought into the hold at market price |
 | Repairs | per day of work | per armour unit restored, per destroyed part replaced |
 | Fuel | per travel day | scales with the zeppelin's engines and hull size |
 | Wages | weekly | each crew member's wage |
@@ -144,10 +175,11 @@ Money is the original's dollar figure, so the hangar's prices stay meaningful: a
 costs $2,423 and a .50 Barret wing gun $410 (see [`org/hangar.md`](org/hangar.md)). The career's
 payouts are set against those prices (see [Economy tunes](#economy-tunes)).
 
-**Ammunition is bought.** The flight check shows the cost of the loadout being taken up, and the
-debrief charges only for what was fired. Specialist ammunition (armour-piercing, magnesium,
-dum-dum) and specialist rockets cost more and are rarer at markets, so a player hoarding seekers
-for a bounty fight is making a real choice.
+**Ammunition is stock.** Rounds and rockets are bought into the hold, the flight check loads them
+from the hold, and the debrief returns what was not fired. Slug rounds are always for sale.
+Specialist ammunition (armour-piercing, magnesium, dum-dum) and every rocket type are limited by
+each market's weekly stock and cost more, so a player hoarding seekers for a bounty fight is
+making a real choice, and a market can run out.
 
 ## The zeppelin
 
@@ -173,9 +205,11 @@ uses the zeppelin systems CSVM already flies (`ZeppelinBroadside`, `ZeppelinDama
 `ZeppelinMotion`), with the player's hull on team id `1`. Gas cells lost in the fight must be
 repaired before the zeppelin can travel at full speed.
 
-**Launch and recovery.** Sorties begin and end at the zeppelin where the mission allows it: the
-player launches from the trapeze and recovers onto the hook. A sortie flown far from home starts
-in the air at the area's edge instead. Landing a damaged plane on the hook is a small skill test
+**Launch and recovery.** The zeppelin is on the sortie's map **only for jobs near its mooring**.
+Then the flight launches from the trapeze, can relaunch from it (see [Shot down: the
+relaunch](#shot-down-the-relaunch)) and recovers onto the hook. A job far from the mooring starts
+in the air at the area's edge, with no zeppelin and so no relaunch; moving the zeppelin closer
+first costs travel days. Landing a damaged plane on the hook is a small skill test
 that saves the cost of a ferry flight.
 
 **Cosmetics.** The gang chooses a name, a flag and a paint scheme for every plane, using the paint
@@ -200,7 +234,7 @@ to 10, which map onto the AI pilot's existing parameters:
 Pilots gain experience per sortie and per kill and spend it on skills. Each also rolls one or two
 **traits**: *Gunslinger* (better gunnery, uses more ammunition), *Careful* (repairs on their plane
 cost less), *Greedy* (wants a bigger share), *Loyal* (never joins a mutiny), *Hothead* (ignores
-the order to return), *Ace of another gang* (comes with a rival's grudge attached).
+"Cover me"), *Ace of another gang* (comes with a rival's grudge attached).
 
 **Injury and death.** A pilot whose plane crashes rolls against the plane's state and whether they
 bailed out. Outcomes are unhurt, wounded (out for days), badly hurt (out for weeks, possibly a
@@ -237,6 +271,11 @@ skills in flight; very low morale means the crew member leaves at the next port.
 the crew are angry at once, a **mutiny** event fires, which the captain can talk down, pay off or
 fight (a sortie against the deserters stealing two planes).
 
+**Traitors.** Every crew member carries a very small chance of being a traitor in a rival's or the
+law's pay, rising as their morale falls. A traitor pilot turns on the flight mid-sortie and flies
+as an enemy; a traitor among the ground crew sabotages a plane or tips off an ambush. A good
+radio operator can catch the signs before it happens.
+
 ## The hangar: aircraft, parts and condition
 
 **Each plane is an instance**, not a type. It has an airframe, an engine, guns per slot, pylons,
@@ -248,10 +287,8 @@ armour per zone and a paint scheme, exactly the record the custom-plane hangar a
   repaired. The four zone values already exist in the saved-plane record.
 - **Damaged parts**: a gun or an engine that took a hit is marked damaged and must be replaced or
   repaired.
-- **Airframe wear**: every sortie adds wear; a worn airframe costs more to repair and eventually
-  must be overhauled.
-- **History**: the pilots who flew it, its kills, the sorties it survived. A plane with a long
-  history earns a name the player can paint on it.
+- **History**: the pilots who flew it, its kills, the sorties it survived, kept as flavour. A plane
+  with a long history earns a name the player can paint on it. There is no airframe wear.
 
 **Parts are stock.** Guns, engines, armour and rockets are bought into the hold and fitted in the
 hangar; removing a part returns it to the hold. Buying a new plane gives a bare airframe. The
@@ -367,8 +404,9 @@ the same mission whenever it is flown and a reported bug can be replayed with `-
 The generator is engine-free and unit-tested: given a site catalogue and a seed, it returns a
 spec, and the tests assert on the spec, not on pixels.
 
-**Difficulty scaling.** The opposition budget for a given threat rating grows slowly with the
-gang's fame, not with the player's force. A rich gang is not punished for being rich; it is
+**Difficulty scaling.** A region's threat floor sets the easiest work it offers. Above that, the
+opposition budget for a given threat rating grows slowly with the gang's fame, not with the
+player's force. A rich gang is not punished for being rich; it is
 offered richer and harder contracts, and can still take easy ones for little money.
 
 ## Salvage and prizes
@@ -405,7 +443,7 @@ seen. At thresholds:
 | 100 | A named law ace and a navy zeppelin come for the gang in a scripted base-defence sortie |
 
 **Fame** is separate from heat: it rises with every completed contract, every famous kill and
-every prize, and it unlocks better employers, better pilots in the pub and the Legends contracts.
+every prize, and it unlocks better employers and better pilots in the pub.
 A gang can be famous and clean (a privateer company) or famous and wanted (a pirate fleet). The
 debrief shows which way the gang's reputation is leaning, and some pilots will only join one kind.
 
@@ -446,17 +484,30 @@ Examples:
 Events are data, not code: a list of entries with conditions, text and outcomes, so new ones are
 added without touching the generator.
 
-## Legends: the story campaign as career contracts
+## Legends: the story campaign on the career's timeline
 
-Once the gang's fame is high enough in a region, the original's campaign missions of that region
-appear on the board as **Legends** contracts: the authored mission in its own world, flown by the
-gang with its own planes and pilots, paid in career money and with unique salvage (a prototype
-airframe, a famous ace's paint). Legends reuse the campaign's existing mission data and objective
-scripts unchanged, and the career only adds the payment and the salvage table around them. A
-Legends contract can be flown once per career.
+The original's 24 campaign missions sit on the career's calendar as five **Legends acts**, one per
+act of the story, in the story's order: Hawaii, Northwest, Hollywood, Colorado, Manhattan.
 
-This gives the career a hand-authored spine without writing new story missions, and gives players
-who finished the campaign a reason to fly its best missions again with a gang they built.
+- **Each act opens on a fixed date.** The acts are spaced so the gang has weeks of contract work
+  between them, whatever its fame.
+- **The gang is warned in advance.** The bridge and the strategic map show the next act's region
+  and the date the zeppelin must be there. Arriving in time starts the act; missing the date counts
+  as skipping it.
+- **An act is flown back to back.** Its missions come in their authored order, with only repair,
+  refit and recovery days between them and no contracts. Contract work resumes when the act ends.
+- **Acts are optional.** The player can skip an act. Skipping costs only what the act would have
+  given (its pay, its unique salvage and its fame); later acts stay on the calendar.
+- **The gang flies its own planes and pilots,** with their stored damage and stock, but only in
+  the wingman seats the original mission authored, so the authored balance holds. Co-op guests fill
+  those seats under the existing campaign co-op rules.
+- **Airframe swaps are rewards.** When an authored mission swaps the pilot into a new aeroplane,
+  the gang keeps that plane after the mission, added to the hangar as a plane instance.
+
+Legends reuse the campaign's mission data and objective scripts unchanged; the career adds the
+calendar, the payment and the salvage around them. This gives the career a hand-authored spine
+without writing new story missions, and gives players who finished the campaign a reason to fly it
+again with a gang they built.
 
 ## Failure and how a career ends
 
@@ -476,9 +527,10 @@ Set when a career starts, shown in the career's save slot:
 
 | Option | Choices |
 |---|---|
+| Starting region | Any of the five; the region's threat floor sets the difficulty |
 | Starting position | Debt-ridden (default), Privateer (a letter of marque, low heat, less money), Notorious (rich, already wanted) |
 | Economy | Generous, Standard, Harsh (scales fees, prices and upkeep) |
-| Pilot death | Off (always wounded), On |
+| Pilot death | On (default), Off (always wounded) |
 | Ironman | One save slot, saved on every state change, captain death ends the career |
 | Second chances | On, Off |
 | Assisted flight | The existing assisted-flight settings, unchanged |
@@ -489,17 +541,18 @@ A co-op career is the career of one **seated profile**, the host's, flown with t
 campaign co-op rules (see "Campaign co-op" in [`CONTEXT.md`](../CONTEXT.md)). One to three other
 humans join as **guests** and take wingman seats, on team id `1`; any seat no human takes is
 filled by an AI pilot from the gang's roster, so the flight is always at most four planes (see
-[The flight](#the-flight)). A guest's kills, ammunition
-and damage are charged to the gang's ledger like an AI wingman's, but a guest has no wage, no
-injury and no persistent skills, and cannot spend from the ledger. Whether a guest may claim a
-named pilot slot from the gang's roster is an open question.
+[The flight](#the-flight)). A guest flies one of the gang's planes and never brings one from their
+own career. Their kills, spent stock and damage count against the gang like an AI wingman's, but a
+guest has no wage, no injury and no persistent skills, and cannot spend from the ledger. Each guest
+has the same one relaunch as the captain.
 
 ## Generated worlds (exploratory)
 
 The five regions the original's worlds cover are a small part of the setting's broken-up North
 America. Generated worlds would let the strategic map grow past them: each new region is a
 **biome** standing for one stretch of that map, and its worlds are generated from a seed instead
-of read from a chapter. This section is a direction to prototype, not a commitment; the career
+of read from a chapter. Generated areas also mix into the five original regions, beside their
+chapter worlds, so a familiar region offers new ground as well. This section is a direction to prototype, not a commitment; the career
 works without it.
 
 ### Biomes
@@ -560,10 +613,12 @@ keeps the built meshes between sorties in the same region.
 
 ## Screens
 
-The career's out-of-mission screens are a new set of pages in the campaign flow's stack, so both
-menu presentations can draw them. The original presentation has no art for most of them, so they
-draw in the modern presentation's style, reusing the campaign board's parchment, plaques and
-fonts where it fits.
+The career's out-of-mission screens are a new set of pages in the campaign flow's stack. New
+screens draw only in the modern presentation, whichever presentation the player chose. Where a
+career screen matches an existing original-presentation page (briefing, flight check, ammo
+selection, hangar), that page is reused. The modern presentation is due to be replaced, so the
+career's state and operations stay engine-free and UI-free, and a page only shows and edits them;
+a replacement presentation then draws the same pages without touching career logic.
 
 | Screen | Role | Closest existing page |
 |---|---|---|
@@ -591,11 +646,12 @@ fonts where it fits.
 | Generated worlds | `EmptyStage`, Rich vegetation and city stamps, the wave ocean | everything in [Generated worlds](#generated-worlds-exploratory) |
 | Building a session from a description | `InstantActionDef` and its producers | a mission spec rich enough for convoys, targets and waves |
 | Enemy aircraft and their AI | `AiPilot`, target ranking, AI nets, enemy generators | AI skill parameters exposed per pilot |
-| Wingmen | the flight check's crew slots, `AiEscort` | orders from the player, three wingmen in formation |
+| Wingmen | the flight check's crew slots, `AiEscort` | the four flight orders, three wingmen in formation |
+| Relaunch | the respawn rule, zeppelin trapeze positions | one relaunch per human from a spare plane |
 | Zeppelins | broadside, damage, motion, replicas | a player-side zeppelin as the base |
 | Ladder boarding | the ladder switch, the airframe swap | boarding a prize instead of a plane |
 | Planes and parts | `CustomPlaneDef`, the hangar, prices and weights | per-instance condition and a parts hold |
-| Ammunition | `FireControl`'s draw-down, the ammo selection screen | billing what was fired |
+| Ammunition | `FireControl`'s draw-down, the ammo selection screen | loading from and returning to the hold's stock |
 | Damage | armour and health per zone | carrying zone state out of the sortie |
 | Objectives and HUD messages | objectives, mission targets, `HudMessages`, `MissionRadio` | objectives from a generated spec |
 | Courses for runs | stunt danger zones, the course runner, stunt race bots | courses as smuggling routes and recon checkpoints |
@@ -608,15 +664,15 @@ fonts where it fits.
 Engine-free types, unit-tested on their own, in a `Career` namespace beside `Session`:
 
 - `CareerState`: the whole save. Calendar day, ledger, zeppelin, crew, hangar, hold, standing
-  per power, heat, fame, rivals, the open contracts per visited port, the event log, the options.
+  per power, heat, fame, rivals, the open contracts per visited port, the Legends timeline (each
+  act's date and outcome), the event log, the options.
 - `Ledger`: entries by day with a category and an amount, the cash balance and the debt, and the
   weekly bill computed from the rest of the state.
 - `Zeppelin`: modules and levels, hull and cell health, the port it is moored at or its travel
   order.
 - `CrewMember`: role, name, skills, traits, wage or share, morale, injury and the days left on it,
   experience; pilots also hold their kill and sortie history.
-- `PlaneInstance`: the `CustomPlaneDef` record plus zone condition, damaged parts, wear and
-  history.
+- `PlaneInstance`: the `CustomPlaneDef` record plus zone condition, damaged parts and history.
 - `Contract`: employer, job type, seed, port, threat rating, fee, expiry, negotiated terms.
 - `MissionSpec`: the generator's output, the one input the session needs to build a sortie.
 - `SortieResult`: what the session reports back: objectives met, rounds and ordnance spent per
@@ -647,21 +703,22 @@ hundred weeks) and then at the controls.
 | Zeppelin upkeep | $500 a week, plus $150 per module level |
 | Fuel | $200 per travel day, scaled by engine level |
 | Repair | $5 per armour unit restored, half the part price for a damaged part |
-| Ammunition | slug rounds cheap, AP and magnesium three times the price, rockets $40 to $250 each |
+| Ammunition | slug rounds cheap and always stocked, AP and magnesium three times the price, rockets $40 to $250 each |
 | Salvage | 40 % of the market price when sold at once, 60 % at a broker |
 
 The intended feel: the first two weeks are tight and every sortie matters, a well-run gang is
-comfortable by the end of the first region, and the zeppelin upgrades and the Legends contracts
-are the long-term money sink.
+comfortable by the end of the first region, and the zeppelin upgrades are the long-term money
+sink.
 
 ## Roadmap
 
 Each phase ends in a playable state, so the design is tested at the controls before the next
 phase builds on it.
 
-1. **The loop on one world.** `CareerState`, the ledger and a contract board with two job types
-   (patrol and strike) on one chapter, generated by seed. Debrief bills ammunition and repairs,
-   plane condition carries between sorties. One port, no travel, no crew skills.
+1. **The loop on one world.** `CareerState`, the ledger and the calendar, and a contract board
+   with two job types (patrol and strike) on one chapter, generated by seed, with added ground
+   targets. Ammunition is stock in the hold, zone damage and damaged parts carry between sorties,
+   the debrief bills repairs. One port, no travel, no crew skills.
 2. **Wingmen and the market.** Pilots with skills mapped to the AI, hiring, wages, injury. The
    market and the parts hold, the hangar fitting from stock. Salvage.
 3. **The zeppelin and travel.** The strategic map with all five regions, ports, travel days and
@@ -669,25 +726,22 @@ phase builds on it.
 4. **The full board.** The remaining job types, negotiation, modifiers, bonus objectives, prizes
    and the ladder boarding.
 5. **The living sky.** Standing, heat and fame, rival gangs and named aces, events, the Articles
-   and morale, mutiny.
-6. **Legends and co-op.** The campaign missions as Legends contracts, guests in the wingman seats,
-   the career options and Ironman.
+   and morale, mutiny and traitors.
+6. **Legends and co-op.** The Legends acts on the calendar, guests in the wingman seats with their
+   relaunch, the career options (starting region included) and Ironman.
 7. **Generated worlds (exploratory).** A single desert-mesa biome as a prototype outside the
    career, judged at the controls beside a chapter world. Only if it holds up: the generator's
    flight data and site catalogue, then new regions on the strategic map, one biome at a time.
 
 The ground-target placer and the prefabs arrive in phase 1, since a strike contract needs them.
-Three AI wingmen in formation are proven in phase 2 against the frame budget, with the worst case
+The four flight orders and the relaunch arrive with the wingmen and the zeppelin. Three AI wingmen in formation are proven in phase 2 against the frame budget, with the worst case
 (four planes, a zeppelin and a full opposition budget) as the perf scenario.
 
 ## Open questions
 
-- Which wingman orders does the captain get (attack my target, cover me, go home, engage at will),
-  and on which controls, given that a co-op human in a seat ignores them?
-- Does a generated world replace a region's original worlds, or only add regions beyond the five?
-- Should the strategic map be the original's briefing map art, a new illustrated map, or a
-  zeppelin-window view of the region?
-- How much of the career should run in the original presentation, which has no art for most of
-  these screens?
-- Should a guest in co-op be able to bring their own plane from their own career, as a hired
-  mercenary with their own ledger?
+- Which controls carry the four flight orders, on a pad, a stick and a keyboard, without taking a
+  binding the original's controls already use?
+- How does a generated area mix into an original region: a separate world reached from the
+  region's ports, or ground joined onto a chapter world's edge?
+- What does a traitor's turn look like at the controls: a warning on the radio first, or no
+  warning at all?
