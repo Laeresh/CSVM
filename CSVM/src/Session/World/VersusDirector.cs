@@ -643,7 +643,7 @@ public sealed class VersusDirector
         return built;
     }
 
-    // R and pad Y on an ended match. ⚠ Nothing while a held board waits out the end's hold: the
+    // R and pad Y on an ended match. ⚠ Nothing while the board waits out the end's hold: the
     // key answers the board, which is not up yet. The pause sheet's Restart calls Restart itself.
     private void RestartFromKey()
     {

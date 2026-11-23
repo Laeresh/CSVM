@@ -51,7 +51,8 @@ internal static class NetTeamSuites
         + "on the Ally cycle in the friendly green and the other team in red, a teammate kill costs the "
         + "killer score_suicide and counts no kill, the host ends the match when a team's total reaches the "
         + "Score target though no pilot reached it alone, every machine's board names the winning "
-        + "team and every pane posts \"Game Over:\" over its win line, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
+        + "team and every pane posts \"Game Over:\" over its win line, every board waiting out the "
+        + "end's hold before it rises, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.Zrdr))}");

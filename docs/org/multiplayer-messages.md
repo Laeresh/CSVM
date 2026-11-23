@@ -935,7 +935,7 @@ goes on, and a click on either answer takes it. The original's barrier offers no
 guest's Yes drops its wire and lands it on the games list; the host takes that as a departure, as
 it takes any link dropping, and the others' start goes on. A host's Yes broadcasts cancel under its
 round and lands on its lobby with the wire kept; a guest that hears it, at once or once its own
-build ends, lands on the same lobby. Only the hold is cancellable: a build still running finishes
+build ends, lands on the same lobby. A build still running is not interrupted: it finishes
 first. An older build drops cancel unread, so every loaded word now carries a mark at byte 7, and
 on a cancel the host drops the link of each guest whose loaded word came unmarked; that guest goes
 down its lost-link path to the games list. An older guest still loading at the cancel has sent no
@@ -947,8 +947,8 @@ the two apart, since it carries only MAJOR.MINOR and 0.8.0 and 0.8.1 share 0.8. 
 older host can still leave; only the host's cancel needs the newer host.
 
 **Leaving a game in flight.** The same cancel word, sent after the release, takes a lobby game back
-to its lobby. A lobby host whose own exit leaves a Dogfight or a stunt race before its end
-broadcasts cancel under its round and lands on its lobby's first tab with the wire kept; a guest
+to its lobby. A lobby host whose lobby a screen stands on, and whose own exit leaves a Dogfight
+or a stunt race before its end, broadcasts cancel under its round and lands on its lobby's first tab with the wire kept; a guest
 that hears it under its own round lands on the same lobby, its wire kept too, so the lobby keeps
 every player, team and plane for the next launch. The host drops each guest that cannot hear the
 word: one whose loaded word came unmarked (an older build), and one whose latest loaded word named
