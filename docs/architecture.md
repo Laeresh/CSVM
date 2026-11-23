@@ -953,6 +953,7 @@ The session-build clusters `GameSession` delegates to, in six sub-namespaces, on
 - `src/Session/Career/Hold.cs`, the zeppelin's hold: gun rounds per calibre and kind, rockets per weapon id.
 - `src/Session/Career/PortShelf.cs`, the port's ammunition shelf: unlimited slug, weekly-rolled specialist rounds and rockets.
 - `src/Session/Career/ContractBoard.cs`, the port's contract board: daily refill of seeded patrol and strike offers within the threat floor.
+- `src/Session/Career/SiteCatalogue.cs`, the places on one chapter a generated sortie can use: fixed patrol nets, ground candidates, mission starts, zeppelin starts.
 
 ### `src/Bindings/`, the input binding model
 

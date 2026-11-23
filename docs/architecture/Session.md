@@ -747,3 +747,10 @@ shelf or the cash cannot cover changes nothing.
 The port's contract board and the `Contract` record. Each day expired offers drop and empty slots
 refill to the board size. An offer's threat is the lower of two draws above the floor, its fee a
 draw in its threat's band, and its seed is what the mission generator builds the sortie from.
+
+## src/Session/Career/SiteCatalogue.cs
+The places on one chapter world a generated sortie can use, harvested at runtime and never
+committed: routes from the chapter's `AiNets` (a net with a trailer is dropped, its points being
+offsets around a moving target), ground candidates under them one per 400 m cell, each mission's
+`PLAYER_INIT` start and its zeppelin starts. Terrain is not judged here: sea, land and flat ground
+are the placer's checks in the built world. Area queries measure on the ground plane.

@@ -253,4 +253,4 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\scripts\RunTests.ps1`**;
 
-Active plan: [`docs/PLAN-career-loop.md`](docs/PLAN-career-loop.md), career mode phase 1; next item B11.
+Active plan: [`docs/PLAN-career-loop.md`](docs/PLAN-career-loop.md), career mode phase 1; next item B12.

@@ -61,6 +61,8 @@ first bind; the design doc holds the rest.
 | 17 | Employers in phase 1 | **Kinds only** (nation, corporation, militia, broker); named employers arrive with standing |
 | 18 | Save layout | **One file per career plus a backup**, `user://Careers/<name>.json` and `.json.bak` |
 | 19 | Wingmen in phase 1 | **The sortie supports all three wingman seats; the starting gang fills one.** Instant Action already flies up to five wingmen (`InstantActionRuntime.FlownWingmen`), so three is in the engine's range. The other seats fill as the gang grows, once hiring and the market arrive in phase 2 |
+| 20 | When the site catalogue is built | **At runtime** from the install, cached in memory; nothing derived from game data is committed |
+| 21 | Terrain tags (sea, land, flat ground) | **Checked at placement** in the built world (B13), not stored in the catalogue |
 
 ## ⚠ Read this before implementing anything
 
@@ -70,7 +72,7 @@ Nothing has been disproven yet; the table below is the confidence roll-up only.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | none | |
 | **Direction sound, magnitude a judgement call** | none | |
-| **Leads only, no mechanism yet** | B11 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
+| **Leads only, no mechanism yet** | B12 to C25 | Every item rests on the design discussion. Read the modules named in each Approach before building; an item may end in a redesign of its seam. All economy numbers are TUNE. |
 
 ## What the data actually ships
 
@@ -132,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the sortie seam
 
-11. ☐ The site catalogue for the phase 1 chapter
+11. ☑ The site catalogue for the phase 1 chapter
 12. ☐ `MissionSpec` and the generator for patrol and strike
 13. ☐ The ground-target placer and the first prefabs
 14. ☐ The session builds a sortie from a `MissionSpec` (`--career-seed=`)
@@ -304,7 +306,13 @@ named placeholders or the chapter's militias (`MilitiaPaint`).>
 
 # Wave B, the sortie seam
 
-## B11 ☐ The site catalogue for the phase 1 chapter
+## B11 ☑ The site catalogue for the phase 1 chapter
+
+**Landed.** `SiteCatalogue` in `Session.Career`. `Build` takes already-read nets, spawns and zeppelin starts; `Harvest` reads them from a chapter scope (`AiNets.Load`) and each mission scope (`SpawnPoints.LoadPlayerInit`, `Zeppelins.Load`), a missing file adding nothing. Routes are the fixed nets (a trailer-carried net is dropped: its points are offsets around a moving target), with their edge length. Ground candidates are the fixed nets' points, x and z only, one per 400 m cell. Terrain tags are not stored (decision 21): the placer checks sea, land and slope in the built world. Built at runtime, never committed (decision 20). The catalogue is chapter-agnostic, so which chapter phase 1 uses is still open; the synthetic data tree ships no nets, so per-chapter counts need the install.
+
+**Verified.** `SiteCatalogueTests` over the committed `ainets` and `zeppelins` fixtures and a temp mission scope: trailer nets dropped (5, 11, 13 out; 7 and 9 kept), route lengths by hand, one candidate per cell, ground-plane queries ignoring height, a mission's start and zeppelins harvested, empty scopes giving an empty catalogue.
+
+**Original approach (kept for reference).**
 
 **Goal.** One chapter has a catalogue of tagged sites (`airfield`, `rail`, `canyon`, `city`,
 `open_sea`, `dock` and so on) that the generator can ask for by tag inside an area.
