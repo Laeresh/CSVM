@@ -100,6 +100,7 @@ internal static class NetCombatSuites
         PauseSheet,
         PauseSheetOlderGuest,
         PauseSheetRoundlessGuest,
+        AfterTheEnd,
     }
 
     [Suite("net-combat-events",
@@ -380,7 +381,9 @@ internal static class NetCombatSuites
         + "game off: both machines land on the lobby itself with their doors kept, every player's "
         + "team and plane as before the flight on both machines, and the host can launch again; a "
         + "guest whose loaded word came from an older build, or named no round of the flight, is "
-        + "dropped instead and leaves with Host left the game")]
+        + "dropped instead and leaves with Host left the game; a host leaving a match that has "
+        + "already ended lands on Game Scores, calls nothing off and keeps its door, the guest's "
+        + "link up")]
     internal static void AVersusHostLeaves(TestContext ctx)
     {
         var spec = MatchSpec(ctx, out _);
@@ -392,6 +395,7 @@ internal static class NetCombatSuites
             HostLeaves(ctx, spec, 7303, HostExit.PauseSheet);
             HostLeaves(ctx, spec, 7304, HostExit.PauseSheetOlderGuest);
             HostLeaves(ctx, spec, 7305, HostExit.PauseSheetRoundlessGuest);
+            HostLeaves(ctx, spec, 7306, HostExit.AfterTheEnd);
         }
         finally
         {
@@ -737,6 +741,7 @@ internal static class NetCombatSuites
         {
             HostExit.LinkDropped => "dropped link",
             HostExit.WindowClosed => "window closed",
+            HostExit.AfterTheEnd => "ended match",
             _ => "pause-sheet exit",
         };
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
@@ -787,6 +792,12 @@ internal static class NetCombatSuites
                 $"ABLE-TO-FAIL CONTROL: [{how}] with the host flying the guest's flight goes on ({guestDoor.Stage})");
 
             var guestWire = (NetLobby)guestLaunch.Transport;
+            if (exit == HostExit.AfterTheEnd)
+            {
+                LeaveTheEnd(ctx, host, guest, hostDoor, guestDoor, hostLaunch.Transport);
+                return;
+            }
+
             if (exit is not (HostExit.LinkDropped or HostExit.WindowClosed))
             {
                 QuitToTheLobby(ctx, exit, host, guest, hostDoor, guestDoor, hostLaunch.Transport, guestWire, stood);
@@ -928,6 +939,37 @@ internal static class NetCombatSuites
             $"[{how}] the lobby keeps its players, their team and their planes on both machines (host {after.Host} was {stood.Host}; guest {after.Guest} was {stood.Guest})");
         var again = hostDoor.BuildLaunch();
         ctx.Check(again != null, $"[{how}] and the host can launch the next game from it");
+    }
+
+    // The launcher's order for a host leaving inside an ended match's hold. The landing is read off
+    // the live session, then the session is freed and the wire goes to the door.
+    private static void LeaveTheEnd(TestContext ctx, Ends host, Ends guest, UI.Menu.NetPlayFeature hostDoor,
+        UI.Menu.NetPlayFeature guestDoor, INetTransport hostWire)
+    {
+        var match = host.Session.Dogfight!.Match;
+        for (int i = 0; i <= match.KillTarget && !match.Completed; i++)
+        {
+            match.RegisterKill(shooter: 0, victim: 1);
+        }
+
+        FlyTogether(SettleSteps, host, guest, hostDoor, guestDoor);
+        ctx.Check(match.Completed && guest.Session.Dogfight!.Match.Completed,
+            $"[ended match] the host's kills end the match on both machines ({match.Completed}, {guest.Session.Dogfight!.Match.Completed})");
+        var landing = NetFlight.Landing(true, hostDoor.Dogfight, host.Session);
+        ctx.Check(landing is { Cancelled: false, Scores.Count: 2 },
+            $"[ended match] the host lands on Game Scores with both pilots' lines, not on a call-off (cancelled {landing?.Cancelled}, {landing?.Scores.Count} line(s))");
+        host.Close();
+        NetFlight.EndNetWire(hostDoor, hostWire, keepLobby: landing != null);
+        for (int i = 0; i < SettleSteps; i++)
+        {
+            guest.Session._PhysicsProcess(GameClock.FixedDt);
+            StepDoors(1, hostDoor, guestDoor);
+        }
+
+        ctx.Check(!guest.Session.Wire.GameCalledOff && !NetFlight.VersusGuestFlightOver(guestDoor),
+            $"[ended match] no call-off reaches the guest, whose link stays up ({guestDoor.Stage}, \"{guestDoor.Fault}\")");
+        ctx.Check(hostDoor.Stage == UI.Menu.NetDoorStage.Hosting && !hostDoor.Released,
+            $"[ended match] and the host keeps its door for the lobby ({hostDoor.Stage})");
     }
 
     // A flight's step on both ends, the way the launcher runs one: each session, then each door.

@@ -117,6 +117,13 @@ internal sealed class NetFlight
             ? lobby is { Shown: true } && wire.CancelStart()
             : wire.GameCalledOff);
 
+    /// <summary>The landing <see cref="Landing(GameSession)"/> picks, off the flight's own lobby.
+    /// ⚠ The ended game's Game Scores come first. A host calling off a match that already ended
+    /// sends every machine to the lobby's first tab.</summary>
+    public static LobbyReturn? Landing(bool lobbyFlight, DogfightLobby? lobby, GameSession session) =>
+        LobbyLanding(lobbyFlight, lobby, session.Dogfight?.Match, session.NetSeats, session.RaceDirector?.Race)
+            ?? (CallGameOff(lobbyFlight, lobby, session.Wire) ? CalledOff : null);
+
     /// <summary>Whether a lobby flight's match ends on Game Scores rather than on a results board.
     /// The host's presentation decides for every machine. A host lands when a lobby screen stands on
     /// its lobby, and a guest when its host's options say so.</summary>
@@ -441,8 +448,7 @@ internal sealed class NetFlight
     /// own destination. A landing keeps the wire for the lobby when the flight closes.</summary>
     public LobbyReturn? Landing(GameSession session)
     {
-        var landing = LobbyLanding(_lobbyFlight, Door?.Dogfight, session.Dogfight?.Match, session.NetSeats, session.RaceDirector?.Race)
-            ?? (CallGameOff(_lobbyFlight, Door?.Dogfight, session.Wire) ? CalledOff : null);
+        var landing = Landing(_lobbyFlight, Door?.Dogfight, session);
         _keepLobby = landing != null;
         return landing;
     }
