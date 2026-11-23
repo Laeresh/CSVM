@@ -1799,3 +1799,17 @@ background still has everything else on it. `Advance` says whether the picture c
 repaints on the frames that need it and no others. Every timing decision belongs to the playback,
 which holds no engine type, so this half is the upload alone. Read `src/Video/MoviePlayback.cs`
 next.
+
+## src/UI/Menu/CareerFeature.cs
+The career as a shared feature, engine-free: the saved gangs (`Careers`), the one open
+(`Current`), the name rule (`NameRefusal`), `Start`, `Open`, `Delete`, and every action a career
+screen offers (wait, accept, abandon, repair, buy rounds or rockets), each saved at once through
+`Session/Career/CareerStore`. The career's own rules are `Session/Career/CareerState`'s. Starting
+planes take their stock guns and display name off the stock loadouts.
+
+## src/UI/Menu/Original/OriginalCareerScreen.cs
+The career's screens in the Original presentation, remake-only and drawn on the scrapbook as
+`OriginalJoinBoard` is: the gang roster with the new-gang name box, the bridge (the career's hub),
+the contract board, the hangar's repairs with the hold, and the ledger. Reached by the CAREER door
+under the join board's on the main menu, present only over a `CareerFeature`. Every action goes
+through `CareerFeature`; FLY stands disabled until the career sortie launch exists.

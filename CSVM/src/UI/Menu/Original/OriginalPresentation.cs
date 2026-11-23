@@ -477,7 +477,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null,
                 joinRoster: _devices,
                 net: host.Features.TryGet<NetPlayFeature>(out var net) ? net : null,
-                netOptions: OptionsStore.UserOptions);
+                netOptions: OptionsStore.UserOptions,
+                career: host.Features.TryGet<CareerFeature>(out var career) ? career : null);
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
@@ -1600,7 +1601,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionWrapup
                     or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
-                : _shell.Screen == OriginalScreen.JoinBoard ? OriginalJoinBoard.Palette
+                : _shell.Screen == OriginalScreen.JoinBoard || (_shell.Career?.Owns(_shell.Screen) ?? false) ? OriginalJoinBoard.Palette
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette

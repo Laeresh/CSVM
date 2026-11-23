@@ -126,9 +126,14 @@ ledger pays wages, upkeep and the debt.
 ## The strategic map
 
 The map is a new illustrated map of the broken-up continent, drawn by the remake (not the
-original's briefing art), with ports as pins and the rivals' last known positions marked. Its
-playable regions are the five the original's worlds cover, each a cluster of **ports**, listed
-from easiest to hardest:
+original's briefing art), with ports as pins and the rivals' last known positions marked. It is
+an SVG traced from the nations map at
+<https://commons.wikimedia.org/wiki/File:Crimson_skies_map.png>, whose author (Zaku Two, English
+Wikipedia) released it into the public domain, with a grant to use it for any purpose where that
+release is not legally possible. Each nation is one SVG region with its own id, so the career can
+colour, outline and label it at runtime (standing, heat, a rival's territory). The traced file
+records that source and release in its own header. Its playable regions are the five the
+original's worlds cover, each a cluster of **ports**, listed from easiest to hardest:
 
 | Region | Worlds it draws on | Character |
 |---|---|---|
@@ -214,9 +219,14 @@ in the air at the area's edge, with no zeppelin and so no relaunch; moving the z
 first costs travel days. Landing a damaged plane on the hook is a small skill test
 that saves the cost of a ferry flight.
 
-**Cosmetics.** The gang chooses a name, a flag and a paint scheme for every plane, using the paint
-system the hangar already has ([`formats/paint.md`](formats/paint.md)). The zeppelin's hull takes
-the gang's colours.
+**The gang's livery.** When a career starts, the gang picks a name and a **livery**: a paint
+pattern, its three colours and a nose or tail decal, from the paint system the hangar already has
+([`formats/paint.md`](formats/paint.md)). Every plane the gang owns wears the livery, including a
+plane bought, captured or won from a Legends mission, so a flight reads as one gang in the air. A
+single plane may still be painted its own way in the hangar (an ace's personal scheme), and can be
+set back to the livery at any time. The livery can be changed at a port for a fee, which repaints
+every plane still wearing it. The zeppelin's hull and the gang's flag take the livery's colours, and
+rival gangs roll liveries of their own, so a third party in a sortie is told apart at a glance.
 
 ## The crew
 
@@ -567,8 +577,12 @@ works without it.
 
 Each biome is a recipe: a terrain shape, a ground palette, vegetation sets, settlement style,
 water, weather odds and the job types and powers it favours. The list is by geography; each
-region's name on the strategic map follows the setting's nation for that ground where the
-install's own strings name it.
+region on the strategic map is a nation of the traced map, and the biome is the one its ground
+suggests: desert mesas for Arixo and the Navajo Territory, the Great Plains for the People's
+Collective, Lakota Territory and the Republic of Texas, river delta and bayou for French Louisiana,
+Great Lakes industry for the Industrial States of America, Appalachian ridges for the Appalachian
+Territory, barrier islands for the Protectorate of the Outer Banks, alpine high country for Utah
+and the Disputed Western Territories.
 
 | Biome | Terrain | Settlements and targets | Favoured jobs |
 |---|---|---|---|
@@ -621,12 +635,12 @@ keeps the built meshes between sorties in the same region.
 
 ## Screens
 
-The career's out-of-mission screens are a new set of pages in the campaign flow's stack. New
-screens draw only in the modern presentation, whichever presentation the player chose. Where a
-career screen matches an existing original-presentation page (briefing, flight check, ammo
-selection, hangar), that page is reused. The modern presentation is due to be replaced, so the
-career's state and operations stay engine-free and UI-free, and a page only shows and edits them;
-a replacement presentation then draws the same pages without touching career logic.
+The career's out-of-mission screens are remake-only screens of the Original presentation, drawn
+on the scrapbook like the join board, behind a CAREER door under JOIN BOARD on the main menu
+(`OriginalCareerScreen`). Where a career screen matches an existing Original page (briefing, flight
+check, ammo selection, hangar), that page is reused. The career's state and operations stay
+engine-free in `CareerFeature` and `Session.Career`, and a screen only shows and edits them, so a
+later presentation can draw the same career without touching its logic.
 
 | Screen | Role | Closest existing page |
 |---|---|---|
@@ -728,7 +742,8 @@ phase builds on it.
    targets. Ammunition is stock in the hold, zone damage and damaged parts carry between sorties,
    the debrief bills repairs. One port, no travel, no crew skills.
 2. **Wingmen and the market.** Pilots with skills mapped to the AI, hiring, wages, injury. The
-   market and the parts hold, the hangar fitting from stock. Salvage.
+   market and the parts hold, the hangar fitting from stock. Salvage. The gang livery, picked through
+   the hangar's paint screen.
 3. **The zeppelin and travel.** The strategic map with all five regions, ports, travel days and
    fuel, zeppelin modules, launch and recovery, base defence.
 4. **The full board.** The remaining job types, negotiation, modifiers, bonus objectives, prizes

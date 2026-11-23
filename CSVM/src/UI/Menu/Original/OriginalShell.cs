@@ -140,6 +140,21 @@ public enum OriginalScreen
 
     /// <summary>The <c>[@Hangar@]</c> inventory, SELL PLANES' destination.</summary>
     HangarInventory,
+
+    /// <summary>The remake-only career's gang roster (<see cref="OriginalCareerScreen"/>).</summary>
+    CareerRoster,
+
+    /// <summary>The career's bridge, its hub.</summary>
+    CareerBridge,
+
+    /// <summary>The career's contract board.</summary>
+    CareerContracts,
+
+    /// <summary>The career's hangar: the gang's planes and their repairs, and the hold.</summary>
+    CareerHangar,
+
+    /// <summary>The career's ledger.</summary>
+    CareerLedger,
 }
 
 /// <summary>How a row draws and reacts.</summary>
@@ -247,6 +262,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The join board's door on the top level.</summary>
     public const string JoinBoardKey = "JOINBOARD";
 
+    /// <summary>The career's door, a plaque under the join board's.</summary>
+    public const string CareerKey = "CAREER";
+
     /// <summary>The local lobby's leave button, and the Options screen's where its section is missing.</summary>
     public const string BackKey = "BACK";
 
@@ -290,6 +308,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     // The join board's door, a third plaque under the two local match doors.
     private const float JoinBoardDoorY = DoorY + 72f;
+
+    // The career's door, a fourth plaque under the join board's.
+    private const float CareerDoorY = DoorY + 108f;
 
     // The remake-only Options hub's text: one authored text height (STDTEXTH, 16) per row, its
     // heading, and the plaque column.
@@ -428,7 +449,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         NetPlayFeature? net = null,
         // Where the network boxes read and remember the callsign, the voice and the game name; null
         // remembers nothing, which is what an engine-free test wants.
-        Func<CSVM.Utils.OptionsStore>? netOptions = null)
+        Func<CSVM.Utils.OptionsStore>? netOptions = null,
+        // The career the CAREER door stands over; null leaves the door off the main menu.
+        CareerFeature? career = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -464,9 +487,20 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Connection = new OriginalConnectionScreen(
             () => _net, this, dataRoot, Lobby.OpenHost, (hosting, then, password) => AskNetInfo(hosting, then, asksPassword: password));
         LocalLobby = new OriginalLocalLobby(this, Lobby, _setup, _free, _chapters, _flightDevices, _stock ?? (() => null), BeginLocalSeatWalk);
-        _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby, LocalLobby }
-            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby, LocalLobby };
+        Career = career != null ? new OriginalCareerScreen(career, layout, this) : null;
+        var modules = new List<IOriginalScreenModule> { InstantAction, Options, Campaign };
+        if (Hangar != null)
+        {
+            modules.Add(Hangar);
+        }
+
+        modules.AddRange(new IOriginalScreenModule[] { Wrapup, JoinBoard, Connection, Lobby, LocalLobby });
+        if (Career != null)
+        {
+            modules.Add(Career);
+        }
+
+        _modules = modules;
         _cheats = new OriginalCheats(Campaign, Hangar);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -566,7 +600,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public bool CapturingText =>
         _box.Standing == null
         && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
-            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText || LocalLobby.CapturingText);
+            || Connection.CapturingText || Lobby.CapturingText || JoinBoard.CapturingText || LocalLobby.CapturingText
+            || (Career?.CapturingText ?? false));
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
@@ -594,6 +629,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The module behind the join board, the one screen a pad signs onto a seat from.
     /// </summary>
     public OriginalJoinBoard JoinBoard { get; }
+
+    /// <summary>The module behind the career's screens, or null on a shell built without a career
+    /// feature.</summary>
+    public OriginalCareerScreen? Career { get; }
 
     /// <summary>The module behind the Multiplayer Games list. It stands on a shell built without a
     /// network door too, with the Multiplayer plaque disabled.</summary>
@@ -903,6 +942,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             OriginalScreen.Lobby => Lobby.TypeText(commands, cues),
             OriginalScreen.JoinBoard => JoinBoard.TypeText(commands),
             OriginalScreen.Dogfight => LocalLobby.TypeText(commands),
+            OriginalScreen.CareerRoster => Career?.TypeText(commands) ?? false,
             _ => Hangar?.TypeName(commands, cues) ?? false,
         };
 
@@ -1596,6 +1636,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                     case JoinBoardKey:
                         JoinBoard.Open();
                         break;
+                    case CareerKey:
+                        Career?.Open();
+                        break;
                     case CampaignKey:
                         Campaign.OpenCampaign();
                         break;
@@ -1710,6 +1753,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
                 rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
                 rows.Add(TextButton(JoinBoardKey, "JOIN BOARD", DoorX, JoinBoardDoorY, true, 0));
+                if (Career != null)
+                {
+                    rows.Add(TextButton(CareerKey, "CAREER", DoorX, CareerDoorY, true, 0));
+                }
+
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {

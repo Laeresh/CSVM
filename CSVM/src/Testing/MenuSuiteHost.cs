@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using CSVM.Bindings;
@@ -8,6 +9,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Session.Career;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -42,6 +44,10 @@ internal static class MenuSuiteHost
         host.Features.Add(new CampaignFeature(
             strings, StockAirframes.Node, chapterCinema, closingCinema)
         { Data = data });
+        // A store of the process's own under the temp folder: no suite may touch user://Careers.
+        var careers = new CareerStore(Path.Combine(Path.GetTempPath(), "csvm-suite-careers",
+            Environment.ProcessId.ToString(CultureInfo.InvariantCulture)));
+        host.Features.Add(new CareerFeature(() => careers, () => StockLoadouts.Load()));
         // No save by default: a suite must never write over the keymap saved at this machine's
         // controls, and only a suite holding the store's directory override may pass one.
         host.Features.Add(new ControlsFeature(saveBindings));

@@ -296,7 +296,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     /// <summary>Whether the screen showing is one of the hangar's: the name screen, a tab, the
     /// totals page or the inventory.</summary>
-    public bool Owns(OriginalScreen screen) => screen >= OriginalScreen.PlaneName;
+    public bool Owns(OriginalScreen screen) => screen >= OriginalScreen.PlaneName && screen <= OriginalScreen.HangarInventory;
 
     /// <summary>Opens one of the showing tab's dropdowns as a press on it would, for a scripted
     /// pose. False when the key names no list on the tab showing. A grid opens on the row its pick

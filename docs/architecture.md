@@ -608,6 +608,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/HangarFeature.cs`, the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
 - `src/UI/Menu/HangarDescriptions.cs`, a construction tab's description box: the shipped figures string, the heading it ends with, and the component's own prose.
 - `src/UI/Menu/CampaignFeature.cs`, the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
+- `src/UI/Menu/CareerFeature.cs`, the career as a shared feature: the saved gangs, the one open, and every action a career screen offers, each saved.
 - `src/UI/Menu/CampaignBriefing.cs`, one mission's briefing as the feature holds it: the state, the narration, the note, the reveal's progress.
 - `src/UI/Menu/CampaignWallet.cs`, the seated profile as the hangar's wallet: funds, affordability, availability, the builds, purchase and sale.
 - `src/UI/Menu/TypedCheat.cs`, one screen's typed-word latch: the click that arms it, the buffer, the reset on a character off the prefix, the case-sensitive fire.
@@ -643,6 +644,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/KeysStickColumn.cs`, the KEYS AND BUTTONS page's split of a row's bindings between Control A/B and the port's Stick column.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
 - `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, the one place a pad signs onto a seat, and a Dogfight's bot rows.
+- `src/UI/Menu/Original/OriginalCareerScreen.cs`, the career's screens on the scrapbook: gang roster, bridge, contract board, hangar repairs and ledger.
 - `src/UI/Menu/Original/OriginalBotPanel.cs`, the join board's bot rows: the Bots block with Add Bot and Fill to, and the Edit Bot panel in the lobby's bot faces.
 - `src/UI/Menu/Original/OriginalSeats.cs`, the seat rules every Original screen shares (a `partial`): joining, a later seat's frame, the campaign strip.
 - `src/UI/Menu/Original/OriginalLocalLobby.cs`, the local Free Flight and Dogfight screens on the Multiplayer Lobby's layout as one standalone module: the map, the rules, seat 0's aircraft, FLY.

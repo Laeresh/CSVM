@@ -49,7 +49,7 @@ first bind; the design doc holds the rest.
 | 5 | Ammunition economy | **Stock in the hold**; slug rounds always for sale, specialist rounds and rockets limited by market stock |
 | 6 | Captain shot down with no relaunch | **The sortie ends**; surviving wingmen withdraw, pay only for objectives met, injury roll. In phase 1 there is never a relaunch (no zeppelin on the map) |
 | 7 | New ground targets in original worlds | **Allowed in a career sortie**, install models placed as prefabs, checked against the built world; never changes a campaign or Instant Action mission |
-| 8 | Menu presentation | **Modern presentation only** for new screens; existing original pages reused where they match. Career logic stays UI-free because the modern presentation will be replaced |
+| 8 | Menu presentation | Superseded by decision 30: the repo has one presentation, the Original, and no modern one |
 | 9 | Starting region | **Player chooses** later; each region has a threat floor. Phase 1 has one region only |
 | 10 | The captain always flies | **Yes**; no auto-resolve |
 | 11 | A bill cash cannot cover | **The shortfall becomes debt**; cash never goes negative, seizure is a later phase |
@@ -71,6 +71,10 @@ first bind; the design doc holds the rest.
 | 27 | A broke gang with no plane fit to fly | **Repairs on credit**: the moneylender pays the shortfall and adds it to the debt |
 | 28 | A broke gang with no ammunition | **Slug rounds are free**; specialist rounds and rockets still cost money |
 | 29 | A missed payment, later phase | **The debt collectors attack the zeppelin**: lose and the career ends, win and their wrecks are salvage. Recorded in `career-mode.md`; not phase 1 |
+| 30 | Where the career screens draw | **In the Original presentation, as remake-only screens on the scrapbook** like the join board, behind a CAREER door under JOIN BOARD on the main menu |
+| 31 | How a gang is named | **The player types the name**, which is also the save file's name |
+| 32 | The gang livery | **Phase 2**, picked through the hangar's paint screen; recorded in `career-mode.md` |
+| 33 | The strategic map's art, phase 3 | **An SVG traced from the public-domain nations map** on Wikimedia Commons (`File:Crimson_skies_map.png`, released by its author Zaku Two), source and release recorded in the file |
 
 ## ⚠ Read this before implementing anything
 
@@ -150,10 +154,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the screens and the loop
 
-21. ☐ Career start, save slots and the main menu entry
-22. ☐ The bridge, contract board and ledger pages
+21. ◐ Career start, save slots and the main menu entry
+22. ◐ The bridge, contract board and ledger pages
 23. ☐ Flight check and briefing over the career, loading from the hold
-24. ☐ Debrief, the bill and the hangar's repair
+24. ◐ Debrief, the bill and the hangar's repair
 25. ◐ The economy simulation and the first tune pass
 
 ## Dependency and parallelism notes
@@ -455,7 +459,13 @@ session knows a sortie has ended, for a win, a loss and a quit.>
 
 # Wave C, the screens and the loop
 
-## C21 ☐ Career start, save slots and the main menu entry
+## C21 ◐ Career start, save slots and the main menu entry
+
+**Landed (first pass, unverified at the controls).** `CareerFeature` in `CSVM.UI.Menu` (engine-free: saved gangs, the one open, the name rule, start, open, delete, every career action saved at once), wired in `ProcessMenu` over `user://Careers/` and in `MenuSuiteHost` over a temp store. `OriginalCareerScreen`, a module of the Original shell drawn on the scrapbook (decision 30), with a CAREER door under JOIN BOARD. The gang roster lists saved gangs and takes a typed name (decision 31); START is enabled only for a name `NameRefusal` accepts. `OriginalHangarScreen.Owns` was bounded to the hangar's own screens: it claimed every screen after `PlaneName`, which caught the new career screens.
+
+**Verified.** `CareerFeatureTests`, `OriginalCareerTests` (the door, a typed name onto the bridge, a saved gang continuing) and `OriginalCoverageTests` with six career journeys, by pointer, keyboard and pad. **Owed at the controls:** layout and legibility on the scrapbook, the text box, and the palette.
+
+**Original approach (kept for reference).**
 
 **Goal.** The main menu offers Career; the player can start a new career (a name and the starting
 options phase 1 supports), continue one, or delete one.
@@ -475,7 +485,13 @@ only, or none).>
 **⚠ Traps.** The modern presentation will be replaced; keep every career operation callable without
 a page, so the replacement draws the same state.
 
-## C22 ☐ The bridge, contract board and ledger pages
+## C22 ◐ The bridge, contract board and ledger pages
+
+**Landed (first pass, unverified at the controls).** The bridge (day, week, cash, debt, next payday, the contract taken, each plane ready, damaged or grounded; CONTRACTS, HANGAR, LEDGER, WAIT A DAY, SCUTTLE with a confirm, MAIN MENU), the contract board (offers as rows, a press takes one, ABANDON, FLY disabled until B14) and the ledger (the last fourteen entries and this week's in and out), all in `OriginalCareerScreen`.
+
+**Verified.** `OriginalCareerTests`: the bridge reaching every page and back, waiting a day, taking and abandoning a contract with the offers disabled meanwhile, scuttling only after the confirm. **Owed at the controls:** the layout.
+
+**Original approach (kept for reference).**
 
 **Goal.** The bridge shows the date, cash, debt, next payday and the way to every other page; the
 contract board lists the offers; the ledger lists the entries by week.
@@ -510,7 +526,13 @@ stock.>
 
 **⚠ Traps.** <TODO>
 
-## C24 ☐ Debrief, the bill and the hangar's repair
+## C24 ◐ Debrief, the bill and the hangar's repair
+
+**Landed (the hangar half, unverified at the controls).** The career hangar page: each plane as a row with its armour, damaged parts and repair quote; a press repairs it (credit rules as `CareerState.Repair`); the hold's stock beside it. The debrief waits for B14 and B15's session side.
+
+**Verified.** `OriginalCareerTests`: a worn plane repaired by a press, its row then disabled.
+
+**Original approach (kept for reference).**
 
 **Goal.** After a sortie the debrief shows objectives, kills, the fee, the ammunition used and the
 damage; the hangar repairs zones and parts for money and days.

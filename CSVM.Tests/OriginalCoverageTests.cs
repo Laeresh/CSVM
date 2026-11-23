@@ -81,6 +81,9 @@ public class OriginalCoverageTests : IDisposable
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
+
+    // The career's bridge through the scratch store's one gang.
+    private static readonly string[] CareerBridge = { OriginalShell.CareerKey, OriginalCareerScreen.GangRowPrefix + "0" };
     private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey };
     private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey, TypeStep + BuildName, OriginalHangarScreen.NameOkKey };
 
@@ -101,6 +104,17 @@ public class OriginalCoverageTests : IDisposable
         new("join-board", OriginalScreen.JoinBoard, new[] { OriginalShell.JoinBoardKey }, new[] { OriginalJoinBoard.BackKey }),
         new("join-board-continue", OriginalScreen.TopLevel,
             new[] { OriginalShell.JoinBoardKey, OriginalJoinBoard.ContinueKey }, Array.Empty<string>()),
+        new("career-roster", OriginalScreen.CareerRoster, new[] { OriginalShell.CareerKey }, new[] { OriginalCareerScreen.RosterBackKey }),
+        new("career-bridge", OriginalScreen.CareerBridge, CareerBridge, new[] { OriginalCareerScreen.BridgeBackKey }),
+        new("career-start", OriginalScreen.CareerBridge,
+            new[] { OriginalShell.CareerKey, OriginalCareerScreen.NameKey, TypeStep + "New Gang", OriginalCareerScreen.StartKey },
+            new[] { OriginalCareerScreen.BridgeBackKey }),
+        new("career-contracts", OriginalScreen.CareerContracts, Then(CareerBridge, OriginalCareerScreen.ContractsKey),
+            new[] { OriginalCareerScreen.PageBackKey, OriginalCareerScreen.BridgeBackKey }),
+        new("career-hangar", OriginalScreen.CareerHangar, Then(CareerBridge, OriginalCareerScreen.HangarKey),
+            new[] { OriginalCareerScreen.PageBackKey, OriginalCareerScreen.BridgeBackKey }),
+        new("career-ledger", OriginalScreen.CareerLedger, Then(CareerBridge, OriginalCareerScreen.LedgerKey),
+            new[] { OriginalCareerScreen.PageBackKey, OriginalCareerScreen.BridgeBackKey }),
         // ⚠ The cursor families walk this screen as the picking seat, not as seat 0, which drives
         // nothing here; only the pointer stays seat 0's. ⚠ Leave by the seat's Back over the open
         // list, which a cursor cannot walk off: the walk's completion is the launch itself.
@@ -794,9 +808,14 @@ public class OriginalCoverageTests : IDisposable
             (_, _, _) => CSVM.Net.LoopbackTransport.Mesh(1, CSVM.Net.LoopbackConditions.Perfect, new Random(1))[0],
             (_, _) => throw new InvalidOperationException("the walk joins nothing"),
             lan: lan.Bind);
+        // A scratch career store holding one gang, so the roster's first row reaches the bridge.
+        var careers = new CSVM.Session.Career.CareerStore(Path.Combine(TestData.TempDir(), "Careers"));
+        var career = new CareerFeature(() => careers, newSeed: () => 1);
+        career.Start("Coverage Gang");
+        career.Close();
         return new OriginalShell(layout, new FreeFlightFeature(), setup, measure,
             hangar: hangar, planes: planes, campaign: campaign, profiles: () => store, dataRoot: dataRoot,
-            controls: controls, net: net);
+            controls: controls, net: net, career: career);
     }
 
     private sealed record Journey(

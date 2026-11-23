@@ -3,6 +3,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Session.Career;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
@@ -146,6 +147,7 @@ internal sealed class ProcessMenu(Node parent, LaunchAudio audio, NetFlight net,
         host.Features.Add(new CampaignFeature(
             strings, StockAirframes.Node, _chapterCinema, _closingCinema)
         { Data = at.Data });
+        host.Features.Add(new CareerFeature(CareerStore.UserCareers, () => StockLoadouts.Load()));
         // The keymap editor writes through the per-player binding store, with player 1's stick rows split
         // off to the profile files. A reset takes them from the stick defaults. Injected so the
         // feature stays engine-free for a suite.
