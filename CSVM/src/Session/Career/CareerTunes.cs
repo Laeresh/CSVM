@@ -163,6 +163,12 @@ public sealed class CareerTunes
 
     public float DefaultFootprint { get; init; } = 30f;
 
+    /// <summary>The share of the fee each secondary objective met adds.</summary>
+    public double SecondaryBonusShare { get; init; } = 0.25;
+
+    /// <summary>Days a sortie takes, travel to the area and back included.</summary>
+    public int SortieDays { get; init; } = 1;
+
     /// <summary>The fee band for <paramref name="threat"/>, clamped to one to five skulls.</summary>
     public (int Min, int Max) FeeBand(int threat) => FeeBands[Math.Clamp(threat, 1, FeeBands.Count) - 1];
 

@@ -701,7 +701,7 @@ One career's whole state: name, seed, day, ledger, planes, hold, shelf, board an
 contract. `New` takes the starting planes' builds from the caller, who makes them from the tunes'
 starting airframes and the stock loadouts, and wears each zone by the tunes' share. Every operation
 that passes time goes through `AdvanceDays`, which refreshes the board daily and runs the payday
-weekly. Nothing in flight reads it. The design is [../career-mode.md](../career-mode.md); persisted
+weekly. `CompleteSortie` applies a `SortieResult` and closes the contract. Nothing in flight reads it. The design is [../career-mode.md](../career-mode.md); persisted
 by `CareerStore`.
 
 ## src/Session/Career/CareerStore.cs
@@ -776,3 +776,9 @@ and of targets already placed; a failing spot is searched outward in rings up to
 and a target with no spot is dropped. The height is the lowest ground sample, so no corner floats.
 The world is read through `IGroundProbe`, whose engine adapter the session supplies. Footprints and
 limits are in `CareerTunes`.
+
+## src/Session/Career/SortieResult.cs
+What a flown sortie hands back to the career, plain data the session fills in: whether the
+primary was met, how many secondaries, and per gang plane the armour lost per zone, parts hit, a
+crash, kills, and rounds and rockets fired. `SortieOutcome` is what `CareerState.CompleteSortie`
+did with it: fee, bonus, stock drawn and planes wrecked, for the debrief.

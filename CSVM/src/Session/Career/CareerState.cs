@@ -122,6 +122,61 @@ public sealed class CareerState
     /// <summary>Drops the active contract, which pays nothing.</summary>
     public void AbandonContract() => ActiveContract = null;
 
+    /// <summary>
+    /// Applies a flown sortie to the career and closes the active contract. A met primary pays the
+    /// fee plus the tunes' bonus per secondary; an unmet one pays nothing. Each plane takes its damage
+    /// and kills, and a crashed plane comes back a wreck: every zone emptied, engine and guns damaged.
+    /// Fired stock leaves the hold, and the sortie takes the tunes' days.
+    /// </summary>
+    public SortieOutcome CompleteSortie(SortieResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var contract = ActiveContract ?? throw new InvalidOperationException("no contract is active");
+        int fee = result.PrimaryMet ? contract.Fee : 0;
+        int bonus = result.PrimaryMet
+            ? (int)Math.Round(contract.Fee * Tunes.SecondaryBonusShare * Math.Max(0, result.SecondariesMet), MidpointRounding.AwayFromZero)
+            : 0;
+        if (fee + bonus > 0)
+        {
+            Ledger.Earn(Day, LedgerCategory.ContractFee, fee + bonus, FormattableString.Invariant($"contract {contract.Id}"));
+        }
+
+        int rounds = 0;
+        int rockets = 0;
+        var wrecked = new List<int>();
+        foreach (var report in result.Planes)
+        {
+            var plane = _planes[report.Plane];
+            plane.Sorties++;
+            plane.Kills += report.Kills;
+            plane.DamagedParts |= report.PartsHit;
+            foreach (var zone in Enum.GetValues<ArmourZone>())
+            {
+                plane.Damage(zone, report.ZoneDamage[(int)zone]);
+            }
+
+            if (report.Crashed)
+            {
+                plane.Wreck();
+                wrecked.Add(report.Plane);
+            }
+
+            foreach (var (line, n) in report.RoundsFired)
+            {
+                rounds += Hold.TakeRounds(line, n);
+            }
+
+            foreach (var (id, n) in report.RocketsFired)
+            {
+                rockets += Hold.TakeRockets(id, n);
+            }
+        }
+
+        ActiveContract = null;
+        AdvanceDays(Tunes.SortieDays);
+        return new SortieOutcome(fee, bonus, rounds, rockets, wrecked);
+    }
+
     /// <summary>Restores a saved career exactly; the store's seam.</summary>
     internal static CareerState Restore(string name, ulong seed, int day, Ledger ledger, IEnumerable<PlaneInstance> planes, Contract? active)
     {

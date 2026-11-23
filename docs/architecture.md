@@ -957,6 +957,7 @@ The session-build clusters `GameSession` delegates to, in six sub-namespaces, on
 - `src/Session/Career/MissionSpec.cs`, a generated sortie as plain data: the flight's start, wingman seats, enemies by wave, ground targets, objectives, the reserve trigger.
 - `src/Session/Career/MissionGenerator.cs`, a contract and a site catalogue into a `MissionSpec`: patrol and strike templates, enemies bought against a threat budget.
 - `src/Session/Career/GroundPlacer.cs`, stands a spec's ground targets on the built world through `IGroundProbe`: land, slope, clearance and spacing, searched outward or dropped.
+- `src/Session/Career/SortieResult.cs`, what a flown sortie hands back (objectives met, per-plane damage, crashes, kills, stock fired) and the outcome the debrief shows.
 
 ### `src/Bindings/`, the input binding model
 

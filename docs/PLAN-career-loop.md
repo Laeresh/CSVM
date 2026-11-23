@@ -65,6 +65,8 @@ first bind; the design doc holds the rest.
 | 21 | Terrain tags (sea, land, flat ground) | **Checked at placement** in the built world (B13), not stored in the catalogue |
 | 22 | How an enemy is valued against the threat budget | **Its hangar price times a skill factor**: airframe, middle engine and stock armour at the decoded prices; flak batteries a fixed value |
 | 23 | Reinforcements in phase 1 | **One reserve wave on a trigger**: a third of the air budget, released after a delay on a patrol and by the first destroyed target on a strike |
+| 24 | A crashed gang plane | **Comes back a wreck**: every zone emptied, engine and mounted guns damaged, repaired at full cost; never lost |
+| 25 | How a contract pays | **The fee, plus 25 % of it per secondary met**; an unmet primary pays nothing |
 
 ## ⚠ Read this before implementing anything
 
@@ -140,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ `MissionSpec` and the generator for patrol and strike
 13. ◐ The ground-target placer and the first prefabs
 14. ☐ The session builds a sortie from a `MissionSpec` (`--career-seed=`)
-15. ☐ `SortieResult`: what the sortie reports back
+15. ◐ `SortieResult`: what the sortie reports back
 
 ### Wave C, the screens and the loop
 
@@ -419,7 +421,15 @@ giving the same spawn and targets; a `tier:ci` suite if the synthetic data tree 
 
 **⚠ Traps.** Every scripted Godot launch goes through `RunProbe.ps1`, never the executable directly.
 
-## B15 ☐ `SortieResult`: what the sortie reports back
+## B15 ◐ `SortieResult`: what the sortie reports back
+
+**Landed (the career side).** `SortieResult` (primary met, secondaries met, a `PlaneReport` per gang plane: zone damage, parts hit, crash, kills, rounds and rockets fired), `SortieOutcome`, and `CareerState.CompleteSortie`. A met primary pays the fee plus 25 % per secondary, an unmet one nothing (decision 25). A crashed plane becomes a wreck through `PlaneInstance.Wreck` (decision 24). Fired stock leaves the hold, clamped to what it held. The contract closes and the sortie takes one day. A sortie that ends early reports only what was met before it ended.
+
+**Verified.** `SortieResultTests`: pay for primary met with none and two secondaries and for primary unmet, damage, parts and kills landing on the right plane, a wreck's zones and parts, fired stock clamped to the hold, a sortie with no contract refused.
+
+**Still open (needs the engine).** The session filling a `SortieResult` when a career sortie ends (win, loss, quit, captain down), and applying decision 14 in flight (a damaged gun cannot fire, a damaged engine loses top speed).
+
+**Original approach (kept for reference).**
 
 **Goal.** When a sortie ends, the session returns objectives met, rounds and rockets fired per plane,
 zone damage and damaged parts per plane, crashes and kills, and the career applies them to the hold

@@ -112,6 +112,25 @@ public sealed class PlaneInstance
         return new RepairQuote(cost, days);
     }
 
+    /// <summary>Makes this plane a wreck: every zone emptied, the engine and every mounted gun
+    /// damaged. It stays in the hangar, to be repaired at full cost.</summary>
+    public void Wreck()
+    {
+        foreach (var zone in Enum.GetValues<ArmourZone>())
+        {
+            SetZoneDamage(zone, ZoneCapacity(zone));
+        }
+
+        DamagedParts |= PlaneParts.Engine;
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            if (!Build.Guns[slot].IsEmpty)
+            {
+                DamagedParts |= GunPart(slot);
+            }
+        }
+    }
+
     /// <summary>Clears every zone's damage and every damaged part.</summary>
     public void Repair()
     {
