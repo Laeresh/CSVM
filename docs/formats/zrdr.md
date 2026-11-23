@@ -69,9 +69,12 @@ be scanned across all three:
 
 | Scope | Archive | Typical readers |
 |---|---|---|
-| shared | top-level `zrdr.zbd` | `vehicle.json`, `engines.json`, `player.json`, `sounds.json`, effect readers (`flame_ball`, `pufftrails`, `fire`, …), building/zeppelin/prop anims, `player_plane_destruct.json` |
+| shared | top-level `zrdr.zbd` | `cm_sequence.json`, `Briefing.json`, `vehicle.json`, `engines.json`, `player.json`, `sounds.json`, effect readers (`flame_ball`, `pufftrails`, `fire`, …), building/zeppelin/prop anims, `player_plane_destruct.json` |
 | chapter | `<Cx>/zrdr.zbd` | chapter scenery anims (`hangar3`, `train`, `fuel_tanks`, `st_light`, `dock_light`, `ap_*`), `cars_moving`/`trucks_moving`, the `ne0NNNNN.zrd` patrol nets + `neindex.zrd` |
-| mission | `<Cx>/<mission>/zrdr.zbd` | `ia.json`, `objectives.json`, `weather.json`, `zepstate.json`, `startanims.json`, `mis_anim.json`, `zeppelins.json`, `egen.json`, `dzones.json`, `aiv.json`, `location.json`, `map.json`, `Briefing` |
+| mission | `<Cx>/<mission>/zrdr.zbd` | `ia.json`, `objectives.json`, `weather.json`, `startanims.json`, `mis_anim.json`, `zeppelins.json`, `zepstate.json`, `egen.json`, `dzones.json`, `aiv.json`, `targets.json`, `net.json`, `location.json`, `map.json`, and mission-specific animation readers |
+
+The exact 24-story-mission census and the non-reader companions needed to assemble one mission are
+in [Campaign mission bundles](missions/campaign-authoring.md).
 
 ## Reader family map
 

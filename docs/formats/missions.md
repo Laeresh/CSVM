@@ -1,12 +1,14 @@
 # Mission objectives and stunt zones
 
 Part of the [format documentation](README.md). This page describes the objective data behind
-Stunt Flying: `ia.json` supplies the zone set, `targets.json` maps nodes to display-string keys,
-and `messages.json` supplies localized text. `dzones.json` carries per-mission overrides that the
-remake does not read. The current readers are `Messages.cs`, `MissionTargets.cs`, and
-`StuntMission.cs`. The campaign missions' choreography script, `objectives.zrd`, which consumes
-these danger zones and target-display flags from its own directives, is decoded in
-[objectives.md](objectives.md).
+Stunt Flying and campaign Danger Zones: `ia.json` supplies the zone set, `targets.json` maps nodes
+to display-string keys, `messages.json` supplies localized text, and `dzones.json` carries
+per-mission overrides. The current readers are `Messages.cs`, `MissionTargets.cs`,
+`StuntMission.cs`, and `CampaignDangerZones.cs`. The campaign missions' choreography script,
+`objectives.zrd`, which consumes these danger zones and target-display flags from its own
+directives, is decoded in [objectives.md](objectives.md). The complete story-mission bundle, its
+cross-file joins, and the whole-scope modding rules are mapped in
+[Campaign mission bundles](missions/campaign-authoring.md).
 
 ## Contents
 
@@ -15,6 +17,7 @@ these danger zones and target-display flags from its own directives, is decoded 
 - [Target display keys](#target-display-keys)
 - [Message table](#message-table)
 - [Assembled marker text](#assembled-marker-text)
+
 ## Stunt objective
 
 An instant-action Stunt Flying run's goal is to fly through a fixed set of **Danger Zones**
