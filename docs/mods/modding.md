@@ -33,8 +33,12 @@ The rule behind the table: the install path without `ZBD/`, with `.zip` for `.zb
 are upper case (`C1B`, `M02`) and file names lower case, which matters on Linux.
 
 A zip may be unpacked into a folder of the same name beside it (`C1/gamez/` for `C1/gamez.zip`),
-which is easier to edit; the folder is read in preference to the zip. Only the files a mod changes
-need to be there.
+which is easier to edit; the folder is read in preference to the zip. Only the **archive outputs**
+a mod changes need to be present. Once an output exists, it replaces that archive as a whole and
+is not merged entry by entry with the game file. An unpacked `C1/M02/zrdr/` therefore needs every
+mission reader the mod still uses; a folder holding only `objectives.zrd.json` makes every other
+reader in that mission scope absent. The campaign-specific export rules are in
+[Campaign mission bundles](../formats/missions/campaign-authoring.md).
 
 ## Which archives CSVM reads
 
