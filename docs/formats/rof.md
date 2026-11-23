@@ -155,8 +155,8 @@ are unexplained and listed under Open.
 | Range | Content |
 |---|---|
 | `[0, 3n)` | 24bpp RGB shading map |
-| `[3n, 6n)` | three 8-bit paint-region weight masks, slot 1, 2, 3 |
-| `[6n, 10n)` | 32bpp pattern/decal overlay with alpha |
+| `[3n, 6n)` | three 8-bit paint-region blend-amount masks, slot 1, 2, 3 |
+| `[6n, 10n)` | RGBA8 pattern/decal overlay; A is the blend amount |
 
 ### The shading map
 
@@ -168,14 +168,13 @@ a neutral luminance map at the same dimensions.
 
 ### Paint region masks
 
-**The three 8-bit planes at `[3n, 6n)` are per-pixel blend weights, one per paint colour slot,
-and they sum to 255.** This is the region table [paint.md](paint.md) records as absent from the
-data, it was in the UI archive all along.
+**The three 8-bit planes at `[3n, 6n)` are per-pixel blend amounts, one per paint colour slot,
+consumed in file order.** They are the region table that maps the three authored paint colours
+onto the skin.
 
-They are weights, not indices, which matters: the values cluster at 0 and 255 with a scatter of
+They are graded amounts, not indices: the values cluster at 0 and 255 with a scatter of
 intermediates, and those intermediates are **antialiased region borders**. An index encoding
-could not express a half-and-half boundary texel, and the hand-authored hue-window
-approach had to reintroduce soft membership precisely to stop borders speckling.
+could not express a half-and-half boundary texel.
 
 Verification, over all 184 skins: the three planes sum to 250–260 for **>97% of pixels in 100
 files**, and for 89–96% in most of the rest (the shortfall is concentrated at borders and in
@@ -184,32 +183,24 @@ directly, `HUGHES` resolves into clean rectangular blocks, `FORTUNE` into a curv
 that matches the white swoosh on the red Fortune Hunters Bloodhawk in
 `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png`.
 
-So the original's colouring is, per texel:
-
-```
-shaded_paint = shading_map * (w1*colour1 + w2*colour2 + w3*colour3) / 255
-```
-
-with the overlay composited over the result. Regions with **no hue at all** are expressible
-this way, which is what the hue-window approach structurally could not do, see "Known
-divergences" in [paint.md](paint.md).
+The retail loader applies the three planes sequentially rather than collapsing them into one
+weighted colour. The exact integer arithmetic and executable evidence are in
+[Compositing a skin](../org/paint.md#compositing-a-skin).
 
 ### The overlay layer
 
-`[6n, 10n)` is 32bpp with a meaningful 4th channel, holding the pattern's decorative artwork
+`[6n, 10n)` is RGBA8, holding the pattern's decorative artwork
 (stripes, flashes, squadron marks) as a layer to composite over the painted skin. It is
 **all-zero for parts a pattern does not decorate**, `BLCKSWAN/FUR_WING.BM` has an empty
 overlay, so a pattern can leave a part plain.
 
-Channel order within the overlay is unconfirmed: the content inspected so far is greyscale, so
-RGBA and BGRA are indistinguishable on it.
+Bytes 0, 1 and 2 are red, green and blue. Byte 3 is the blend amount consumed by the retail
+loader, not the returned texture's alpha channel. The compositing rule is in
+[Compositing a skin](../org/paint.md#compositing-a-skin).
 
 ## Known limits
 
-- **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
-  undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
-  everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed *, file order **is** `paint_color1..3`. Rendering the
+- **Slot order.** File order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between
@@ -241,4 +232,6 @@ pixel for pixel but not byte for byte, since that one used another compressor.
 
 ## Evidence & limits
 
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+The archive layout, dimensions, row order and plane census come from CSVM's retail install and its
+readers. The loader behavior and its executable identification are in
+[Compositing a skin](../org/paint.md#compositing-a-skin). No game asset bytes are reproduced here.
