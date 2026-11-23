@@ -138,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ The site catalogue for the phase 1 chapter
 12. ☑ `MissionSpec` and the generator for patrol and strike
-13. ☐ The ground-target placer and the first prefabs
+13. ◐ The ground-target placer and the first prefabs
 14. ☐ The session builds a sortie from a `MissionSpec` (`--career-seed=`)
 15. ☐ `SortieResult`: what the sortie reports back
 
@@ -366,7 +366,15 @@ specific assertions: budget spent within a margin, every required role filled, s
 
 **⚠ Traps.** <TODO>
 
-## B13 ☐ The ground-target placer and the first prefabs
+## B13 ◐ The ground-target placer and the first prefabs
+
+**Landed (the rules).** `GroundPlacer` and `IGroundProbe` in `Session.Career`. Targets are placed before flak. A spot must be land at its centre and at eight points on its footprint's edge, rise no more than an 8° slope across the footprint, be clear of the original's nodes (`IGroundProbe.Occupied`) and of targets already placed; a failing spot is searched outward in 50 m rings up to 300 m, and a target with no spot is dropped. The height is the lowest sample. `PlacementResult.NoTargets` tells the caller a strike lost every target. Footprints (depot 40 m, dump 30 m, flak 15 m), slope and shift are TUNE in `CareerTunes`. The clearance from AI net flight volumes the original approach named was left out: ground candidates already lie under the nets, and a ground target does not reach flight altitude.
+
+**Verified.** `GroundPlacerTests` over a hand-made ground: flat land keeps the requested point, water moves a target to the nearest land, all water or off the world drops it, the slope limit refuses 27° and accepts 6° with the lowest sample as the height, an original node pushes a target aside, two targets on one point stand apart, targets go before flak, yaw is pure in the seed.
+
+**Still open (needs the install).** The `IGroundProbe` adapter over `IWorldQuery` and the ocean mask; which install models each prefab is built from, and which reader loads a mission entity or destructible outside the mission that authored it; the tunes judged in a real world.
+
+**Original approach (kept for reference).**
 
 **Goal.** A strike's targets are placed into the original world as prefabs of install models, each
 checked against the built world, so nothing floats, buries itself or overlaps an original node.

@@ -768,3 +768,11 @@ and stock armour at the decoded prices times its skill factor, its airframe draw
 availability column. A third of the air budget is one reserve wave. A patrol flies a fixed route;
 a strike places two to five targets and flak from a cluster of ground candidates. Tunes are in
 `CareerTunes`. Null when the catalogue lacks the job's sites.
+
+## src/Session/Career/GroundPlacer.cs
+Stands a `MissionSpec`'s ground targets on the world, targets before flak. A spot must be land,
+rise no more than the slope limit across the prefab's footprint, be clear of the original's nodes
+and of targets already placed; a failing spot is searched outward in rings up to the maximum shift,
+and a target with no spot is dropped. The height is the lowest ground sample, so no corner floats.
+The world is read through `IGroundProbe`, whose engine adapter the session supplies. Footprints and
+limits are in `CareerTunes`.

@@ -144,6 +144,25 @@ public sealed class CareerTunes
     /// <summary>Seconds after the start a patrol's reserve wave arrives.</summary>
     public int ReserveDelaySeconds { get; init; } = 120;
 
+    /// <summary>The steepest ground, in degrees, a target's footprint may stand on.</summary>
+    public float MaxPlacementSlopeDeg { get; init; } = 8f;
+
+    /// <summary>How far, in metres, the placer may move a target from its requested point.</summary>
+    public float MaxPlacementShift { get; init; } = 300f;
+
+    /// <summary>The spacing, in metres, of the placer's search rings.</summary>
+    public float PlacementSearchStep { get; init; } = 50f;
+
+    /// <summary>Each prefab's footprint radius in metres; a prefab not listed takes the default.</summary>
+    public IReadOnlyDictionary<string, float> PrefabFootprints { get; init; } = new Dictionary<string, float>(StringComparer.Ordinal)
+    {
+        ["fuel_depot"] = 40f,
+        ["supply_dump"] = 30f,
+        ["flak_battery"] = 15f,
+    };
+
+    public float DefaultFootprint { get; init; } = 30f;
+
     /// <summary>The fee band for <paramref name="threat"/>, clamped to one to five skulls.</summary>
     public (int Min, int Max) FeeBand(int threat) => FeeBands[Math.Clamp(threat, 1, FeeBands.Count) - 1];
 
